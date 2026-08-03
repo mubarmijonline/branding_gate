@@ -11,20 +11,9 @@ import unittest
 import branding_gate
 import rbac
 
-# Endpoints that legitimately hold no permission. Everything here except
-# `login` and `static` still sits behind the require_login before_request.
-PUBLIC_ENDPOINTS = {
-    'static',
-    'login', 'logout', 'main', 'home',
-    'subscribe', 'firebase_messaging_sw', 'refresh_user_roles',
-    'get_notifications', 'mark_notifications_read', 'all_notifications',
-    'add_notification',
-    'serve_item_attachment', 'sales_requests_lookup',
-    # Dead stubs and debug endpoints, removed in the phase 7 cleanup.
-    'test_push', 'test_notification', 'template_test',
-    'add_sales_request_old', 'add_operation_request_old',
-    'edit_sales_request_old', 'edit_operation_request_old',
-}
+# Read the real list off the application rather than restating it, so the two
+# can never drift apart.
+PUBLIC_ENDPOINTS = branding_gate.PUBLIC_ENDPOINTS
 
 
 class RouteCoverageTest(unittest.TestCase):

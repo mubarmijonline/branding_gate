@@ -16,6 +16,7 @@ from datetime import timedelta, datetime
 import re
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import HTTPException
 import rbac
 import zipfile
 import ssl
@@ -2426,6 +2427,24 @@ def _validate_hierarchy(cur, fields, user_id=None):
     return None
 
 
+# Endpoints that legitimately carry no permission gate. Everything here except
+# login and static still sits behind the session check below. Kept next to
+# require_login so the two are read together; tests/test_route_coverage.py
+# asserts every other route is gated.
+PUBLIC_ENDPOINTS = {
+    'static',
+    'login', 'logout', 'main', 'home',
+    'subscribe', 'firebase_messaging_sw', 'refresh_user_roles',
+    'get_notifications', 'mark_notifications_read', 'all_notifications',
+    'add_notification',
+    'serve_item_attachment', 'sales_requests_lookup',
+    # Dead stubs and debug endpoints, removed in the phase 7 cleanup.
+    'test_push', 'test_notification', 'template_test',
+    'add_sales_request_old', 'add_operation_request_old',
+    'edit_sales_request_old', 'edit_operation_request_old',
+}
+
+
 @app.before_request
 def require_login():
     """
@@ -2455,6 +2474,17 @@ def require_login():
                 return jsonify({'error': 'Not authenticated'}), 401
             # For normal requests, redirect to login
             return redirect(url_for('login'))
+
+    # Default deny. A route that carries no permission gate and is not on the
+    # public list is refused outright, so a handler added without a decorator
+    # fails closed in development instead of shipping open.
+    view = app.view_functions.get(request.endpoint)
+    if view is not None and request.endpoint not in PUBLIC_ENDPOINTS \
+            and not getattr(view, '_perms', None):
+        app.logger.warning('Ungated endpoint refused: %s (%s)', request.endpoint, request.path)
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Forbidden'}), 403
+        return abort(403)
 
 
 @app.route('/management_admin', methods=['GET'])
@@ -5011,10 +5041,12 @@ def api_workflow_requests():
     """Get all sales requests with summary for timeline view"""
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    
+
     try:
         conn, cur = connection()
-        
+
+        scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+
         cur.execute("""
             SELECT 
                 sr.id AS request_id,
@@ -5040,9 +5072,10 @@ def api_workflow_requests():
             LEFT JOIN client c ON sr.client_id = c.id
             LEFT JOIN company co ON sr.company_id = co.id
             LEFT JOIN sales_request_items sri ON sr.id = sri.request_id
+            WHERE 1=1 """ + scope_sql + """
             GROUP BY sr.id
             ORDER BY sr.id DESC
-        """)
+        """, scope_params)
         
         requests = cur.fetchall()
         
@@ -5333,6 +5366,9 @@ def get_sales_requests():
             """)
             company_id_exists = cur.fetchone()['column_exists'] > 0
             
+            # Row-level scope: own / team / department / all.
+            scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+            
             if company_id_exists:
                 # Use new schema with company support - includes approval tracking
                 # Item states are MUTUALLY EXCLUSIVE following this hierarchy:
@@ -5363,13 +5399,14 @@ def get_sales_requests():
                     LEFT JOIN client c ON sr.client_id = c.id
                     LEFT JOIN company comp ON sr.company_id = comp.id
                     LEFT JOIN sales_request_items i ON sr.id = i.request_id
+                    WHERE 1=1 """ + scope_sql + """
                     GROUP BY sr.id, sr.company_id, sr.client_id, sr.request_type, sr.title, 
                              sr.status, sr.priority, sr.start_date, sr.end_date, 
                              sr.budget_total, sr.currency, sr.items_count, sr.total_cost, 
                              sr.total_sell, sr.client_approval_stage, sr.created_by, sr.created_at, sr.modified_at,
                              c.client_name, comp.company_name
                     ORDER BY sr.id DESC
-                """)
+                """, scope_params)
             else:
                 # Use new schema without company support (fallback) - includes approval tracking
                 # Item states are MUTUALLY EXCLUSIVE (same as above)
@@ -5394,13 +5431,14 @@ def get_sales_requests():
                     LEFT JOIN client c ON sr.client_id = c.id
                     LEFT JOIN company comp ON c.parent_company_id = comp.id
                     LEFT JOIN sales_request_items i ON sr.id = i.request_id
+                    WHERE 1=1 """ + scope_sql + """
                     GROUP BY sr.id, sr.client_id, sr.request_type, sr.title, 
                              sr.status, sr.priority, sr.start_date, sr.end_date, 
                              sr.budget_total, sr.currency, sr.items_count, sr.total_cost, 
                              sr.total_sell, sr.client_approval_stage, sr.created_by, sr.created_at, sr.modified_at,
                              c.client_name, c.parent_company_id, comp.company_name
                     ORDER BY sr.id DESC
-                """)
+                """, scope_params)
             new_requests = cur.fetchall()
             
             for req in new_requests:
@@ -5682,7 +5720,11 @@ def get_single_sales_request(request_id):
                 'success': False,
                 'error': 'Request not found'
             }), 404
-        
+
+        # Row-level scope: a caller with own or team scope may not open
+        # somebody else's request just by knowing its id.
+        assert_scope('sales_request.view', request_data.get('owner_user_id'))
+
         # Calculate duration
         duration_days = 0
         if request_data.get('start_date') and request_data.get('end_date'):
@@ -5741,6 +5783,9 @@ def get_single_sales_request(request_id):
                 })
             
             print(f"DEBUG: Retrieved {len(template_instances)} template instances for request {request_id}")
+        # A scope refusal is a 403, not a server error.
+        except HTTPException:
+            raise
         except Exception as inst_error:
             # Table might not exist yet - that's okay
             print(f"DEBUG: Could not retrieve template instances: {inst_error}")
@@ -5962,6 +6007,9 @@ def get_single_sales_request(request_id):
             'request': request_info
         })
         
+    # A scope refusal is a 403, not a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Error in get_single_sales_request: {e}")
         return jsonify({
@@ -7496,6 +7544,9 @@ def edit_sales_request(request_id):
         conn, cur = connection()
         cur.execute("SELECT * FROM sales_request WHERE id = %s", (request_id,))
         existing_request = cur.fetchone()
+        if existing_request:
+            # Own or team scope must not be able to edit somebody else's request.
+            assert_scope('sales_request.edit', existing_request.get('owner_user_id'))
         
         if not existing_request:
             return jsonify({
@@ -7716,6 +7767,9 @@ def edit_sales_request(request_id):
         try:
             cur.execute("DELETE FROM sales_request_template_instances WHERE request_id = %s", (request_id,))
             print(f"DEBUG EDIT: Deleted existing template instances for request {request_id}")
+        # A scope refusal is a 403, not a server error.
+        except HTTPException:
+            raise
         except Exception as inst_del_error:
             print(f"DEBUG EDIT: Could not delete template instances (table may not exist): {inst_del_error}")
         
@@ -8245,6 +8299,9 @@ def edit_sales_request(request_id):
             'duration_days': duration_days
         })
         
+    # A scope refusal is a 403, not a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Error in edit_sales_request: {e}")
         import traceback
@@ -8270,8 +8327,11 @@ def delete_sales_request(request_id):
         conn, cur = connection()
         
         # Check if request exists in sales_request table
-        cur.execute("SELECT id FROM sales_request WHERE id = %s", (request_id,))
-        if not cur.fetchone():
+        cur.execute("SELECT id, owner_user_id FROM sales_request WHERE id = %s", (request_id,))
+        _target = cur.fetchone()
+        if _target:
+            assert_scope('sales_request.delete', _target.get('owner_user_id'))
+        if not _target:
             return jsonify({
                 'success': False,
                 'error': 'Request not found'
@@ -8347,6 +8407,9 @@ def delete_sales_request(request_id):
             'message': 'Request deleted successfully'
         })
         
+    # A scope refusal is a 403, not a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Error in delete_sales_request: {e}")
         import traceback
@@ -10852,6 +10915,9 @@ def update_request_with_template(request_id):
         # Verify request exists and user has permission to edit
         cur.execute("SELECT * FROM sales_request WHERE id = %s", (request_id,))
         existing_request = cur.fetchone()
+        if existing_request:
+            # Own or team scope must not be able to edit somebody else's request.
+            assert_scope('sales_request.edit', existing_request.get('owner_user_id'))
         if not existing_request:
             return jsonify({
                 'success': False,
@@ -10995,6 +11061,9 @@ def update_request_with_template(request_id):
                 if 'company_id' in columns:
                     update_fields.append("company_id = %s")
                     update_values.append(data['company_id'])
+            # A scope refusal is a 403, not a server error.
+            except HTTPException:
+                raise
             except Exception as e:
                 print(f"DEBUG: company_id column check failed: {e}")
         
@@ -11916,6 +11985,9 @@ def update_request_with_template(request_id):
             'message': 'Request updated successfully'
         })
         
+    # A scope refusal is a 403, not a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error updating request with template: {str(e)}")
         import traceback
@@ -12465,9 +12537,11 @@ def get_client_approval_items():
             LEFT JOIN user u ON i.submitted_by = u.id
             WHERE 1=1
         """
-        
-        params = []
-        
+
+        # Row-level scope on the owning request, applied before any user filter.
+        scope_sql, params = scope_clause('client_approval.view', 'sr.owner_user_id')
+        query += scope_sql
+
         # Apply status filter
         if status_filter == 'pending':
             query += " AND (i.cost_per_item IS NULL OR i.sell_per_item IS NULL)"
@@ -14233,6 +14307,8 @@ def get_chat_sr_list():
         conn, cur = connection()
         user_id = session['user_id']
 
+        scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+
         cur.execute(
             """
             SELECT
@@ -14271,10 +14347,11 @@ def get_chat_sr_list():
                   AND c.is_deleted = 0
                 GROUP BY c.request_id
             ) unread ON unread.request_id = sr.id
+            WHERE 1=1 """ + scope_sql + """
             ORDER BY COALESCE(stats.last_message_at, sr.created_at) DESC
             LIMIT 500
             """,
-            (user_id,)
+            [user_id] + scope_params
         )
         rows = cur.fetchall() or []
 
@@ -19639,12 +19716,10 @@ def get_user_balance(user_id):
         if not session.get('user_id'):
             return jsonify({'success': False, 'error': 'Not logged in'}), 401
         
-        # Users can only view their own balance, admins can view all
-        # session holds 'roles' (a list); the old singular 'user_role' key was never written.
-        _roles = session.get('roles', [])
-        if not any(r in _roles for r in ('admin', 'finance')) and session.get('user_id') != user_id:
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-        
+        # Own scope sees only themselves; team and department scope reach their
+        # reports; finance holds it at 'all'.
+        assert_scope('user_balance.view', user_id)
+
         conn, cur = connection()
         
         cur.execute("""
@@ -19679,6 +19754,9 @@ def get_user_balance(user_id):
         conn.close()
         
         return jsonify({'success': True, 'user': user, 'history': history})
+    # A scope refusal is a 403, not a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -19957,11 +20035,13 @@ def get_balance_requests():
         
         conn, cur = connection()
         
-        is_admin = any(r in session.get('roles', []) for r in ('admin', 'finance'))
+        # Scope decides breadth: 'all' sees every request, anything narrower
+        # falls back to the caller's own transfers.
+        is_admin = visible_user_ids('user_balance.view') is None
         user_id = session.get('user_id')
-        
+
         if is_admin:
-            # Admin sees all
+            # Unrestricted scope sees all
             status_filter = request.args.get('status', '')
             query = """
                 SELECT 
@@ -21556,12 +21636,16 @@ def get_expense_trackings():
             LEFT JOIN payment_methods pm ON et.payment_method_id = pm.id
             WHERE 1=1
         """
-        params = []
-        
+        # Scope is authoritative: the caller no longer chooses their own breadth
+        # via ?user_only. A member sees their own claims, a team leader their
+        # team's, a head their department's, finance everything.
+        scope_sql, params = scope_clause('expense_tracking.view', 'et.user_id')
+        query += scope_sql
+
         if user_only:
             query += " AND et.user_id = %s"
             params.append(session.get('user_id'))
-        
+
         if status:
             if status == 'manager_pending':
                 query += " AND et.status = 'pending'"
