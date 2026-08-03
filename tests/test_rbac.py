@@ -153,14 +153,25 @@ class PolicyDecisionTest(unittest.TestCase):
         grants = rbac.SEED_MATRIX['assistant']
         for code, scope in grants.items():
             with self.subTest(permission=code):
-                # Managing one's own expense claim is not company-wide power.
-                if code.startswith('expense.'):
-                    self.assertEqual(scope, 'own')
+                # Self-service over one's own claims and balance is not
+                # company-wide power, so it is exempt provided it stays own-scope.
+                if code in rbac.SELF_SERVICE_PERMISSIONS:
+                    if code not in rbac.SCOPELESS_PERMISSIONS:
+                        self.assertEqual(scope, 'own')
                     continue
                 self.assertFalse(code.endswith('.delete'))
                 self.assertNotIn('approve', code)
                 self.assertFalse(code.startswith('finance_txn.'))
                 self.assertFalse(code.startswith('user_balance.'))
+
+    def test_every_employee_keeps_self_service_access(self):
+        """The navbar balance widget and catalog lookup render for everyone."""
+        for role, grants in rbac.SEED_MATRIX.items():
+            with self.subTest(role=role):
+                self.assertIn('user_balance.view', grants)
+                self.assertIn('user_balance.request', grants)
+                self.assertIn('catalog.view', grants)
+                self.assertIn('expense.create', grants)
         self.assertNotIn('user.create', grants)
         self.assertNotIn('user.edit', grants)
         self.assertNotIn('role.assign', grants)

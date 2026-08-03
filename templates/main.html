@@ -577,14 +577,27 @@
 </head>
 
 <body class="bg-shell" style="background-color:#f4f6f9;">
-  {# ---------- Reusable permission shortcuts (used across navbar & FAB) ---------- #}
+  {# ---------- Reusable permission shortcuts (used across navbar & FAB) ----------
+     Driven by session['perms'], the permission set loaded at login and refreshed
+     by /api/refresh-roles. The variable names are kept so the twenty-odd places
+     downstream that consume them need no change. #}
+  {% set _p = session.get('perms', {}) %}
   {% set _r = session.get('roles', []) %}
-  {% set is_admin              = 'admin' in _r %}
-  {% set can_manage_clients    = is_admin or 'client_management'   in _r %}
-  {% set can_manage_companies  = is_admin or 'company_management'  in _r %}
-  {% set can_manage_suppliers  = is_admin or 'supplier_management' in _r %}
-  {% set can_manage_entities   = is_admin or 'entity_management'   in _r %}
+  {% set is_admin              = 'user.create'   in _p %}
+  {% set can_manage_clients    = 'client.edit'   in _p %}
+  {% set can_manage_companies  = 'company.edit'  in _p %}
+  {% set can_manage_suppliers  = 'supplier.edit' in _p %}
+  {% set can_manage_entities   = 'entity.edit'   in _p %}
   {% set can_open_admin        = is_admin or can_manage_clients or can_manage_companies or can_manage_suppliers or can_manage_entities %}
+  {% set can_set_prices        = 'sales_item.price' in _p %}
+  {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
+  {% set can_view_sales        = 'sales_request.view' in _p %}
+  {% set can_view_operations   = 'approved_item.view' in _p %}
+  {% set can_view_finance      = 'finance_txn.view' in _p %}
+  {% set can_approve_finance   = 'finance_txn.approve' in _p %}
+  {% set can_approve_expense_mgr = 'expense_tracking.approve_manager' in _p %}
+  {% set can_approve_expense_fin = 'expense_tracking.approve_finance' in _p %}
+  <script>window.USER_PERMS = {{ _p | tojson }};</script>
 
 
   <nav id="main_nav_bar" class="navbar sticky-top navbar-expand-lg navbar-light" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
@@ -671,6 +684,7 @@
           {% endif %}
 
           <!-- Sales Dropdown -->
+          {% if can_view_sales %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="salesDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-chart-line mr-1"></i> Sales
@@ -689,7 +703,7 @@
                 <i class="fas fa-handshake"></i> Client
               </a>
               {% endif %}
-              {% if 'admin' in session.get('roles', []) or 'sales_head' in session.get('roles', []) %}
+              {% if can_decide_negotiation %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
                 <i class="fas fa-user-check"></i> Sales Head Approval
@@ -698,20 +712,26 @@
             </div>
           </li>
 
-          <!-- Operations Dropdown -->
+          {% endif %}
+
+          <!-- Operations Dropdown. Pricing lives in here, so Pricing roles must
+               be able to open it even without operations access. -->
+          {% if can_view_operations or can_set_prices %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-cogs mr-1"></i> Operations
             </a>
             <div class="dropdown-menu" aria-labelledby="operationsDropdown">
-              <a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
+              {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
                 <i class="fas fa-tachometer-alt"></i> Operations Section
               </a>
+              {% endif %}
               <div class="dropdown-divider"></div>
-              <a class="dropdown-item" href="{{ url_for('operation_request') }}">
+              {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_request') }}">
                 <i class="fas fa-tools"></i> Operation Request
               </a>
-              {% if 'admin' in session.get('roles', []) or 'pricing' in session.get('roles', []) or 'operation' in session.get('roles', []) %}
+              {% endif %}
+              {% if can_set_prices %}
               <a class="dropdown-item" href="{{ url_for('pricing_dashboard') }}">
                 <i class="fas fa-tags"></i> Pricing &amp; Re-Pricing
               </a>
@@ -725,14 +745,18 @@
                 <i class="fas fa-truck"></i> Supplier
               </a>
               {% endif %}
+              {% if 'inventory.view' in _p %}
               <a class="dropdown-item" href="{{ url_for('item_management_page') }}">
                 <i class="fas fa-warehouse"></i> Item Management
               </a>
+              {% endif %}
             </div>
           </li>
 
+          {% endif %}
+
           <!-- Finance Dropdown -->
-          {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) or 'sales' in session.get('roles', []) %}
+          {% if can_view_finance %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="financeDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-coins mr-1"></i> Finance
@@ -745,7 +769,7 @@
               <a class="dropdown-item" href="{{ url_for('finance_management_page') }}">
                 <i class="fas fa-wallet"></i> Finance Management
               </a>
-              {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) %}
+              {% if can_approve_finance %}
               <a class="dropdown-item" href="{{ url_for('finance_approvals') }}">
                 <i class="fas fa-check-double"></i> Finance Approvals
               </a>
@@ -754,12 +778,12 @@
               <a class="dropdown-item" href="{{ url_for('expense_tracking_page') }}">
                 <i class="fas fa-receipt"></i> Expense Tracking
               </a>
-              {% if 'admin' in session.get('roles', []) %}
+              {% if can_approve_expense_mgr %}
               <a class="dropdown-item" href="{{ url_for('expense_tracking_approval_page') }}">
                 <i class="fas fa-clipboard-check"></i> Expense Approval
               </a>
               {% endif %}
-              {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) %}
+              {% if can_approve_expense_fin %}
               <a class="dropdown-item" href="{{ url_for('finance_expense_approval_page') }}">
                 <i class="fas fa-file-invoice-dollar"></i> Finance Expense Approval
               </a>
@@ -2381,6 +2405,7 @@ function refreshUserRoles() {
   .then(data => {
     if (data.success) {
       console.log('Roles refreshed:', data.roles);
+      window.USER_PERMS = data.perms || {};
       
       // Check if current page should be reloaded based on role changes
       checkPageAccessWithNewRoles(data.roles);
@@ -2401,21 +2426,26 @@ function checkPageAccessWithNewRoles(newRoles) {
   const currentPath = window.location.pathname;
   
   // Define page-role mappings
-  const pageRoleMap = {
-    '/management_admin': ['admin'],
-    '/sales_mainpage': ['sales'],
-    '/sales_request': ['sales'],
-    '/operation_mainpage': ['operation', 'operations'],
-    '/operation_request': ['operation', 'operations'],
-    '/company': ['admin'],
-    '/client': ['admin'],
-    '/supplier': ['admin']
+  // Page -> permission. Mirrors the server-side @perm gates; the server is
+  // authoritative, this only avoids leaving someone parked on a dead page.
+  const pagePermMap = {
+    '/management_admin': ['user.view', 'client.edit', 'company.edit', 'supplier.edit', 'entity.edit'],
+    '/sales_mainpage':   ['sales_request.view'],
+    '/sales_request':    ['sales_request.view'],
+    '/operation_mainpage': ['approved_item.view'],
+    '/operation_request':  ['approved_item.view'],
+    '/pricing':          ['sales_item.price'],
+    '/sales-head-approval': ['negotiation.decide_sales_head'],
+    '/company':          ['company.view'],
+    '/client':           ['client.view'],
+    '/supplier':         ['supplier.view'],
+    '/users':            ['user.view']
   };
-  
-  // Check if current page requires specific roles
-  const requiredRoles = pageRoleMap[currentPath];
-  if (requiredRoles) {
-    const hasAccess = requiredRoles.some(role => newRoles.includes(role)) || newRoles.includes('admin');
+
+  const requiredPerms = pagePermMap[currentPath];
+  if (requiredPerms) {
+    const held = window.USER_PERMS || {};
+    const hasAccess = requiredPerms.some(code => code in held);
     
     if (!hasAccess) {
       // User lost access to current page, redirect to home

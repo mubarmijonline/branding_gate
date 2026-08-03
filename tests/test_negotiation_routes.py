@@ -4,6 +4,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import rbac
 
 
 class _RollbackConnection:
@@ -182,26 +183,54 @@ class NegotiationRouteTest(unittest.TestCase):
         self.assertEqual(negotiation["destination_team"], "costing")
         self.assertEqual(self._item()["negotiation_status"], "pending_negotiation")
 
-    def test_current_operation_role_can_use_the_repricing_decision_api(self):
-        self._set_negotiation_state("pending_pricing", "pricing")
+    def _client_as(self, role_code, user_id=9):
         client = branding_gate.app.test_client()
         with client.session_transaction() as current_session:
             current_session.update({
-                "user_id": 9,
+                "user_id": user_id,
                 "mobile": "01050802925",
-                "email": "operation-test@example.com",
-                "username": "operation-test",
-                "name": "Operation Pricing Test",
-                "roles": ["operation"],
+                "email": "%s@example.com" % role_code,
+                "username": role_code,
+                "name": role_code,
+                "roles": [role_code],
+                "perms": rbac.SEED_MATRIX[role_code],
+                "role_code": role_code,
             })
+        return client
 
-        response = client.post(
+    def test_pricing_manager_can_use_the_repricing_decision_api(self):
+        self._set_negotiation_state("pending_pricing", "pricing")
+
+        response = self._client_as("pricing_manager").post(
             f"/api/pricing/negotiations/{self.negotiation_id}/send-to-costing",
-            json={"notes": "Operation role pricing decision"},
+            json={"notes": "Pricing decision"},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._negotiation()["status"], "pending_costing")
+
+    def test_operations_can_no_longer_take_the_pricing_decision(self):
+        """Pricing owns the re-pricing decision; Operations only re-costs."""
+        self._set_negotiation_state("pending_pricing", "pricing")
+
+        response = self._client_as("operations_manager").post(
+            f"/api/pricing/negotiations/{self.negotiation_id}/send-to-costing",
+            json={"notes": "Operations should not be allowed here"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._negotiation()["status"], "pending_pricing")
+
+    def test_a_pricing_specialist_prepares_but_does_not_decide(self):
+        self._set_negotiation_state("pending_pricing", "pricing")
+
+        response = self._client_as("pricing_specialist").post(
+            f"/api/pricing/negotiations/{self.negotiation_id}/decline",
+            json={"reason": "Specialists may not decline"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._negotiation()["status"], "pending_pricing")
 
     def test_pricing_can_decline_and_return_the_existing_price_to_client_review(self):
         self._set_negotiation_state("pending_pricing", "pricing")

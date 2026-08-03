@@ -379,11 +379,17 @@ SEED_MATRIX = {
         _manager_expense_approval('department'),
         {
             'sales_request.view': 'all',
+            # Operations raises and maintains its own requests through
+            # /operation_request, so it needs create and edit, not just view.
+            'sales_request.create': 'all',
+            'sales_request.edit': 'all',
+            'sales_request.comment': 'all',
             'sales_item.cost': 'all',
             'negotiation.view': 'all',
             'negotiation.complete_costing': 'all',
             'approved_item.view': 'all',
             'approved_item.edit': 'all',
+            'catalog.edit': 'all',
             'supplier_report.view': 'all',
             'supplier.view': 'all',
             'supplier.create': 'all',
@@ -406,6 +412,9 @@ SEED_MATRIX = {
         _manager_expense_approval('team'),
         {
             'sales_request.view': 'all',
+            'sales_request.create': 'all',
+            'sales_request.edit': 'all',
+            'sales_request.comment': 'all',
             'sales_item.cost': 'all',
             'negotiation.view': 'all',
             'negotiation.complete_costing': 'all',
@@ -553,6 +562,29 @@ SEED_MATRIX = {
         },
     ),
 }
+
+# Self-service: what every employee needs regardless of job. The navbar balance
+# widget and the item-catalog lookup in main.html are rendered for everyone, so
+# gating them behind a departmental permission would break the shell itself.
+_SELF_SERVICE = _merge(
+    _OWN_EXPENSES,
+    {
+        'user_balance.view': 'own',
+        'user_balance.request': 'own',
+        'catalog.view': 'all',
+        'expense_tracking.view': 'own',
+        'expense_tracking.create': 'own',
+    },
+)
+
+SELF_SERVICE_PERMISSIONS = frozenset(_SELF_SERVICE)
+
+for _role_code in list(SEED_MATRIX):
+    if _role_code == 'admin':
+        continue
+    # _merge keeps the wider scope, so a role that already sees expense tracking
+    # at department scope is not narrowed to own by this baseline.
+    SEED_MATRIX[_role_code] = _merge(_SELF_SERVICE, SEED_MATRIX[_role_code])
 
 # Admin holds everything, generated rather than listed, so a permission added
 # to PERMISSIONS is never accidentally unreachable.

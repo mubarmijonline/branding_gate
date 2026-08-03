@@ -1504,7 +1504,7 @@ def home():
     return render_template("home.html")
 
 @app.route("/create_team", methods=["GET", "POST"])
-@role_required('admin')
+@perm('team.create')
 def create_team():
     if request.method == "POST":
         data = request.get_json() or {}
@@ -1718,7 +1718,7 @@ def test_notification():
         app.logger.error("Error sending test notification: %s", e)
         return jsonify(error=str(e)), 500
 @app.route('/users', methods=['GET'])
-@role_required('admin')
+@perm('user.view')
 def users():
     """Display users page with user data table"""
     if 'user_id' not in session:
@@ -1727,7 +1727,7 @@ def users():
     return render_template("users.html")
 
 @app.route('/api/users', methods=['GET'])
-@role_required('admin')
+@perm('user.view')
 def get_users():
     """API endpoint to fetch users data from MySQL"""
     if 'user_id' not in session:
@@ -1793,7 +1793,7 @@ def get_users():
         }), 500
 
 @app.route('/api/teams', methods=['GET'])
-@role_required('admin')
+@perm('team.view')
 def get_teams():
     """API endpoint to fetch all teams for the teams table, including roles as a comma-separated string"""
     if 'user_id' not in session:
@@ -1819,7 +1819,7 @@ def get_teams():
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/add', methods=['POST'])
-@role_required('admin')
+@perm('user.create')
 def add_user():
     """API endpoint to add a new user"""
     if 'user_id' not in session:
@@ -1934,7 +1934,7 @@ def add_user():
         }), 500
 
 @app.route('/api/users/delete/<int:user_id>', methods=['DELETE'])
-@role_required('admin')
+@perm('user.delete')
 def delete_user(user_id):
     """API endpoint to delete a user"""
     if 'user_id' not in session:
@@ -1980,7 +1980,7 @@ def delete_user(user_id):
         }), 500
 
 @app.route('/api/teams/edit/<int:team_id>', methods=['POST'])
-@role_required('admin')
+@perm('team.edit')
 def edit_team(team_id):
     """API endpoint to edit a team's name, department, and roles"""
     if 'user_id' not in session:
@@ -2018,7 +2018,7 @@ def edit_team(team_id):
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/teams/<int:team_id>/roles', methods=['GET'])
-@role_required('admin')
+@perm('team.view')
 def get_team_roles(team_id):
     """API endpoint to fetch current roles for a team (for edit modal)"""
     if 'user_id' not in session:
@@ -2034,7 +2034,7 @@ def get_team_roles(team_id):
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/edit/<int:user_id>', methods=['POST'])
-@role_required('admin')
+@perm('user.edit')
 def edit_user(user_id):
     """API endpoint to edit an existing user"""
     if 'user_id' not in session:
@@ -2160,7 +2160,7 @@ def edit_user(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/all_roles', methods=['GET'])
-@role_required('admin')
+@perm('user.view')
 def get_user_all_roles(user_id):
     """Return both user-only roles and team roles for a user (for Edit User modal)"""
     if 'user_id' not in session:
@@ -2194,7 +2194,7 @@ def get_user_all_roles(user_id):
 # ---------------------------------------------------------------------------
 
 @app.route('/api/departments', methods=['GET'])
-@role_required('admin')
+@perm('department.view')
 def get_departments():
     """List departments with how many teams and users sit in each."""
     try:
@@ -2215,7 +2215,7 @@ def get_departments():
 
 
 @app.route('/api/departments', methods=['POST'])
-@role_required('admin')
+@perm('department.edit')
 def add_department():
     """Create a department. `code` is the stable key, `name` is the label."""
     try:
@@ -2243,7 +2243,7 @@ def add_department():
 
 
 @app.route('/api/departments/<int:department_id>', methods=['PUT'])
-@role_required('admin')
+@perm('department.edit')
 def edit_department(department_id):
     """
     Rename a department. The code is deliberately immutable: rbac.py and the
@@ -2269,7 +2269,7 @@ def edit_department(department_id):
 
 
 @app.route('/api/rbac/roles', methods=['GET'])
-@role_required('admin')
+@perm('role.view')
 def get_rbac_roles():
     """List roles with their department and how many permissions each holds."""
     try:
@@ -2291,7 +2291,7 @@ def get_rbac_roles():
 
 
 @app.route('/api/rbac/roles/<int:role_id>/permissions', methods=['GET'])
-@role_required('admin')
+@perm('role.view')
 def get_rbac_role_permissions(role_id):
     """
     Show what a role can do. Read-only: the grant matrix lives in rbac.py and
@@ -2322,7 +2322,7 @@ def get_rbac_role_permissions(role_id):
 
 
 @app.route('/api/rbac/managers', methods=['GET'])
-@role_required('admin')
+@perm('user.view')
 def get_manager_candidates():
     """
     Candidate managers for a role: anyone holding a role at a higher level
@@ -2458,6 +2458,7 @@ def require_login():
 
 
 @app.route('/management_admin', methods=['GET'])
+@perm('user.view', 'client.edit', 'company.edit', 'supplier.edit', 'entity.edit')
 def management_admin():
     """Display admin section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
@@ -2466,7 +2467,7 @@ def management_admin():
     return render_template("admin_section.html")
 
 @app.route('/sales_mainpage', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def sales_mainpage():
     """Display sales section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
@@ -2475,6 +2476,7 @@ def sales_mainpage():
     return render_template("sales_mainpage.html")
 
 @app.route('/operation_mainpage', methods=['GET'])
+@perm('approved_item.view')
 def operation_mainpage():
     """Display operations section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
@@ -2483,13 +2485,13 @@ def operation_mainpage():
     return render_template("operation_mainpage.html")
 
 @app.route('/approved-items', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def approved_items_page():
     """Display client approved items page"""
     return render_template("approved_items.html")
 
 @app.route('/api/operations/approved-items', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def get_approved_items():
     """Get all client-approved items with sales request details"""
     try:
@@ -2731,7 +2733,7 @@ def _autosize_worksheet(ws, min_width=8, max_width=80, padding=2):
 
 
 @app.route('/api/operations/approved-items/export/by-request', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def export_approved_by_request():
     """Excel workbook with one sheet per Approved Request listing its items."""
     try:
@@ -2780,7 +2782,7 @@ def export_approved_by_request():
 
 
 @app.route('/api/operations/approved-items/export/by-supplier', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def export_approved_by_supplier():
     """Excel workbook with one sheet per Supplier listing the approved items assigned to them."""
     try:
@@ -2830,7 +2832,7 @@ def export_approved_by_supplier():
 
 
 @app.route('/api/operations/approved-items/export/request/<int:request_id>', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def export_approved_single_request(request_id):
     """Excel file with a single sheet listing all approved items for one request."""
     try:
@@ -2865,7 +2867,7 @@ def export_approved_single_request(request_id):
 # ===================== APPROVED ITEM COMPONENTS API =====================
 
 @app.route('/api/approved-items/<int:item_id>/components', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def get_item_components(item_id):
     """Get all components for an approved item"""
     try:
@@ -2959,7 +2961,7 @@ def get_item_components(item_id):
 
 
 @app.route('/api/approved-items/<int:item_id>/components', methods=['POST'])
-@role_required('operation')
+@perm('approved_item.edit')
 def add_item_component(item_id):
     """Add a component to an approved item"""
     try:
@@ -3007,7 +3009,7 @@ def add_item_component(item_id):
 
 
 @app.route('/api/approved-items/components/<int:component_id>', methods=['PUT'])
-@role_required('operation')
+@perm('approved_item.edit')
 def update_item_component(component_id):
     """Update a component"""
     try:
@@ -3058,7 +3060,7 @@ def update_item_component(component_id):
 
 
 @app.route('/api/approved-items/components/<int:component_id>', methods=['DELETE'])
-@role_required('operation')
+@perm('approved_item.edit')
 def delete_item_component(component_id):
     """Delete a component"""
     try:
@@ -3100,7 +3102,7 @@ def delete_item_component(component_id):
 
 
 @app.route('/api/approved-items/<int:item_id>/supplier', methods=['PUT'])
-@role_required('operation')
+@perm('approved_item.edit')
 def update_item_supplier(item_id):
     """Update supplier info for an item without components (direct assignment)"""
     try:
@@ -3146,7 +3148,7 @@ def update_item_supplier(item_id):
 
 
 @app.route('/api/suppliers/list', methods=['GET'])
-@role_required('operation')
+@perm('supplier.view')
 def get_suppliers_list():
     """Get list of all active suppliers for dropdown"""
     try:
@@ -3177,14 +3179,14 @@ def get_suppliers_list():
 # ===================== SUPPLIER REPORT =====================
 
 @app.route('/supplier-report', methods=['GET'])
-@role_required('operation')
+@perm('supplier_report.view')
 def supplier_report_page():
     """Display supplier report page"""
     return render_template("supplier_report.html")
 
 
 @app.route('/api/supplier-report', methods=['GET'])
-@role_required('operation')
+@perm('supplier_report.view')
 def get_supplier_report():
     """Get comprehensive supplier report with all related items and components"""
     try:
@@ -3462,7 +3464,7 @@ def get_supplier_report():
 
 
 @app.route('/api/supplier-report/scorecards', methods=['GET'])
-@role_required('operation')
+@perm('supplier_report.view')
 def get_supplier_scorecards():
     """Lightweight per-supplier scorecards: on-time %, total received, avg lead-time (days).
     Aggregates components (approved_item_components) + direct items (sales_request_items).
@@ -3550,7 +3552,7 @@ def get_supplier_scorecards():
 
 
 @app.route('/api/supplier-report/export-excel', methods=['GET'])
-@role_required('operation')
+@perm('supplier_report.view')
 def export_supplier_report_excel():
     """Export the current supplier-report (filtered) to an Excel workbook.
     Two sheets: 'All Items' and one sheet per supplier.
@@ -3638,7 +3640,7 @@ def export_supplier_report_excel():
 
 
 @app.route('/company', methods=['GET'])
-@role_required('admin', 'company_management')
+@perm('company.view')
 def company():
     """Display company page - Admin or company_management role"""
     if 'user_id' not in session:
@@ -3647,6 +3649,7 @@ def company():
     return render_template("company.html")
 
 @app.route('/api/companies', methods=['GET'])
+@perm('company.view')
 def get_companies():
     """API endpoint to fetch all companies - Admin only"""
     if 'user_id' not in session:
@@ -3704,7 +3707,7 @@ def get_companies():
         }), 500
 
 @app.route('/api/companies/add', methods=['POST'])
-@role_required('admin', 'company_management')
+@perm('company.create')
 def add_company():
     """API endpoint to add a new company - Admin or company_management role"""
     if 'user_id' not in session:
@@ -3882,7 +3885,7 @@ def add_company():
         }), 500
 
 @app.route('/api/companies/edit/<int:company_id>', methods=['POST'])
-@role_required('admin', 'company_management')
+@perm('company.edit')
 def edit_company(company_id):
     """API endpoint to edit an existing company - Admin or company_management role"""
     if 'user_id' not in session:
@@ -4058,7 +4061,7 @@ def edit_company(company_id):
         }), 500
 
 @app.route('/api/companies/delete/<int:company_id>', methods=['DELETE'])
-@role_required('admin', 'company_management')
+@perm('company.delete')
 def delete_company(company_id):
     """API endpoint to delete a company - Admin or company_management role"""
     if 'user_id' not in session:
@@ -4110,7 +4113,7 @@ def delete_company(company_id):
         }), 500
 
 @app.route('/api/companies/<int:company_id>/documents', methods=['GET'])
-@role_required('admin', 'company_management')
+@perm('company.view')
 def get_company_documents(company_id):
     """API endpoint to get documents for a company - Admin or company_management role"""
     if 'user_id' not in session:
@@ -4164,7 +4167,7 @@ def get_company_documents(company_id):
         }), 500
 
 @app.route('/api/companies/documents/<int:document_id>', methods=['DELETE'])
-@role_required('admin', 'company_management')
+@perm('company.edit')
 def delete_company_document(document_id):
     """API endpoint to delete a company document - Admin or company_management role"""
     if 'user_id' not in session:
@@ -4236,7 +4239,7 @@ def delete_company_document(document_id):
         }), 500
 
 @app.route('/api/companies/documents/<int:document_id>/download', methods=['GET'])
-@role_required('admin', 'company_management')
+@perm('company.view')
 def download_company_document(document_id):
     """API endpoint to download a company document - Admin or company_management role"""
     if 'user_id' not in session:
@@ -4287,7 +4290,7 @@ def download_company_document(document_id):
         }), 500
 
 @app.route('/client', methods=['GET'])
-@role_required('admin', 'client_management')
+@perm('client.view')
 def client():
     """Display client page - Admin or client_management role"""
     if 'user_id' not in session:
@@ -4296,6 +4299,7 @@ def client():
     return render_template("client.html")
 
 @app.route('/api/clients', methods=['GET'])
+@perm('client.view')
 def get_clients():
     """API endpoint to fetch all clients"""
     if 'user_id' not in session:
@@ -4353,7 +4357,7 @@ def get_clients():
         }), 500
 
 @app.route('/api/clients/add', methods=['POST'])
-@role_required('admin', 'client_management')
+@perm('client.create')
 def add_client():
     """API endpoint to add a new client - Admin or client_management role"""
     if 'user_id' not in session:
@@ -4439,7 +4443,7 @@ def add_client():
         }), 500
 
 @app.route('/api/clients/edit/<int:client_id>', methods=['POST'])
-@role_required('admin', 'client_management')
+@perm('client.edit')
 def edit_client(client_id):
     """API endpoint to edit an existing client - Admin or client_management role"""
     if 'user_id' not in session:
@@ -4540,7 +4544,7 @@ def edit_client(client_id):
         }), 500
 
 @app.route('/api/clients/<int:client_id>', methods=['GET'])
-@role_required('admin', 'client_management')
+@perm('client.view')
 def get_client(client_id):
     """API endpoint to get a single client - Admin or client_management role"""
     if 'user_id' not in session:
@@ -4571,7 +4575,7 @@ def get_client(client_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/clients/delete/<int:client_id>', methods=['DELETE'])
-@role_required('admin', 'client_management')
+@perm('client.delete')
 def delete_client(client_id):
     """API endpoint to delete a client - Admin or client_management role"""
     if 'user_id' not in session:
@@ -4607,7 +4611,7 @@ def delete_client(client_id):
         }), 500
 # Add this after the client route (around line 1400)
 @app.route('/supplier', methods=['GET'])
-@role_required('admin', 'supplier_management')
+@perm('supplier.view')
 def supplier():
     """Display supplier page - Admin or supplier_management role"""
     if 'user_id' not in session:
@@ -4617,7 +4621,7 @@ def supplier():
 
 # Update this around line 1570
 @app.route('/api/suppliers', methods=['GET'])
-@role_required('admin', 'supplier_management')
+@perm('supplier.view')
 def get_suppliers():
     """API endpoint to fetch all suppliers - Admin only"""
     if 'user_id' not in session:
@@ -4676,6 +4680,7 @@ def get_suppliers():
 
 # Simple endpoint for dropdowns
 @app.route('/api/suppliers/simple', methods=['GET'])
+@perm('supplier.view')
 def get_suppliers_simple():
     """API endpoint to fetch suppliers for dropdowns"""
     if 'user_id' not in session:
@@ -4723,7 +4728,7 @@ def get_suppliers_simple():
 
 # Add this after the get_suppliers endpoint
 @app.route('/api/suppliers/add', methods=['POST'])
-@role_required('admin', 'supplier_management')
+@perm('supplier.create')
 def add_supplier():
     """API endpoint to add a new supplier - Admin or supplier_management role"""
     if 'user_id' not in session:
@@ -4811,7 +4816,7 @@ def add_supplier():
 
 # Add this after the add_supplier endpoint
 @app.route('/api/suppliers/edit/<int:supplier_id>', methods=['POST'])
-@role_required('admin', 'supplier_management')
+@perm('supplier.edit')
 def edit_supplier(supplier_id):
     """API endpoint to edit an existing supplier - Admin or supplier_management role"""
     if 'user_id' not in session:
@@ -4914,7 +4919,7 @@ def edit_supplier(supplier_id):
 
 # Add this after the edit_supplier endpoint
 @app.route('/api/suppliers/delete/<int:supplier_id>', methods=['DELETE'])
-@role_required('admin', 'supplier_management')
+@perm('supplier.delete')
 def delete_supplier(supplier_id):
     """API endpoint to delete a supplier - Admin or supplier_management role"""
     if 'user_id' not in session:
@@ -4951,7 +4956,7 @@ def delete_supplier(supplier_id):
 
 # Routes for rendering HTML pages
 @app.route('/approvals', methods=['GET'])
-@role_required('admin')
+@perm('sales_request.approve')
 def approvals_page():
     """Render the approvals management page for admins"""
     if 'user_id' not in session:
@@ -4960,7 +4965,7 @@ def approvals_page():
     return render_template('approvals.html')
 
 @app.route('/sales_request', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def sales_request():
     """Display sales request page"""
     if 'user_id' not in session:
@@ -4970,7 +4975,7 @@ def sales_request():
 
 
 @app.route('/sales_request_details/<int:request_id>', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def sales_request_details_page(request_id):
     """Privilege-gated read-only details page for a single sales request.
     Data is fetched client-side from /api/sales/requests/<id>.
@@ -4981,7 +4986,7 @@ def sales_request_details_page(request_id):
 
 
 @app.route('/pricing', methods=['GET'])
-@role_required('pricing', 'operation')
+@perm('sales_item.price')
 def pricing_dashboard():
     """Pricing - Operation Dashboard.
     Reuses the sales_request template in read-only mode:
@@ -4992,7 +4997,7 @@ def pricing_dashboard():
     return render_template("sales_request.html", pricing_mode=True)
 
 @app.route('/workflow_timeline')
-@role_required('sales')
+@perm('sales_request.view')
 def workflow_timeline():
     """Display workflow timeline page showing status flow of all sales requests"""
     if 'user_id' not in session:
@@ -5001,7 +5006,7 @@ def workflow_timeline():
     return render_template("workflow_timeline.html")
 
 @app.route('/api/workflow/requests', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def api_workflow_requests():
     """Get all sales requests with summary for timeline view"""
     if 'user_id' not in session:
@@ -5062,7 +5067,7 @@ def api_workflow_requests():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/workflow/request/<int:request_id>/timeline', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def api_workflow_request_timeline(request_id):
     """Get detailed timeline for a specific sales request"""
     if 'user_id' not in session:
@@ -5193,7 +5198,7 @@ def template_test():
     return send_from_directory('.', 'template_system_test.html')
 
 @app.route('/operation_request', methods=['GET'])
-@role_required('operation')
+@perm('approved_item.view')
 def operation_request():
     """Display operation request page"""
     if 'user_id' not in session:
@@ -5203,6 +5208,7 @@ def operation_request():
 
 # API endpoints for requests
 @app.route('/api/requests', methods=['GET'])
+@perm('sales_request.view')
 def get_requests():
     """API endpoint to fetch all requests"""
     if 'user_id' not in session:
@@ -5254,6 +5260,7 @@ def get_requests():
         return jsonify(error=str(e)), 500
 
 @app.route('/api/requests/<int:request_id>/items', methods=['GET'])
+@perm('sales_request.view')
 def get_request_items(request_id):
     """API endpoint to fetch items for a specific request"""
     if 'user_id' not in session:
@@ -5295,7 +5302,7 @@ def get_request_items(request_id):
 
 # Sales and Operations API endpoints (with /api/ prefix)
 @app.route('/api/sales/requests', methods=['GET'])
-@role_required('sales', 'pricing', 'operation')
+@perm('sales_request.view')
 def get_sales_requests():
     """API endpoint to fetch all sales requests for DataTable - Enhanced for revamp"""
     if 'user_id' not in session:
@@ -5490,6 +5497,7 @@ def get_sales_requests():
         }), 500
 
 @app.route('/api/operations/requests', methods=['GET'])
+@perm('sales_request.view')
 def get_operations_requests():
     """API endpoint to fetch all operations requests for DataTable"""
     if 'user_id' not in session:
@@ -5630,6 +5638,7 @@ def get_operations_requests():
         }), 500
 
 @app.route('/api/sales/requests/<int:request_id>', methods=['GET'])
+@perm('sales_request.view')
 def get_single_sales_request(request_id):
     """API endpoint to fetch a single sales request with items - Enhanced with duration"""
     if 'user_id' not in session:
@@ -5961,6 +5970,7 @@ def get_single_sales_request(request_id):
         }), 500
 
 @app.route('/api/operations/requests/<int:request_id>', methods=['GET'])
+@perm('sales_request.view')
 def get_single_operations_request(request_id):
     """API endpoint to fetch a single operations request with items"""
     if 'user_id' not in session:
@@ -6179,7 +6189,7 @@ def get_single_operations_request(request_id):
         }), 500
 
 @app.route('/api/sales/requests/add', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.create')
 def add_sales_request():
     """Add a new sales request with items - Enhanced with duration calculation"""
     print(f"DEBUG: add_sales_request function called")
@@ -6768,7 +6778,7 @@ def add_sales_request():
 
 
 @app.route('/api/sales/requests/<int:request_id>/items', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_sales_request_items_list(request_id):
     """Get items for a specific sales request - used for credit item selection"""
     if 'user_id' not in session:
@@ -6828,7 +6838,7 @@ def get_sales_request_items_list(request_id):
 
 
 @app.route('/api/sales/requests/<int:request_id>/files', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_request_files(request_id):
     """Get files for a sales request"""
     try:
@@ -6860,7 +6870,7 @@ def get_request_files(request_id):
         }), 500
 
 @app.route('/api/sales/requests/files/<int:file_id>/download', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def download_request_file(file_id):
     """Download a sales request file"""
     try:
@@ -6892,7 +6902,7 @@ def download_request_file(file_id):
         return abort(500)
 
 @app.route('/api/sales/requests/files/<int:file_id>', methods=['DELETE'])
-@role_required('sales')
+@perm('sales_request.edit')
 def delete_request_file(file_id):
     """Delete a sales request file"""
     try:
@@ -6940,7 +6950,7 @@ def delete_request_file(file_id):
         }), 500
 
 @app.route('/api/sales/requests/<int:request_id>/status', methods=['POST'])
-@role_required('admin')
+@perm('sales_request.approve')
 def update_request_status(request_id):
     """Update request status with history tracking"""
     try:
@@ -6999,6 +7009,7 @@ def update_request_status(request_id):
         }), 500
 
 @app.route('/api/operations/requests/add', methods=['POST'])
+@perm('sales_request.create')
 def add_operation_request():
     """Add costs to existing request items (operations role)"""
     if 'user_id' not in session:
@@ -7073,7 +7084,7 @@ def add_operation_request():
         }), 500
 
 @app.route('/api/operations/requests/add-costs', methods=['POST'])
-@role_required('operation')
+@perm('sales_item.cost')
 def add_operation_request_costs():
     """Add costs to existing request items (operations role) - alternative endpoint"""
     if 'user_id' not in session:
@@ -7470,7 +7481,7 @@ def add_operation_request_costs():
         }), 500
 
 @app.route('/api/sales/requests/edit/<int:request_id>', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.edit')
 def edit_sales_request(request_id):
     """Edit sales request - Enhanced with duration calculation"""
     if 'user_id' not in session:
@@ -8243,12 +8254,13 @@ def edit_sales_request(request_id):
             'error': str(e)
         }), 500
 @app.route('/api/operations/requests/edit/<int:request_id>', methods=['POST'])
+@perm('sales_request.edit')
 def edit_operation_request(request_id):
     """Edit operation request (same as add operation for now)"""
     return add_operation_request()
 
 @app.route('/api/sales/requests/delete/<int:request_id>', methods=['DELETE'])
-@role_required('sales')
+@perm('sales_request.delete')
 def delete_sales_request(request_id):
     """Delete a sales request and all its items"""
     if 'user_id' not in session:
@@ -8345,7 +8357,7 @@ def delete_sales_request(request_id):
         }), 500
 
 @app.route('/api/sales/requests/<int:request_id>/changelog', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_request_changelog(request_id):
     """Get change log for a sales request"""
     if 'user_id' not in session:
@@ -8436,7 +8448,7 @@ def get_request_changelog(request_id):
 # ============================================================================
 
 @app.route('/api/approvals/pending', methods=['GET'])
-@role_required('admin')
+@perm('sales_request.approve')
 def get_pending_approvals():
     """Get all pending approval requests for admin review"""
     if 'user_id' not in session:
@@ -8494,7 +8506,7 @@ def get_pending_approvals():
         }), 500
 
 @app.route('/api/approvals/<int:approval_id>/approve', methods=['POST'])
-@role_required('admin')
+@perm('sales_request.approve')
 def approve_request(approval_id):
     """Approve a pending request and create the actual sales request"""
     if 'user_id' not in session:
@@ -8635,7 +8647,7 @@ def approve_request(approval_id):
         }), 500
 
 @app.route('/api/approvals/<int:approval_id>/reject', methods=['POST'])
-@role_required('admin')
+@perm('sales_request.approve')
 def reject_request(approval_id):
     """Reject a pending approval request"""
     if 'user_id' not in session:
@@ -8696,7 +8708,7 @@ def reject_request(approval_id):
         }), 500
 
 @app.route('/api/approvals/my-requests', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_my_pending_requests():
     """Get current user's pending approval requests"""
     if 'user_id' not in session:
@@ -8755,7 +8767,7 @@ def get_my_pending_requests():
 # ============================================================================
 
 @app.route('/api/sales/requests/<int:request_id>/set-prices', methods=['POST'])
-@role_required('sales', 'pricing', 'operation')
+@perm('sales_item.price')
 def set_item_prices(request_id):
     """Set selling prices for items in a sales request"""
     if 'user_id' not in session:
@@ -9055,7 +9067,7 @@ def set_item_prices(request_id):
         }), 500
 
 @app.route('/api/sales/requests/<int:request_id>/generate-proposal', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def generate_proposal_pdf(request_id):
     """Generate a professional PDF proposal for a fully costed sales request"""
     if 'user_id' not in session:
@@ -9399,6 +9411,7 @@ def generate_proposal_pdf(request_id):
 
 # Comments API endpoints using Firebase
 @app.route('/api/requests/<int:request_id>/comments', methods=['GET'])
+@perm('sales_request.comment')
 def get_request_comments(request_id):
     """Get all comments for a specific request from Firebase"""
     if 'user_id' not in session:
@@ -9431,6 +9444,7 @@ def get_request_comments(request_id):
         }), 500
 
 @app.route('/api/requests/<int:request_id>/comments/add', methods=['POST'])
+@perm('sales_request.comment')
 def add_request_comment(request_id):
     """Add a new comment to a request in Firebase"""
     if 'user_id' not in session:
@@ -9490,6 +9504,7 @@ def edit_operation_request_old(request_id):
 
 # Dashboard Statistics API endpoints
 @app.route('/api/dashboard/sales/statistics', methods=['GET'])
+@perm('dashboard.sales')
 def get_sales_statistics():
     """Get sales dashboard statistics"""
     if 'user_id' not in session:
@@ -9548,6 +9563,7 @@ def get_sales_statistics():
         }), 500
 
 @app.route('/api/dashboard/operations/statistics', methods=['GET'])
+@perm('dashboard.operations')
 def get_operations_statistics():
     """Get operations dashboard statistics"""
     if 'user_id' not in session:
@@ -9627,6 +9643,7 @@ def get_operations_statistics():
         }), 500
 
 @app.route('/api/dashboard/operations/recent-activity', methods=['GET'])
+@perm('dashboard.operations')
 def get_operations_recent_activity():
     """Get recent operations activity for dashboard"""
     if 'user_id' not in session:
@@ -9691,6 +9708,7 @@ def get_operations_recent_activity():
         }), 500
 
 @app.route('/api/dashboard/suppliers/statistics', methods=['GET'])
+@perm('dashboard.supplier')
 def get_suppliers_statistics():
     """Get supplier statistics for operations dashboard"""
     if 'user_id' not in session:
@@ -9734,6 +9752,7 @@ def get_suppliers_statistics():
 # Template System API Endpoints
 
 @app.route('/api/sales-requests/templates', methods=['GET'])
+@perm('catalog.view')
 def get_request_templates():
     """Get all available request templates"""
     if 'user_id' not in session:
@@ -9765,6 +9784,7 @@ def get_request_templates():
         }), 500
 
 @app.route('/api/sales-requests/templates/<int:template_id>/fields', methods=['GET'])
+@perm('catalog.view')
 def get_template_fields(template_id):
     """Get field definitions for a specific template"""
     if 'user_id' not in session:
@@ -9807,6 +9827,7 @@ def get_template_fields(template_id):
         }), 500
 
 @app.route('/api/sales-requests/catalog/items', methods=['GET'])
+@perm('catalog.view')
 def get_catalog_items():
     """Get all catalog items with their descriptions"""
     if 'user_id' not in session:
@@ -9849,6 +9870,7 @@ def get_catalog_items():
         }), 500
 
 @app.route('/api/sales-requests/catalog/item-types', methods=['GET'])
+@perm('catalog.view')
 def get_catalog_item_types():
     """Get all catalog item types"""
     if 'user_id' not in session:
@@ -9883,6 +9905,7 @@ def get_catalog_item_types():
 # ============================================================================
 
 @app.route('/api/sales-requests/items/<int:item_id>/attachments', methods=['POST'])
+@perm('sales_request.edit')
 def upload_item_attachments(item_id):
     """
     Upload multiple attachments (images/PDFs) for a specific item.
@@ -10063,6 +10086,7 @@ def upload_item_attachments(item_id):
 
 
 @app.route('/api/sales-requests/items/<int:item_id>/attachments', methods=['GET'])
+@perm('sales_request.view')
 def get_item_attachments(item_id):
     """
     Retrieve all attachments for a specific item.
@@ -10128,6 +10152,7 @@ def get_item_attachments(item_id):
 
 
 @app.route('/api/sales-requests/items/<int:item_id>/attachments/<int:attachment_id>', methods=['DELETE'])
+@perm('sales_request.edit')
 def delete_item_attachment(item_id, attachment_id):
     """
     Delete a specific attachment from an item.
@@ -10258,7 +10283,7 @@ def serve_item_attachment(item_id, filename):
 # ============================================================================
 
 @app.route('/api/sales-requests/create-with-template', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.create')
 def create_request_with_template():
     """Create a new sales request using template system"""
     if 'user_id' not in session:
@@ -10773,7 +10798,7 @@ def create_request_with_template():
         }), 500
 
 @app.route('/api/sales-requests/update-with-template/<int:request_id>', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.edit')
 def update_request_with_template(request_id):
     """Update an existing sales request using template system"""
     if 'user_id' not in session:
@@ -11901,6 +11926,7 @@ def update_request_with_template(request_id):
         }), 500
 
 @app.route('/api/sales-requests/<int:request_id>/attachments', methods=['POST'])
+@perm('sales_request.edit')
 def upload_request_attachments(request_id):
     """Upload attachments for a request with proper categorization"""
     if 'user_id' not in session:
@@ -12075,6 +12101,7 @@ def save_item_to_catalog_internal(name, unit='pcs', width=None, height=None, dep
             conn.close()
 
 @app.route('/api/item-catalog', methods=['GET'])
+@perm('catalog.view')
 def get_item_catalog():
     """Get all items from catalog, sorted by usage"""
     if 'user_id' not in session:
@@ -12112,6 +12139,7 @@ def get_item_catalog():
         }), 500
 
 @app.route('/api/item-catalog/save', methods=['POST'])
+@perm('catalog.edit')
 def save_item_to_catalog():
     """Save an item to the catalog (insert or update usage count)"""
     if 'user_id' not in session:
@@ -12191,6 +12219,7 @@ def save_item_to_catalog():
         }), 500
 
 @app.route('/api/item-catalog/<int:item_id>', methods=['DELETE'])
+@perm('catalog.edit')
 def delete_catalog_item(item_id):
     """Delete an item from the catalog"""
     if 'user_id' not in session:
@@ -12234,6 +12263,7 @@ def delete_catalog_item(item_id):
 # ============================================================================
 
 @app.route('/api/inventory/search-items', methods=['GET'])
+@perm('inventory.view')
 def search_inventory_items():
     """
     Search inventory items for sales request item selection.
@@ -12366,13 +12396,13 @@ def search_inventory_items():
 # ============================================================================
 
 @app.route('/client_approval', methods=['GET'])
-@role_required('sales')
+@perm('client_approval.view')
 def client_approval_page():
     """Render client approval management page"""
     return render_template('client_approval.html')
 
 @app.route('/api/client-approval/items', methods=['GET'])
-@role_required('sales')
+@perm('client_approval.view')
 def get_client_approval_items():
     """Get all items for client approval with filters"""
     if 'user_id' not in session:
@@ -12484,7 +12514,7 @@ def get_client_approval_items():
         }), 500
 
 @app.route('/api/client-approval/statistics', methods=['GET'])
-@role_required('sales')
+@perm('client_approval.view')
 def get_client_approval_statistics():
     """Get client approval statistics"""
     if 'user_id' not in session:
@@ -12532,7 +12562,7 @@ def get_client_approval_statistics():
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>', methods=['GET'])
-@role_required('sales')
+@perm('client_approval.view')
 def get_client_approval_item_details(item_id):
     """Get detailed information about a specific item"""
     if 'user_id' not in session:
@@ -12578,7 +12608,7 @@ def get_client_approval_item_details(item_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/submit', methods=['POST'])
-@role_required('sales')
+@perm('client_approval.submit')
 def submit_item_for_approval(item_id):
     """Submit an item for client approval"""
     if 'user_id' not in session:
@@ -12684,7 +12714,7 @@ def submit_item_for_approval(item_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/history', methods=['GET'])
-@role_required('sales')
+@perm('client_approval.view')
 def get_item_approval_history(item_id):
     """Get approval history for an item"""
     if 'user_id' not in session:
@@ -12721,7 +12751,7 @@ def get_item_approval_history(item_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/approve', methods=['POST'])
-@role_required('sales')
+@perm('client_approval.decide')
 def approve_item(item_id):
     """Approve an item (can be used by admin or when client approves)"""
     if 'user_id' not in session:
@@ -12808,7 +12838,7 @@ def approve_item(item_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/reject', methods=['POST'])
-@role_required('sales')
+@perm('client_approval.decide')
 def reject_item(item_id):
     """Reject an item"""
     if 'user_id' not in session:
@@ -12895,7 +12925,7 @@ def reject_item(item_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/negotiate', methods=['POST'])
-@role_required('sales')
+@perm('client_approval.decide')
 def negotiate_item_price(item_id):
     """NEW: Create negotiation request with expected price - routes through Sales Head"""
     if 'user_id' not in session:
@@ -13055,13 +13085,13 @@ def negotiate_item_price(item_id):
 # =============================================================================
 
 @app.route('/sales-head-approval')
-@role_required('sales_head')
+@perm('negotiation.decide_sales_head')
 def sales_head_approval_page():
     """Sales Head Approval page - admin role is always allowed by decorator"""
     return render_template('sales_head_approval.html')
 
 @app.route('/api/sales-head/negotiations', methods=['GET'])
-@role_required('sales_head')
+@perm('negotiation.decide_sales_head')
 def get_sales_head_negotiations():
     """Get all negotiation requests for sales head review"""
     if 'user_id' not in session:
@@ -13159,7 +13189,7 @@ def get_sales_head_negotiations():
         }), 500
 
 @app.route('/api/sales-head/negotiations/statistics', methods=['GET'])
-@role_required('sales_head')
+@perm('negotiation.decide_sales_head')
 def get_sales_head_statistics():
     """Get statistics for sales head dashboard"""
     if 'user_id' not in session:
@@ -13228,7 +13258,7 @@ def get_sales_head_statistics():
         }), 500
 
 @app.route('/api/sales-head/negotiations/<int:negotiation_id>/approve', methods=['POST'])
-@role_required('sales_head')
+@perm('negotiation.decide_sales_head')
 def approve_sales_head_negotiation(negotiation_id):
     """Approve a negotiation and always send it to Pricing for a decision."""
     if 'user_id' not in session:
@@ -13325,7 +13355,7 @@ def approve_sales_head_negotiation(negotiation_id):
 
 
 @app.route('/api/pricing/negotiations/<int:negotiation_id>/send-to-costing', methods=['POST'])
-@role_required('pricing', 'operation')
+@perm('negotiation.decide_pricing')
 def pricing_send_negotiation_to_costing(negotiation_id):
     """Let Pricing request re-costing before it sets a new selling price."""
     try:
@@ -13409,7 +13439,7 @@ def pricing_send_negotiation_to_costing(negotiation_id):
 
 
 @app.route('/api/pricing/negotiations/<int:negotiation_id>/decline', methods=['POST'])
-@role_required('pricing', 'operation')
+@perm('negotiation.decide_pricing')
 def pricing_decline_negotiation(negotiation_id):
     """Decline a negotiation from Pricing and retain the existing price."""
     try:
@@ -13492,7 +13522,7 @@ def pricing_decline_negotiation(negotiation_id):
 
 
 @app.route('/api/sales-head/negotiations/<int:negotiation_id>/decline', methods=['POST'])
-@role_required('sales_head')
+@perm('negotiation.decide_sales_head')
 def decline_sales_head_negotiation(negotiation_id):
     """Decline negotiation - return to client approval"""
     if 'user_id' not in session:
@@ -13589,6 +13619,7 @@ def decline_sales_head_negotiation(negotiation_id):
         }), 500
 
 @app.route('/api/client-approval/items/<int:item_id>/price-history', methods=['GET'])
+@perm('client_approval.view')
 def get_item_price_history(item_id):
     """Get price history for an item showing all negotiation rounds"""
     if 'user_id' not in session:
@@ -13641,7 +13672,7 @@ def get_item_price_history(item_id):
         }), 500
 
 @app.route('/api/sales/requests/<int:request_id>/approval-stage', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_request_approval_stage(request_id):
     """Get detailed approval stage information for a request"""
     if 'user_id' not in session:
@@ -13818,7 +13849,7 @@ def update_request_approval_stage(request_id, conn=None, cur=None):
 # ============================================================================
 
 @app.route('/api/sales/requests/<int:request_id>/comments', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.comment')
 def get_sales_request_comments(request_id):
     """Get all comments for a sales request with mentions"""
     if 'user_id' not in session:
@@ -13897,7 +13928,7 @@ def get_sales_request_comments(request_id):
 
 
 @app.route('/api/sales/requests/<int:request_id>/comments', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.comment')
 def add_sales_request_comment(request_id):
     """Add a comment/note to a sales request with @mention support"""
     if 'user_id' not in session:
@@ -14048,7 +14079,7 @@ def add_sales_request_comment(request_id):
 
 
 @app.route('/api/sales/requests/comments/<int:comment_id>', methods=['PUT'])
-@role_required('sales')
+@perm('sales_request.comment')
 def update_sales_request_comment(comment_id):
     """Update a comment (only by the author)"""
     if 'user_id' not in session:
@@ -14104,7 +14135,7 @@ def update_sales_request_comment(comment_id):
 
 
 @app.route('/api/sales/requests/comments/<int:comment_id>', methods=['DELETE'])
-@role_required('sales')
+@perm('sales_request.comment')
 def delete_sales_request_comment(comment_id):
     """Soft delete a comment (only by author or admin)"""
     if 'user_id' not in session:
@@ -14156,7 +14187,7 @@ def delete_sales_request_comment(comment_id):
 
 
 @app.route('/api/sales/requests/comments/<int:comment_id>/mentions/read', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.comment')
 def mark_mention_as_read(comment_id):
     """Mark a mention as read"""
     if 'user_id' not in session:
@@ -14187,7 +14218,7 @@ def mark_mention_as_read(comment_id):
 
 
 @app.route('/api/chat/sr-list', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.view')
 def get_chat_sr_list():
     """
     Global chat list for the slide-in chat drawer.
@@ -14284,7 +14315,7 @@ def get_chat_sr_list():
 
 
 @app.route('/api/chat/sr/<int:request_id>/mark-read', methods=['POST'])
-@role_required('sales')
+@perm('sales_request.comment')
 def mark_chat_sr_read(request_id):
     """Mark every mention of the current user as read for the given sales request.
     Called by the chat drawer when the user opens a chat thread.
@@ -14318,7 +14349,7 @@ def mark_chat_sr_read(request_id):
 
 
 @app.route('/api/sales/my-mentions', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.comment')
 def get_my_mentions():
     """Get all mentions for the current user across all requests"""
     if 'user_id' not in session:
@@ -14371,7 +14402,7 @@ def get_my_mentions():
 
 
 @app.route('/api/users/search', methods=['GET'])
-@role_required('sales')
+@perm('sales_request.comment')
 def search_users_for_mention():
     """Search users for @mention functionality"""
     if 'user_id' not in session:
@@ -14436,7 +14467,7 @@ def search_users_for_mention():
 # ============================================================================
 
 @app.route('/entity-management', methods=['GET'])
-@role_required('admin', 'entity_management')
+@perm('entity.view')
 def entity_management_page():
     """Render the Entity Management page"""
     if 'user_id' not in session:
@@ -14444,7 +14475,7 @@ def entity_management_page():
     return render_template('entity_management.html')
 
 @app.route('/inventory-selection', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def inventory_selection_page():
     """Render the Inventory Selection Landing page"""
     if 'user_id' not in session:
@@ -14452,7 +14483,7 @@ def inventory_selection_page():
     return render_template('inventory_selection.html')
 
 @app.route('/api/entities', methods=['GET'])
-@role_required('admin', 'entity_management')
+@perm('entity.view')
 def get_entities():
     """Get all entities with statistics"""
     if 'user_id' not in session:
@@ -14511,7 +14542,7 @@ def get_entities():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/entities', methods=['POST'])
-@role_required('admin', 'entity_management')
+@perm('entity.create')
 def create_entity():
     """Create a new entity"""
     if 'user_id' not in session:
@@ -14571,7 +14602,7 @@ def create_entity():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/entities/<int:entity_id>', methods=['GET'])
-@role_required('admin', 'entity_management')
+@perm('entity.view')
 def get_entity(entity_id):
     """Get single entity details"""
     if 'user_id' not in session:
@@ -14599,7 +14630,7 @@ def get_entity(entity_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/entities/<int:entity_id>', methods=['PUT'])
-@role_required('admin', 'entity_management')
+@perm('entity.edit')
 def update_entity(entity_id):
     """Update an entity"""
     if 'user_id' not in session:
@@ -14671,7 +14702,7 @@ def update_entity(entity_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/entities/<int:entity_id>', methods=['DELETE'])
-@role_required('admin', 'entity_management')
+@perm('entity.delete')
 def delete_entity(entity_id):
     """Delete an entity (only if no inventory items)"""
     if 'user_id' not in session:
@@ -14708,7 +14739,7 @@ def delete_entity(entity_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/entities/inventory-stats', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_entities_inventory_stats():
     """Get all entities with inventory statistics for landing page"""
     if 'user_id' not in session:
@@ -14779,7 +14810,7 @@ def get_entities_inventory_stats():
 # ============================================================================
 
 @app.route('/item_management', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def item_management_page():
     """Redirect to new inventory management page"""
     if 'user_id' not in session:
@@ -14793,7 +14824,7 @@ def item_management_page():
 # ============================================================================
 
 @app.route('/finance_management', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_txn.view')
 def finance_management_page():
     """Render the Finance Management page (detailed tabs)"""
     if 'user_id' not in session:
@@ -14802,7 +14833,7 @@ def finance_management_page():
     return render_template('finance_management.html')
 
 @app.route('/finance', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_txn.view')
 def finance_section_page():
     """Display finance section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
@@ -14816,7 +14847,7 @@ def finance_section_page():
 
 @app.route('/inventory_management', methods=['GET'])
 @app.route('/inventory', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def inventory_management_page():
     """Render the NEW modern inventory management page with separated regular/credit"""
     if 'user_id' not in session:
@@ -14848,7 +14879,7 @@ def inventory_management_page():
                          inventory_type=inventory_type)
 
 @app.route('/api/inventory/items', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_inventory_items():
     """Get all inventory items with stock levels and component details"""
     if 'user_id' not in session:
@@ -14993,7 +15024,7 @@ def get_inventory_items():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/items/add', methods=['POST'])
-@role_required('admin')
+@perm('inventory.create')
 def add_inventory_item():
     """Add a new inventory item (simple or composite)"""
     if 'user_id' not in session:
@@ -15173,7 +15204,7 @@ def add_inventory_item():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/items/<int:item_id>', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_inventory_item(item_id):
     """Get a single inventory item by ID"""
     if 'user_id' not in session:
@@ -15210,7 +15241,7 @@ def get_inventory_item(item_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/items/<int:item_id>', methods=['PUT'])
-@role_required('admin')
+@perm('inventory.edit')
 def update_inventory_item(item_id):
     """Update an inventory item"""
     if 'user_id' not in session:
@@ -15292,7 +15323,7 @@ def update_inventory_item(item_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/items/<int:item_id>', methods=['DELETE'])
-@role_required('admin')
+@perm('inventory.delete')
 def delete_inventory_item(item_id):
     """Delete an inventory item"""
     if 'user_id' not in session:
@@ -15323,7 +15354,7 @@ def delete_inventory_item(item_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/transactions', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_inventory_transactions():
     """Get all inventory transactions with optional filters"""
     if 'user_id' not in session:
@@ -15442,7 +15473,7 @@ def get_inventory_transactions():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/transactions/add', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def add_inventory_transaction():
     """Add a new inventory transaction (purchase, stock_out, adjustment, etc.)
     NOTE: Stock updates are handled by database trigger 'update_inventory_stock_after_transaction'
@@ -15538,7 +15569,7 @@ def add_inventory_transaction():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_credit_items():
     """Get all credit/consignment items"""
     if 'user_id' not in session:
@@ -15617,7 +15648,7 @@ def get_credit_items():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/add', methods=['POST'])
-@role_required('admin')
+@perm('inventory.create')
 def add_credit_item():
     """Add a new credit/consignment item - can be linked to sales request or standalone"""
     if 'user_id' not in session:
@@ -15803,7 +15834,7 @@ def add_credit_item():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/<int:credit_id>', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_credit_item(credit_id):
     """Get a single credit item by ID with its transactions"""
     if 'user_id' not in session:
@@ -15910,7 +15941,7 @@ def get_credit_item(credit_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/<int:credit_id>/add-quantity', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def add_quantity_to_credit_item(credit_id):
     """Add more quantity to an existing credit item"""
     if 'user_id' not in session:
@@ -15999,7 +16030,7 @@ def add_quantity_to_credit_item(credit_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/<int:credit_id>/sell', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def sell_credit_item(credit_id):
     """Record sale of credit item"""
     if 'user_id' not in session:
@@ -16062,7 +16093,7 @@ def sell_credit_item(credit_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/<int:credit_id>/return', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def return_credit_item(credit_id):
     """Return unsold credit items to supplier"""
     if 'user_id' not in session:
@@ -16129,7 +16160,7 @@ def return_credit_item(credit_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/credit-items/<int:credit_id>/payment', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def record_credit_payment(credit_id):
     """Record payment for credit item"""
     if 'user_id' not in session:
@@ -16171,7 +16202,7 @@ def record_credit_payment(credit_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/approved-items', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_approved_items_from_sales():
     """Get approved items from sales requests that can be added to inventory"""
     if 'user_id' not in session:
@@ -16269,7 +16300,7 @@ def get_approved_items_from_sales():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/items/create-from-sales', methods=['POST'])
-@role_required('admin')
+@perm('inventory.create')
 def create_inventory_from_sales():
     """
     Smart inventory management from sales requests:
@@ -16606,7 +16637,7 @@ def create_inventory_from_sales():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/alerts', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_inventory_alerts():
     """Get all unresolved inventory alerts - filtered by entity or credit"""
     if 'user_id' not in session:
@@ -16681,7 +16712,7 @@ def get_inventory_alerts():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/alerts/<int:alert_id>/resolve', methods=['POST'])
-@role_required('admin')
+@perm('inventory.transact')
 def resolve_inventory_alert(alert_id):
     """Mark an inventory alert as resolved"""
     if 'user_id' not in session:
@@ -16707,7 +16738,7 @@ def resolve_inventory_alert(alert_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inventory/statistics', methods=['GET'])
-@role_required('admin')
+@perm('inventory.view')
 def get_inventory_statistics():
     """Get inventory statistics for dashboard with regular/credit separation"""
     if 'user_id' not in session:
@@ -16802,7 +16833,7 @@ def get_inventory_statistics():
 # ----------------------- PAYMENT METHODS -----------------------
 
 @app.route('/api/finance/payment-methods', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_master.view')
 def get_payment_methods():
     """Get all payment methods with current balances"""
     if 'user_id' not in session:
@@ -16842,7 +16873,7 @@ def get_payment_methods():
 
 
 @app.route('/api/finance/payment-methods', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def add_payment_method():
     """Add a new payment method"""
     if 'user_id' not in session:
@@ -16899,7 +16930,7 @@ def add_payment_method():
 
 
 @app.route('/api/finance/payment-methods/<int:method_id>', methods=['PUT'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def update_payment_method(method_id):
     """Update a payment method"""
     if 'user_id' not in session:
@@ -16943,7 +16974,7 @@ def update_payment_method(method_id):
 
 
 @app.route('/api/finance/payment-methods/<int:method_id>/set-balance', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def set_payment_method_balance(method_id):
     """Set/adjust current balance for a payment method"""
     if 'user_id' not in session:
@@ -16992,7 +17023,7 @@ def set_payment_method_balance(method_id):
 
 
 @app.route('/api/finance/payment-methods/<int:method_id>/history', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_master.view')
 def get_payment_method_history(method_id):
     """Get balance history for a payment method"""
     if 'user_id' not in session:
@@ -17034,7 +17065,7 @@ def get_payment_method_history(method_id):
 # ----------------------- FINANCE CATEGORIES -----------------------
 
 @app.route('/api/finance/categories', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_master.view')
 def get_finance_categories():
     """Get all finance categories (hierarchical)"""
     if 'user_id' not in session:
@@ -17100,7 +17131,7 @@ def get_finance_categories():
 
 
 @app.route('/api/finance/categories', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def add_finance_category():
     """Add a new finance category or sub-category"""
     if 'user_id' not in session:
@@ -17156,7 +17187,7 @@ def add_finance_category():
 
 
 @app.route('/api/finance/categories/<int:cat_id>', methods=['PUT'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def update_finance_category(cat_id):
     """Update a finance category"""
     if 'user_id' not in session:
@@ -17200,7 +17231,7 @@ def update_finance_category(cat_id):
 
 
 @app.route('/api/finance/categories/<int:cat_id>', methods=['DELETE'])
-@role_required('admin', 'finance')
+@perm('finance_master.edit')
 def delete_finance_category(cat_id):
     """Soft delete a finance category and all its subcategories
     
@@ -17282,7 +17313,7 @@ def generate_transaction_code():
 
 
 @app.route('/api/finance/transactions', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_txn.view')
 def get_finance_transactions():
     """Get finance transactions with filters"""
     if 'user_id' not in session:
@@ -17508,7 +17539,7 @@ def get_finance_transactions():
 
 
 @app.route('/api/finance/transactions', methods=['POST'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_txn.create')
 def add_finance_transaction():
     """Add a new finance transaction (pending approval)"""
     if 'user_id' not in session:
@@ -17724,7 +17755,7 @@ def add_finance_transaction():
 
 
 @app.route('/api/finance/transactions/<int:trans_id>', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_txn.view')
 def get_finance_transaction(trans_id):
     """Get single transaction with full details and approval history"""
     if 'user_id' not in session:
@@ -17832,7 +17863,7 @@ def get_finance_transaction(trans_id):
 
 
 @app.route('/api/finance/transactions/<int:trans_id>/approve', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('finance_txn.approve')
 def approve_finance_transaction(trans_id):
     """Approve a pending finance transaction"""
     if 'user_id' not in session:
@@ -17989,7 +18020,7 @@ def approve_finance_transaction(trans_id):
 
 
 @app.route('/api/finance/transactions/<int:trans_id>/reject', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('finance_txn.approve')
 def reject_finance_transaction(trans_id):
     """Reject a pending finance transaction"""
     if 'user_id' not in session:
@@ -18046,7 +18077,7 @@ def reject_finance_transaction(trans_id):
 # ----------------------- FINANCE STATISTICS & DASHBOARD -----------------------
 
 @app.route('/api/finance/statistics', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_txn.view')
 def get_finance_statistics():
     """Get finance overview statistics"""
     if 'user_id' not in session:
@@ -18140,7 +18171,7 @@ def get_finance_statistics():
 
 
 @app.route('/api/finance/tree', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_txn.view')
 def get_finance_tree():
     """Get finance tree - categories with transaction totals"""
     if 'user_id' not in session:
@@ -18277,7 +18308,7 @@ def get_finance_tree():
 # ----------------------- HELPER: Get Clients and Suppliers for Dropdowns -----------------------
 
 @app.route('/api/finance/clients', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_report.view')
 def get_finance_clients():
     """Get clients for finance dropdowns"""
     if 'user_id' not in session:
@@ -18300,7 +18331,7 @@ def get_finance_clients():
 
 
 @app.route('/api/finance/suppliers', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_report.view')
 def get_finance_suppliers():
     """Get suppliers for finance dropdowns"""
     if 'user_id' not in session:
@@ -18324,7 +18355,7 @@ def get_finance_suppliers():
 
 
 @app.route('/api/finance/clients/summary', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_finance_clients_summary():
     """Get clients with their transaction summary under Client Payments"""
     if 'user_id' not in session:
@@ -18380,7 +18411,7 @@ def get_finance_clients_summary():
 
 
 @app.route('/api/finance/suppliers/summary', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_finance_suppliers_summary():
     """Get suppliers with their transaction summary under Supplier Payments"""
     if 'user_id' not in session:
@@ -18435,7 +18466,7 @@ def get_finance_suppliers_summary():
 
 
 @app.route('/api/finance/clients/<int:client_id>/transactions', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_client_transactions(client_id):
     """Get all transactions for a specific client"""
     if 'user_id' not in session:
@@ -18520,7 +18551,7 @@ def get_client_transactions(client_id):
 
 
 @app.route('/api/finance/suppliers/<int:supplier_id>/transactions', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_supplier_transactions(supplier_id):
     """Get all transactions for a specific supplier"""
     if 'user_id' not in session:
@@ -18601,7 +18632,7 @@ def get_supplier_transactions(supplier_id):
 # ----------------------- REPORTING API ENDPOINTS -----------------------
 
 @app.route('/api/finance/reports/clients', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_finance_report_clients():
     """Get all clients with their full transaction summary (not category-filtered)"""
     if 'user_id' not in session:
@@ -18679,7 +18710,7 @@ def get_finance_report_clients():
 
 
 @app.route('/api/finance/reports/suppliers', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_finance_report_suppliers():
     """Get all suppliers with their full transaction summary (not category-filtered)"""
     if 'user_id' not in session:
@@ -18755,7 +18786,7 @@ def get_finance_report_suppliers():
 
 
 @app.route('/api/finance/reports/payment-methods', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_finance_report_payment_methods():
     """Get all payment methods with transaction summaries"""
     if 'user_id' not in session:
@@ -18826,7 +18857,7 @@ def get_finance_report_payment_methods():
 
 
 @app.route('/api/finance/reports/clients/<int:client_id>/transactions', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_report_client_transactions(client_id):
     """Get all transactions for a client (for reporting - not category-filtered)"""
     if 'user_id' not in session:
@@ -18912,7 +18943,7 @@ def get_report_client_transactions(client_id):
 
 
 @app.route('/api/finance/reports/suppliers/<int:supplier_id>/transactions', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_report.view')
 def get_report_supplier_transactions(supplier_id):
     """Get all transactions for a supplier (for reporting - not category-filtered)"""
     if 'user_id' not in session:
@@ -18994,7 +19025,7 @@ def get_report_supplier_transactions(supplier_id):
 
 
 @app.route('/api/finance/sales-requests', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('sales_request.view')
 def get_finance_sales_requests():
     """Get sales requests for finance linking"""
     if 'user_id' not in session:
@@ -19038,7 +19069,7 @@ def get_finance_sales_requests():
 
 
 @app.route('/api/finance/income-statement', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_report.view')
 def get_income_statement():
     """Get income statement data"""
     if 'user_id' not in session:
@@ -19178,7 +19209,7 @@ def get_income_statement():
 
 
 @app.route('/api/finance/balance-sheet', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_report.view')
 def get_balance_sheet():
     """Get balance sheet data with date range support"""
     if 'user_id' not in session:
@@ -19339,7 +19370,7 @@ def get_balance_sheet():
 
 
 @app.route('/api/finance/analytics', methods=['GET'])
-@role_required('admin', 'finance', 'sales')
+@perm('finance_report.view')
 def get_finance_analytics():
     """Get comprehensive finance analytics with date range support"""
     if 'user_id' not in session:
@@ -19559,7 +19590,7 @@ def get_finance_analytics():
 # ============================================================================
 
 @app.route('/finance/approvals')
-@role_required('admin', 'finance')
+@perm('finance_txn.approve')
 def finance_approvals():
     """Finance Approvals Page"""
     return render_template('finance_approvals.html')
@@ -19570,7 +19601,7 @@ def finance_approvals():
 # ============================================================================
 
 @app.route('/api/finance/user-balances', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('user_balance.view')
 def get_user_balances():
     """Get all user balances"""
     try:
@@ -19601,6 +19632,7 @@ def get_user_balances():
 
 
 @app.route('/api/finance/user-balances/<int:user_id>', methods=['GET'])
+@perm('user_balance.view')
 def get_user_balance(user_id):
     """Get specific user balance"""
     try:
@@ -19652,6 +19684,7 @@ def get_user_balance(user_id):
 
 
 @app.route('/api/finance/my-balance', methods=['GET'])
+@perm('user_balance.view')
 def get_my_balance():
     """Get current user's balance"""
     try:
@@ -19691,6 +19724,7 @@ def get_my_balance():
 
 
 @app.route('/api/finance/my-balance-history', methods=['GET'])
+@perm('user_balance.view')
 def get_my_balance_history():
     """Get current user's balance history (internal transfers)"""
     try:
@@ -19729,7 +19763,7 @@ def get_my_balance_history():
 
 
 @app.route('/api/finance/transfer-balance', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('user_balance.transfer')
 def transfer_balance_to_user():
     """Admin transfers balance to a user from a payment method"""
     try:
@@ -19877,6 +19911,7 @@ def transfer_balance_to_user():
 
 
 @app.route('/api/finance/request-balance', methods=['POST'])
+@perm('user_balance.request')
 def request_balance():
     """User requests balance from admin"""
     try:
@@ -19913,6 +19948,7 @@ def request_balance():
 
 
 @app.route('/api/finance/balance-requests', methods=['GET'])
+@perm('user_balance.view')
 def get_balance_requests():
     """Get balance requests - admin sees all pending, users see their own"""
     try:
@@ -19975,7 +20011,7 @@ def get_balance_requests():
 
 
 @app.route('/api/finance/balance-requests/<int:request_id>/approve', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('user_balance.approve')
 def approve_balance_request(request_id):
     """Approve a balance request - creates finance transaction and deducts from payment method"""
     try:
@@ -20115,7 +20151,7 @@ def approve_balance_request(request_id):
 
 
 @app.route('/api/finance/balance-requests/<int:request_id>/reject', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('user_balance.approve')
 def reject_balance_request(request_id):
     """Reject a balance request"""
     try:
@@ -20146,7 +20182,7 @@ def reject_balance_request(request_id):
 
 
 @app.route('/api/finance/pending-approvals', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('finance_txn.view')
 def get_all_pending_approvals():
     """Get all pending approvals (transactions + balance requests)"""
     try:
@@ -20205,6 +20241,7 @@ def get_all_pending_approvals():
 # ============================================================================
 
 @app.route('/my-expenses')
+@perm('expense.view')
 def my_expenses_page():
     """User expense tracking page"""
     if not session.get('user_id'):
@@ -20246,6 +20283,7 @@ def sales_requests_lookup():
 
 
 @app.route('/api/my-expenses', methods=['GET'])
+@perm('expense.view')
 def get_my_expenses():
     """Get current user's expense tracking records"""
     try:
@@ -20317,6 +20355,7 @@ def get_my_expenses():
 
 
 @app.route('/api/my-expenses', methods=['POST'])
+@perm('expense.create')
 def add_my_expense():
     """Add new expense tracking record"""
     try:
@@ -20392,6 +20431,7 @@ def add_my_expense():
 
 
 @app.route('/api/my-expenses/<int:expense_id>', methods=['PUT'])
+@perm('expense.edit')
 def update_my_expense(expense_id):
     """Update expense tracking record (only draft status)"""
     try:
@@ -20463,6 +20503,7 @@ def update_my_expense(expense_id):
 
 
 @app.route('/api/my-expenses/<int:expense_id>', methods=['DELETE'])
+@perm('expense.delete')
 def delete_my_expense(expense_id):
     """Delete expense tracking record (only draft status)"""
     try:
@@ -20490,6 +20531,7 @@ def delete_my_expense(expense_id):
 
 
 @app.route('/api/my-expenses/submit', methods=['POST'])
+@perm('expense.submit')
 def submit_my_expenses():
     """Submit all draft expenses for approval"""
     try:
@@ -20557,7 +20599,7 @@ def submit_my_expenses():
 
 
 @app.route('/api/finance/expense-approvals', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.view')
 def get_expense_approvals():
     """Get all submitted expenses pending approval (admin/finance only)"""
     try:
@@ -20631,7 +20673,7 @@ def get_expense_approvals():
 
 
 @app.route('/api/finance/expense-approvals/<int:expense_id>/approve', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_manager')
 def approve_user_expense(expense_id):
     """Manager approval - sends to finance for final approval"""
     try:
@@ -20678,7 +20720,7 @@ def approve_user_expense(expense_id):
 
 
 @app.route('/api/finance/expense-approvals/<int:expense_id>/update-amount', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.edit_amount')
 def update_expense_amount(expense_id):
     """Auto-save edited amount (works for both manager and finance editing)"""
     try:
@@ -20711,7 +20753,7 @@ def update_expense_amount(expense_id):
 
 
 @app.route('/api/finance/expense-approvals/approve-bulk', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_manager')
 def approve_expenses_bulk():
     """Manager approval for multiple expenses - sends to finance"""
     try:
@@ -20755,7 +20797,7 @@ def approve_expenses_bulk():
 
 
 @app.route('/api/finance/expense-approvals/<int:expense_id>/finance-approve', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_finance')
 def finance_approve_user_expense(expense_id):
     """Final finance approval for user expense - creates finance transaction"""
     try:
@@ -20877,7 +20919,7 @@ def finance_approve_user_expense(expense_id):
 
 
 @app.route('/api/finance/expense-approvals/finance-approve-bulk', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_finance')
 def finance_approve_expenses_bulk():
     """Finance approval for multiple expenses - creates finance transactions with selected category"""
     try:
@@ -21085,7 +21127,7 @@ def finance_approve_expenses_bulk():
 
 
 @app.route('/api/finance/expense-approvals/reject-bulk', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.reject')
 def reject_expenses_bulk():
     """Reject multiple expenses at once (works for both manager and finance rejection)"""
     try:
@@ -21127,7 +21169,7 @@ def reject_expenses_bulk():
 
 
 @app.route('/api/finance/expense-approvals/<int:expense_id>/reject', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.reject')
 def reject_user_expense(expense_id):
     """Reject user expense"""
     try:
@@ -21162,7 +21204,7 @@ def reject_user_expense(expense_id):
 # ============================================================================
 
 @app.route('/api/finance/users', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('loan.view')
 def get_all_users_for_loans():
     """Get all users for loan selection"""
     try:
@@ -21193,7 +21235,7 @@ def get_all_users_for_loans():
 
 
 @app.route('/api/finance/loans', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('loan.view')
 def get_all_loans():
     """Get all user loans summary"""
     try:
@@ -21226,7 +21268,7 @@ def get_all_loans():
 
 
 @app.route('/api/finance/loans/<int:user_id>', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('loan.view')
 def get_user_loan_details(user_id):
     """Get detailed loan info for a specific user including transaction history"""
     try:
@@ -21292,7 +21334,7 @@ def get_user_loan_details(user_id):
 
 
 @app.route('/api/finance/loans/add', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('loan.create')
 def add_loan_transaction():
     """Add a new loan (expense) or pay loan (income) transaction"""
     if 'user_id' not in session:
@@ -21477,28 +21519,28 @@ def generate_tracking_code():
 
 
 @app.route('/expense-tracking', methods=['GET'])
-@role_required('admin', 'finance', 'sales', 'operation')
+@perm('expense_tracking.view')
 def expense_tracking_page():
     """Render expense tracking submission page"""
     return render_template('expense_tracking.html')
 
 
 @app.route('/expense-tracking-approval', methods=['GET'])
-@role_required('admin')
+@perm('expense_tracking.approve_manager')
 def expense_tracking_approval_page():
     """Render expense tracking approval page (first level - manager)"""
     return render_template('expense_tracking_approval.html')
 
 
 @app.route('/finance-expense-approval', methods=['GET'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_finance')
 def finance_expense_approval_page():
     """Render finance expense approval page (second level - finance)"""
     return render_template('finance_expense_approval.html')
 
 
 @app.route('/api/expense-tracking', methods=['GET'])
-@role_required('admin', 'finance', 'sales', 'operation')
+@perm('expense_tracking.view')
 def get_expense_trackings():
     """Get expense tracking records"""
     try:
@@ -21562,7 +21604,7 @@ def get_expense_trackings():
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>', methods=['GET'])
-@role_required('admin', 'finance', 'sales', 'operation')
+@perm('expense_tracking.view')
 def get_expense_tracking_details(tracking_id):
     """Get expense tracking details with items"""
     try:
@@ -21637,7 +21679,7 @@ def get_expense_tracking_details(tracking_id):
 
 
 @app.route('/api/expense-tracking', methods=['POST'])
-@role_required('admin', 'finance', 'sales', 'operation')
+@perm('expense_tracking.create')
 def create_expense_tracking():
     """Create new expense tracking submission"""
     if 'user_id' not in session:
@@ -21709,7 +21751,7 @@ def create_expense_tracking():
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>/manager-approve', methods=['POST'])
-@role_required('admin')
+@perm('expense_tracking.approve_manager')
 def manager_approve_expense_tracking(tracking_id):
     """First level approval by manager/admin"""
     if 'user_id' not in session:
@@ -21759,7 +21801,7 @@ def manager_approve_expense_tracking(tracking_id):
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>/update-total', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.edit_amount')
 def update_expense_tracking_total(tracking_id):
     """Update total amount of expense tracking (finance can edit before approval)"""
     try:
@@ -21793,7 +21835,7 @@ def update_expense_tracking_total(tracking_id):
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>/finance-approve', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.approve_finance')
 def finance_approve_expense_tracking(tracking_id):
     """Second level approval by finance - assigns categories and creates transactions"""
     if 'user_id' not in session:
@@ -21982,7 +22024,7 @@ def finance_approve_expense_tracking(tracking_id):
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>/reject', methods=['POST'])
-@role_required('admin', 'finance')
+@perm('expense_tracking.reject')
 def reject_expense_tracking(tracking_id):
     """Reject expense tracking at any stage"""
     if 'user_id' not in session:
@@ -22033,7 +22075,7 @@ def reject_expense_tracking(tracking_id):
 
 
 @app.route('/api/expense-tracking/<int:tracking_id>/update-items', methods=['POST'])
-@role_required('admin')
+@perm('expense_tracking.edit_amount')
 def update_expense_tracking_items(tracking_id):
     """Update expense tracking items (manager can edit amounts before approval)"""
     if 'user_id' not in session:
