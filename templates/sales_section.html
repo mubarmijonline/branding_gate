@@ -1,0 +1,299 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+    .section-hero {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .section-hero h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .section-hero p { opacity: 0.9; margin-bottom: 0; font-size: 0.95rem; }
+
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        height: 100%;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.18); }
+    .stat-card .card-body { padding: 1.25rem; }
+    .stat-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; }
+
+    .feature-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        overflow: hidden;
+        height: 100%;
+    }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.2); }
+    .feature-card .card-header { border: none; padding: 1.25rem; }
+    .feature-card .card-header .card-icon { font-size: 2rem; opacity: .85; }
+    .feature-card .card-header h5 { margin-bottom: 0; }
+    .feature-card .card-header small { opacity: .8; }
+    .feature-card .card-body { padding: 1.25rem; }
+    .feature-card .card-body p { color: #6c757d; font-size: .9rem; }
+
+    .mini-stat { border-right: 1px solid #e3e6f0; }
+    .mini-stat:last-child { border-right: none; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'sales' in user_roles %}
+
+    <!-- Hero Header -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-chart-line mr-2"></i>Sales Department</h1>
+                <p>Manage sales operations, requests, client approvals, and performance metrics</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-light btn-sm mr-2"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-light btn-sm" id="refreshStatsBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-primary mb-1">Total Requests</div>
+                            <div class="stat-value text-gray-800" id="totalRequestsCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-clipboard-list fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-success mb-1">This Month</div>
+                            <div class="stat-value text-gray-800" id="monthlyRequestsCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-calendar-check fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-info mb-1">Total Value</div>
+                            <div class="stat-value text-gray-800" id="totalValue">EGP 0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-dollar-sign fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-warning mb-1">Pending Items</div>
+                            <div class="stat-value text-gray-800" id="pendingItemsCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <h5 class="font-weight-bold text-gray-800 mb-3"><i class="fas fa-th-large mr-2"></i>Sales Modules</h5>
+    <div class="row mb-4">
+
+        <!-- Sales Requests -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-shopping-cart card-icon mr-3"></i>
+                        <div>
+                            <h5>Sales Requests</h5>
+                            <small>Create &amp; manage requests</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Create, edit, and manage sales requests. Add items, set prices, and track request status throughout the sales process.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="pendingRequestsCount">0</div>
+                            <small class="text-muted">Submitted</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="processingRequestsCount">0</div>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold" id="completedRequestsCount">0</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/sales_request" class="btn btn-primary btn-lg"><i class="fas fa-clipboard-list mr-1"></i>Sales Requests</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Approval -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle card-icon mr-3"></i>
+                        <div>
+                            <h5>Client Approval</h5>
+                            <small>Submit for client review</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Submit priced items to clients for approval. Track approval status, view feedback, and manage the approval workflow.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="awaitingApprovalCount">0</div>
+                            <small class="text-muted">Awaiting</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="approvedItemsCount">0</div>
+                            <small class="text-muted">Approved</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold" id="readyToSubmitItemsCount">0</div>
+                            <small class="text-muted">Ready</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/client_approval" class="btn btn-success btn-lg"><i class="fas fa-check-circle mr-1"></i>Client Approval</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Head Approval -->
+        {% if 'admin' in user_roles or 'sales_head' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-user-check card-icon mr-3"></i>
+                        <div>
+                            <h5>Sales Head Approval</h5>
+                            <small>Senior review &amp; authorization</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Review and authorize sales requests as Sales Head. Approve pricing, discounts, and special conditions before processing.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/sales-head-approval" class="btn btn-warning btn-lg text-dark"><i class="fas fa-user-check mr-1"></i>Head Approval</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Client Management (Admin) -->
+        {% if 'admin' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-handshake card-icon mr-3"></i>
+                        <div>
+                            <h5>Client Management</h5>
+                            <small>Manage client records</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>View and manage client contacts, company relationships, and contact persons linked to the sales pipeline.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/client" class="btn btn-info btn-lg"><i class="fas fa-handshake mr-1"></i>Clients</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have sales permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    loadSalesSectionStats();
+
+    $('#refreshStatsBtn').click(function() {
+        const btn = $(this);
+        btn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadSalesSectionStats();
+        setTimeout(() => btn.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'), 1000);
+    });
+
+    function loadSalesSectionStats() {
+        $.get('/api/sales/requests', function(response) {
+            if (response.success) {
+                const requests = response.requests;
+                $('#totalRequestsCount').text(requests.length);
+
+                const now = new Date();
+                const monthlyRequests = requests.filter(req => {
+                    const d = new Date(req.sales_added_date);
+                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                });
+                $('#monthlyRequestsCount').text(monthlyRequests.length);
+
+                const totalValue = requests.reduce((s, r) => s + (r.total_sell || 0), 0);
+                $('#totalValue').text('EGP ' + totalValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+                const pendingItems = requests.filter(r => !r.total_cost || r.total_cost === 0);
+                $('#pendingItemsCount').text(pendingItems.length);
+
+                $('#pendingRequestsCount').text(requests.filter(r => r.status && r.status.includes('Submitted')).length);
+                $('#processingRequestsCount').text(requests.filter(r => r.status && r.status.includes('In_Progress')).length);
+                $('#completedRequestsCount').text(requests.filter(r => r.status && r.status.includes('Completed')).length);
+            }
+        }).fail(function() { console.error('Failed to load sales requests statistics'); });
+
+        $.get('/api/client-approval/statistics', function(response) {
+            if (response.success) {
+                $('#awaitingApprovalCount').text(response.stats.pending_pricing || 0);
+                $('#approvedItemsCount').text(response.stats.approved || 0);
+                $('#readyToSubmitItemsCount').text(response.stats.ready_to_submit || 0);
+            }
+        }).fail(function() { console.error('Failed to load client approval statistics'); });
+    }
+});
+</script>
+{% endblock %}

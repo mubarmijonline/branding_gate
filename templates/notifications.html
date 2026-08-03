@@ -1,0 +1,463 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- Additional CSS for notifications page -->
+<style>
+    .notification-item {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .notification-item:hover {
+        background-color: #f8f9fa;
+        transform: translateY(-1px);
+    }
+    
+    .notification-item.unread {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        font-weight: 600;
+    }
+    
+    .notification-item.read {
+        background-color: #ffffff;
+        border-left: 4px solid #e0e0e0;
+        opacity: 0.8;
+    }
+    
+    .notification-title {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+    }
+    
+    .notification-content {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+    
+    .notification-time {
+        color: #999;
+        font-size: 12px;
+    }
+    
+    .notification-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+    
+    .mark-read-btn {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .notification-item:hover .mark-read-btn {
+        opacity: 1;
+    }
+    
+    .notification-item.unread .mark-read-btn {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-bell mr-2"></i>All Notifications
+        </h1>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm" onclick="markAllAsRead()">
+                <i class="fas fa-check-double mr-1"></i>Mark All as Read
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="refreshNotifications()">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Notifications Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Notifications
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bell fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Unread
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="unreadCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Read
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="readCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Today
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="todayCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-day fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-list mr-2"></i>Notifications List
+            </h6>
+            <div class="dropdown no-arrow">
+                <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown">
+                    <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+                </a>
+                <div class="dropdown-menu dropdown-menu-right shadow">
+                    <div class="dropdown-header">Filter Options:</div>
+                    <a class="dropdown-item" href="#" onclick="filterNotifications('all')">All</a>
+                    <a class="dropdown-item" href="#" onclick="filterNotifications('unread')">Unread Only</a>
+                    <a class="dropdown-item" href="#" onclick="filterNotifications('read')">Read Only</a>
+                    <a class="dropdown-item" href="#" onclick="filterNotifications('today')">Today</a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Loading State -->
+            <div id="loadingState" class="text-center py-4">
+                <i class="fas fa-spinner fa-spin fa-2x text-gray-400"></i>
+                <p class="mt-2 text-gray-600">Loading notifications...</p>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="text-center py-4" style="display: none;">
+                <i class="fas fa-bell-slash fa-3x text-gray-400 mb-3"></i>
+                <h5 class="text-gray-600">No notifications found</h5>
+                <p class="text-gray-500">You're all caught up!</p>
+            </div>
+            
+            <!-- Notifications Container -->
+            <div id="notificationsContainer">
+                <!-- Notifications will be loaded here -->
+            </div>
+            
+            <!-- Load More Button -->
+            <div class="text-center mt-3" id="loadMoreContainer" style="display: none;">
+                <button class="btn btn-outline-primary" onclick="loadMoreNotifications()">
+                    <i class="fas fa-plus mr-1"></i>Load More
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allNotifications = [];
+let currentFilter = 'all';
+let currentPage = 1;
+const notificationsPerPage = 20;
+
+// Format date function
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return 'Invalid date';
+        }
+        
+        const now = new Date();
+        const diff = now - date;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor(diff / (1000 * 60));
+        
+        if (days > 0) {
+            return `${days} day${days > 1 ? 's' : ''} ago`;
+        } else if (hours > 0) {
+            return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        } else if (minutes > 0) {
+            return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+        } else {
+            return 'Just now';
+        }
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Invalid date';
+    }
+}
+
+// Check if notification is from today
+function isToday(dateString) {
+    try {
+        const date = new Date(dateString);
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
+    } catch (error) {
+        return false;
+    }
+}
+
+// Fetch notifications
+async function fetchNotifications() {
+    try {
+        const response = await fetch('/get_notifications');
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to fetch notifications');
+        }
+        
+        allNotifications = data.notifications || [];
+        updateStatistics();
+        displayNotifications();
+        
+    } catch (error) {
+        console.error('Error fetching notifications:', error);
+        document.getElementById('loadingState').innerHTML = `
+            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+            <p class="mt-2 text-danger">Error loading notifications</p>
+        `;
+    }
+}
+
+// Update statistics
+function updateStatistics() {
+    const total = allNotifications.length;
+    const unread = allNotifications.filter(n => !n.read).length;
+    const read = total - unread;
+    const today = allNotifications.filter(n => isToday(n.timeadded_datestamp)).length;
+    
+    document.getElementById('totalCount').textContent = total;
+    document.getElementById('unreadCount').textContent = unread;
+    document.getElementById('readCount').textContent = read;
+    document.getElementById('todayCount').textContent = today;
+}
+
+// Filter notifications
+function filterNotifications(type) {
+    currentFilter = type;
+    currentPage = 1;
+    displayNotifications();
+}
+
+// Display notifications
+function displayNotifications() {
+    const container = document.getElementById('notificationsContainer');
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    
+    // Hide loading state
+    loadingState.style.display = 'none';
+    
+    // Filter notifications
+    let filteredNotifications = [...allNotifications];
+    
+    switch (currentFilter) {
+        case 'unread':
+            filteredNotifications = filteredNotifications.filter(n => !n.read);
+            break;
+        case 'read':
+            filteredNotifications = filteredNotifications.filter(n => n.read);
+            break;
+        case 'today':
+            filteredNotifications = filteredNotifications.filter(n => isToday(n.timeadded_datestamp));
+            break;
+        default:
+            // 'all' - no additional filtering
+            break;
+    }
+    
+    if (filteredNotifications.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    
+    // Paginate notifications
+    const startIndex = 0;
+    const endIndex = currentPage * notificationsPerPage;
+    const paginatedNotifications = filteredNotifications.slice(startIndex, endIndex);
+    
+    container.innerHTML = '';
+    
+    paginatedNotifications.forEach(notification => {
+        const notificationElement = createNotificationElement(notification);
+        container.appendChild(notificationElement);
+    });
+    
+    // Show/hide load more button
+    const loadMoreContainer = document.getElementById('loadMoreContainer');
+    if (endIndex < filteredNotifications.length) {
+        loadMoreContainer.style.display = 'block';
+    } else {
+        loadMoreContainer.style.display = 'none';
+    }
+}
+
+// Create notification element
+function createNotificationElement(notification) {
+    const div = document.createElement('div');
+    const isUnread = !notification.read;
+    
+    div.className = `notification-item p-3 mb-2 border rounded ${isUnread ? 'unread' : 'read'}`;
+    div.innerHTML = `
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center mb-1">
+                    <div class="notification-title">${notification.title || 'Notification'}</div>
+                    ${isUnread ? '<span class="badge badge-primary notification-badge ml-2">New</span>' : ''}
+                </div>
+                <div class="notification-content">${notification.content || notification.body || ''}</div>
+                <div class="notification-time">
+                    <i class="fas fa-clock mr-1"></i>${formatDate(notification.timeadded_datestamp)}
+                </div>
+            </div>
+            <div class="ml-3">
+                ${isUnread ? `
+                    <button class="btn btn-sm btn-outline-primary mark-read-btn" onclick="markAsRead('${notification.id}')">
+                        <i class="fas fa-check"></i>
+                    </button>
+                ` : `
+                    <i class="fas fa-check-circle text-success"></i>
+                `}
+            </div>
+        </div>
+    `;
+    
+    return div;
+}
+
+// Mark single notification as read
+async function markAsRead(notificationId) {
+    try {
+        const response = await fetch('/mark_notifications_read', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                notification_ids: [notificationId]
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Update the notification in our local array
+            const notification = allNotifications.find(n => n.id === notificationId);
+            if (notification) {
+                notification.read = true;
+            }
+            updateStatistics();
+            displayNotifications();
+        }
+    } catch (error) {
+        console.error('Error marking notification as read:', error);
+    }
+}
+
+// Mark all notifications as read
+async function markAllAsRead() {
+    try {
+        const response = await fetch('/mark_notifications_read', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({})
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Update all notifications in our local array
+            allNotifications.forEach(n => n.read = true);
+            updateStatistics();
+            displayNotifications();
+            
+            // Show success message
+            Swal.fire({
+                icon: 'success',
+                title: 'Success',
+                text: 'All notifications marked as read!',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+    } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+    }
+}
+
+// Load more notifications
+function loadMoreNotifications() {
+    currentPage++;
+    displayNotifications();
+}
+
+// Refresh notifications
+async function refreshNotifications() {
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('notificationsContainer').innerHTML = '';
+    
+    await fetchNotifications();
+}
+
+// Initialize when document is ready
+$(document).ready(function() {
+    fetchNotifications();
+});
+</script>
+{% endblock %}

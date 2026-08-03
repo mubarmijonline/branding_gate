@@ -1,0 +1,463 @@
+{% extends "main.html" %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+    /* Hero */
+    .section-hero {
+        background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);
+        color: #1a1a2e; border-radius: 15px; padding: 1.5rem 2rem; margin-bottom: 1.5rem;
+        position: relative; overflow: hidden;
+    }
+    .section-hero::after {
+        content:''; position:absolute; top:-60%; right:-15%; width:350px; height:350px;
+        background:rgba(255,255,255,.1); border-radius:50%; pointer-events:none;
+    }
+    .section-hero h1 { font-size:1.6rem; font-weight:700; margin-bottom:.15rem; }
+    .section-hero p  { opacity:.75; margin:0; font-size:.9rem; }
+
+    /* Nav cards */
+    .nav-card {
+        border:none; border-radius:14px; overflow:hidden; height:100%;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+    }
+    .nav-card:hover { transform:translateY(-5px); box-shadow:0 .5rem 2rem rgba(58,59,69,.2); }
+    .nav-card .card-header { border:none; padding:1.1rem 1.25rem; }
+    .nav-card .card-header h5 { margin:0; font-weight:700; font-size:1.05rem; }
+    .nav-card .card-body { padding:1.1rem 1.25rem; }
+    .nav-card .card-icon { font-size:1.8rem; opacity:.85; }
+    .mini-stat { border-right:1px solid #e3e6f0; }
+
+    /* KPI cards */
+    .kpi-card {
+        border:none; border-radius:12px; height:100%; overflow:hidden;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+    }
+    .kpi-card:hover { transform:translateY(-3px); box-shadow:0 .4rem 1.5rem rgba(58,59,69,.16); }
+    .kpi-card .card-body { padding:1.1rem 1.25rem; }
+    .kpi-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .kpi-value { font-size:1.5rem; font-weight:800; }
+    .kpi-sub  { font-size:.73rem; color:#858796; }
+    .kpi-icon { font-size:2rem; opacity:.22; }
+
+    /* Chart area */
+    .chart-card {
+        border:none; border-radius:14px; overflow:hidden;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+    }
+    .chart-card .card-header {
+        background:#fff; border-bottom:1px solid #e3e6f0; padding:.85rem 1.25rem;
+    }
+    .chart-card .card-header h6 { font-weight:700; margin:0; }
+    .chart-wrap { position:relative; width:100%; }
+
+    /* Costing bar */
+    .costing-bar { display:flex; gap:2px; border-radius:8px; overflow:hidden; height:26px; }
+    .costing-bar .seg {
+        display:flex; align-items:center; justify-content:center;
+        font-size:.62rem; font-weight:700; color:#fff; min-width:24px;
+        transition: flex .4s ease;
+    }
+
+    /* Activity */
+    .activity-row { border-left:3px solid transparent; transition:border-color .15s; }
+    .activity-row:hover { border-left-color:#f6c23e; background:#fffdf5; }
+    .badge-sm { font-size:.68rem; padding:.3em .55em; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'operation' in user_roles or 'operations' in user_roles %}
+
+    <!-- Hero -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-cogs mr-2"></i>Operations Dashboard</h1>
+                <p>Costing progress, supplier tracking &amp; approved items</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-dark btn-sm mr-1"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-dark btn-sm" id="refreshBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NAVIGATION CARDS (top) ===== -->
+    <div class="row mb-4">
+        <!-- Operations Requests -->
+        <div class="col-lg-4 mb-3">
+            <div class="card nav-card">
+                <div class="card-header bg-warning text-dark">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-calculator card-icon mr-3"></i>
+                        <div><h5>Operations Requests</h5><small>Costing &amp; pricing</small></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-warning" id="cardPending">0</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-success" id="cardCompleted">0</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold text-secondary" id="cardNoItems">0</div>
+                            <small class="text-muted">No Items</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/operation_request" class="btn btn-warning text-dark"><i class="fas fa-arrow-right mr-1"></i>Open Operations</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Approved Items -->
+        <div class="col-lg-4 mb-3">
+            <div class="card nav-card">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle card-icon mr-3"></i>
+                        <div><h5>Approved Items</h5><small class="text-white-50">Client approved</small></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-6 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-success" id="navApprItems">0</div>
+                            <small class="text-muted">Items</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h6 mb-0 font-weight-bold text-primary" id="navApprValue">0</div>
+                            <small class="text-muted">Requests</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/approved-items" class="btn btn-success"><i class="fas fa-arrow-right mr-1"></i>View Approved</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Supplier Report -->
+        <div class="col-lg-4 mb-3">
+            <div class="card nav-card">
+                <div class="card-header" style="background:linear-gradient(135deg,#1e3a5f,#2d5a87);color:#fff">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-truck card-icon mr-3"></i>
+                        <div><h5>Supplier Report</h5><small class="text-white-50">Track assignments</small></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="navSuppliers">0</div>
+                            <small class="text-muted">Suppliers</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-warning" id="navSupPend">0</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold text-success" id="navSupRecv">0</div>
+                            <small class="text-muted">Received</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/supplier-report" class="btn btn-dark"><i class="fas fa-arrow-right mr-1"></i>View Report</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== KPI STATS ===== -->
+    <div class="row mb-4">
+        <div class="col-xl col-lg-4 col-md-6 mb-3">
+            <div class="card kpi-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-warning mb-1">Pending Costing</div>
+                            <div class="kpi-value text-gray-800" id="kpiPending">0</div>
+                            <div class="kpi-sub"><span id="kpiPendItems">0</span> items to cost</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half kpi-icon text-warning"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-lg-4 col-md-6 mb-3">
+            <div class="card kpi-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-success mb-1">Completed</div>
+                            <div class="kpi-value text-gray-800" id="kpiCompleted">0</div>
+                            <div class="kpi-sub" id="kpiRate">0% of requests</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-check-circle kpi-icon text-success"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-lg-4 col-md-6 mb-3">
+            <div class="card kpi-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-info mb-1">Total Items</div>
+                            <div class="kpi-value text-gray-800" id="kpiTotalItems">0</div>
+                            <div class="kpi-sub"><span id="kpiCosted">0</span> costed</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-boxes kpi-icon text-info"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-lg-6 col-md-6 mb-3">
+            <div class="card kpi-card border-left-danger">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-danger mb-1">Total Cost Value</div>
+                            <div class="kpi-value text-gray-800" id="kpiCostVal" style="font-size:1.3rem">EGP 0</div>
+                            <div class="kpi-sub">Operations cost</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-coins kpi-icon text-danger"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== OVERALL PROGRESS + COSTING BAR ===== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-warning"><i class="fas fa-tasks mr-2"></i>Costing Progress</h6>
+                    <span class="badge badge-light" id="totalReqBadge">0 requests</span>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="font-weight-bold">Overall Item Costing</small>
+                        <small class="font-weight-bold" id="overallPct">0%</small>
+                    </div>
+                    <div class="progress mb-3" style="height:12px;border-radius:6px;">
+                        <div class="progress-bar bg-success" id="overallBar" style="width:0%;transition:width .6s ease;"></div>
+                    </div>
+                    <div class="costing-bar mb-3" id="costingBar"></div>
+                    <div class="row text-center">
+                        <div class="col"><div class="font-weight-bold text-success" id="barCosted">0</div><small class="text-muted">Costed</small></div>
+                        <div class="col"><div class="font-weight-bold text-warning" id="barPending">0</div><small class="text-muted">Pending</small></div>
+                        <div class="col"><div class="font-weight-bold text-danger" id="barRecosting">0</div><small class="text-muted">Re-costing</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CHARTS (bottom) ===== -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <h6 class="text-warning"><i class="fas fa-chart-bar mr-2"></i>Top Requests by Items (Stacked)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-wrap" style="height:280px;">
+                        <canvas id="costingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <h6 class="text-warning"><i class="fas fa-chart-pie mr-2"></i>Request Status</h6>
+                </div>
+                <div class="card-body d-flex flex-column align-items-center">
+                    <div class="chart-wrap" style="height:200px;">
+                        <canvas id="statusDonut"></canvas>
+                    </div>
+                    <div class="row text-center w-100 mt-2">
+                        <div class="col-4"><span class="font-weight-bold text-warning" id="dPending">0</span><br><small class="text-muted">Pending</small></div>
+                        <div class="col-4"><span class="font-weight-bold text-success" id="dCompleted">0</span><br><small class="text-muted">Completed</small></div>
+                        <div class="col-4"><span class="font-weight-bold text-secondary" id="dNoItems">0</span><br><small class="text-muted">No Items</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== RECENT TABLE ===== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-warning"><i class="fas fa-history mr-2"></i>Recent Costing Activity</h6>
+                    <a href="/operation_request" class="btn btn-sm btn-outline-warning">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="border-0">ID</th>
+                                    <th class="border-0">Client</th>
+                                    <th class="border-0">Title</th>
+                                    <th class="border-0">Progress</th>
+                                    <th class="border-0">Cost</th>
+                                    <th class="border-0">Status</th>
+                                    <th class="border-0">Date</th>
+                                    <th class="border-0"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentBody">
+                                <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning mt-4"><i class="fas fa-exclamation-triangle mr-1"></i>You don't have operation permissions.</div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    var chartBar = null, chartDonut = null;
+
+    loadAll();
+    $('#refreshBtn').click(function() {
+        var b = $(this);
+        b.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadAll();
+        setTimeout(function(){ b.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'); }, 1200);
+    });
+
+    function fmt(n) { return (n||0).toLocaleString('en-US'); }
+    function egp(n) { return 'EGP ' + (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+    function loadAll() {
+        $.get('/api/operations/requests', function(res) {
+            if (!res.success) return;
+            var rr = res.requests;
+            var pending=0, completed=0, noItems=0;
+            var totItems=0, totCosted=0, totPend=0, totReco=0, totCost=0;
+
+            rr.forEach(function(r) {
+                var it=r.items_count||0, co=r.costed_items_count||0;
+                var re=r.renegotiation_items_count||0, pe=r.pending_items_count||0;
+                totItems+=it; totCosted+=co; totPend+=pe; totReco+=re;
+                totCost+=r.total_cost||0;
+                if(it===0) noItems++; else if(co===it) completed++; else pending++;
+            });
+            var pct = totItems>0?((totCosted/totItems)*100).toFixed(1):0;
+            var rPct = rr.length>0?((completed/rr.length)*100).toFixed(1):0;
+
+            // KPI
+            $('#kpiPending').text(fmt(pending)); $('#kpiPendItems').text(fmt(totPend+totReco));
+            $('#kpiCompleted').text(fmt(completed)); $('#kpiRate').text(rPct+'% of requests');
+            $('#kpiTotalItems').text(fmt(totItems)); $('#kpiCosted').text(fmt(totCosted)+' costed');
+            $('#kpiCostVal').text(egp(totCost));
+
+            // Nav card
+            $('#cardPending').text(fmt(pending)); $('#cardCompleted').text(fmt(completed)); $('#cardNoItems').text(fmt(noItems));
+            $('#totalReqBadge').text(fmt(rr.length)+' requests');
+
+            // Donut labels
+            $('#dPending').text(fmt(pending)); $('#dCompleted').text(fmt(completed)); $('#dNoItems').text(fmt(noItems));
+
+            // Progress
+            $('#overallPct').text(pct+'%'); $('#overallBar').css('width',pct+'%');
+            $('#barCosted').text(fmt(totCosted)); $('#barPending').text(fmt(totPend)); $('#barRecosting').text(fmt(totReco));
+
+            // Costing bar
+            var bTotal = totItems||1; var bh='';
+            if(totCosted>0) bh+='<div class="seg" style="flex:'+((totCosted/bTotal)*100)+';background:#1cc88a" title="Costed: '+totCosted+'">'+totCosted+'</div>';
+            if(totPend>0)   bh+='<div class="seg" style="flex:'+((totPend/bTotal)*100)+';background:#f6c23e" title="Pending: '+totPend+'">'+totPend+'</div>';
+            if(totReco>0)   bh+='<div class="seg" style="flex:'+((totReco/bTotal)*100)+';background:#e74a3b" title="Re-costing: '+totReco+'">'+totReco+'</div>';
+            $('#costingBar').html(bh||'<div class="seg" style="flex:1;background:#e3e6f0;color:#858796">No items</div>');
+
+            // Stacked bar chart - top 10
+            var top10 = rr.filter(function(r){return r.items_count>0;})
+                .sort(function(a,b){return b.items_count-a.items_count;}).slice(0,10);
+            if(chartBar){chartBar.destroy();chartBar=null;}
+            var ctx1 = document.getElementById('costingChart');
+            if(ctx1){
+                chartBar = new Chart(ctx1, {
+                    type:'bar',
+                    data:{
+                        labels:top10.map(function(r){return '#'+r.request_id;}),
+                        datasets:[
+                            {label:'Costed',data:top10.map(function(r){return r.costed_items_count||0;}),backgroundColor:'#1cc88a',borderRadius:4,barPercentage:.65},
+                            {label:'Pending',data:top10.map(function(r){return r.pending_items_count||0;}),backgroundColor:'#f6c23e',borderRadius:4,barPercentage:.65},
+                            {label:'Re-costing',data:top10.map(function(r){return r.renegotiation_items_count||0;}),backgroundColor:'#e74a3b',borderRadius:4,barPercentage:.65}
+                        ]
+                    },
+                    options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},
+                        plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:12}}},
+                        scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}}}
+                });
+            }
+
+            // Donut
+            if(chartDonut){chartDonut.destroy();chartDonut=null;}
+            var ctx2 = document.getElementById('statusDonut');
+            if(ctx2){
+                chartDonut = new Chart(ctx2, {
+                    type:'doughnut',
+                    data:{labels:['Pending','Completed','No Items'],
+                        datasets:[{data:[pending,completed,noItems],backgroundColor:['#f6c23e','#1cc88a','#858796'],borderWidth:0,hoverOffset:6}]},
+                    options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},
+                        cutout:'65%',plugins:{legend:{display:false}}}
+                });
+            }
+
+            // Recent activity
+            var tb=$('#recentBody').empty();
+            var slice=rr.slice(0,10);
+            if(!slice.length){tb.html('<tr><td colspan="8" class="text-center text-muted py-4">No requests</td></tr>');return;}
+            slice.forEach(function(r){
+                var it=r.items_count||0, co=r.costed_items_count||0;
+                var p=it>0?Math.round((co/it)*100):0;
+                var bc,bt;
+                if(it===0){bc='secondary';bt='No Items';}
+                else if(co===it){bc='success';bt='Completed';}
+                else if(r.renegotiation_items_count>0){bc='danger';bt='Re-costing';}
+                else{bc='warning';bt='Pending';}
+                var ds=r.sales_added_date?new Date(r.sales_added_date).toLocaleDateString():'-';
+                tb.append('<tr class="activity-row">'
+                    +'<td><strong>#'+r.request_id+'</strong></td>'
+                    +'<td>'+(r.client_name||'-')+'</td>'
+                    +'<td>'+(r.title||'-')+'</td>'
+                    +'<td style="min-width:130px"><div class="d-flex align-items-center"><div class="progress flex-grow-1 mr-2" style="height:5px"><div class="progress-bar bg-success" style="width:'+p+'%"></div></div><small>'+co+'/'+it+'</small></div></td>'
+                    +'<td>'+egp(r.total_cost)+'</td>'
+                    +'<td><span class="badge badge-'+bc+' badge-sm">'+bt+'</span></td>'
+                    +'<td>'+ds+'</td>'
+                    +'<td><a href="/operation_request" class="btn btn-sm btn-outline-warning"><i class="fas fa-calculator"></i></a></td></tr>');
+            });
+        });
+
+        $.get('/api/operations/approved-items',{date_range:'all'},function(r){
+            if(r.success){$('#navApprItems').text(fmt(r.stats.total_items));$('#navApprValue').text(fmt(r.stats.total_requests));}
+        });
+        $.get('/api/supplier-report',function(r){
+            if(r.success){$('#navSuppliers').text(fmt(r.stats.total_suppliers));$('#navSupPend').text(fmt(r.stats.pending));$('#navSupRecv').text(fmt(r.stats.received));}
+        });
+    }
+});
+</script>
+{% endblock %}

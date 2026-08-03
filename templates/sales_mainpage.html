@@ -1,0 +1,469 @@
+{% extends "main.html" %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+    /* Hero */
+    .section-hero {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        color: #fff; border-radius: 15px; padding: 1.5rem 2rem; margin-bottom: 1.5rem;
+        position: relative; overflow: hidden;
+    }
+    .section-hero::after {
+        content:''; position:absolute; top:-60%; right:-15%; width:350px; height:350px;
+        background:rgba(255,255,255,.06); border-radius:50%; pointer-events:none;
+    }
+    .section-hero h1 { font-size:1.6rem; font-weight:700; margin-bottom:.15rem; }
+    .section-hero p  { opacity:.85; margin:0; font-size:.9rem; }
+
+    /* Nav cards */
+    .nav-card {
+        border:none; border-radius:14px; overflow:hidden; height:100%;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+    }
+    .nav-card:hover { transform:translateY(-5px); box-shadow:0 .5rem 2rem rgba(58,59,69,.2); }
+    .nav-card .card-header { border:none; padding:1.1rem 1.25rem; }
+    .nav-card .card-header h5 { margin:0; font-weight:700; font-size:1.05rem; }
+    .nav-card .card-body { padding:1.1rem 1.25rem; }
+    .nav-card .card-icon { font-size:1.8rem; opacity:.85; }
+    .mini-stat { border-right:1px solid #e3e6f0; }
+
+    /* KPI cards */
+    .kpi-card {
+        border:none; border-radius:12px; height:100%; overflow:hidden;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+    }
+    .kpi-card:hover { transform:translateY(-3px); box-shadow:0 .4rem 1.5rem rgba(58,59,69,.16); }
+    .kpi-card .card-body { padding:1.1rem 1.25rem; }
+    .kpi-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .kpi-value { font-size:1.5rem; font-weight:800; }
+    .kpi-sub  { font-size:.73rem; color:#858796; }
+    .kpi-icon { font-size:2rem; opacity:.22; }
+
+    /* Chart area */
+    .chart-card {
+        border:none; border-radius:14px; overflow:hidden;
+        box-shadow:0 .15rem 1.75rem rgba(58,59,69,.1);
+    }
+    .chart-card .card-header {
+        background:#fff; border-bottom:1px solid #e3e6f0; padding:.85rem 1.25rem;
+    }
+    .chart-card .card-header h6 { font-weight:700; margin:0; }
+    .chart-wrap { position:relative; width:100%; }
+
+    /* Pipeline bar */
+    .pipeline-bar { display:flex; gap:2px; border-radius:8px; overflow:hidden; height:36px; }
+    .pipeline-bar .seg {
+        display:flex; align-items:center; justify-content:center;
+        font-size:.7rem; font-weight:700; color:#fff; min-width:30px;
+        transition: flex .4s ease; white-space:nowrap; overflow:hidden;
+        padding:0 6px;
+    }
+
+    /* Activity table */
+    .activity-row { border-left:3px solid transparent; transition:border-color .15s; }
+    .activity-row:hover { border-left-color:#4e73df; background:#f8f9fc; }
+    .badge-sm { font-size:.68rem; padding:.3em .55em; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'sales' in user_roles %}
+
+    <!-- Hero -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-chart-line mr-2"></i>Sales Dashboard</h1>
+                <p>Overview of sales requests, client approvals &amp; revenue</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-light btn-sm mr-1"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-light btn-sm" id="refreshBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NAVIGATION CARDS (top) ===== -->
+    <div class="row mb-4">
+        <!-- Sales Requests -->
+        <div class="col-lg-6 mb-3">
+            <div class="card nav-card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-shopping-cart card-icon mr-3"></i>
+                        <div><h5>Sales Requests</h5><small class="text-white-50">Create &amp; manage requests</small></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-3 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-warning" id="cardSubmitted">0</div>
+                            <small class="text-muted">Submitted</small>
+                        </div>
+                        <div class="col-3 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-info" id="cardInProgress">0</div>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                        <div class="col-3 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-success" id="cardCompleted">0</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="h6 mb-0 font-weight-bold text-primary" id="cardTotal">0</div>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="fas fa-comments mr-1"></i><span id="totalComments">0</span> comments</small>
+                        <a href="/sales_request" class="btn btn-primary"><i class="fas fa-arrow-right mr-1"></i>Open Sales Requests</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Client Approval -->
+        <div class="col-lg-6 mb-3">
+            <div class="card nav-card">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle card-icon mr-3"></i>
+                        <div><h5>Client Approval</h5><small class="text-white-50">Submit for client review</small></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-secondary" id="caPending">0</div>
+                            <small class="text-muted">Pending Pricing</small>
+                        </div>
+                        <div class="col mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-info" id="caReady">0</div>
+                            <small class="text-muted">Ready</small>
+                        </div>
+                        <div class="col mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-warning" id="caNego">0</div>
+                            <small class="text-muted">Negotiation</small>
+                        </div>
+                        <div class="col mini-stat">
+                            <div class="h6 mb-0 font-weight-bold text-success" id="caApproved">0</div>
+                            <small class="text-muted">Approved</small>
+                        </div>
+                        <div class="col">
+                            <div class="h6 mb-0 font-weight-bold text-danger" id="caRejected">0</div>
+                            <small class="text-muted">Rejected</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <a href="/client_approval" class="btn btn-success"><i class="fas fa-arrow-right mr-1"></i>Open Client Approval</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== KPI STATS ===== -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card kpi-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-primary mb-1">Total Requests</div>
+                            <div class="kpi-value text-gray-800" id="kpiTotal">0</div>
+                            <div class="kpi-sub"><span id="kpiItems">0</span> total items</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-clipboard-list kpi-icon text-primary"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card kpi-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-success mb-1">This Month</div>
+                            <div class="kpi-value text-gray-800" id="kpiMonthly">0</div>
+                            <div class="kpi-sub"><span id="kpiMonthItems">0</span> items</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-calendar-check kpi-icon text-success"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card kpi-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-info mb-1">Total Sell Value</div>
+                            <div class="kpi-value text-gray-800" id="kpiSell" style="font-size:1.25rem">EGP 0</div>
+                            <div class="kpi-sub">Cost: <span id="kpiCost">EGP 0</span></div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-coins kpi-icon text-info"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card kpi-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="kpi-label text-warning mb-1">Pending Items</div>
+                            <div class="kpi-value text-gray-800" id="kpiPending">0</div>
+                            <div class="kpi-sub"><span id="kpiNC">0</span> not costed &middot; <span id="kpiNP">0</span> not priced</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half kpi-icon text-warning"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PIPELINE ===== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-primary"><i class="fas fa-stream mr-2"></i>Item Approval Pipeline</h6>
+                    <span class="badge badge-light" id="pipTotal">0 items</span>
+                </div>
+                <div class="card-body">
+                    <div class="pipeline-bar mb-3" id="pipelineBar"></div>
+                    <div class="row text-center">
+                        <div class="col"><div class="font-weight-bold" id="pipNC">0</div><small class="text-muted">Not Costed</small></div>
+                        <div class="col"><div class="font-weight-bold" id="pipNP">0</div><small class="text-muted">Not Priced</small></div>
+                        <div class="col"><div class="font-weight-bold" id="pipReady">0</div><small class="text-muted">Ready</small></div>
+                        <div class="col"><div class="font-weight-bold" id="pipNego">0</div><small class="text-muted">Negotiation</small></div>
+                        <div class="col"><div class="font-weight-bold" id="pipAppr">0</div><small class="text-muted">Approved</small></div>
+                        <div class="col"><div class="font-weight-bold" id="pipRej">0</div><small class="text-muted">Rejected</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CHARTS (bottom) ===== -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <h6 class="text-primary"><i class="fas fa-chart-bar mr-2"></i>Approval Breakdown</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-wrap" style="height:280px;">
+                        <canvas id="approvalChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <h6 class="text-primary"><i class="fas fa-chart-pie mr-2"></i>Request Status</h6>
+                </div>
+                <div class="card-body d-flex flex-column align-items-center">
+                    <div class="chart-wrap" style="height:200px;">
+                        <canvas id="statusDonut"></canvas>
+                    </div>
+                    <div class="row text-center w-100 mt-2">
+                        <div class="col-4"><span class="font-weight-bold text-warning" id="dSubmitted">0</span><br><small class="text-muted">Submitted</small></div>
+                        <div class="col-4"><span class="font-weight-bold text-info" id="dInProg">0</span><br><small class="text-muted">In Progress</small></div>
+                        <div class="col-4"><span class="font-weight-bold text-success" id="dDone">0</span><br><small class="text-muted">Completed</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== RECENT TABLE ===== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-primary"><i class="fas fa-history mr-2"></i>Recent Sales Requests</h6>
+                    <a href="/sales_request" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="border-0">ID</th>
+                                    <th class="border-0">Client</th>
+                                    <th class="border-0">Title</th>
+                                    <th class="border-0">Items</th>
+                                    <th class="border-0">Progress</th>
+                                    <th class="border-0">Value</th>
+                                    <th class="border-0">Status</th>
+                                    <th class="border-0">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentBody">
+                                <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning mt-4"><i class="fas fa-exclamation-triangle mr-1"></i>You don't have sales permissions.</div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    var chartBar = null, chartDonut = null;
+
+    loadAll();
+    $('#refreshBtn').click(function() {
+        var b = $(this);
+        b.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadAll();
+        setTimeout(function(){ b.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'); }, 1200);
+    });
+
+    function fmt(n) { return (n||0).toLocaleString('en-US'); }
+    function egp(n) { return 'EGP ' + (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+    function bucket(raw) {
+        var s = (raw||'').toLowerCase().replace(/[^\w\s]/g,'').trim();
+        if (/completed|approved|closed/.test(s)) return 'completed';
+        if (/in.progress|processing|costed|priced/.test(s)) return 'in_progress';
+        return 'submitted';
+    }
+
+    function loadAll() {
+        $.get('/api/sales/requests', function(res) {
+            if (!res.success) return;
+            var rr = res.requests;
+            var totItems=0, totSell=0, totCost=0, totComm=0;
+            var nc=0, np=0, pend=0, nego=0, repr=0, appr=0, rej=0;
+            var sub=0, inp=0, done=0, mReq=[], mItems=0;
+            var now = new Date();
+
+            rr.forEach(function(r) {
+                totItems += r.items_count||0;
+                totSell  += r.total_sell||0;
+                totCost  += r.total_cost||0;
+                totComm  += r.comment_count||0;
+                var a = r.approval_stats||{};
+                nc   += a.not_costed||0;
+                np   += a.not_priced||0;
+                pend += a.pending||0;
+                nego += a.negotiation||0;
+                repr += a.repricing||0;
+                appr += a.approved||0;
+                rej  += a.rejected||0;
+                var b = bucket(r.status);
+                if (b==='completed') done++; else if (b==='in_progress') inp++; else sub++;
+                var d = new Date(r.sales_added_date);
+                if (d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear()) { mReq.push(r); mItems += r.items_count||0; }
+            });
+            var totPend = nc + np + pend;
+
+            // KPI
+            $('#kpiTotal').text(fmt(rr.length)); $('#kpiItems').text(fmt(totItems));
+            $('#kpiMonthly').text(fmt(mReq.length)); $('#kpiMonthItems').text(fmt(mItems));
+            $('#kpiSell').text(egp(totSell)); $('#kpiCost').text(egp(totCost));
+            $('#kpiPending').text(fmt(totPend)); $('#kpiNC').text(fmt(nc)); $('#kpiNP').text(fmt(np));
+
+            // Nav card
+            $('#cardSubmitted').text(fmt(sub)); $('#cardInProgress').text(fmt(inp));
+            $('#cardCompleted').text(fmt(done)); $('#cardTotal').text(fmt(rr.length));
+            $('#totalComments').text(fmt(totComm));
+
+            // Donut labels
+            $('#dSubmitted').text(fmt(sub)); $('#dInProg').text(fmt(inp)); $('#dDone').text(fmt(done));
+
+            // Pipeline bar
+            var segs = [
+                {v:nc,c:'#858796',l:'Not Costed'},{v:np,c:'#f6c23e',l:'Not Priced'},
+                {v:pend+repr,c:'#36b9cc',l:'Ready'},{v:nego,c:'#e74a3b',l:'Negotiation'},
+                {v:appr,c:'#1cc88a',l:'Approved'},{v:rej,c:'#5a5c69',l:'Rejected'}
+            ];
+            var sTotal = segs.reduce(function(s,d){return s+d.v;},0)||1;
+            $('#pipTotal').text(fmt(sTotal)+' items');
+            $('#pipNC').text(fmt(nc)); $('#pipNP').text(fmt(np)); $('#pipReady').text(fmt(pend+repr));
+            $('#pipNego').text(fmt(nego)); $('#pipAppr').text(fmt(appr)); $('#pipRej').text(fmt(rej));
+            var bh='';
+            segs.forEach(function(d){
+                if(d.v>0){ var p=(d.v/sTotal)*100; bh+='<div class="seg" style="flex:'+p+';background:'+d.c+'" title="'+d.l+': '+d.v+'">'+(p>8?d.l+' ('+d.v+')':d.v)+'</div>'; }
+            });
+            $('#pipelineBar').html(bh||'<div class="seg" style="flex:1;background:#e3e6f0;color:#858796">No items</div>');
+
+            // Bar chart
+            if(chartBar){chartBar.destroy();chartBar=null;}
+            var ctx1 = document.getElementById('approvalChart');
+            if(ctx1){
+                chartBar = new Chart(ctx1, {
+                    type:'bar',
+                    data:{
+                        labels:['Not Costed','Not Priced','Ready','Negotiation','Repricing','Approved','Rejected'],
+                        datasets:[{label:'Items',data:[nc,np,pend,nego,repr,appr,rej],
+                            backgroundColor:['#858796','#f6c23e','#36b9cc','#e74a3b','#fd7e14','#1cc88a','#5a5c69'],
+                            borderRadius:5, barPercentage:.55}]
+                    },
+                    options:{responsive:true, maintainAspectRatio:false, animation:{duration:600},
+                        plugins:{legend:{display:false}},
+                        scales:{y:{beginAtZero:true,ticks:{precision:0}}}}
+                });
+            }
+
+            // Donut
+            if(chartDonut){chartDonut.destroy();chartDonut=null;}
+            var ctx2 = document.getElementById('statusDonut');
+            if(ctx2){
+                chartDonut = new Chart(ctx2, {
+                    type:'doughnut',
+                    data:{labels:['Submitted','In Progress','Completed'],
+                        datasets:[{data:[sub,inp,done],backgroundColor:['#f6c23e','#36b9cc','#1cc88a'],borderWidth:0,hoverOffset:6}]},
+                    options:{responsive:true, maintainAspectRatio:false, animation:{duration:600},
+                        cutout:'65%', plugins:{legend:{display:false}}}
+                });
+            }
+
+            // Recent table
+            var tb = $('#recentBody').empty();
+            var slice = rr.slice(0,10);
+            if(!slice.length){ tb.html('<tr><td colspan="8" class="text-center text-muted py-4">No requests</td></tr>'); return; }
+            slice.forEach(function(r){
+                var tot=r.items_count||0, costed=r.costed_items_count||0;
+                var pct = tot>0?Math.round((costed/tot)*100):0;
+                var b = bucket(r.status);
+                var bc = b==='completed'?'success':b==='in_progress'?'info':'warning';
+                var bt = b==='completed'?'Completed':b==='in_progress'?'In Progress':'Submitted';
+                var ds = r.sales_added_date ? new Date(r.sales_added_date).toLocaleDateString() : '-';
+                tb.append('<tr class="activity-row">'
+                    +'<td><strong>#'+r.request_id+'</strong></td>'
+                    +'<td>'+(r.client_name||'-')+'</td>'
+                    +'<td>'+(r.title||'-')+'</td>'
+                    +'<td class="text-center">'+tot+'</td>'
+                    +'<td style="min-width:130px"><div class="d-flex align-items-center"><div class="progress flex-grow-1 mr-2" style="height:5px"><div class="progress-bar bg-success" style="width:'+pct+'%"></div></div><small>'+costed+'/'+tot+'</small></div></td>'
+                    +'<td>'+egp(r.total_sell)+'</td>'
+                    +'<td><span class="badge badge-'+bc+' badge-sm">'+bt+'</span></td>'
+                    +'<td>'+ds+'</td></tr>');
+            });
+        });
+
+        $.get('/api/client-approval/statistics', function(res) {
+            if(!res.success) return;
+            var s=res.stats;
+            $('#caPending').text(fmt(s.pending_pricing));
+            $('#caReady').text(fmt(s.ready_to_submit));
+            $('#caNego').text(fmt(s.in_negotiation));
+            $('#caApproved').text(fmt(s.approved));
+            $('#caRejected').text(fmt(s.rejected));
+        });
+    }
+});
+</script>
+{% endblock %}

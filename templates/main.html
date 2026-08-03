@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="Branding Gate - Enterprise Solutions">
+  <meta name="author" content="">
+
+  <title>Branding Gate</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/branding_gate_logo.jpg') }}">
+
+  <!-- Custom fonts for this template-->
+  <link href="{{ url_for('static', filename='vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet"
+    type="text/css">
+  <link
+    href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i"
+    rel="stylesheet">
+
+  <!-- Custom styles for this template-->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sb-admin-2.min.css') }}">
+  <link href="{{ url_for('static', filename='sweetalert/dist/sweetalert2.min.css') }}" rel="stylesheet" type="text/css">
+
+  <script src="{{ url_for('static', filename='sweetalert/dist/sweetalert2.all.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='sweetalert/dist/sweetalert2.min.js') }}"></script>
+  <link href="{{ url_for('static', filename='bootstrap-datepicker.min.css') }}" rel="stylesheet" type="text/css">
+  <!-- <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet" type="text/css"> -->
+
+  <script src="{{ url_for('static', filename='js/main_user_profile.js') }}"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <style>
+    /* Base Mobile-Friendly Styles */
+    :root {
+      --navbar-height: 56px;
+    }
+
+    body {
+      font: 90%/1.45em "Helvetica Neue", HelveticaNeue, Verdana, Arial, Helvetica, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      background-color: #f4f6f9 !important;
+      overflow-x: hidden;
+    }
+
+    .animated--fade-in {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    /* Footer */
+    .footer-copyright {
+      padding: 1rem !important;
+      font-size: 0.8rem !important;
+    }
+
+    /* Loading Animation */
+    .loading-container-class {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 9999;
+    }
+
+    .popup-class {
+      max-width: 90vw !important;
+      margin: 1rem !important;
+    }
+
+    #transfer_request_modal .modal-body {
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    .request-card {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      background-color: #fff;
+    }
+
+    .request-info {
+      margin-bottom: 10px;
+    }
+
+    .request-actions {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .request-actions .btn {
+      width: 48%;
+    }
+
+    .card_customized1 {
+      padding: 15px;
+      text-align: center;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+
+    .card_customized {
+      position: relative;
+      font-family: 'Trebuchet MS', sans-serif;
+      flex-direction: column;
+      min-width: 0;
+      word-wrap: break-word;
+      background-color: #fff;
+      background-clip: border-box;
+      border: 0 solid transparent;
+      border-radius: .25rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 6px 0 rgb(218 218 253 / 65%), 0 2px 6px 0 rgb(206 206 238 / 54%);
+      background-color: white;
+      padding-left: 40px;
+      padding-right: 40px;
+      padding-top: 2em;
+
+      /* background-image: url("{{url_for('static', filename='images/padel_background.jpg')}}"); */
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center center;
+    }
+
+    @media print {
+  @page {
+    margin: 0;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  /* Hide the print header and footer */
+  body::before, body::after {
+    content: none !important;
+  }
+}
+    /* ===== Navbar Dropdown & Notification Fixes ===== */
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      z-index: 1060;
+      border: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      border-radius: 10px;
+      min-width: 220px;
+      padding: 0.35rem 0;
+      animation: navDropFade .2s ease;
+    }
+    .dropdown-menu.show { display: block; }
+
+    @keyframes navDropFade {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .dropdown-item {
+      padding: 0.6rem 1.15rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #3a3b45;
+      transition: background .15s, padding-left .15s;
+      white-space: nowrap;
+    }
+    .dropdown-item:hover,
+    .dropdown-item:focus {
+      background: #f0f4ff;
+      color: #224abe;
+      padding-left: 1.4rem;
+    }
+    .dropdown-item i {
+      width: 20px;
+      text-align: center;
+      margin-right: 8px;
+      opacity: 0.65;
+    }
+    .dropdown-item:hover i { opacity: 1; }
+
+    .dropdown-divider { margin: 0.25rem 0; border-color: #edf2f9; }
+
+    /* Section link at top of each dropdown */
+    .dropdown-item:first-child {
+      font-weight: 600;
+    }
+
+    .notification-dropdown {
+      padding: 0;
+      right: 0;
+      left: auto;
+      width: 350px !important;
+      font-size: .85rem;
+    }
+
+    .notification-item {
+      padding: 10px 15px;
+      border-bottom: 1px solid #eee;
+      transition: background-color 0.2s;
+      position: relative;
+    }
+    .notification-item:hover { background-color: #f8f9fc; }
+    .notification-item.unread {
+      background-color: #e3f2fd;
+      border-left: 3px solid #2196f3;
+      font-weight: 600;
+    }
+    .notification-item.unread::before {
+      content: '';
+      position: absolute;
+      top: 50%; right: 10px;
+      transform: translateY(-50%);
+      width: 8px; height: 8px;
+      background-color: #2196f3;
+      border-radius: 50%;
+    }
+    .notification-item .notification-title { font-weight: bold; margin-bottom: 5px; color: #333; }
+    .notification-item .notification-time { font-size: 0.75em; color: #6c757d; }
+
+    .badge-counter {
+      position: absolute;
+      transform: scale(0.7);
+      transform-origin: top right;
+      right: 0.25rem;
+      margin-top: -0.25rem;
+    }
+    .notification-badge {
+      position: absolute;
+      transform: scale(0.8);
+      transform-origin: top right;
+      top: 0; right: 0;
+    }
+
+    .dropdown-header {
+      background-color: #f8f9fc;
+      border-bottom: 1px solid #e3e6f0;
+      padding: 0.85rem 1rem;
+      font-weight: 600;
+      color: #4e73df;
+    }
+
+    .scrollable-menu { max-height: 400px; overflow-y: auto; }
+    .scrollable-menu::-webkit-scrollbar { width: 6px; }
+    .scrollable-menu::-webkit-scrollbar-thumb { background: #d1d3e2; border-radius: 3px; }
+
+    /* ===== Enhanced Navbar ===== */
+    #main_nav_bar {
+      z-index: 1040;
+      padding: 0 1.5rem;
+      height: auto;
+      min-height: 56px;
+      box-shadow: 0 2px 16px rgba(34,74,190,.18);
+    }
+
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff !important;
+      gap: 0.75rem;
+      padding: 0.4rem 0;
+    }
+    .navbar-brand img {
+      height: 38px;
+      width: auto;
+      object-fit: contain;
+      border-radius: 6px;
+    }
+    .brand-separator {
+      color: rgba(255,255,255,0.35);
+      font-size: 1.5rem;
+      font-weight: 300;
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+    }
+    .brand-text span { font-size: 1rem; letter-spacing: .02em; }
+    .brand-text small { font-size: 0.62rem; opacity: 0.7; font-weight: 400; text-transform: uppercase; letter-spacing: .08em; }
+
+    .navbar-nav .nav-link {
+      color: rgba(255,255,255,.88) !important;
+      font-weight: 500;
+      font-size: 0.875rem;
+      padding: 0.55rem 0.85rem !important;
+      border-radius: 6px;
+      transition: background .2s, color .2s;
+    }
+    .navbar-nav .nav-link:hover,
+    .navbar-nav .nav-link:focus {
+      color: #fff !important;
+      background: rgba(255,255,255,.12);
+    }
+    .navbar-nav .nav-item { margin: 0 1px; }
+    .nav-link .badge {
+      position: absolute;
+      top: 2px; right: 2px;
+      transform: translate(50%, -50%);
+    }
+
+    .navbar-toggler { border: none; padding: 0.4rem; }
+    .navbar-toggler:focus { outline: none; box-shadow: none; }
+    .navbar-toggler-icon {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255,255,255,0.85)' stroke-linecap='round' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+    }
+
+    /* Toast */
+    .swal2-toast-custom {
+      background: #fff !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15) !important;
+      border-radius: 8px !important;
+      padding: 1rem !important;
+      width: auto !important;
+      max-width: 400px !important;
+    }
+    .swal2-toast-title-custom { color: #2e59d9 !important; font-size: 1rem !important; font-weight: 600 !important; }
+    .swal2-toast-content-custom { color: #666 !important; font-size: .9rem !important; }
+    .swal2-timer-progress-bar { background: #4e73df !important; }
+
+    /* ===== Mobile Responsive ===== */
+    @media (max-width: 991px) {
+      .navbar-collapse {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        border-radius: 0 0 12px 12px;
+        padding: 0.5rem;
+        margin: 0 -1.5rem;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .navbar-nav .dropdown-menu {
+        background: rgba(255,255,255,.97);
+        border-radius: 8px;
+        margin: 2px 0.5rem 4px;
+        box-shadow: none;
+        border: 1px solid rgba(255,255,255,.15);
+      }
+    }
+    @media (max-width: 576px) {
+      #main_nav_bar { padding: 0 0.75rem; }
+      .brand-separator { display: none; }
+      .brand-text small { display: none; }
+      .navbar-brand img { height: 32px; }
+      .notification-dropdown { width: 100% !important; position: fixed !important; top: 56px !important; left: 0 !important; right: 0 !important; border-radius: 0 !important; }
+    }
+
+    /* ===== Sliding Chat Drawer (WhatsApp-style) ===== */
+    .chat-unread-badge {
+      position: absolute;
+      top: 4px;
+      right: 0;
+      font-size: 0.65rem;
+      padding: 2px 5px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+    }
+    #chatDrawerOverlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1055;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s ease;
+    }
+    #chatDrawerOverlay.open { opacity: 1; pointer-events: auto; }
+    #chatDrawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 1040px; max-width: 100vw;
+      background: #fff; z-index: 1060;
+      box-shadow: -6px 0 24px rgba(0,0,0,0.25);
+      transform: translateX(100%);
+      transition: transform .28s ease;
+      display: flex; flex-direction: column;
+    }
+    #chatDrawer.open { transform: translateX(0); }
+    .chat-drawer-header {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #075e54, #128c7e);
+      color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      flex: 0 0 auto;
+    }
+    .chat-drawer-header h5 { margin: 0; font-size: 1rem; font-weight: 600; }
+    .chat-drawer-close {
+      background: transparent; border: 0; color: #fff;
+      font-size: 1.2rem; cursor: pointer; padding: 2px 8px;
+    }
+    .chat-drawer-body {
+      flex: 1 1 auto; display: flex; min-height: 0;
+      background: #ece5dd;
+    }
+    .chat-list-pane {
+      width: 380px; flex: 0 0 380px;
+      background: #fff; border-right: 1px solid #e0e0e0;
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .chat-list-search {
+      padding: 8px; border-bottom: 1px solid #eee; flex: 0 0 auto;
+    }
+    .chat-list-search input {
+      width: 100%; border: 1px solid #ddd; border-radius: 18px;
+      padding: 6px 12px; font-size: 0.85rem; outline: none;
+    }
+    .chat-list-toolbar {
+      display:flex; gap:6px; align-items:center; padding:6px 8px;
+      border-bottom:1px solid #eee; background:#fafafa; flex:0 0 auto;
+      font-size: 0.78rem;
+    }
+    .chat-list-toolbar select {
+      flex:1; border:1px solid #ddd; border-radius:6px;
+      padding:4px 6px; font-size:.78rem; background:#fff; outline:none;
+    }
+    .chat-list-toolbar .unread-toggle {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:4px 8px; border-radius:14px;
+      background:#eef2f5; color:#37474f; cursor:pointer;
+      font-weight:600; user-select:none;
+      border:1px solid transparent; white-space:nowrap;
+    }
+    .chat-list-toolbar .unread-toggle.active {
+      background:#25d366; color:#fff; border-color:#1ea854;
+    }
+    .chat-list-toolbar .unread-toggle .cnt {
+      background:rgba(255,255,255,.85); color:#1ea854;
+      border-radius:8px; padding:0 6px; font-weight:800; font-size:.7rem;
+    }
+    .chat-list-toolbar .unread-toggle.active .cnt {
+      background:#fff; color:#1ea854;
+    }
+    .chat-list-items { flex: 1 1 auto; overflow-y: auto; }
+    .chat-list-empty {
+      padding: 30px 16px; text-align: center; color: #888; font-size: 0.85rem;
+    }
+    .chat-list-item {
+      padding: 10px 12px; border-bottom: 1px solid #f1f1f1;
+      cursor: pointer; display: flex; gap: 10px; align-items: flex-start;
+      transition: background .15s;
+    }
+    .chat-list-item:hover { background: #f5f6f6; }
+    .chat-list-item.active { background: #e7f5f3; }
+    .chat-list-item.unread {
+      background: #f0fbf4;
+      border-left: 3px solid #25d366;
+      padding-left: 9px;
+    }
+    .chat-list-item.unread .chat-list-title { color:#075e54; }
+    .chat-list-item.unread .chat-list-title span:first-child { font-weight: 800; }
+    .chat-list-item.unread .chat-list-preview span:first-child { color:#111b21; font-weight:600; }
+    .chat-list-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: #128c7e; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 0.8rem; flex: 0 0 38px;
+    }
+    .chat-list-body { flex: 1 1 auto; min-width: 0; }
+    .chat-list-title {
+      display: flex; justify-content: space-between; gap: 6px;
+      font-size: 0.85rem; font-weight: 600; color: #111b21;
+    }
+    .chat-list-title .req-id { color: #128c7e; font-weight: 700; }
+    .chat-list-title .time { font-size: 0.7rem; color: #667781; font-weight: 400; }
+    .chat-list-sub {
+      font-size: 0.75rem; color: #667781;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .chat-list-preview {
+      font-size: 0.78rem; color: #3b4a54; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; justify-content: space-between; gap: 6px;
+    }
+    .chat-list-preview .unread {
+      background: #25d366; color: #fff; border-radius: 10px;
+      font-size: 0.65rem; font-weight: 700; padding: 1px 7px; flex: 0 0 auto;
+    }
+
+    .chat-thread-pane {
+      flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0;
+      background-image: linear-gradient(rgba(236,229,221,.6), rgba(236,229,221,.6)),
+        repeating-linear-gradient(45deg, #f0e8de, #f0e8de 12px, #ece5dd 12px, #ece5dd 24px);
+    }
+    .chat-thread-header {
+      padding: 10px 14px; background: #f0f2f5; border-bottom: 1px solid #d1d7db;
+      flex: 0 0 auto;
+    }
+    .chat-thread-header .title {
+      font-size: 0.9rem; font-weight: 600; color: #111b21;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .chat-thread-header .meta {
+      font-size: 0.75rem; color: #667781; margin-top: 2px;
+    }
+    .chat-thread-header .details-btn {
+      float: right; font-size: 0.75rem;
+    }
+    .chat-thread-messages {
+      flex: 1 1 auto; overflow-y: auto; padding: 14px;
+    }
+    .chat-thread-placeholder {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      color: #667781; text-align: center; padding: 20px;
+    }
+    .chat-msg { display: flex; margin-bottom: 8px; }
+    .chat-msg.own { justify-content: flex-end; }
+    .chat-msg-bubble {
+      max-width: 78%; padding: 6px 10px 18px;
+      background: #fff; border-radius: 8px;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.08);
+      position: relative; font-size: 0.85rem; color: #111b21;
+      word-wrap: break-word; white-space: pre-wrap;
+    }
+    .chat-msg.own .chat-msg-bubble { background: #d9fdd3; }
+    .chat-msg-author {
+      font-size: 0.72rem; font-weight: 600; color: #128c7e;
+      margin-bottom: 2px;
+    }
+    .chat-msg.own .chat-msg-author { color: #075e54; }
+    .chat-msg-time {
+      position: absolute; bottom: 3px; right: 8px;
+      font-size: 0.65rem; color: #667781;
+    }
+    .chat-msg .mention {
+      color: #075e54; background: rgba(37,211,102,0.18);
+      font-weight: 700; padding: 1px 5px; border-radius: 4px;
+    }
+    .chat-thread-composer {
+      flex: 0 0 auto; padding: 8px 12px; background: #f0f2f5;
+      border-top: 1px solid #d1d7db; position: relative;
+    }
+    .chat-thread-composer .composer-row {
+      display: flex; gap: 8px; align-items: flex-end;
+    }
+    .chat-thread-composer textarea {
+      flex: 1 1 auto; border: 1px solid #d1d7db; border-radius: 18px;
+      padding: 8px 14px; resize: none; max-height: 100px; min-height: 38px;
+      font-size: 0.9rem; outline: none; background: #fff;
+    }
+    .chat-thread-composer .send-btn {
+      width: 38px; height: 38px; border-radius: 50%; border: 0;
+      background: #25d366; color: #fff; flex: 0 0 38px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .chat-thread-composer .send-btn:disabled { background: #b8b8b8; cursor: not-allowed; }
+    .chat-mention-suggest {
+      position: absolute; bottom: 100%; left: 12px; right: 12px;
+      background: #fff; border: 1px solid #ddd; border-radius: 6px;
+      box-shadow: 0 -4px 12px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto;
+      display: none; z-index: 10;
+    }
+    .chat-mention-suggest .item {
+      padding: 8px 12px; cursor: pointer; font-size: 0.85rem;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .chat-mention-suggest .item:hover,
+    .chat-mention-suggest .item.active { background: #e7f5f3; }
+    @media (max-width: 768px) {
+      #chatDrawer { width: 100vw; }
+      .chat-list-pane { width: 140px; flex: 0 0 140px; }
+      .chat-list-sub, .chat-list-preview span:not(.unread) { display: none; }
+    }
+  </style>
+
+  {% block head %}{% endblock %}
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260801-pricing-2">
+
+</head>
+
+<body class="bg-shell" style="background-color:#f4f6f9;">
+  {# ---------- Reusable permission shortcuts (used across navbar & FAB) ---------- #}
+  {% set _r = session.get('roles', []) %}
+  {% set is_admin              = 'admin' in _r %}
+  {% set can_manage_clients    = is_admin or 'client_management'   in _r %}
+  {% set can_manage_companies  = is_admin or 'company_management'  in _r %}
+  {% set can_manage_suppliers  = is_admin or 'supplier_management' in _r %}
+  {% set can_manage_entities   = is_admin or 'entity_management'   in _r %}
+  {% set can_open_admin        = is_admin or can_manage_clients or can_manage_companies or can_manage_suppliers or can_manage_entities %}
+
+
+  <nav id="main_nav_bar" class="navbar sticky-top navbar-expand-lg navbar-light" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
+
+    <div class="container-fluid">
+      <a class="navbar-brand" href="{{ url_for('home') }}">
+        <img src="{{ url_for('static', filename='img/branding_gate_logo.jpg') }}" alt="Branding Gate Logo" class="d-inline-block align-top">
+        <span class="brand-separator">|</span>
+        <div class="brand-text">
+          <span>Branding Gate</span>
+          <small>Enterprise Solutions</small>
+        </div>
+      </a>
+      
+      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto">
+          <li class="nav-item active user_profile" id="home_nav" style="display: none;">
+            <a class="nav-link" href="/home">
+              <i class="fas fa-home mr-1"></i> Home
+              <span class="sr-only">(current)</span>
+            </a>
+          </li>
+          
+          <!-- Dashboard Dropdown -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="dashboardDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-tachometer-alt mr-1"></i> Dashboard
+            </a>
+            <div class="dropdown-menu" aria-labelledby="dashboardDropdown">
+              <a class="dropdown-item" href="#">
+                <i class="fas fa-chart-line"></i> Analytics
+              </a>
+              <a class="dropdown-item" href="#">
+                <i class="fas fa-chart-pie"></i> Reports
+              </a>
+              <a class="dropdown-item" href="#">
+                <i class="fas fa-chart-bar"></i> Statistics
+              </a>
+            </div>
+          </li>
+
+          {% if can_open_admin %}
+          <!-- Admin Dropdown (any admin permission) -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-shield-alt mr-1"></i> Admin
+            </a>
+            <div class="dropdown-menu" aria-labelledby="adminDropdown">
+              <a class="dropdown-item" href="{{ url_for('management_admin') }}">
+                <i class="fas fa-tachometer-alt"></i> Admin Section
+              </a>
+              <div class="dropdown-divider"></div>
+              {% if can_manage_companies %}
+              <a class="dropdown-item" href="{{ url_for('company') }}">
+                <i class="fas fa-building"></i> Company
+              </a>
+              {% endif %}
+              {% if can_manage_clients %}
+              <a class="dropdown-item" href="{{ url_for('client') }}">
+                <i class="fas fa-handshake"></i> Client
+              </a>
+              {% endif %}
+              {% if can_manage_suppliers %}
+              <a class="dropdown-item" href="{{ url_for('supplier') }}">
+                <i class="fas fa-truck"></i> Supplier
+              </a>
+              {% endif %}
+              {% if is_admin %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="#">
+                <i class="fas fa-tasks"></i> Tasks
+              </a>
+              <a class="dropdown-item" href="#">
+                <i class="fas fa-calendar-alt"></i> Calendar
+              </a>
+              {% endif %}
+            </div>
+          </li>
+          {% endif %}
+
+          <!-- Sales Dropdown -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="salesDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-chart-line mr-1"></i> Sales
+            </a>
+            <div class="dropdown-menu" aria-labelledby="salesDropdown">
+              <a class="dropdown-item" href="{{ url_for('sales_mainpage') }}">
+                <i class="fas fa-tachometer-alt"></i> Sales Section
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('sales_request') }}">
+                <i class="fas fa-shopping-cart"></i> Sales Request
+              </a>
+              {% if can_manage_clients %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('client') }}">
+                <i class="fas fa-handshake"></i> Client
+              </a>
+              {% endif %}
+              {% if 'admin' in session.get('roles', []) or 'sales_head' in session.get('roles', []) %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
+                <i class="fas fa-user-check"></i> Sales Head Approval
+              </a>
+              {% endif %}
+            </div>
+          </li>
+
+          <!-- Operations Dropdown -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-cogs mr-1"></i> Operations
+            </a>
+            <div class="dropdown-menu" aria-labelledby="operationsDropdown">
+              <a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
+                <i class="fas fa-tachometer-alt"></i> Operations Section
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('operation_request') }}">
+                <i class="fas fa-tools"></i> Operation Request
+              </a>
+              {% if 'admin' in session.get('roles', []) or 'pricing' in session.get('roles', []) or 'operation' in session.get('roles', []) %}
+              <a class="dropdown-item" href="{{ url_for('pricing_dashboard') }}">
+                <i class="fas fa-tags"></i> Pricing &amp; Re-Pricing
+              </a>
+              {% endif %}
+              <a class="dropdown-item" href="{{ url_for('workflow_timeline') }}">
+                <i class="fas fa-stream"></i> Workflow Timeline
+              </a>
+              <div class="dropdown-divider"></div>
+              {% if can_manage_suppliers %}
+              <a class="dropdown-item" href="{{ url_for('supplier') }}">
+                <i class="fas fa-truck"></i> Supplier
+              </a>
+              {% endif %}
+              <a class="dropdown-item" href="{{ url_for('item_management_page') }}">
+                <i class="fas fa-warehouse"></i> Item Management
+              </a>
+            </div>
+          </li>
+
+          <!-- Finance Dropdown -->
+          {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) or 'sales' in session.get('roles', []) %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="financeDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-coins mr-1"></i> Finance
+            </a>
+            <div class="dropdown-menu" aria-labelledby="financeDropdown">
+              <a class="dropdown-item" href="{{ url_for('finance_section_page') }}">
+                <i class="fas fa-tachometer-alt"></i> Finance Section
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('finance_management_page') }}">
+                <i class="fas fa-wallet"></i> Finance Management
+              </a>
+              {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) %}
+              <a class="dropdown-item" href="{{ url_for('finance_approvals') }}">
+                <i class="fas fa-check-double"></i> Finance Approvals
+              </a>
+              {% endif %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('expense_tracking_page') }}">
+                <i class="fas fa-receipt"></i> Expense Tracking
+              </a>
+              {% if 'admin' in session.get('roles', []) %}
+              <a class="dropdown-item" href="{{ url_for('expense_tracking_approval_page') }}">
+                <i class="fas fa-clipboard-check"></i> Expense Approval
+              </a>
+              {% endif %}
+              {% if 'admin' in session.get('roles', []) or 'finance' in session.get('roles', []) %}
+              <a class="dropdown-item" href="{{ url_for('finance_expense_approval_page') }}">
+                <i class="fas fa-file-invoice-dollar"></i> Finance Expense Approval
+              </a>
+              {% endif %}
+            </div>
+          </li>
+          {% endif %}
+
+          <!-- Single Item -->
+          <li class="nav-item">
+            <a class="nav-link" href="#">
+              <i class="fas fa-question-circle mr-1"></i> Help Center
+            </a>
+          </li>
+        </ul>        <div class="my-2 my-lg-0 navbar-nav">          <!-- User Balance Widget -->
+          <li class="nav-item dropdown mr-2">
+            <a class="nav-link" href="#" id="balanceDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="padding: 0.5rem 0.75rem;">
+              <span class="d-none d-md-inline" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 6px 12px; border-radius: 20px; font-weight: 600; color: #0369a1; font-size: 13px;">
+                <i class="fas fa-wallet mr-1"></i>
+                <span id="navbarMyBalance">EGP 0.00</span>
+              </span>
+              <span class="d-md-none" style="color: #0369a1;"><i class="fas fa-wallet"></i></span>
+            </a>
+            <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="balanceDropdown" style="min-width: 280px;">
+              <h6 class="dropdown-header border-bottom" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; margin: -8px -8px 8px; padding: 12px 16px;">
+                <i class="fas fa-wallet mr-2"></i>My Balance
+              </h6>
+              <div style="padding: 12px 16px; text-align: center;">
+                <div style="font-size: 28px; font-weight: 800; color: #0369a1;" id="navbarBalanceLarge">EGP 0.00</div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Available Balance</div>
+              </div>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="/my-expenses">
+                <i class="fas fa-receipt fa-fw mr-2 text-warning"></i>
+                My Personal Expenses
+              </a>
+              <a class="dropdown-item" href="/expense-tracking">
+                <i class="fas fa-file-invoice fa-fw mr-2 text-success"></i>
+                Submit Expense Reimbursement
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="#" onclick="openGlobalRequestBalanceModal(); return false;">
+                <i class="fas fa-hand-holding-usd fa-fw mr-2 text-primary"></i>
+                Request Balance
+              </a>
+              <a class="dropdown-item" href="#" onclick="openGlobalMyRequestsModal(); return false;">
+                <i class="fas fa-list-alt fa-fw mr-2 text-info"></i>
+                My Requests <span class="badge badge-warning ml-2" id="navbarPendingBadge" style="display: none;">0</span>
+              </a>
+            </div>
+          </li>
+
+          <!-- Chat Drawer Trigger -->
+          <li class="nav-item">
+            <a class="nav-link position-relative" href="#" id="chatDrawerToggle" title="Sales Request Chats">
+              <i class="fas fa-comments fa-fw"></i>
+              <span class="badge badge-danger chat-unread-badge" id="chatUnreadBadge" style="display:none;">0</span>
+            </a>
+          </li>
+
+          <!-- Notification Dropdown -->
+          <li class="nav-item dropdown">
+            <a class="nav-link" href="#" id="notificationDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-bell fa-fw"></i>
+              <span class="badge badge-danger notification-badge" style="display: none;">0</span>
+            </a>
+            <div class="dropdown-menu dropdown-menu-right notification-dropdown shadow animated--fade-in" aria-labelledby="notificationDropdown">
+              <h6 class="dropdown-header border-bottom">
+                Notifications
+              </h6>
+              <div id="notificationList" class="scrollable-menu" style="max-height: 400px; overflow-y: auto;">
+                <!-- Notifications will be inserted here -->
+              </div>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item text-center small text-gray-500" href="/notifications">
+                <i class="fas fa-list fa-fw mr-1"></i>
+                Show All Notifications
+              </a>
+              <a class="dropdown-item text-center small text-gray-500" href="#" onclick="markAllNotificationsAsRead()">
+                <i class="fas fa-check-double fa-fw mr-1"></i>
+                Mark All as Read
+              </a>
+            </div>
+          </li>
+
+          <!-- User Profile Dropdown -->
+          <ul class="navbar-nav">
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <i class="fas fa-user-circle mr-1"></i>
+                <span>{{ session['name'] }}</span>
+              </a>
+              <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in" aria-labelledby="navbarDropdown">
+                <a class="dropdown-item" href="#">
+                  <i class="fas fa-user fa-sm fa-fw mr-2 text-gray-400"></i>
+                  Profile
+                </a>
+                <a class="dropdown-item" href="#">
+                  <i class="fas fa-cogs fa-sm fa-fw mr-2 text-gray-400"></i>
+                  Settings
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="/logout">
+                  <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
+                  Logout
+                </a>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Quick Add Floating Button (any admin/management permission) -->
+  {% if can_manage_clients or can_manage_companies or can_manage_suppliers %}
+  <div class="quick-add-fab" id="quickAddFab">
+    <button class="fab-main-btn" id="fabMainBtn" title="Quick Actions">
+      <i class="fas fa-plus"></i>
+    </button>
+    <div class="fab-menu" id="fabMenu">
+      {% if can_manage_suppliers %}
+      <button class="fab-item" data-toggle="modal" data-target="#quickAddSupplierModal" title="Add Supplier">
+        <i class="fas fa-truck"></i>
+        <span>Supplier</span>
+      </button>
+      {% endif %}
+      {% if can_manage_clients %}
+      <button class="fab-item" data-toggle="modal" data-target="#quickAddClientModal" title="Add Client">
+        <i class="fas fa-user-tie"></i>
+        <span>Client</span>
+      </button>
+      {% endif %}
+      {% if can_manage_companies %}
+      <button class="fab-item" onclick="window.location.href='{{ url_for('company') }}'" title="Add Company">
+        <i class="fas fa-building"></i>
+        <span>Company</span>
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  
+  <style>
+    /* Floating Action Button Styles */
+    .quick-add-fab {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      z-index: 1040;
+    }
+    
+    .fab-main-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(78, 115, 223, 0.4);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .fab-main-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(78, 115, 223, 0.5);
+    }
+    
+    .fab-main-btn:focus {
+      outline: none;
+    }
+    
+    .fab-main-btn.active {
+      transform: rotate(45deg);
+      background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+    
+    .fab-menu {
+      position: absolute;
+      bottom: 70px;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
+    }
+    
+    .fab-menu.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    
+    .fab-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: white;
+      border: none;
+      border-radius: 25px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    
+    .fab-item:hover {
+      background: #f8f9fc;
+      transform: translateX(-5px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .fab-item:focus {
+      outline: none;
+    }
+    
+    .fab-item i {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 12px;
+    }
+    
+    .fab-item i.fa-truck {
+      background: #1cc88a;
+      color: white;
+    }
+    
+    .fab-item i.fa-user-tie {
+      background: #36b9cc;
+      color: white;
+    }
+    
+    .fab-item i.fa-handshake {
+      background: #36b9cc;
+      color: white;
+    }
+    
+    .fab-item i.fa-building {
+      background: #f6c23e;
+      color: white;
+    }
+    
+    .fab-item span {
+      font-size: 14px;
+      font-weight: 500;
+      color: #5a5c69;
+    }
+    
+    @media (max-width: 576px) {
+      .quick-add-fab {
+        bottom: 20px;
+        right: 20px;
+      }
+      
+      .fab-main-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+      }
+    }
+  </style>
+  {% endif %}
+
+  <!-- Quick Add Supplier Modal -->
+  {% if can_manage_suppliers %}
+  <div class="modal fade" id="quickAddSupplierModal" tabindex="-1" role="dialog" aria-labelledby="quickAddSupplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title" id="quickAddSupplierModalLabel">
+            <i class="fas fa-truck mr-2"></i>Quick Add Supplier
+          </h5>
+          <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="quickAddSupplierForm">
+            <!-- Basic Supplier Information Section -->
+            <div class="card mb-3">
+              <div class="card-header bg-primary text-white">
+                <h6 class="m-0"><i class="fas fa-info-circle mr-2"></i>Basic Information</h6>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickSupplierName">Supplier Name <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="quickSupplierName" name="supplier_name" required placeholder="Enter supplier name">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickSupplierType">Supplier Type <span class="text-danger">*</span></label>
+                      <select class="form-control" id="quickSupplierType" name="supplier_type" required>
+                        <option value="">Select Type...</option>
+                        <option value="Manufacturer">Manufacturer</option>
+                        <option value="Distributor">Distributor</option>
+                        <option value="Wholesaler">Wholesaler</option>
+                        <option value="Service Provider">Service Provider</option>
+                        <option value="Raw Materials">Raw Materials</option>
+                        <option value="Equipment">Equipment</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="row" id="quickOtherSupplierTypeRow" style="display: none;">
+                  <div class="col-md-12">
+                    <div class="form-group">
+                      <label for="quickOtherSupplierType">Specify Other Type</label>
+                      <input type="text" class="form-control" id="quickOtherSupplierType" name="other_supplier_type" placeholder="Enter supplier type">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickCompanyName">Company Name</label>
+                      <input type="text" class="form-control" id="quickCompanyName" name="company_name" placeholder="Enter company name">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickStatus">Status <span class="text-danger">*</span></label>
+                      <select class="form-control" id="quickStatus" name="status" required>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Pending">Pending</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contact Information Section -->
+            <div class="card mb-3">
+              <div class="card-header bg-info text-white">
+                <h6 class="m-0"><i class="fas fa-address-book mr-2"></i>Contact Information</h6>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickContactPersonName">Contact Person <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="quickContactPersonName" name="contact_person_name" required placeholder="Enter contact person name">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickJobTitle">Job Title</label>
+                      <input type="text" class="form-control" id="quickJobTitle" name="job_title" placeholder="Enter job title">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickPrimaryPhone">Primary Phone <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="quickPrimaryPhone" name="primary_phone" required placeholder="Enter phone number">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickEmailAddress">Email Address <span class="text-danger">*</span></label>
+                      <input type="email" class="form-control" id="quickEmailAddress" name="email_address" required placeholder="Enter email address">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickPreferredContactMethod">Preferred Contact Method <span class="text-danger">*</span></label>
+                      <select class="form-control" id="quickPreferredContactMethod" name="preferred_contact_method" required>
+                        <option value="Phone">Phone</option>
+                        <option value="Email">Email</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="In Person">In Person</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickWhatsappNumber">WhatsApp Number</label>
+                      <input type="text" class="form-control" id="quickWhatsappNumber" name="whatsapp_number" placeholder="Enter WhatsApp number">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-12">
+                    <div class="form-group">
+                      <label for="quickAddress">Address</label>
+                      <textarea class="form-control" id="quickAddress" name="address" rows="2" placeholder="Enter address"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="fas fa-times mr-2"></i>Cancel
+          </button>
+          <button type="button" class="btn btn-success" id="quickSaveSupplierBtn">
+            <i class="fas fa-save mr-2"></i>Save Supplier
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Add Client Modal -->
+  {% if can_manage_clients %}
+  <div class="modal fade" id="quickAddClientModal" tabindex="-1" role="dialog" aria-labelledby="quickAddClientModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title" id="quickAddClientModalLabel">
+            <i class="fas fa-user-tie mr-2"></i>Quick Add Client
+          </h5>
+          <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="quickAddClientForm">
+            <!-- Basic Client Information Section -->
+            <div class="card mb-3">
+              <div class="card-header bg-primary text-white">
+                <h6 class="m-0"><i class="fas fa-info-circle mr-2"></i>Basic Information</h6>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientName">Client Name <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="quickClientName" name="client_name" required placeholder="Enter client name">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientCompany">Parent Company</label>
+                      <select class="form-control" id="quickClientCompany" name="parent_company_id">
+                        <option value="">Select Company (Optional)...</option>
+                        <!-- Will be populated dynamically -->
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientJobTitle">Job Title</label>
+                      <input type="text" class="form-control" id="quickClientJobTitle" name="job_title" placeholder="Enter job title">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientPreferredChannel">Preferred Contact Channel <span class="text-danger">*</span></label>
+                      <select class="form-control" id="quickClientPreferredChannel" name="preferred_contact_channel" required>
+                        <option value="Phone">Phone</option>
+                        <option value="Email">Email</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="In Person">In Person</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contact Information Section -->
+            <div class="card mb-3">
+              <div class="card-header" style="background: linear-gradient(135deg, #36b9cc 0%, #1a8eaa 100%); color: white;">
+                <h6 class="m-0"><i class="fas fa-address-book mr-2"></i>Contact Information</h6>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientMobile">Mobile Number <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="quickClientMobile" name="mobile_number" required placeholder="Enter mobile number">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="quickClientSecondaryMobile">Secondary Mobile</label>
+                      <input type="text" class="form-control" id="quickClientSecondaryMobile" name="secondary_mobile_number" placeholder="Enter secondary mobile">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-12">
+                    <div class="form-group">
+                      <label for="quickClientEmail">Email Address <span class="text-danger">*</span></label>
+                      <input type="email" class="form-control" id="quickClientEmail" name="email_address" required placeholder="Enter email address">
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-12">
+                    <div class="form-group">
+                      <label for="quickClientNotes">Additional Notes</label>
+                      <textarea class="form-control" id="quickClientNotes" name="additional_notes" rows="2" placeholder="Enter any additional notes"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="fas fa-times mr-2"></i>Cancel
+          </button>
+          <button type="button" class="btn btn-info" id="quickSaveClientBtn">
+            <i class="fas fa-save mr-2"></i>Save Client
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!----------------------------------------------------------------------------------->
+  <!-- Logout Modal-->
+  <div class="modal fade" id="logoutModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Ready to Leave?</h5>
+          <button class="close" type="button" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <div class="modal-body">Select "Logout" below if you are ready to end your current session.</div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
+          <a class="btn btn-primary" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <br>
+
+
+  <hr>
+
+
+
+
+  </script>
+
+  </style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <!-- Bootstrap core JavaScript-->
+  <!-- jQuery with CDN fallback for reliability -->
+  <script src="{{ url_for('static', filename='vendor/jquery/jquery.min.js') }}"></script>
+  <script>
+    // Fallback to CDN if local jQuery failed to load - use proper async loading
+    if (typeof jQuery === 'undefined') {
+      console.error('Local jQuery failed to load!');
+      var script = document.createElement('script');
+      script.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
+      script.async = false;
+      document.head.appendChild(script);
+    }
+  </script>
+  <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+
+  <!-- Core plugin JavaScript-->
+  <script src="{{ url_for('static', filename='vendor/jquery-easing/jquery.easing.min.js') }}"></script>
+  <script>
+    // Fallback for jQuery easing if it failed
+    if (typeof jQuery !== 'undefined' && typeof jQuery.easing === 'undefined') {
+      jQuery.easing = { swing: function(x, t, b, c, d) { return c * (t / d) + b; } };
+    }
+  </script>
+
+  <!-- Custom scripts for all pages-->
+  <script src="{{ url_for('static', filename='js/sb-admin-2.min.js') }}"></script>
+
+  <!-- Page level plugins -->
+  <script src="{{ url_for('static', filename='vendor/chart.js/Chart.min.js') }}"></script>
+  <script>
+    // Fallback to CDN if local Chart.js failed to load - use proper async loading
+    if (typeof Chart === 'undefined') {
+      console.warn('Local Chart.js failed, loading from CDN...');
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js';
+      script.async = false;
+      document.head.appendChild(script);
+    }
+  </script>
+
+  <!-- Page level custom scripts -->
+  <script src="{{ url_for('static', filename='js/demo/chart-area-demo.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/demo/chart-pie-demo.js')   }}"></script>
+  <script src="{{ url_for('static', filename='datepicker/js/bootstrap-datepicker.js') }}"></script>
+
+  <link href="{{ url_for('static', filename='datepicker/css/bootstrap-datepicker.css') }}" rel="stylesheet"
+    type="text/css">
+
+<!-- Trigger button -->
+<!-- Trigger button (Bootstrap 4) -->
+<!-- <button
+  type="button"
+  class="btn btn-secondary mb-3"
+  data-toggle="modal"
+  data-target="#addNotifModal"
+>
+  Test Add Notification
+</button> -->
+
+<!-- Modal markup (Bootstrap 4) -->
+<div
+  class="modal fade"
+  id="addNotifModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="addNotifModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog" role="document">
+    <form id="addNotifForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addNotifModalLabel">Add Notification</h5>
+        <button
+          type="button"
+          class="close"
+          data-dismiss="modal"
+          aria-label="Close"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="notifUid">UID</label>
+          <input
+            type="text"
+            class="form-control"
+            id="notifUid"
+            name="uid"
+            placeholder="+201024527770"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="notifTitle">Title</label>
+          <input
+            type="text"
+            class="form-control"
+            id="notifTitle"
+            name="title"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="notifContent">Content</label>
+          <textarea
+            class="form-control"
+            id="notifContent"
+            name="content"
+            rows="3"
+            required
+          ></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-dismiss="modal"
+        >Close</button>
+        <button type="submit" class="btn btn-primary">Send</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById('addNotifForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const uid     = document.getElementById('notifUid').value.trim();
+  const title   = document.getElementById('notifTitle').value.trim();
+  const content = document.getElementById('notifContent').value.trim();
+
+  try {
+    const res = await fetch('/add_notification', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, title, content })
+    });
+    const json = await res.json();
+
+    if (!json.success) {
+      throw new Error(json.error || 'Server error');
+    }
+
+    // Close the modal
+    const modalEl = document.getElementById('addNotifModal');
+    const modal   = bootstrap.Modal.getInstance(modalEl);
+    modal.hide();
+
+    // Show success toast
+    showToast('Saved!', `ID: ${json.message_id}`, 'success');
+    e.target.reset();
+  } catch (err) {
+    showToast('Error', err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+});
+
+// Toast helper (requires <div id="toastContainer"> somewhere in body)
+function showToast(title, body, variant = 'info') {
+  const tc = document.getElementById('toastContainer');
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast align-items-center text-bg-${variant} border-0`;
+  toastEl.setAttribute('role','alert');
+  toastEl.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">
+        <strong>${title}</strong><br>${body}
+      </div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>`;
+  tc.appendChild(toastEl);
+  new bootstrap.Toast(toastEl, { delay: 5000 }).show();
+}
+</script>
+
+
+<script>
+
+
+/** Display a Bootstrap toast **/
+function showToast(title, body) {
+  const tc = document.getElementById('toastContainer');
+  // remove existing
+  tc.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'toast align-items-center text-bg-light border-0';
+  el.setAttribute('role','alert');
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">
+        <strong>${title}</strong><br>${body}
+      </div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>`;
+  tc.appendChild(el);
+  new bootstrap.Toast(el, { delay: 5000 }).show();
+}
+</script>
+  {% block body %}{% endblock %}
+
+  <!-- ===== Sales Request Chat Drawer ===== -->
+  <div id="chatDrawerOverlay"></div>
+  <aside id="chatDrawer" aria-hidden="true">
+    <div class="chat-drawer-header">
+      <h5><i class="fas fa-comments mr-2"></i>Sales Request Chats</h5>
+      <button type="button" class="chat-drawer-close" id="chatDrawerCloseBtn" title="Close">&times;</button>
+    </div>
+    <div class="chat-drawer-body">
+      <div class="chat-list-pane">
+        <div class="chat-list-search">
+          <input type="text" id="chatListSearch" placeholder="Search chats..." />
+        </div>
+        <div class="chat-list-toolbar">
+          <label for="chatListSort" class="text-muted mb-0" style="font-weight:600;">Sort:</label>
+          <select id="chatListSort" title="Sort chats">
+            <option value="id_desc">SR-ID (newest first)</option>
+            <option value="id_asc">SR-ID (oldest first)</option>
+            <option value="recent">Last activity</option>
+            <option value="unread">Unread first</option>
+          </select>
+          <span class="unread-toggle" id="chatUnreadToggle" title="Show only chats with unread mentions">
+            <i class="fas fa-bell"></i>Unread <span class="cnt" id="chatUnreadCnt">0</span>
+          </span>
+        </div>
+        <div class="chat-list-items" id="chatListItems">
+          <div class="chat-list-empty">Loading...</div>
+        </div>
+      </div>
+      <div class="chat-thread-pane" id="chatThreadPane">
+        <div class="chat-thread-placeholder">
+          <div>
+            <i class="fas fa-comment-dots fa-2x mb-2" style="opacity:.4;"></i>
+            <div>Select a sales request chat from the left</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+  /* ===== Global Sales Request Chat Drawer =====
+     Reuses the existing comments API:
+       GET  /api/sales/requests/<id>/comments
+       POST /api/sales/requests/<id>/comments
+       GET  /api/chat/sr-list  (new)
+       GET  /api/users  (for @mention search)
+       GET  /api/sales/requests/<id>  (for details, privilege-gated server-side)
+  */
+  (function(){
+    var $drawer = $('#chatDrawer');
+    var $overlay = $('#chatDrawerOverlay');
+    var $badge = $('#chatUnreadBadge');
+    var chats = [];
+    var mentionUsers = [];
+    var currentRequestId = null;
+    var currentRequestMeta = null;
+    var lastSeenLastMsgIso = null;
+    var listPollTimer = null;
+    var threadPollTimer = null;
+    var lastThreadMsgIds = new Set();
+    var firstListFetch = true;
+    var currentUserName = {{ (session.get('name') or '') | tojson }};
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function highlightMentions(text) {
+      // Only the @name itself is bold; text after is plain.
+      if (!text) return '';
+      var names = mentionUsers.map(function(u){ return u && u.name; }).filter(Boolean);
+      names.sort(function(a,b){ return b.length - a.length; });
+      var out = '', i = 0;
+      while (i < text.length) {
+        if (text.charAt(i) === '@') {
+          var matched = null;
+          for (var k = 0; k < names.length; k++) {
+            var n = names[k];
+            if (text.substr(i+1, n.length) === n) {
+              var nxt = text.charAt(i+1+n.length);
+              if (nxt === '' || /[\s.,!?;:)\]\}]/.test(nxt)) { matched = n; break; }
+            }
+          }
+          if (matched) {
+            out += '<span class="mention">@' + escapeHtml(matched) + '</span>';
+            i += 1 + matched.length;
+            continue;
+          }
+        }
+        var ch = text.charAt(i);
+        out += (ch === '&') ? '&amp;'
+             : (ch === '<') ? '&lt;'
+             : (ch === '>') ? '&gt;'
+             : (ch === '"') ? '&quot;'
+             : (ch === "'") ? '&#39;' : ch;
+        i++;
+      }
+      return out;
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      var d = new Date(iso.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return '';
+      var s = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (s < 60) return 'now';
+      if (s < 3600) return Math.floor(s/60) + 'm';
+      if (s < 86400) return Math.floor(s/3600) + 'h';
+      if (s < 7*86400) return Math.floor(s/86400) + 'd';
+      return d.toLocaleDateString();
+    }
+
+    function timeHHMM(iso) {
+      if (!iso) return '';
+      var d = new Date(iso.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    }
+
+    function initials(name) {
+      return (name||'?').split(/\s+/).map(function(p){return p.charAt(0);}).slice(0,2).join('').toUpperCase();
+    }
+
+    function updateBadge(total) {
+      if (total && total > 0) {
+        $badge.text(total > 99 ? '99+' : total).show();
+      } else {
+        $badge.hide();
+      }
+    }
+
+    function openDrawer() {
+      $drawer.addClass('open').attr('aria-hidden', 'false');
+      $overlay.addClass('open');
+      fetchChatList();
+      ensureMentionUsers();
+      startListPolling();
+    }
+    function closeDrawer() {
+      $drawer.removeClass('open').attr('aria-hidden', 'true');
+      $overlay.removeClass('open');
+      stopThreadPolling();
+    }
+
+    function startListPolling() {
+      stopListPolling();
+      listPollTimer = setInterval(fetchChatList, 8000);
+    }
+    function stopListPolling() {
+      if (listPollTimer) { clearInterval(listPollTimer); listPollTimer = null; }
+    }
+    function startThreadPolling() {
+      stopThreadPolling();
+      threadPollTimer = setInterval(function(){
+        if (currentRequestId) fetchThread(currentRequestId, true);
+      }, 4000);
+    }
+    function stopThreadPolling() {
+      if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+    }
+
+    function fetchChatList() {
+      $.ajax({ url: '/api/chat/sr-list', type: 'GET', cache: false, silent: true })
+        .done(function(resp) {
+          if (!resp || !resp.success) return;
+          var prevTop = chats.length ? chats[0] : null;
+          chats = resp.chats || [];
+          updateBadge(resp.total_unread || 0);
+          renderChatList($('#chatListSearch').val() || '');
+
+          // Notify when a NEW message arrives (only after first fetch)
+          if (!firstListFetch && resp.chats && resp.chats.length) {
+            var top = resp.chats[0];
+            if (top && top.last_message_at &&
+                (!prevTop || top.last_message_at !== prevTop.last_message_at) &&
+                top.last_message_user !== currentUserName) {
+              notifyNewMessage(top);
+            }
+          }
+          firstListFetch = false;
+        })
+        .fail(function(xhr) {
+          if (xhr && (xhr.status === 401 || xhr.status === 403)) {
+            chatAccessDenied = true;
+            if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+          }
+        });
+    }
+
+    function notifyNewMessage(chat) {
+      // Soft toast (skip if user is viewing this chat already)
+      if (currentRequestId === chat.request_id && $drawer.hasClass('open')) return;
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          toast: true, position: 'top-end',
+          icon: 'info', timer: 3500, showConfirmButton: false,
+          title: 'New message · SR-' + chat.request_id,
+          html: '<small><b>' + escapeHtml(chat.last_message_user||'') + ':</b> ' +
+                escapeHtml((chat.last_message_text||'').substring(0,80)) + '</small>'
+        });
+      }
+    }
+
+    function renderChatList(filter) {
+      var $list = $('#chatListItems');
+      var q = (filter || '').toLowerCase();
+      var sortMode = $('#chatListSort').val() || 'id_desc';
+      var unreadOnly = $('#chatUnreadToggle').hasClass('active');
+
+      // Update the unread counter pill (total chats with unread mentions)
+      var unreadChatCount = chats.filter(function(c){ return (c.unread_mentions||0) > 0; }).length;
+      $('#chatUnreadCnt').text(unreadChatCount);
+
+      var rows = chats.filter(function(c){
+        if (unreadOnly && !((c.unread_mentions||0) > 0)) return false;
+        if (!q) return true;
+        return ('sr-' + c.request_id).includes(q)
+          || (c.title||'').toLowerCase().includes(q)
+          || (c.client_name||'').toLowerCase().includes(q)
+          || (c.company_name||'').toLowerCase().includes(q);
+      });
+
+      // Apply sort
+      rows.sort(function(a, b){
+        if (sortMode === 'id_asc')  return (a.request_id|0) - (b.request_id|0);
+        if (sortMode === 'id_desc') return (b.request_id|0) - (a.request_id|0);
+        if (sortMode === 'unread') {
+          var d = (b.unread_mentions||0) - (a.unread_mentions||0);
+          if (d !== 0) return d;
+          return (b.last_message_at||'').localeCompare(a.last_message_at||'');
+        }
+        // recent (default fallback): server already returns by last_message_at desc
+        return (b.last_message_at||'').localeCompare(a.last_message_at||'');
+      });
+
+      if (!rows.length) {
+        $list.html('<div class="chat-list-empty">' + (unreadOnly ? 'No unread chats.' : 'No chats found.') + '</div>');
+        return;
+      }
+      var html = rows.map(function(c){
+        var isUnread = (c.unread_mentions||0) > 0;
+        var unread = isUnread
+          ? '<span class="unread"><i class="fas fa-at" style="font-size:9px;margin-right:2px;"></i>' + c.unread_mentions + '</span>' : '';
+        var active = (c.request_id === currentRequestId) ? ' active' : '';
+        var unreadCls = isUnread ? ' unread' : '';
+        var hasMsgs = !!c.last_message_at;
+        var timeLabel = hasMsgs ? timeAgo(c.last_message_at) : '<i class="far fa-comment-dots"></i>';
+        var previewHtml = hasMsgs
+          ? '<span><b>' + escapeHtml(c.last_message_user||'') + ':</b> ' +
+              escapeHtml((c.last_message_text||'').substring(0,40)) + '</span>'
+          : '<span class="text-muted font-italic">No messages yet — click to start</span>';
+        return '<div class="chat-list-item' + active + unreadCls + '" data-id="' + c.request_id + '">' +
+          '<div class="chat-list-avatar">' + escapeHtml(initials(c.client_name || c.title)) + '</div>' +
+          '<div class="chat-list-body">' +
+            '<div class="chat-list-title">' +
+              '<span><span class="req-id">SR-' + c.request_id + '</span> · ' +
+                escapeHtml((c.title||'').substring(0,28)) + '</span>' +
+              '<span class="time">' + timeLabel + '</span>' +
+            '</div>' +
+            '<div class="chat-list-sub">' +
+              escapeHtml(c.client_name||'-') +
+              (c.company_name ? ' · ' + escapeHtml(c.company_name) : '') +
+            '</div>' +
+            '<div class="chat-list-preview">' +
+              previewHtml +
+              unread +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      $list.html(html);
+    }
+
+    // Toolbar handlers: re-render on sort change or unread toggle click
+    $(document).on('change', '#chatListSort', function(){
+      renderChatList($('#chatListSearch').val() || '');
+    });
+    $(document).on('click', '#chatUnreadToggle', function(){
+      $(this).toggleClass('active');
+      renderChatList($('#chatListSearch').val() || '');
+    });
+
+    function ensureMentionUsers() {
+      if (mentionUsers.length) return;
+      $.get('/api/users', function(r){
+        if (r && r.success) mentionUsers = r.users || [];
+      });
+    }
+
+    function openChat(requestId) {
+      currentRequestId = requestId;
+      currentRequestMeta = chats.find(function(c){ return c.request_id === requestId; }) || null;
+      lastThreadMsgIds = new Set();
+      // Optimistically clear unread for this SR so the badge feels instant
+      if (currentRequestMeta && currentRequestMeta.unread_mentions > 0) {
+        var was = currentRequestMeta.unread_mentions;
+        currentRequestMeta.unread_mentions = 0;
+        var newTotal = Math.max(0, chats.reduce(function(s,c){ return s + (c.unread_mentions||0); }, 0));
+        updateBadge(newTotal);
+      }
+      renderChatList($('#chatListSearch').val() || '');
+      renderThreadShell();
+      fetchThread(requestId, false);
+      fetchSrDetails(requestId);
+      startThreadPolling();
+      // Persist read state on the server
+      $.ajax({ url: '/api/chat/sr/' + requestId + '/mark-read', type: 'POST', cache: false })
+        .always(function(){ /* refresh list so server state propagates */
+          setTimeout(fetchChatList, 250);
+        });
+    }
+
+    function renderThreadShell() {
+      var c = currentRequestMeta || {};
+      var html = '' +
+        '<div class="chat-thread-header">' +
+          '<button class="btn btn-sm btn-outline-secondary details-btn" id="chatDetailsBtn" title="Open full request">' +
+            '<i class="fas fa-external-link-alt"></i> Open</button>' +
+          '<div class="title"><i class="fas fa-hashtag text-success"></i>' +
+            'SR-' + (c.request_id||'') + ' · ' + escapeHtml(c.title||'') + '</div>' +
+          '<div class="meta" id="chatThreadMeta">' +
+            escapeHtml(c.client_name||'') +
+            (c.company_name ? ' · ' + escapeHtml(c.company_name) : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="chat-thread-messages" id="chatThreadMessages">' +
+          '<div class="text-center text-muted p-3"><i class="fas fa-spinner fa-spin"></i> Loading...</div>' +
+        '</div>' +
+        '<div class="chat-thread-composer">' +
+          '<div class="chat-mention-suggest" id="chatMentionSuggest"></div>' +
+          '<div class="composer-row">' +
+            '<textarea id="chatComposer" rows="1" placeholder="Type a message — use @ to mention"></textarea>' +
+            '<button class="send-btn" id="chatSendBtn" title="Send"><i class="fas fa-paper-plane"></i></button>' +
+          '</div>' +
+        '</div>';
+      $('#chatThreadPane').html(html);
+    }
+
+    function fetchSrDetails(requestId) {
+      $.ajax({ url: '/api/sales/requests/' + requestId, type: 'GET' })
+        .done(function(r){
+          if (!r || !r.success || !r.request) return;
+          var sr = r.request;
+          var bits = [];
+          if (sr.client_name) bits.push(escapeHtml(sr.client_name));
+          if (sr.company_name) bits.push(escapeHtml(sr.company_name));
+          if (sr.status) bits.push('<span class="badge badge-light">' + escapeHtml(sr.status) + '</span>');
+          if (sr.priority) bits.push('<span class="badge badge-info">' + escapeHtml(sr.priority) + '</span>');
+          $('#chatThreadMeta').html(bits.join(' · '));
+        })
+        .fail(function(xhr){
+          if (xhr.status === 403) {
+            $('#chatThreadMeta').html('<span class="text-warning"><i class="fas fa-lock"></i> No permission to view full details</span>');
+          }
+        });
+    }
+
+    function fetchThread(requestId, silent) {
+      $.ajax({ url: '/api/sales/requests/' + requestId + '/comments', type: 'GET', cache: false })
+        .done(function(r){
+          if (!r || !r.success) return;
+          if (requestId !== currentRequestId) return; // user switched chat
+          renderThreadMessages(r.comments || [], silent);
+        });
+    }
+
+    function renderThreadMessages(comments, silent) {
+      var $box = $('#chatThreadMessages');
+      if (!comments.length) {
+        $box.html('<div class="text-center text-muted p-4"><i class="fas fa-comment-slash"></i><br><small>No messages yet</small></div>');
+        lastThreadMsgIds = new Set();
+        return;
+      }
+      // API returns DESC, we want chronological
+      var ordered = comments.slice().reverse();
+      var newIds = new Set(ordered.map(function(c){ return c.id; }));
+
+      var hadNew = false;
+      ordered.forEach(function(c){ if (!lastThreadMsgIds.has(c.id)) hadNew = true; });
+
+      var html = ordered.map(function(c){
+        var isOwn = (c.user_name === currentUserName);
+        return '<div class="chat-msg' + (isOwn ? ' own' : '') + '">' +
+          '<div class="chat-msg-bubble">' +
+            (isOwn ? '' : '<div class="chat-msg-author">' + escapeHtml(c.user_name||'Unknown') + '</div>') +
+            '<div class="chat-msg-text">' + highlightMentions(c.comment_text||'') + '</div>' +
+            '<span class="chat-msg-time">' + timeHHMM(c.created_at) + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      $box.html(html);
+
+      // Auto-scroll if first render or new messages
+      if (!silent || hadNew) {
+        var el = $box.get(0);
+        if (el) el.scrollTop = el.scrollHeight;
+      }
+      lastThreadMsgIds = newIds;
+    }
+
+    // Mention suggestion in composer
+    var mentionActive = false, mentionStart = -1, mentionFiltered = [], mentionIdx = 0;
+    function updateMentionSuggest() {
+      var $ta = $('#chatComposer');
+      var ta = $ta.get(0); if (!ta) return;
+      var val = ta.value, pos = ta.selectionStart;
+      var before = val.substring(0, pos);
+      var at = before.lastIndexOf('@');
+      if (at === -1 || (at > 0 && !/\s/.test(before.charAt(at-1)))) {
+        return hideMentionSuggest();
+      }
+      var search = before.substring(at+1);
+      if (/\s/.test(search) || search.length > 30) return hideMentionSuggest();
+      mentionActive = true; mentionStart = at;
+      var q = search.toLowerCase();
+      mentionFiltered = mentionUsers.filter(function(u){
+        return (u.name||'').toLowerCase().includes(q);
+      }).slice(0, 6);
+      if (!mentionFiltered.length) return hideMentionSuggest();
+      mentionIdx = 0;
+      var $sg = $('#chatMentionSuggest');
+      $sg.html(mentionFiltered.map(function(u,i){
+        return '<div class="item' + (i===0?' active':'') + '" data-name="' + escapeHtml(u.name) + '">' +
+          '<div class="chat-list-avatar" style="width:26px;height:26px;font-size:.7rem;flex:0 0 26px;">' +
+            escapeHtml(initials(u.name)) + '</div>' +
+          '<div><div style="font-weight:600;">' + escapeHtml(u.name) + '</div>' +
+          '<small class="text-muted">' + escapeHtml(u.title || u.team_name || '') + '</small></div>' +
+        '</div>';
+      }).join('')).show();
+    }
+    function hideMentionSuggest() {
+      mentionActive = false;
+      $('#chatMentionSuggest').hide();
+    }
+    function insertMention(name) {
+      var ta = $('#chatComposer').get(0); if (!ta) return;
+      var val = ta.value, pos = ta.selectionStart;
+      var newVal = val.substring(0, mentionStart) + '@' + name + ' ' + val.substring(pos);
+      ta.value = newVal;
+      var newPos = mentionStart + name.length + 2;
+      ta.setSelectionRange(newPos, newPos);
+      ta.focus();
+      hideMentionSuggest();
+    }
+
+    function sendMessage() {
+      var $ta = $('#chatComposer');
+      var text = ($ta.val() || '').trim();
+      if (!text || !currentRequestId) return;
+      // Resolve mentions
+      var mentions = [];
+      var seen = new Set();
+      mentionUsers.forEach(function(u){
+        if (!u || !u.name) return;
+        var re = new RegExp('@' + u.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(?=\\s|$|[.,!?;:)\\]\\}])');
+        if (re.test(text) && !seen.has(u.id)) { mentions.push(u.id); seen.add(u.id); }
+      });
+      var $btn = $('#chatSendBtn').prop('disabled', true);
+      $.ajax({
+        url: '/api/sales/requests/' + currentRequestId + '/comments',
+        type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+          comment_text: text, source: 'general', is_note: false,
+          mentioned_users: mentions
+        })
+      }).done(function(r){
+        if (r && r.success) {
+          $ta.val('');
+          fetchThread(currentRequestId, false);
+          fetchChatList();
+        } else if (typeof Swal !== 'undefined') {
+          Swal.fire('Error', (r && r.error) || 'Failed to send', 'error');
+        }
+      }).fail(function(){
+        if (typeof Swal !== 'undefined') Swal.fire('Error', 'Network error', 'error');
+      }).always(function(){
+        $btn.prop('disabled', false);
+      });
+    }
+
+    // ===== Event bindings =====
+    $(document).on('click', '#chatDrawerToggle', function(e){
+      e.preventDefault();
+      if ($drawer.hasClass('open')) closeDrawer(); else openDrawer();
+    });
+    $(document).on('click', '#chatDrawerCloseBtn, #chatDrawerOverlay', closeDrawer);
+    $(document).on('keydown', function(e){
+      if (e.key === 'Escape' && $drawer.hasClass('open')) closeDrawer();
+    });
+
+    $(document).on('click', '#chatListItems .chat-list-item', function(){
+      var id = parseInt($(this).data('id'), 10);
+      if (id) openChat(id);
+    });
+
+    $(document).on('input', '#chatListSearch', function(){
+      renderChatList($(this).val());
+    });
+
+    $(document).on('input', '#chatComposer', updateMentionSuggest);
+    $(document).on('keydown', '#chatComposer', function(e){
+      if (mentionActive && $('#chatMentionSuggest').is(':visible')) {
+        var $items = $('#chatMentionSuggest .item');
+        if (e.key === 'ArrowDown') { e.preventDefault();
+          mentionIdx = Math.min(mentionIdx+1, $items.length-1);
+          $items.removeClass('active').eq(mentionIdx).addClass('active'); return;
+        }
+        if (e.key === 'ArrowUp') { e.preventDefault();
+          mentionIdx = Math.max(mentionIdx-1, 0);
+          $items.removeClass('active').eq(mentionIdx).addClass('active'); return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          var name = $items.eq(mentionIdx).data('name');
+          if (name) insertMention(name); return;
+        }
+        if (e.key === 'Escape') { e.preventDefault(); hideMentionSuggest(); return; }
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    $(document).on('click', '#chatMentionSuggest .item', function(){
+      insertMention($(this).data('name'));
+    });
+    $(document).on('click', '#chatSendBtn', sendMessage);
+    $(document).on('click', '#chatDetailsBtn', function(){
+      if (currentRequestId) window.open('/sales_request_details/' + currentRequestId, '_blank');
+    });
+
+    // ===== Background unread polling (even when drawer closed) =====
+    var chatAccessDenied = false;
+    var chatPollInterval = null;
+    function pollBadge() {
+      if (chatAccessDenied) return;
+      $.ajax({ url: '/api/chat/sr-list', type: 'GET', cache: false, silent: true })
+        .done(function(r){
+          if (r && r.success) {
+            chats = r.chats || [];
+            var prevSeen = lastSeenLastMsgIso;
+            updateBadge(r.total_unread || 0);
+            var top = chats[0];
+            if (top && top.last_message_at) {
+              if (prevSeen && top.last_message_at > prevSeen &&
+                  top.last_message_user !== currentUserName &&
+                  !$drawer.hasClass('open')) {
+                notifyNewMessage(top);
+              }
+              lastSeenLastMsgIso = top.last_message_at;
+            }
+          }
+        })
+        .fail(function(xhr){
+          if (xhr && (xhr.status === 401 || xhr.status === 403)) {
+            chatAccessDenied = true;
+            if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+          }
+        });
+    }
+    $(document).ready(function(){
+      pollBadge();
+      chatPollInterval = setInterval(function(){ if (!$drawer.hasClass('open')) pollBadge(); }, 15000);
+    });
+
+    // Public hook so other pages can open a chat directly
+    window.openChatDrawerForRequest = function(requestId){
+      openDrawer();
+      // Wait for chat list to load before selecting
+      var tries = 0;
+      var iv = setInterval(function(){
+        tries++;
+        if (chats && chats.length) {
+          clearInterval(iv);
+          openChat(parseInt(requestId, 10));
+        } else if (tries > 30) {
+          clearInterval(iv);
+        }
+      }, 150);
+    };
+  })();
+  </script>
+
+</body>
+
+
+<!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.js"></script> -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" />
+
+
+
+
+<script>
+  // Global AJAX loading indicator - track concurrent requests
+  var skipAjaxLoading = false;
+  var ajaxLoadingTimer = null;
+  var activeAjaxRequests = 0;
+  var loadingShown = false;
+  
+  $(document)
+    .ajaxSend(function(event, jqxhr, settings) {
+      // Skip loading for certain URLs (notifications, roles, etc.)
+      var silentUrls = ['/get_notifications', '/api/refresh-roles', '/api/item-catalog'];
+      var isSilent = silentUrls.some(function(url) { 
+        return settings.url.indexOf(url) !== -1; 
+      });
+      
+      // Per-request opt-in: $.ajax({ silent: true, ... })
+      if (settings.silent === true) { isSilent = true; }
+      
+      if (isSilent) {
+        jqxhr.silent = true;
+        return;
+      }
+      
+      activeAjaxRequests++;
+      
+      // Only show loading if not already shown and not skipped
+      if (!loadingShown && !skipAjaxLoading && activeAjaxRequests === 1) {
+        ajaxLoadingTimer = setTimeout(function() {
+          if (activeAjaxRequests > 0 && !loadingShown) {
+            loadingShown = true;
+            Swal.fire({
+              imageUrl: "{{ url_for('static', filename='img/branding_gate_logo.jpg') }}",
+              imageWidth: 150,
+              imageHeight: 150,
+              background: 'transparent',
+              allowOutsideClick: false,
+              showConfirmButton: false,
+              timer: 30000,
+              customClass: {
+                container: 'loading-container-class',
+                popup: 'popup-class',
+                backdrop: 'true'
+              }
+            });
+          }
+        }, 400);
+      }
+    })
+    .ajaxComplete(function(event, jqxhr, settings) {
+      // Don't decrement for silent requests
+      if (jqxhr.silent) return;
+      
+      activeAjaxRequests = Math.max(0, activeAjaxRequests - 1);
+      
+      // Close loading when all requests complete
+      if (activeAjaxRequests === 0) {
+        if (ajaxLoadingTimer) {
+          clearTimeout(ajaxLoadingTimer);
+          ajaxLoadingTimer = null;
+        }
+        if (loadingShown) {
+          Swal.close();
+          loadingShown = false;
+        }
+        skipAjaxLoading = false;
+      }
+    })
+    .ajaxError(function(event, jqxhr, settings, thrownError) {
+      if (jqxhr && jqxhr.silent) return;
+      console.error('AJAX Error:', thrownError, 'URL:', settings.url);
+    });
+</script>
+<footer class="page-footer font-small blue">
+  <hr>
+  <hr>
+  <div class="footer-copyright text-center py-3"
+    style="color: maroon;font-weight: bold; font-size:12px;font-family: Verdana, Geneva, Tahoma, sans-serif">Developed
+    By: MubarmiJ Development
+  </div>
+</footer>
+
+<script>
+// Function to fetch notifications
+async function fetchNotifications() {
+  try {
+    const response = await fetch('/get_notifications');
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch notifications');
+    }
+    
+    return data.notifications;
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    return [];
+  }
+}
+
+// Function to update notification badge
+function updateNotificationBadge(count) {
+  const badge = document.querySelector('.notification-badge');
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Function to format date
+function formatDate(dateString) {
+  try {
+    // Handle both ISO string and timestamp formats
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    return date.toLocaleString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
+}
+
+// Function to display notifications in dropdown
+function displayNotifications(notifications) {
+  const container = document.getElementById('notificationList');
+  container.innerHTML = '';
+  
+  if (notifications.length === 0) {
+    container.innerHTML = '<div class="dropdown-item text-muted">No notifications</div>';
+    updateNotificationBadge(0);
+    return;
+  }
+  
+  // Update badge with unread count
+  const unreadCount = notifications.filter(n => !n.read).length;
+  updateNotificationBadge(unreadCount);
+  
+  // Show only first 5 notifications in dropdown
+  const displayNotifications = notifications.slice(0, 5);
+  
+  displayNotifications.forEach(notif => {
+    const item = document.createElement('div');
+    const isUnread = !notif.read;
+    
+    item.innerHTML = `
+      <a class="dropdown-item notification-item ${isUnread ? 'unread' : ''}" 
+         href="#" onclick="markNotificationAsRead('${notif.id}', event)">
+        <div class="d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="notification-title">${notif.title || 'Notification'}</div>
+            <small class="notification-time">${formatDate(notif.timeadded_datestamp)}</small>
+          </div>
+          <small class="text-muted mt-1">${notif.content || notif.body || ''}</small>
+          ${isUnread ? '<span class="badge badge-primary badge-sm mt-1">New</span>' : ''}
+        </div>
+      </a>
+    `;
+    
+    container.appendChild(item);
+  });
+}
+
+// Function to refresh notifications
+async function refreshNotifications() {
+  const notifications = await fetchNotifications();
+  displayNotifications(notifications);
+}
+
+// Function to mark a single notification as read
+async function markNotificationAsRead(notificationId, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  try {
+    const response = await fetch('/mark_notifications_read', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        notification_ids: [notificationId]
+      })
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      // Refresh notifications to update the display
+      refreshNotifications();
+    }
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+}
+
+// Function to mark all notifications as read
+async function markAllNotificationsAsRead() {
+  try {
+    const response = await fetch('/mark_notifications_read', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({})
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      // Refresh notifications to update the display
+      refreshNotifications();
+    }
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+  }
+}
+
+// Role refresh functionality
+function refreshUserRoles() {
+  return fetch('/api/refresh-roles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      console.log('Roles refreshed:', data.roles);
+      
+      // Check if current page should be reloaded based on role changes
+      checkPageAccessWithNewRoles(data.roles);
+      
+      return data.roles;
+    } else {
+      console.error('Failed to refresh roles:', data.error);
+      return null;
+    }
+  })
+  .catch(error => {
+    console.error('Error refreshing roles:', error);
+    return null;
+  });
+}
+
+function checkPageAccessWithNewRoles(newRoles) {
+  const currentPath = window.location.pathname;
+  
+  // Define page-role mappings
+  const pageRoleMap = {
+    '/management_admin': ['admin'],
+    '/sales_mainpage': ['sales'],
+    '/sales_request': ['sales'],
+    '/operation_mainpage': ['operation', 'operations'],
+    '/operation_request': ['operation', 'operations'],
+    '/company': ['admin'],
+    '/client': ['admin'],
+    '/supplier': ['admin']
+  };
+  
+  // Check if current page requires specific roles
+  const requiredRoles = pageRoleMap[currentPath];
+  if (requiredRoles) {
+    const hasAccess = requiredRoles.some(role => newRoles.includes(role)) || newRoles.includes('admin');
+    
+    if (!hasAccess) {
+      // User lost access to current page, redirect to home
+      console.log('Access lost for current page, redirecting to home');
+      window.location.href = '/home';
+    }
+  }
+}
+
+function initializeRoleRefresh() {
+  var lastRoleRefresh = Date.now();
+  var REFRESH_COOLDOWN = 10000; // 10 seconds cooldown between refreshes
+  
+  function throttledRefresh() {
+    var now = Date.now();
+    if (now - lastRoleRefresh > REFRESH_COOLDOWN) {
+      lastRoleRefresh = now;
+      refreshUserRoles();
+    }
+  }
+  
+  // Refresh roles when page becomes visible (user switches back to tab)
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      throttledRefresh();
+    }
+  });
+  
+  // Refresh roles periodically (every 5 minutes instead of 1 minute)
+  setInterval(refreshUserRoles, 300000);
+  
+  // Refresh roles when window gains focus (with throttling)
+  window.addEventListener('focus', function() {
+    throttledRefresh();
+  });
+  
+  // Skip initial role refresh - not needed on page load
+  // setTimeout(refreshUserRoles, 1000);
+}
+
+// Initialize dropdown and notifications when document is ready
+$(document).ready(function() {
+  try {
+    // Initial fetch notifications
+    refreshNotifications();
+    
+    // Refresh notifications periodically (every 30 seconds)
+    setInterval(refreshNotifications, 30000);
+
+    // Initialize role refresh functionality
+    initializeRoleRefresh();
+
+    // Bootstrap 4 dropdowns work automatically via data-toggle="dropdown"
+    // No manual initialization needed - just prevent dropdown from closing when clicking inside
+    $('.dropdown-menu').on('click', function(e) {
+      e.stopPropagation();
+    });
+
+    // Close dropdowns when clicking outside
+    $(document).on('click', function(e) {
+      if (!$(e.target).closest('.dropdown').length) {
+        $('.dropdown-menu.show').dropdown('hide');
+      }
+    });
+
+    // Initialize tooltips and popovers if you're using them
+    $('[data-toggle="tooltip"]').tooltip();
+    $('[data-toggle="popover"]').popover();
+    
+    // Initialize Quick Add FAB (Floating Action Button)
+    initQuickAddFAB();
+    
+  } catch (error) {
+    console.error('Error initializing page:', error);
+    // Page should still be usable even if some initialization fails
+  }
+});
+
+// Quick Add FAB functionality
+function initQuickAddFAB() {
+  var fabMainBtn = $('#fabMainBtn');
+  var fabMenu = $('#fabMenu');
+  
+  if (fabMainBtn.length === 0) return;
+  
+  // Toggle FAB menu
+  fabMainBtn.on('click', function(e) {
+    e.stopPropagation();
+    $(this).toggleClass('active');
+    fabMenu.toggleClass('show');
+  });
+  
+  // Close FAB menu when clicking outside
+  $(document).on('click', function(e) {
+    if (!$(e.target).closest('.quick-add-fab').length) {
+      fabMainBtn.removeClass('active');
+      fabMenu.removeClass('show');
+    }
+  });
+  
+  // Close FAB menu when clicking on a menu item (except modal triggers)
+  $('.fab-item').not('[data-toggle="modal"]').on('click', function() {
+    fabMainBtn.removeClass('active');
+    fabMenu.removeClass('show');
+  });
+  
+  // Close FAB when modal opens
+  $('#quickAddSupplierModal').on('show.bs.modal', function() {
+    fabMainBtn.removeClass('active');
+    fabMenu.removeClass('show');
+  });
+  
+  // Handle supplier type "Other" option
+  $('#quickSupplierType').on('change', function() {
+    if ($(this).val() === 'Other') {
+      $('#quickOtherSupplierTypeRow').show();
+      $('#quickOtherSupplierType').attr('required', true);
+    } else {
+      $('#quickOtherSupplierTypeRow').hide();
+      $('#quickOtherSupplierType').attr('required', false).val('');
+    }
+  });
+  
+  // Quick Save Supplier
+  $('#quickSaveSupplierBtn').on('click', function() {
+    var btn = $(this);
+    var originalText = btn.html();
+    
+    // Basic validation
+    var supplierName = $('#quickSupplierName').val().trim();
+    var supplierType = $('#quickSupplierType').val();
+    var contactPersonName = $('#quickContactPersonName').val().trim();
+    var primaryPhone = $('#quickPrimaryPhone').val().trim();
+    var emailAddress = $('#quickEmailAddress').val().trim();
+    var status = $('#quickStatus').val();
+    
+    if (!supplierName) {
+      Swal.fire('Error!', 'Please enter the supplier name.', 'error');
+      return;
+    }
+    
+    if (!supplierType) {
+      Swal.fire('Error!', 'Please select a supplier type.', 'error');
+      return;
+    }
+    
+    if (supplierType === 'Other' && !$('#quickOtherSupplierType').val().trim()) {
+      Swal.fire('Error!', 'Please specify the other supplier type.', 'error');
+      return;
+    }
+    
+    if (!contactPersonName) {
+      Swal.fire('Error!', 'Please enter the contact person name.', 'error');
+      return;
+    }
+    
+    if (!primaryPhone) {
+      Swal.fire('Error!', 'Please enter the primary phone number.', 'error');
+      return;
+    }
+    
+    if (!emailAddress) {
+      Swal.fire('Error!', 'Please enter the email address.', 'error');
+      return;
+    }
+    
+    // Disable button and show loading
+    btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>Saving...');
+    
+    // Skip global AJAX loading for this request
+    skipAjaxLoading = true;
+    
+    var formData = {
+      supplier_name: supplierName,
+      supplier_type: supplierType,
+      other_supplier_type: $('#quickOtherSupplierType').val(),
+      company_name: $('#quickCompanyName').val(),
+      status: status,
+      date_added: new Date().toISOString().split('T')[0],
+      address: $('#quickAddress').val(),
+      contact_person_name: contactPersonName,
+      job_title: $('#quickJobTitle').val(),
+      primary_phone: primaryPhone,
+      email_address: emailAddress,
+      preferred_contact_method: $('#quickPreferredContactMethod').val(),
+      whatsapp_number: $('#quickWhatsappNumber').val()
+    };
+    
+    $.ajax({
+      url: '/api/suppliers/add',
+      type: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(formData),
+      success: function(response) {
+        btn.prop('disabled', false).html(originalText);
+        
+        if (response.success) {
+          // Store new supplier info for dropdown refresh
+          var newSupplierId = response.supplier_id || response.id;
+          var newSupplierName = supplierName;
+          
+          // Reset form first
+          $('#quickAddSupplierForm')[0].reset();
+          $('#quickOtherSupplierTypeRow').hide();
+          
+          // Hide modal and show success after modal is hidden
+          $('#quickAddSupplierModal').one('hidden.bs.modal', function() {
+            // Refresh all supplier dropdowns on the page with the new supplier selected
+            if (typeof refreshSupplierDropdowns === 'function') {
+              refreshSupplierDropdowns(newSupplierId, newSupplierName);
+            }
+            
+            Swal.fire({
+              icon: 'success',
+              title: 'Supplier Added!',
+              html: 'Supplier "<strong>' + newSupplierName + '</strong>" has been added successfully.<br><small class="text-muted">All supplier dropdowns have been updated.</small>',
+              confirmButtonColor: '#28a745',
+              confirmButtonText: 'OK'
+            });
+          });
+          $('#quickAddSupplierModal').modal('hide');
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error!',
+            text: response.error || 'Failed to add supplier',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      },
+      error: function(xhr, status, error) {
+        btn.prop('disabled', false).html(originalText);
+        console.error('Error adding supplier:', error);
+        console.error('Response:', xhr.responseText);
+        
+        var errorMsg = 'Error adding supplier';
+        try {
+          var errResponse = JSON.parse(xhr.responseText);
+          if (errResponse.error) {
+            errorMsg = errResponse.error;
+          }
+        } catch(e) {
+          errorMsg = error || 'Unknown error';
+        }
+        
+        Swal.fire({
+          icon: 'error',
+          title: 'Error!',
+          text: errorMsg,
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    });
+  });
+  
+  // Close FAB when client modal opens
+  $('#quickAddClientModal').on('show.bs.modal', function() {
+    fabMainBtn.removeClass('active');
+    fabMenu.removeClass('show');
+    
+    // Load companies for the dropdown
+    loadCompaniesForClientModal();
+  });
+  
+  // Quick Save Client
+  $('#quickSaveClientBtn').on('click', function() {
+    var btn = $(this);
+    var originalText = btn.html();
+    
+    // Basic validation
+    var clientName = $('#quickClientName').val().trim();
+    var mobileNumber = $('#quickClientMobile').val().trim();
+    var emailAddress = $('#quickClientEmail').val().trim();
+    var preferredChannel = $('#quickClientPreferredChannel').val();
+    
+    if (!clientName) {
+      Swal.fire('Error!', 'Please enter the client name.', 'error');
+      return;
+    }
+    
+    if (!mobileNumber) {
+      Swal.fire('Error!', 'Please enter the mobile number.', 'error');
+      return;
+    }
+    
+    if (!emailAddress) {
+      Swal.fire('Error!', 'Please enter the email address.', 'error');
+      return;
+    }
+    
+    // Disable button and show loading
+    btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>Saving...');
+    
+    // Skip global AJAX loading for this request
+    skipAjaxLoading = true;
+    
+    var formData = {
+      client_name: clientName,
+      parent_company_id: $('#quickClientCompany').val() || null,
+      job_title: $('#quickClientJobTitle').val(),
+      preferred_contact_channel: preferredChannel,
+      mobile_number: mobileNumber,
+      secondary_mobile_number: $('#quickClientSecondaryMobile').val(),
+      email_address: emailAddress,
+      additional_notes: $('#quickClientNotes').val()
+    };
+    
+    $.ajax({
+      url: '/api/clients/add',
+      type: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(formData),
+      success: function(response) {
+        btn.prop('disabled', false).html(originalText);
+        
+        if (response.success) {
+          // Store new client info for dropdown refresh
+          var newClientId = response.client_id || response.id;
+          var newClientName = clientName;
+          
+          // Reset form first
+          $('#quickAddClientForm')[0].reset();
+          
+          // Hide modal and show success after modal is hidden
+          $('#quickAddClientModal').one('hidden.bs.modal', function() {
+            // Refresh all client dropdowns on the page with the new client selected
+            if (typeof refreshClientDropdowns === 'function') {
+              refreshClientDropdowns(newClientId, newClientName);
+            }
+            
+            Swal.fire({
+              icon: 'success',
+              title: 'Client Added!',
+              html: 'Client "<strong>' + newClientName + '</strong>" has been added successfully.<br><small class="text-muted">All client dropdowns have been updated.</small>',
+              confirmButtonColor: '#17a2b8',
+              confirmButtonText: 'OK'
+            });
+          });
+          $('#quickAddClientModal').modal('hide');
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error!',
+            text: response.error || 'Failed to add client',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      },
+      error: function(xhr, status, error) {
+        btn.prop('disabled', false).html(originalText);
+        console.error('Error adding client:', error);
+        console.error('Response:', xhr.responseText);
+        
+        var errorMsg = 'Error adding client';
+        try {
+          var errResponse = JSON.parse(xhr.responseText);
+          if (errResponse.error) {
+            errorMsg = errResponse.error;
+          }
+        } catch(e) {
+          errorMsg = error || 'Unknown error';
+        }
+        
+        Swal.fire({
+          icon: 'error',
+          title: 'Error!',
+          text: errorMsg,
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    });
+  });
+}
+
+// Load companies for client modal dropdown
+function loadCompaniesForClientModal() {
+  $.ajax({
+    url: '/api/companies',
+    type: 'GET',
+    success: function(response) {
+      if (response.success && response.companies) {
+        var $select = $('#quickClientCompany');
+        $select.empty();
+        $select.append('<option value="">Select Company (Optional)...</option>');
+        response.companies.forEach(function(company) {
+          $select.append($('<option>', {
+            value: company.id,
+            text: company.company_name
+          }));
+        });
+      }
+    },
+    error: function(err) {
+      console.error('Error loading companies:', err);
+    }
+  });
+}
+
+// Add necessary container for toasts
+if (!document.getElementById('toastContainer')) {
+  const toastContainer = document.createElement('div');
+  toastContainer.id = 'toastContainer';
+  toastContainer.style.cssText = 'position: fixed; top: 1rem; right: 1rem; z-index: 1050;';
+  document.body.appendChild(toastContainer);
+}
+
+// ============================================================================
+// GLOBAL DROPDOWN REFRESH SYSTEM
+// Automatically refreshes dropdowns when new suppliers/clients are added
+// ============================================================================
+window.DropdownRefreshManager = {
+  // Registry of dropdown configurations
+  config: {
+    supplier: {
+      apiEndpoint: '/api/suppliers',
+      selectors: [
+        'select[name*="supplier"]',
+        'select[id*="supplier"]',
+        'select[id*="Supplier"]',
+        '.supplier-dropdown',
+        '#supplierSelect',
+        '#supplierFilter',
+        '#supplier_id',
+        '#item_supplier'
+      ],
+      valueField: 'id',
+      textField: 'supplier_name',
+      dataKey: 'suppliers',
+      placeholder: 'Select Supplier...'
+    },
+    client: {
+      apiEndpoint: '/api/clients',
+      selectors: [
+        'select[name*="client"]',
+        'select[id*="client"]',
+        'select[id*="Client"]',
+        '.client-dropdown',
+        '#clientSelect',
+        '#clientFilter',
+        '#client_id'
+      ],
+      valueField: 'id',
+      textField: 'client_name',
+      dataKey: 'clients',
+      placeholder: 'Select Client...'
+    },
+    company: {
+      apiEndpoint: '/api/companies',
+      selectors: [
+        'select[name*="company"]',
+        'select[id*="company"]',
+        'select[id*="Company"]',
+        '.company-dropdown',
+        '#companySelect',
+        '#company_id'
+      ],
+      valueField: 'id',
+      textField: 'company_name',
+      dataKey: 'companies',
+      placeholder: 'Select Company...'
+    }
+  },
+
+  // Fetch fresh data from API
+  async fetchData(type) {
+    try {
+      const config = this.config[type];
+      if (!config) {
+        console.warn('Unknown dropdown type:', type);
+        return null;
+      }
+      
+      const response = await fetch(config.apiEndpoint);
+      const data = await response.json();
+      
+      if (data.success) {
+        // Use configured dataKey or fall back to type + 's'
+        return data[config.dataKey] || data[type + 's'] || data.data || [];
+      } else {
+        console.error('API Error fetching', type, ':', data.error);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching', type, 'data:', error);
+      return null;
+    }
+  },
+
+  // Find all dropdowns of a specific type on the page
+  findDropdowns(type) {
+    const config = this.config[type];
+    if (!config) return [];
+    
+    const dropdowns = [];
+    config.selectors.forEach(selector => {
+      try {
+        document.querySelectorAll(selector).forEach(el => {
+          if (!dropdowns.includes(el)) {
+            dropdowns.push(el);
+          }
+        });
+      } catch (e) {
+        // Invalid selector, skip
+      }
+    });
+    
+    return dropdowns;
+  },
+
+  // Refresh a single dropdown element
+  refreshDropdown(element, data, config, newItemId = null) {
+    if (!element || !data) return;
+    
+    // Store current value
+    const currentValue = $(element).val();
+    
+    // Check if this is a filter dropdown (has "All" option)
+    const $el = $(element);
+    const firstOption = $el.find('option:first');
+    const isFilterDropdown = firstOption.length && 
+      (firstOption.val() === '' || firstOption.text().toLowerCase().includes('all'));
+    const filterPlaceholder = isFilterDropdown ? firstOption.text() : null;
+    
+    // Check dropdown type (Select2, Selectize, or native)
+    const isSelect2 = $el.hasClass('select2-hidden-accessible');
+    const isSelectize = element.selectize !== undefined;
+    
+    if (isSelectize) {
+      // Handle Selectize
+      const selectize = element.selectize;
+      selectize.clearOptions();
+      
+      // Add placeholder or "All" option
+      selectize.addOption({ value: '', text: filterPlaceholder || config.placeholder });
+      
+      data.forEach(item => {
+        selectize.addOption({
+          value: item[config.valueField],
+          text: item[config.textField]
+        });
+      });
+      selectize.refreshOptions(false);
+      
+      // Set to new item or restore previous value
+      if (newItemId) {
+        selectize.setValue(newItemId);
+      } else if (currentValue) {
+        selectize.setValue(currentValue);
+      }
+      
+    } else if (isSelect2) {
+      // Handle Select2
+      $el.empty();
+      
+      // Preserve "All" option for filter dropdowns
+      $el.append(new Option(filterPlaceholder || config.placeholder, '', !newItemId && !currentValue, !newItemId && !currentValue));
+      
+      data.forEach(item => {
+        const isSelected = newItemId ? item[config.valueField] == newItemId : item[config.valueField] == currentValue;
+        $el.append(new Option(item[config.textField], item[config.valueField], false, isSelected));
+      });
+      
+      // For filter dropdowns, don't trigger change to avoid reloading data
+      // The dropdownRefreshed event will handle any necessary reloads
+      $el.trigger('change.select2');
+      
+    } else {
+      // Handle native select
+      $el.empty();
+      
+      // Preserve "All" option for filter dropdowns
+      $el.append($('<option>', { value: '', text: filterPlaceholder || config.placeholder }));
+      
+      data.forEach(item => {
+        $el.append($('<option>', {
+          value: item[config.valueField],
+          text: item[config.textField],
+          selected: newItemId ? item[config.valueField] == newItemId : item[config.valueField] == currentValue
+        }));
+      });
+      
+      $el.trigger('change');
+    }
+    
+    // Visual feedback
+    this.flashElement(element);
+  },
+
+  // Visual feedback when dropdown is refreshed
+  flashElement(element) {
+    const $el = $(element);
+    const originalBg = $el.css('background-color');
+    
+    $el.css({
+      'transition': 'background-color 0.3s ease',
+      'background-color': '#d4edda'
+    });
+    
+    setTimeout(() => {
+      $el.css('background-color', originalBg || '');
+      setTimeout(() => {
+        $el.css('transition', '');
+      }, 300);
+    }, 500);
+  },
+
+  // Refresh all dropdowns of a specific type
+  async refreshAllOfType(type, newItemId = null) {
+    const config = this.config[type];
+    if (!config) return;
+    
+    const data = await this.fetchData(type);
+    if (!data) return;
+    
+    const dropdowns = this.findDropdowns(type);
+    console.log(`Refreshing ${dropdowns.length} ${type} dropdown(s)...`);
+    
+    dropdowns.forEach(dropdown => {
+      this.refreshDropdown(dropdown, data, config, newItemId);
+    });
+    
+    // Dispatch custom event for any custom handlers
+    document.dispatchEvent(new CustomEvent('dropdownRefreshed', {
+      detail: { type, data, newItemId }
+    }));
+    
+    return dropdowns.length;
+  },
+
+  // Show toast notification
+  showRefreshToast(type, count, itemName) {
+    if (count > 0 && typeof Swal !== 'undefined') {
+      const Toast = Swal.mixin({
+        toast: true,
+        position: 'bottom-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        didOpen: (toast) => {
+          toast.addEventListener('mouseenter', Swal.stopTimer);
+          toast.addEventListener('mouseleave', Swal.resumeTimer);
+        }
+      });
+      
+      Toast.fire({
+        icon: 'info',
+        title: `${count} ${type} dropdown${count > 1 ? 's' : ''} updated`,
+        html: itemName ? `<small>"${itemName}" now available</small>` : ''
+      });
+    }
+  }
+};
+
+// Convenience functions for triggering refreshes
+window.refreshSupplierDropdowns = async function(newSupplierId = null, supplierName = null) {
+  const count = await DropdownRefreshManager.refreshAllOfType('supplier', newSupplierId);
+  if (count > 0) {
+    DropdownRefreshManager.showRefreshToast('supplier', count, supplierName);
+  }
+  return count;
+};
+
+window.refreshClientDropdowns = async function(newClientId = null, clientName = null) {
+  const count = await DropdownRefreshManager.refreshAllOfType('client', newClientId);
+  if (count > 0) {
+    DropdownRefreshManager.showRefreshToast('client', count, clientName);
+  }
+  return count;
+};
+
+window.refreshCompanyDropdowns = async function(newCompanyId = null, companyName = null) {
+  const count = await DropdownRefreshManager.refreshAllOfType('company', newCompanyId);
+  if (count > 0) {
+    DropdownRefreshManager.showRefreshToast('company', count, companyName);
+  }
+  return count;
+};
+
+// Register custom dropdown selectors dynamically
+window.registerDropdownSelector = function(type, selector) {
+  if (DropdownRefreshManager.config[type]) {
+    if (!DropdownRefreshManager.config[type].selectors.includes(selector)) {
+      DropdownRefreshManager.config[type].selectors.push(selector);
+    }
+  }
+};
+
+// ============================================
+// Global User Balance Functions
+// ============================================
+function loadNavbarBalance() {
+  fetch('/api/finance/my-balance')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        var formatted = 'EGP ' + parseFloat(data.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        $('#navbarMyBalance').text(formatted);
+        $('#navbarBalanceLarge').text(formatted);
+        if (data.pending_requests > 0) {
+          $('#navbarPendingBadge').text(data.pending_requests).show();
+        } else {
+          $('#navbarPendingBadge').hide();
+        }
+      }
+    })
+    .catch(function(err) {
+      console.log('Could not load balance:', err);
+    });
+}
+
+function openGlobalRequestBalanceModal() {
+  $('#globalRequestBalanceModal').modal('show');
+}
+
+function openGlobalMyRequestsModal() {
+  loadGlobalMyRequests();
+  $('#globalMyRequestsModal').modal('show');
+}
+
+function loadGlobalMyRequests() {
+  $('#globalMyRequestsBody').html('<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
+  
+  fetch('/api/finance/balance-requests')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success && data.requests.length > 0) {
+        var html = '<table class="table table-sm"><thead><tr><th>Code</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>';
+        data.requests.forEach(function(req) {
+          var statusClass = req.status === 'approved' ? 'success' : (req.status === 'pending' ? 'warning' : 'danger');
+          html += '<tr><td><code>' + req.transfer_code + '</code></td>' +
+                  '<td>EGP ' + parseFloat(req.amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) + '</td>' +
+                  '<td><span class="badge badge-' + statusClass + '">' + req.status + '</span></td>' +
+                  '<td>' + (req.created_at ? new Date(req.created_at).toLocaleDateString() : '-') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        $('#globalMyRequestsBody').html(html);
+      } else {
+        $('#globalMyRequestsBody').html('<div style="text-align: center; padding: 40px; color: #64748b;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.3;"></i><p>No balance requests yet</p></div>');
+      }
+    })
+    .catch(function(err) {
+      $('#globalMyRequestsBody').html('<div class="alert alert-danger">Error loading requests</div>');
+    });
+}
+
+function getBgTableScrollTarget(origin) {
+  if (!origin || origin.closest('.sales-request-table-wrap')) return null;
+  return origin.closest('.dataTables_scrollBody, .table-responsive, .dataTables_wrapper, table.finance-table, table.balances-table, table.expense-table, table.transfers-table');
+}
+
+$(document).on('pointerdown.bgTableDrag', '.table-responsive, .dataTables_scrollBody, .dataTables_wrapper, table.finance-table, table.balances-table, table.expense-table, table.transfers-table', function(e) {
+  var event = e.originalEvent || e;
+  var target = getBgTableScrollTarget(event.target);
+  var drag;
+
+  if (event.bgTableDragHandled) return;
+  event.bgTableDragHandled = true;
+  if (!target || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if ($(event.target).closest('button, a, input, select, textarea, label, .dropdown-menu').length) return;
+  if (target.scrollWidth <= target.clientWidth + 2) return;
+
+  drag = {
+    startX: event.clientX,
+    scrollLeft: target.scrollLeft
+  };
+
+  target.classList.add('bg-table-dragging');
+  if (target.setPointerCapture && event.pointerId !== undefined) {
+    target.setPointerCapture(event.pointerId);
+  }
+
+  $(target)
+    .on('pointermove.bgTableDrag', function(moveEvent) {
+      var move = moveEvent.originalEvent || moveEvent;
+      target.scrollLeft = drag.scrollLeft + (drag.startX - move.clientX);
+      moveEvent.preventDefault();
+    })
+    .one('pointerup.bgTableDrag pointercancel.bgTableDrag lostpointercapture.bgTableDrag', function(upEvent) {
+      var up = upEvent.originalEvent || upEvent;
+      $(target).off('pointermove.bgTableDrag');
+      target.classList.remove('bg-table-dragging');
+      if (target.releasePointerCapture && up.pointerId !== undefined) {
+        try {
+          target.releasePointerCapture(up.pointerId);
+        } catch (ignore) {}
+      }
+    });
+
+  e.preventDefault();
+});
+
+function submitGlobalBalanceRequest() {
+  var amount = $('#globalReqAmount').val();
+  var description = $('#globalReqDescription').val();
+  
+  if (!amount || parseFloat(amount) <= 0) {
+    Swal.fire('Error', 'Please enter a valid amount', 'error');
+    return;
+  }
+  if (!description) {
+    Swal.fire('Error', 'Please provide a reason for this request', 'error');
+    return;
+  }
+  
+  fetch('/api/finance/request-balance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: parseFloat(amount), description: description })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      Swal.fire('Success', 'Balance request submitted! Code: ' + data.transfer_code, 'success');
+      $('#globalRequestBalanceModal').modal('hide');
+      $('#globalReqAmount').val('');
+      $('#globalReqDescription').val('');
+      loadNavbarBalance();
+    } else {
+      Swal.fire('Error', data.error || 'Failed to submit request', 'error');
+    }
+  })
+  .catch(function(err) {
+    Swal.fire('Error', 'Server error', 'error');
+  });
+}
+
+// Load balance on page load
+$(document).ready(function() {
+  loadNavbarBalance();
+});
+</script>
+
+<!-- Global Request Balance Modal -->
+<div class="modal fade" id="globalRequestBalanceModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white;">
+        <h5 class="modal-title"><i class="fas fa-hand-holding-usd mr-2"></i>Request Balance</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="globalRequestBalanceForm">
+          <div class="form-group">
+            <label style="font-weight: 600;">Amount (EGP) *</label>
+            <input type="number" class="form-control" id="globalReqAmount" step="0.01" min="0.01" required placeholder="Enter amount">
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 600;">Description / Reason *</label>
+            <textarea class="form-control" id="globalReqDescription" rows="3" required placeholder="Why do you need this balance?"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitGlobalBalanceRequest()">
+          <i class="fas fa-paper-plane mr-1"></i> Submit Request
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Global My Requests Modal -->
+<div class="modal fade" id="globalMyRequestsModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white;">
+        <h5 class="modal-title"><i class="fas fa-list-alt mr-2"></i>My Balance Requests</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="globalMyRequestsBody">
+        Loading...
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Role-based Dashboard Containers -->
+  <!-- (Removed: All dashboard containers previously here. Now handled in home.html only.) -->
+  <!-- End Role-based Dashboard Containers -->
+
+</html>

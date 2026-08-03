@@ -1,0 +1,1967 @@
+{% extends "main.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<style>
+:root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --primary: #6366f1;
+    --primary-soft: rgba(99,102,241,0.1);
+    --success: #10b981;
+    --success-soft: rgba(16,185,129,0.1);
+    --warning: #f59e0b;
+    --warning-soft: rgba(245,158,11,0.1);
+    --danger: #ef4444;
+    --danger-soft: rgba(239,68,68,0.1);
+    --info: #3b82f6;
+    --info-soft: rgba(59,130,246,0.1);
+    --text: #0f172a;
+    --text-light: #475569;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --shadow: rgba(15,23,42,0.1);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.approval-shell {
+    min-height: calc(100vh - 64px);
+    padding: 24px;
+    background: linear-gradient(135deg, #f8fafc 0%, #fef3c7 50%, #e0e7ff 100%);
+}
+.approval-card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: 0 4px 6px -1px var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+.approval-header {
+    padding: 32px 36px 16px;
+    border-bottom: 2px solid var(--border);
+    background: linear-gradient(to right, rgba(245,158,11,0.05), transparent);
+}
+.approval-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.badge-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--warning-soft);
+    color: var(--warning);
+    font-size: 18px;
+}
+.stats-row {
+    display: flex;
+    gap: 20px;
+    padding: 24px 36px;
+    background: rgba(248,250,252,0.6);
+    flex-wrap: wrap;
+}
+.stat-box {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 28px;
+    border: 1px solid var(--border);
+    min-width: 200px;
+}
+.stat-box h3 {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+}
+.stat-box p {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 4px 0 0;
+}
+.stat-box.warning h3 { color: var(--warning); }
+.stat-box.success h3 { color: var(--success); }
+.stat-box.danger h3 { color: var(--danger); }
+
+/* Tabs */
+.approval-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 16px 36px;
+    background: rgba(248,250,252,0.8);
+    border-bottom: 1px solid var(--border);
+}
+.approval-tab {
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--muted);
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.approval-tab:hover {
+    background: white;
+    color: var(--text);
+}
+.approval-tab.active {
+    background: var(--warning);
+    color: white;
+}
+.approval-tab .badge {
+    background: rgba(255,255,255,0.3);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+.tab-panel {
+    display: none;
+    padding: 24px 36px;
+}
+.tab-panel.active {
+    display: block;
+}
+
+/* Approval Items */
+.approval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.approval-item {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 24px;
+    border: 2px solid var(--border);
+    transition: var(--transition);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+.approval-item:hover {
+    border-color: var(--warning);
+    box-shadow: 0 8px 16px var(--shadow);
+}
+.approval-item.transaction { border-left: 4px solid var(--primary); }
+.approval-item.balance-request { border-left: 4px solid var(--info); }
+.approval-item .item-info {
+    flex: 1;
+    min-width: 200px;
+}
+.approval-item .item-code {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--text);
+}
+.approval-item .item-type {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-left: 8px;
+}
+.approval-item .item-type.income {
+    background: var(--success-soft);
+    color: var(--success);
+}
+.approval-item .item-type.expense {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.approval-item .item-type.user_request {
+    background: var(--info-soft);
+    color: var(--info);
+}
+.approval-item .item-type.admin_transfer {
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+.approval-item .item-desc {
+    font-size: 14px;
+    color: var(--text-light);
+    margin: 8px 0 4px;
+}
+.approval-item .item-meta {
+    font-size: 12px;
+    color: var(--muted);
+}
+.approval-item .item-amount {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text);
+    min-width: 150px;
+    text-align: right;
+}
+.approval-item .item-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Buttons */
+.btn-pill {
+    border-radius: 12px;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 13px;
+    border: 2px solid transparent;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+.btn-pill-success {
+    background: linear-gradient(135deg, var(--success), #059669);
+    color: white;
+}
+.btn-pill-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16,185,129,0.4);
+}
+.btn-pill-danger {
+    background: linear-gradient(135deg, var(--danger), #dc2626);
+    color: white;
+}
+.btn-pill-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239,68,68,0.4);
+}
+.btn-pill-primary {
+    background: linear-gradient(135deg, var(--primary), #4f46e5);
+    color: white;
+}
+.btn-pill-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+}
+.btn-pill-outline {
+    background: white;
+    border-color: var(--border);
+    color: var(--text);
+}
+.btn-pill-outline:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* User Balances Table */
+.balances-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.balances-table thead th {
+    background: rgba(248,250,252,0.9);
+    padding: 14px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+}
+.balances-table tbody td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text);
+}
+.balances-table tbody tr:hover {
+    background: rgba(99,102,241,0.02);
+}
+.balance-amount {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--success);
+}
+
+/* Modals */
+.modal-content {
+    border-radius: 20px;
+    border: none;
+}
+.modal-header {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+}
+.modal-body {
+    padding: 28px;
+}
+.modal-footer {
+    padding: 20px 28px;
+    border-top: 1px solid var(--border);
+}
+.form-group-modern {
+    margin-bottom: 20px;
+}
+.form-group-modern label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: block;
+}
+.form-group-modern .form-control,
+.form-group-modern select {
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    padding: 12px 16px;
+    font-size: 14px;
+    transition: var(--transition);
+    width: 100%;
+}
+.form-group-modern .form-control:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+    outline: none;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+}
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+.empty-state h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+@media (max-width: 768px) {
+    .approval-shell { padding: 12px; }
+    .tab-panel { padding: 16px; }
+    .approval-item { flex-direction: column; align-items: flex-start; }
+    .approval-item .item-amount { text-align: left; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="approval-shell">
+    <div class="approval-card">
+        <!-- Header -->
+        <div class="approval-header">
+            <h1>
+                <span class="badge-dot"><i class="fas fa-check-double"></i></span>
+                Finance Approvals
+            </h1>
+            <p style="margin: 10px 0 0; color: var(--text-light);">Review and approve pending transactions and balance requests</p>
+        </div>
+        
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-box warning">
+                <h3 id="totalPending">0</h3>
+                <p>Total Pending</p>
+            </div>
+            <div class="stat-box" style="border-left: 4px solid var(--primary);">
+                <h3 id="pendingTransactions">0</h3>
+                <p>Pending Transactions</p>
+            </div>
+            <div class="stat-box" style="border-left: 4px solid var(--info);">
+                <h3 id="pendingRequests">0</h3>
+                <p>Balance Requests</p>
+            </div>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="approval-tabs">
+            <button class="approval-tab active" data-tab="pending-transactions" type="button">
+                <i class="fas fa-exchange-alt"></i> Transactions <span class="badge" id="badgeTrans">0</span>
+            </button>
+            <button class="approval-tab" data-tab="balance-requests" type="button">
+                <i class="fas fa-hand-holding-usd"></i> Balance Requests <span class="badge" id="badgeReq">0</span>
+            </button>
+            <button class="approval-tab" data-tab="user-balances" type="button">
+                <i class="fas fa-users"></i> User Balances
+            </button>
+            <button class="approval-tab" data-tab="expense-tracking" type="button">
+                <i class="fas fa-file-invoice-dollar"></i> Expense Tracking <span class="badge" id="badgeExpenseTracking">0</span>
+            </button>
+            <button class="approval-tab" data-tab="transfer" type="button">
+                <i class="fas fa-paper-plane"></i> Transfer Balance
+            </button>
+        </div>
+        
+        <!-- Tab: Pending Transactions (includes User Expenses) -->
+        <div class="tab-panel active" id="tab-pending-transactions">
+            <!-- User Expenses Section -->
+            <div id="userExpensesSection" style="margin-bottom: 30px;">
+                <h5 style="color: var(--warning); margin-bottom: 16px;"><i class="fas fa-receipt mr-2"></i>User Expenses (Pending Finance Approval)</h5>
+                <div class="approval-list" id="userExpensesList">
+                    <div class="empty-state" style="padding: 20px;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <h3>Loading...</h3>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Original Transactions Section -->
+            <h5 style="color: var(--primary); margin-bottom: 16px;"><i class="fas fa-exchange-alt mr-2"></i>Transactions</h5>
+            <div class="approval-list" id="transactionsList">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <h3>Loading...</h3>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tab: Balance Requests -->
+        <div class="tab-panel" id="tab-balance-requests">
+            <div class="approval-list" id="balanceRequestsList">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <h3>Loading...</h3>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tab: User Balances -->
+        <div class="tab-panel" id="tab-user-balances">
+            <div style="margin-bottom: 20px;">
+                <button class="btn-pill btn-pill-primary" id="btnRefreshBalances" type="button">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="balances-table" id="userBalancesTable">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Balance</th>
+                            <th>Last Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userBalancesBody">
+                        <tr><td colspan="6" style="text-align: center; padding: 40px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Tab: Expense Tracking (Manager Approved - Pending Finance) -->
+        <div class="tab-panel" id="tab-expense-tracking">
+            <div style="margin-bottom: 20px;">
+                <select class="form-control" id="expenseTrackingStatusFilter" style="max-width: 200px; display: inline-block;" onchange="loadExpenseTracking()">
+                    <option value="manager_approved">Pending Finance Approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+                <button class="btn-pill btn-pill-outline ml-2" onclick="loadExpenseTracking()" type="button">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div class="approval-list" id="expenseTrackingList">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <h3>Loading...</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Transfer Balance -->
+        <div class="tab-panel" id="tab-transfer">
+            <div style="max-width: 600px;">
+                <div class="alert alert-info" style="border-radius: 12px; background: var(--info-soft); border: 1px solid var(--info); color: var(--info);">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    Transfer balance from a payment method to a user's personal balance.
+                </div>
+                
+                <div class="form-group-modern">
+                    <label>Payment Method (Source) *</label>
+                    <select class="form-control" id="transferPaymentMethod" required onchange="updatePaymentMethodBalance()">
+                        <option value="">Select Payment Method</option>
+                    </select>
+                    <small class="text-muted">Available Balance: <strong id="transferPmBalance">EGP 0.00</strong></small>
+                </div>
+                
+                <div class="form-group-modern">
+                    <label>Select User (Destination) *</label>
+                    <select class="form-control" id="transferToUser" required>
+                        <option value="">Select User</option>
+                    </select>
+                </div>
+                
+                <div class="form-group-modern">
+                    <label>Amount (EGP) *</label>
+                    <input type="number" class="form-control" id="transferAmount" step="0.01" min="0.01" placeholder="Enter amount" oninput="validateTransferAmount()">
+                    <small class="text-danger" id="transferAmountError" style="display: none;">Amount exceeds available balance!</small>
+                </div>
+                
+                <div class="form-group-modern">
+                    <label>Description *</label>
+                    <textarea class="form-control" id="transferDescription" rows="3" placeholder="Reason for transfer" required></textarea>
+                </div>
+                
+                <div style="background: rgba(248,250,252,0.8); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <h6 style="margin: 0 0 12px; color: var(--text);"><i class="fas fa-calculator mr-2"></i>Transfer Preview</h6>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border);">
+                        <span>Payment Method Balance:</span>
+                        <span id="previewPmBalance">EGP 0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border);">
+                        <span>Transfer Amount:</span>
+                        <span id="previewTransferAmount" style="color: var(--danger);">- EGP 0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; font-weight: 700;">
+                        <span>New PM Balance:</span>
+                        <span id="previewNewPmBalance">EGP 0.00</span>
+                    </div>
+                </div>
+                
+                <button class="btn-pill btn-pill-success" id="btnTransfer" type="button" onclick="transferBalance()">
+                    <i class="fas fa-paper-plane"></i> Transfer Balance
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approval Modal -->
+<div class="modal fade" id="approvalModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="approvalModalTitle">Approve</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="approvalId">
+                <input type="hidden" id="approvalType">
+                <input type="hidden" id="approvalAction">
+                <div class="form-group-modern" id="paymentMethodGroup" style="display:none;">
+                    <label><i class="fas fa-wallet mr-1"></i> Payment Method <span class="text-danger">*</span></label>
+                    <select class="form-control" id="approvalPaymentMethod">
+                        <option value="">-- Select Payment Method --</option>
+                    </select>
+                    <small class="text-muted" id="pmBalanceHint"></small>
+                </div>
+                <div class="form-group-modern">
+                    <label id="approvalNotesLabel">Notes</label>
+                    <textarea class="form-control" id="approvalNotes" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn-pill btn-pill-success" id="btnConfirmApproval">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View User History Modal -->
+<div class="modal fade" id="userHistoryModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Balance History</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body" id="userHistoryBody">
+                Loading...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+// Format currency
+function formatCurrency(amount) {
+    return 'EGP ' + parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+$(document).ready(function() {
+    // Load categories first, then load pending approvals (which includes user expenses)
+    loadFinanceCategories(function() {
+        loadPendingApprovals();
+    });
+    loadUserBalances();
+    loadUsersForTransfer();
+    loadPaymentMethodsForTransfer();
+    
+    // Tab switching
+    $('.approval-tab').on('click', function() {
+        var tab = $(this).data('tab');
+        $('.approval-tab').removeClass('active');
+        $(this).addClass('active');
+        $('.tab-panel').removeClass('active');
+        $('#tab-' + tab).addClass('active');
+        
+        // Load data when switching to transfer tab
+        if (tab === 'transfer') {
+            loadPaymentMethodsForTransfer();
+            loadUsersForTransfer();
+        }
+    });
+    
+    // Refresh balances
+    $('#btnRefreshBalances').on('click', loadUserBalances);
+    
+    // Confirm approval
+    $('#btnConfirmApproval').on('click', confirmApproval);
+});
+
+function loadPendingApprovals() {
+    $.ajax({
+        url: '/api/finance/pending-approvals',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                renderPendingTransactions(data.pending_transactions);
+                renderBalanceRequests(data.pending_balance_requests);
+                
+                // Update stats
+                var transCnt = data.pending_transactions.length;
+                var reqCnt = data.pending_balance_requests.length;
+                $('#pendingTransactions').text(transCnt);
+                $('#pendingRequests').text(reqCnt);
+                $('#badgeTrans').text(transCnt);
+                $('#badgeReq').text(reqCnt);
+            }
+        },
+        error: function() {
+            $('#transactionsList').html('<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error loading data</h3></div>');
+        }
+    });
+    
+    // Also load user expenses pending finance approval
+    loadUserExpensesForFinance();
+}
+
+function loadUserExpensesForFinance() {
+    $.ajax({
+        url: '/api/finance/expense-approvals?status=pending_finance',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                renderUserExpensesForFinance(data.expenses);
+                var expenseCount = data.expenses.length;
+                // Update total pending to include expenses
+                var currentTotal = parseInt($('#totalPending').text()) || 0;
+                $('#totalPending').text(currentTotal + expenseCount);
+            }
+        },
+        error: function() {
+            $('#userExpensesList').html('<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error loading expenses</h3></div>');
+        }
+    });
+}
+
+// Store finance categories for user expense approval
+var financeCategories = [];
+var financeCategoriesLoaded = false;
+
+function loadFinanceCategories(callback) {
+    $.ajax({
+        url: '/api/finance/categories?type=expense',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                financeCategories = data.categories;
+                financeCategoriesLoaded = true;
+                if (callback) callback();
+            }
+        }
+    });
+}
+
+// Categories are loaded in the main $(document).ready block above
+
+function renderUserExpensesForFinance(expenses) {
+    var container = $('#userExpensesList');
+    container.empty();
+    
+    if (expenses.length === 0) {
+        container.html('<div class="empty-state" style="padding: 20px;"><i class="fas fa-check-circle"></i><h3>No Pending User Expenses</h3></div>');
+        $('#userExpensesSection').hide();
+        return;
+    }
+    
+    $('#userExpensesSection').show();
+    
+    // Build category options HTML - show only expense categories
+    // data-parent-id is set on subcategory options so we can send both category_id and subcategory_id
+    var categoryOptions = '<option value="">-- Select Category --</option>';
+    financeCategories.forEach(function(cat) {
+        if (cat.category_type === 'expense') {
+            categoryOptions += '<option value="' + cat.id + '" data-parent-id="">' + cat.category_name + '</option>';
+            // Add subcategories - these store parent_id so we know the main category
+            if (cat.subcategories && cat.subcategories.length > 0) {
+                cat.subcategories.forEach(function(sub) {
+                    categoryOptions += '<option value="' + sub.id + '" data-parent-id="' + cat.id + '">&nbsp;&nbsp;↳ ' + sub.category_name + '</option>';
+                });
+            }
+        }
+    });
+    
+    // Group by employee
+    var grouped = {};
+    expenses.forEach(function(e) {
+        var key = e.user_id;
+        if (!grouped[key]) {
+            grouped[key] = {
+                user_id: e.user_id,
+                user_name: e.user_name,
+                expenses: []
+            };
+        }
+        grouped[key].expenses.push(e);
+    });
+    
+    Object.values(grouped).forEach(function(group) {
+        var totalAmount = group.expenses.reduce(function(sum, e) { return sum + parseFloat(e.amount); }, 0);
+        
+        var html = '<div class="approval-item" data-user-id="' + group.user_id + '" style="display: block; border-left: 4px solid var(--warning);">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">' +
+                '<div>' +
+                    '<h5 style="margin: 0;"><i class="fas fa-user mr-2"></i>' + group.user_name + '</h5>' +
+                    '<small class="text-muted">' + group.expenses.length + ' expense(s) - Total: <strong>' + formatCurrency(totalAmount) + '</strong></small>' +
+                '</div>' +
+                '<div>' +
+                    '<button class="btn-pill btn-pill-danger mr-2" onclick="rejectAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-times"></i> Reject All</button>' +
+                    '<button class="btn-pill btn-pill-success" onclick="approveAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-check"></i> Approve All</button>' +
+                '</div>' +
+            '</div>' +
+            '<table class="balances-table" style="margin: 0;">' +
+                '<thead><tr>' +
+                    '<th>Code</th>' +
+                    '<th>SR</th>' +
+                    '<th>Client</th>' +
+                    '<th>Company</th>' +
+                    '<th>Date</th>' +
+                    '<th>Supplier</th>' +
+                    '<th>Description</th>' +
+                    '<th style="width: 150px;">Amount</th>' +
+                    '<th style="width: 200px;">Category</th>' +
+                '</tr></thead>' +
+                '<tbody>';
+        
+        group.expenses.forEach(function(e) {
+            html += '<tr data-user-expense-id="' + e.id + '">' +
+                '<td><strong>' + e.tracking_code + '</strong></td>' +
+                '<td>' + (e.sales_request_id ? '<span class="badge badge-info">SR-' + e.sales_request_id + '</span>' : '-') + '</td>' +
+                '<td>' + (e.client_name || '-') + '</td>' +
+                '<td>' + (e.company_name || '-') + '</td>' +
+                '<td>' + (e.expense_date || '-') + '</td>' +
+                '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
+                '<td>' + (e.description || '-') + '</td>' +
+                '<td>' +
+                    '<div class="input-group input-group-sm">' +
+                        '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input" ' +
+                               'id="user_expense_amount_' + e.id + '" ' +
+                               'value="' + parseFloat(e.amount).toFixed(2) + '" ' +
+                               'step="0.01" min="0" ' +
+                               'onchange="autoSaveUserExpenseAmount(' + e.id + ')">' +
+                        '<div class="input-group-append"><span class="input-group-text">EGP</span></div>' +
+                    '</div>' +
+                '</td>' +
+                '<td>' +
+                    '<select class="form-control form-control-sm user-expense-category" id="user_expense_category_' + e.id + '">' +
+                        categoryOptions +
+                    '</select>' +
+                '</td>' +
+            '</tr>';
+        });
+        
+        html += '</tbody></table></div>';
+        container.append(html);
+    });
+}
+
+// Auto-save user expense amount for finance
+function autoSaveUserExpenseAmount(expenseId) {
+    var input = $('#user_expense_amount_' + expenseId);
+    var newAmount = parseFloat(input.val()) || 0;
+    
+    input.prop('disabled', true);
+    
+    $.ajax({
+        url: '/api/finance/expense-approvals/' + expenseId + '/update-amount',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ amount: newAmount }),
+        success: function(response) {
+            if (response.success) {
+                input.css('background-color', '#d4edda');
+                setTimeout(function() { input.css('background-color', ''); }, 1000);
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+        },
+        complete: function() {
+            input.prop('disabled', false);
+        }
+    });
+}
+
+// Approve all user expenses for a user (finance approval)
+function approveAllUserExpensesForFinance(userId, userName) {
+    var expenses = [];
+    
+    // Find the card for this specific user
+    var userCard = $('.approval-item[data-user-id="' + userId + '"]');
+    
+    userCard.find('tr[data-user-expense-id]').each(function() {
+        var row = $(this);
+        var expId = row.data('user-expense-id');
+        var amount = parseFloat($('#user_expense_amount_' + expId).val()) || 0;
+        var catSelect = $('#user_expense_category_' + expId);
+        var selectedOption = catSelect.find('option:selected');
+        var selectedVal = catSelect.val();
+        if (!selectedVal) {
+            Swal.fire('Error', 'Please select a category for all expenses before approving', 'error');
+            expenses = [];
+            return false; // break
+        }
+        var parentId = selectedOption.data('parent-id');
+        var expenseData = { id: expId, amount: amount };
+        if (parentId) {
+            // Subcategory selected: parent goes to category_id, selected goes to subcategory_id
+            expenseData.category_id = parseInt(parentId);
+            expenseData.subcategory_id = parseInt(selectedVal);
+        } else {
+            // Main category selected (no subcategory)
+            expenseData.category_id = parseInt(selectedVal);
+            expenseData.subcategory_id = null;
+        }
+        expenses.push(expenseData);
+    });
+    
+    if (expenses.length === 0) return;
+    
+    var totalAmount = expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
+    
+    Swal.fire({
+        title: 'Finance Approve All for ' + userName + '?',
+        html: '<p>This will approve <strong>' + expenses.length + '</strong> expense(s)</p>' +
+              '<p>Total: <strong>' + formatCurrency(totalAmount) + '</strong></p>' +
+              '<p class="text-info"><small><i class="fas fa-info-circle mr-1"></i>Each expense creates: Income (Internal Transfer) + Expense (selected category)</small></p>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Approve All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: '/api/finance/expense-approvals/finance-approve-bulk',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ expenses: expenses }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Approved!', response.approved_count + ' expense(s) approved as income transactions', 'success');
+                        loadPendingApprovals();
+                    } else {
+                        Swal.fire('Error', response.error, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+                }
+            });
+        }
+    });
+}
+
+// Reject all user expenses for a user
+function rejectAllUserExpensesForFinance(userId, userName) {
+    var expenseIds = [];
+    
+    $('tr[data-user-expense-id]').each(function() {
+        var row = $(this);
+        var expId = row.data('user-expense-id');
+        var userCard = row.closest('.approval-item');
+        if (userCard.find('h5').text().includes(userName)) {
+            expenseIds.push(expId);
+        }
+    });
+    
+    if (expenseIds.length === 0) return;
+    
+    Swal.fire({
+        title: 'Reject All for ' + userName + '?',
+        input: 'textarea',
+        inputLabel: 'Rejection Reason (Required)',
+        inputPlaceholder: 'Enter reason...',
+        inputValidator: function(value) {
+            if (!value) return 'Please provide a reason';
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Reject All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: '/api/finance/expense-approvals/reject-bulk',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ expense_ids: expenseIds, reason: result.value }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Rejected', response.rejected_count + ' expense(s) rejected', 'success');
+                        loadPendingApprovals();
+                    } else {
+                        Swal.fire('Error', response.error, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+                }
+            });
+        }
+    });
+}
+
+function renderPendingTransactions(transactions) {
+    var container = $('#transactionsList');
+    container.empty();
+    
+    if (transactions.length === 0) {
+        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Pending Transactions</h3><p>All transactions have been processed</p></div>');
+        return;
+    }
+    
+    transactions.forEach(function(t) {
+        var typeClass = t.type === 'income' ? 'income' : 'expense';
+        var html = '<div class="approval-item transaction">' +
+            '<div class="item-info">' +
+                '<span class="item-code">' + t.code + '</span>' +
+                '<span class="item-type ' + typeClass + '">' + t.type.toUpperCase() + '</span>' +
+                '<div class="item-desc">' + (t.description || 'No description') + '</div>' +
+                '<div class="item-meta">Requested by: ' + (t.requested_by || 'N/A') + ' • ' + (t.created_at || '') + '</div>' +
+            '</div>' +
+            '<div class="item-amount">' + formatCurrency(t.amount) + '</div>' +
+            '<div class="item-actions">' +
+                '<button class="btn-pill btn-pill-success btn-approve-trans" data-id="' + t.id + '"><i class="fas fa-check"></i> Approve</button>' +
+                '<button class="btn-pill btn-pill-danger btn-reject-trans" data-id="' + t.id + '"><i class="fas fa-times"></i> Reject</button>' +
+            '</div>' +
+        '</div>';
+        container.append(html);
+    });
+    
+    // Bind events
+    $('.btn-approve-trans').on('click', function() {
+        openApprovalModal($(this).data('id'), 'transaction', 'approve');
+    });
+    $('.btn-reject-trans').on('click', function() {
+        openApprovalModal($(this).data('id'), 'transaction', 'reject');
+    });
+}
+
+function renderBalanceRequests(requests) {
+    var container = $('#balanceRequestsList');
+    container.empty();
+    
+    if (requests.length === 0) {
+        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Pending Requests</h3><p>All balance requests have been processed</p></div>');
+        return;
+    }
+    
+    requests.forEach(function(r) {
+        var html = '<div class="approval-item balance-request">' +
+            '<div class="item-info">' +
+                '<span class="item-code">' + r.code + '</span>' +
+                '<span class="item-type user_request">BALANCE REQUEST</span>' +
+                '<div class="item-desc">' + (r.description || 'No description') + '</div>' +
+                '<div class="item-meta">Requested by: ' + (r.requested_by || 'N/A') + ' • ' + (r.created_at || '') + '</div>' +
+            '</div>' +
+            '<div class="item-amount">' + formatCurrency(r.amount) + '</div>' +
+            '<div class="item-actions">' +
+                '<button class="btn-pill btn-pill-success btn-approve-req" data-id="' + r.id + '"><i class="fas fa-check"></i> Approve</button>' +
+                '<button class="btn-pill btn-pill-danger btn-reject-req" data-id="' + r.id + '"><i class="fas fa-times"></i> Reject</button>' +
+            '</div>' +
+        '</div>';
+        container.append(html);
+    });
+    
+    // Bind events
+    $('.btn-approve-req').on('click', function() {
+        openApprovalModal($(this).data('id'), 'balance_request', 'approve');
+    });
+    $('.btn-reject-req').on('click', function() {
+        openApprovalModal($(this).data('id'), 'balance_request', 'reject');
+    });
+}
+
+function loadUserBalances() {
+    $.ajax({
+        url: '/api/finance/user-balances',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                var tbody = $('#userBalancesBody');
+                tbody.empty();
+                
+                if (data.users.length === 0) {
+                    tbody.html('<tr><td colspan="6" style="text-align: center; padding: 40px;">No users found</td></tr>');
+                    return;
+                }
+                
+                data.users.forEach(function(u) {
+                    var row = '<tr>' +
+                        '<td><strong>' + (u.user_name || 'N/A') + '</strong></td>' +
+                        '<td>' + (u.email || '-') + '</td>' +
+                        '<td><span style="text-transform: capitalize;">' + (u.role || '-') + '</span></td>' +
+                        '<td><span class="balance-amount">' + formatCurrency(u.balance) + '</span></td>' +
+                        '<td>' + (u.last_updated || 'Never') + '</td>' +
+                        '<td>' +
+                            '<button class="btn-pill btn-pill-outline btn-view-history" data-id="' + u.user_id + '" style="padding: 6px 12px; font-size: 12px;"><i class="fas fa-history"></i></button>' +
+                            '<button class="btn-pill btn-pill-primary btn-quick-transfer" data-id="' + u.user_id + '" data-name="' + u.user_name + '" style="padding: 6px 12px; font-size: 12px; margin-left: 6px;"><i class="fas fa-plus"></i></button>' +
+                        '</td>' +
+                    '</tr>';
+                    tbody.append(row);
+                });
+                
+                // Bind events
+                $('.btn-view-history').on('click', function() {
+                    viewUserHistory($(this).data('id'));
+                });
+                $('.btn-quick-transfer').on('click', function() {
+                    $('#transferToUser').val($(this).data('id'));
+                    $('[data-tab="transfer"]').click();
+                });
+            }
+        }
+    });
+}
+
+function loadUsersForTransfer() {
+    $.ajax({
+        url: '/api/finance/user-balances',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                var options = '<option value="">Select User</option>';
+                data.users.forEach(function(u) {
+                    options += '<option value="' + u.user_id + '">' + u.user_name + ' (' + u.email + ') - ' + formatCurrency(u.balance) + '</option>';
+                });
+                $('#transferToUser').html(options);
+            }
+        }
+    });
+}
+
+// Payment Methods for Transfer
+var transferPaymentMethods = [];
+var selectedPmBalance = 0;
+
+function loadPaymentMethodsForTransfer() {
+    $.ajax({
+        url: '/api/finance/payment-methods',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                transferPaymentMethods = data.payment_methods;
+                var options = '<option value="">Select Payment Method</option>';
+                data.payment_methods.forEach(function(pm) {
+                    if (pm.is_active) {
+                        options += '<option value="' + pm.id + '" data-balance="' + pm.current_balance + '">' + 
+                                   pm.method_name + ' (' + formatCurrency(pm.current_balance) + ')' + '</option>';
+                    }
+                });
+                $('#transferPaymentMethod').html(options);
+            }
+        }
+    });
+}
+
+function updatePaymentMethodBalance() {
+    var pmId = $('#transferPaymentMethod').val();
+    if (!pmId) {
+        selectedPmBalance = 0;
+        $('#transferPmBalance').text('EGP 0.00');
+        $('#previewPmBalance').text('EGP 0.00');
+        return;
+    }
+    
+    var pm = transferPaymentMethods.find(function(p) { return p.id == pmId; });
+    if (pm) {
+        selectedPmBalance = parseFloat(pm.current_balance) || 0;
+        $('#transferPmBalance').text(formatCurrency(selectedPmBalance));
+        $('#previewPmBalance').text(formatCurrency(selectedPmBalance));
+        validateTransferAmount();
+    }
+}
+
+function validateTransferAmount() {
+    var amount = parseFloat($('#transferAmount').val()) || 0;
+    var newBalance = selectedPmBalance - amount;
+    
+    $('#previewTransferAmount').text('- ' + formatCurrency(amount));
+    $('#previewNewPmBalance').text(formatCurrency(newBalance));
+    
+    if (amount > selectedPmBalance) {
+        $('#transferAmountError').show();
+        $('#previewNewPmBalance').css('color', 'var(--danger)');
+        $('#btnTransfer').prop('disabled', true);
+    } else {
+        $('#transferAmountError').hide();
+        $('#previewNewPmBalance').css('color', amount > 0 ? 'var(--success)' : 'var(--text)');
+        $('#btnTransfer').prop('disabled', false);
+    }
+}
+
+function transferBalance() {
+    var pmId = $('#transferPaymentMethod').val();
+    var userId = $('#transferToUser').val();
+    var amount = $('#transferAmount').val();
+    var description = $('#transferDescription').val();
+    
+    if (!pmId) {
+        Swal.fire('Error', 'Please select a payment method', 'error');
+        return;
+    }
+    if (!userId) {
+        Swal.fire('Error', 'Please select a user', 'error');
+        return;
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+        Swal.fire('Error', 'Please enter a valid amount', 'error');
+        return;
+    }
+    if (!description) {
+        Swal.fire('Error', 'Please enter a description', 'error');
+        return;
+    }
+    if (parseFloat(amount) > selectedPmBalance) {
+        Swal.fire('Error', 'Amount exceeds available balance in the selected payment method', 'error');
+        return;
+    }
+    
+    var pmName = $('#transferPaymentMethod option:selected').text();
+    var userName = $('#transferToUser option:selected').text().split(' (')[0];
+    
+    Swal.fire({
+        title: 'Confirm Transfer',
+        html: '<p>Transfer <strong>' + formatCurrency(amount) + '</strong> from <strong>' + pmName.split(' (')[0] + '</strong> to <strong>' + userName + '</strong>?</p>' +
+              '<p class="text-muted small">This will deduct from the payment method balance.</p>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Transfer',
+        showLoaderOnConfirm: true,
+        preConfirm: function() {
+            return new Promise(function(resolve, reject) {
+                $.ajax({
+                    url: '/api/finance/transfer-balance',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        to_user_id: userId,
+                        payment_method_id: pmId,
+                        amount: parseFloat(amount),
+                        description: description
+                    }),
+                    success: function(data) {
+                        resolve(data);
+                    },
+                    error: function(xhr) {
+                        var errorMsg = 'Failed to transfer balance';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        Swal.showValidationMessage(errorMsg);
+                        resolve(null);
+                    }
+                });
+            });
+        },
+        allowOutsideClick: function() { return !Swal.isLoading(); }
+    }).then(function(result) {
+        if (result.isConfirmed && result.value) {
+            var data = result.value;
+            if (data.success) {
+                Swal.fire({
+                    title: 'Success',
+                    text: 'Balance transferred successfully. User new balance: ' + formatCurrency(data.new_user_balance),
+                    icon: 'success'
+                });
+                $('#transferAmount').val('');
+                $('#transferDescription').val('');
+                $('#transferPaymentMethod').val('');
+                updatePaymentMethodBalance();
+                loadUserBalances();
+                loadUsersForTransfer();
+                loadPaymentMethodsForTransfer();
+            } else {
+                Swal.fire('Error', data.error || 'Transfer failed', 'error');
+            }
+        }
+    });
+}
+
+function openApprovalModal(id, type, action) {
+    $('#approvalId').val(id);
+    $('#approvalType').val(type);
+    $('#approvalAction').val(action);
+    
+    // Show payment method selector only for balance request approvals
+    if (type === 'balance_request' && action === 'approve') {
+        $('#paymentMethodGroup').show();
+        loadPaymentMethodsForApproval();
+    } else {
+        $('#paymentMethodGroup').hide();
+    }
+    
+    if (action === 'approve') {
+        $('#approvalModalTitle').text('Approve ' + (type === 'transaction' ? 'Transaction' : 'Balance Request'));
+        $('#approvalNotesLabel').text('Approval Notes (Optional)');
+        $('#approvalNotes').attr('placeholder', 'Optional notes').removeAttr('required');
+        $('#btnConfirmApproval').removeClass('btn-pill-danger').addClass('btn-pill-success').html('<i class="fas fa-check"></i> Approve');
+    } else {
+        $('#approvalModalTitle').text('Reject ' + (type === 'transaction' ? 'Transaction' : 'Balance Request'));
+        $('#approvalNotesLabel').text('Rejection Reason (Required)');
+        $('#approvalNotes').attr('placeholder', 'Enter rejection reason').attr('required', true);
+        $('#btnConfirmApproval').removeClass('btn-pill-success').addClass('btn-pill-danger').html('<i class="fas fa-times"></i> Reject');
+    }
+    
+    $('#approvalNotes').val('');
+    $('#approvalModal').modal('show');
+}
+
+function loadPaymentMethodsForApproval() {
+    $.ajax({
+        url: '/api/finance/payment-methods',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                var sel = $('#approvalPaymentMethod');
+                sel.html('<option value="">-- Select Payment Method --</option>');
+                var methods = data.payment_methods || data.methods || [];
+                methods.forEach(function(m) {
+                    sel.append('<option value="' + m.id + '" data-balance="' + m.current_balance + '">' + m.method_name + ' (Balance: ' + formatCurrency(m.current_balance) + ')</option>');
+                });
+                sel.off('change').on('change', function() {
+                    var opt = $(this).find(':selected');
+                    var bal = opt.data('balance');
+                    if (bal !== undefined) {
+                        $('#pmBalanceHint').text('Available: ' + formatCurrency(bal));
+                    } else {
+                        $('#pmBalanceHint').text('');
+                    }
+                });
+            }
+        }
+    });
+}
+
+function confirmApproval() {
+    var id = $('#approvalId').val();
+    var type = $('#approvalType').val();
+    var action = $('#approvalAction').val();
+    var notes = $('#approvalNotes').val();
+    
+    if (action === 'reject' && !notes) {
+        Swal.fire('Error', 'Please provide a rejection reason', 'error');
+        return;
+    }
+    
+    var url, body;
+    if (type === 'transaction') {
+        url = '/api/finance/transactions/' + id + '/' + action;
+        body = action === 'approve' ? { notes: notes } : { reason: notes };
+    } else {
+        url = '/api/finance/balance-requests/' + id + '/' + action;
+        if (action === 'approve') {
+            var pmId = $('#approvalPaymentMethod').val();
+            if (!pmId) {
+                Swal.fire('Error', 'Please select a payment method', 'error');
+                return;
+            }
+            body = { notes: notes, payment_method_id: parseInt(pmId) };
+        } else {
+            body = { reason: notes };
+        }
+    }
+    
+    // Close modal first to prevent SweetAlert conflict
+    $('#approvalModal').modal('hide');
+    
+    var typeLabel = type === 'transaction' ? 'Transaction' : 'Request';
+    var actionLabel = action === 'approve' ? 'Approve' : 'Reject';
+    
+    Swal.fire({
+        title: actionLabel + ' ' + typeLabel + '?',
+        text: 'Are you sure you want to ' + action + ' this ' + type + '?',
+        icon: action === 'approve' ? 'question' : 'warning',
+        showCancelButton: true,
+        confirmButtonColor: action === 'approve' ? '#10b981' : '#ef4444',
+        confirmButtonText: 'Yes, ' + actionLabel,
+        showLoaderOnConfirm: true,
+        preConfirm: function() {
+            return new Promise(function(resolve, reject) {
+                $.ajax({
+                    url: url,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(body),
+                    success: function(data) {
+                        resolve(data);
+                    },
+                    error: function(xhr) {
+                        var errorMsg = 'Failed to process approval';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        Swal.showValidationMessage(errorMsg);
+                        resolve(null);
+                    }
+                });
+            });
+        },
+        allowOutsideClick: function() { return !Swal.isLoading(); }
+    }).then(function(result) {
+        if (result.isConfirmed && result.value) {
+            var data = result.value;
+            if (data.success) {
+                Swal.fire({
+                    title: 'Success',
+                    text: typeLabel + ' ' + action + 'd successfully',
+                    icon: 'success',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#10b981'
+                }).then(function() {
+                    loadPendingApprovals();
+                    loadUserBalances();
+                });
+            } else {
+                Swal.fire({
+                    title: 'Error',
+                    text: data.error || 'Operation failed',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+            }
+        }
+    });
+}
+
+function viewUserHistory(userId) {
+    $.ajax({
+        url: '/api/finance/user-balances/' + userId,
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                var html = '<p><strong>Current Balance:</strong> <span style="font-size: 20px; color: #10b981;">' + formatCurrency(data.user.balance) + '</span></p><hr>';
+                
+                if (data.history.length === 0) {
+                    html += '<p style="text-align: center; color: #64748b;">No history found</p>';
+                } else {
+                    html += '<table class="balances-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance After</th><th>Description</th></tr></thead><tbody>';
+                    data.history.forEach(function(h) {
+                        var amountColor = h.change_amount >= 0 ? '#10b981' : '#ef4444';
+                        var prefix = h.change_amount >= 0 ? '+' : '';
+                        html += '<tr>' +
+                            '<td>' + (h.created_at || '-') + '</td>' +
+                            '<td>' + h.change_type + '</td>' +
+                            '<td style="color: ' + amountColor + '; font-weight: 700;">' + prefix + formatCurrency(h.change_amount) + '</td>' +
+                            '<td>' + formatCurrency(h.balance_after) + '</td>' +
+                            '<td>' + (h.description || '-') + '</td>' +
+                        '</tr>';
+                    });
+                    html += '</tbody></table>';
+                }
+                
+                $('#userHistoryBody').html(html);
+                $('#userHistoryModal').modal('show');
+            }
+        }
+    });
+}
+
+// ============================================
+// User Expense Approvals
+// ============================================
+
+function loadExpenseApprovals() {
+    var status = $('#expenseStatusFilter').val() || 'submitted';
+    
+    $.ajax({
+        url: '/api/finance/expense-approvals?status=' + status,
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                renderExpenseApprovals(data.expenses, status);
+                // Update badge
+                var submittedCount = data.status_counts['submitted'] || 0;
+                $('#badgeExpense').text(submittedCount);
+            }
+        },
+        error: function() {
+            $('#expenseApprovalsList').html('<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error Loading Expenses</h3></div>');
+        }
+    });
+}
+
+function renderExpenseApprovals(expenses, status) {
+    var container = $('#expenseApprovalsList');
+    container.empty();
+    
+    if (expenses.length === 0) {
+        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Expenses Found</h3><p>No expenses in this status</p></div>');
+        return;
+    }
+    
+    // Group by employee for pending approval
+    if (status === 'submitted') {
+        var grouped = {};
+        expenses.forEach(function(e) {
+            var key = e.user_id;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    user_id: e.user_id,
+                    user_name: e.user_name,
+                    expenses: []
+                };
+            }
+            grouped[key].expenses.push(e);
+        });
+        
+        Object.values(grouped).forEach(function(group) {
+            var totalAmount = group.expenses.reduce(function(sum, e) { return sum + parseFloat(e.amount); }, 0);
+            
+            var html = '<div class="approval-item" style="display: block; border-left: 4px solid var(--warning);">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">' +
+                    '<div>' +
+                        '<h5 style="margin: 0;"><i class="fas fa-user mr-2"></i>' + group.user_name + '</h5>' +
+                        '<small class="text-muted">' + group.expenses.length + ' expense(s) - Total: <strong>' + formatCurrency(totalAmount) + '</strong></small>' +
+                    '</div>' +
+                    '<div>' +
+                        '<button class="btn-pill btn-pill-danger mr-2" onclick="rejectAllForUser(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-times"></i> Reject All</button>' +
+                        '<button class="btn-pill btn-pill-success" onclick="approveAllForUser(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-check"></i> Approve All</button>' +
+                    '</div>' +
+                '</div>' +
+                '<table class="balances-table" style="margin: 0;">' +
+                    '<thead><tr>' +
+                        '<th>Code</th>' +
+                        '<th>Date</th>' +
+                        '<th>Supplier</th>' +
+                        '<th>Description</th>' +
+                        '<th style="width: 150px;">Amount (Editable)</th>' +
+                        '<th>Requested</th>' +
+                    '</tr></thead>' +
+                    '<tbody>';
+            
+            group.expenses.forEach(function(e) {
+                var requestedAmount = e.requested_amount ? parseFloat(e.requested_amount) : parseFloat(e.amount);
+                html += '<tr data-expense-id="' + e.id + '">' +
+                    '<td><strong>' + e.tracking_code + '</strong></td>' +
+                    '<td>' + (e.expense_date || '-') + '</td>' +
+                    '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
+                    '<td>' + (e.description || '-') + '</td>' +
+                    '<td>' +
+                        '<div class="input-group input-group-sm">' +
+                            '<input type="number" class="form-control text-right font-weight-bold expense-amount-input" ' +
+                                   'id="expense_amount_' + e.id + '" ' +
+                                   'value="' + parseFloat(e.amount).toFixed(2) + '" ' +
+                                   'step="0.01" min="0" ' +
+                                   'onchange="autoSaveExpenseAmount(' + e.id + ')">' +
+                            '<div class="input-group-append"><span class="input-group-text">EGP</span></div>' +
+                        '</div>' +
+                    '</td>' +
+                    '<td class="text-muted">' + formatCurrency(requestedAmount) + '</td>' +
+                '</tr>';
+            });
+            
+            html += '</tbody></table></div>';
+            container.append(html);
+        });
+    } else {
+        // Non-pending - show flat list
+        expenses.forEach(function(e) {
+            var statusClass = e.status === 'approved' ? 'success' : 'danger';
+            var statusIcon = e.status === 'approved' ? 'fa-check' : 'fa-times';
+            var actionsHtml = e.status === 'approved' 
+                ? '<span class="text-success"><i class="fas fa-check-circle"></i> Approved</span>'
+                : '<span class="text-danger" title="' + (e.rejection_reason || '') + '"><i class="fas fa-times-circle"></i> Rejected</span>';
+            
+            var html = '<div class="approval-item" style="border-left: 4px solid var(--' + statusClass + ');">' +
+                '<div class="item-info">' +
+                    '<span class="item-code">' + e.tracking_code + '</span>' +
+                    '<span class="item-type expense">EXPENSE</span>' +
+                    '<div class="item-desc"><strong>User:</strong> ' + (e.user_name || 'N/A') + ' &bull; ' + (e.description || '') + '</div>' +
+                    '<div class="item-meta">Date: ' + (e.expense_date || '-') + '</div>' +
+                '</div>' +
+                '<div class="item-amount" style="color: var(--' + statusClass + ');">' + formatCurrency(e.amount) + '</div>' +
+                '<div class="item-actions">' + actionsHtml + '</div>' +
+            '</div>';
+            container.append(html);
+        });
+    }
+}
+
+// Auto-save expense amount
+function autoSaveExpenseAmount(expenseId) {
+    var input = $('#expense_amount_' + expenseId);
+    var newAmount = parseFloat(input.val()) || 0;
+    
+    input.prop('disabled', true);
+    
+    $.ajax({
+        url: '/api/finance/expense-approvals/' + expenseId + '/update-amount',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ amount: newAmount }),
+        success: function(response) {
+            if (response.success) {
+                input.css('background-color', '#d4edda');
+                setTimeout(function() { input.css('background-color', ''); }, 1000);
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+        },
+        complete: function() {
+            input.prop('disabled', false);
+        }
+    });
+}
+
+// Approve all expenses for a user
+function approveAllForUser(userId, userName) {
+    var expenseIds = [];
+    var expenses = [];
+    
+    $('tr[data-expense-id]').each(function() {
+        var row = $(this);
+        var expId = row.data('expense-id');
+        var amount = parseFloat($('#expense_amount_' + expId).val()) || 0;
+        // Check if this expense belongs to the user by checking parent card
+        var userCard = row.closest('.approval-item');
+        if (userCard.find('h5').text().includes(userName)) {
+            expenseIds.push(expId);
+            expenses.push({ id: expId, amount: amount });
+        }
+    });
+    
+    if (expenseIds.length === 0) return;
+    
+    var totalAmount = expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
+    
+    Swal.fire({
+        title: 'Approve All for ' + userName + '?',
+        html: '<p>This will approve <strong>' + expenses.length + '</strong> expense(s)</p>' +
+              '<p>Total: <strong>' + formatCurrency(totalAmount) + '</strong></p>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Approve All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: '/api/finance/expense-approvals/approve-bulk',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ expenses: expenses }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Approved!', response.approved_count + ' expense(s) approved', 'success');
+                        loadExpenseApprovals();
+                        loadUserBalances();
+                    } else {
+                        Swal.fire('Error', response.error, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+                }
+            });
+        }
+    });
+}
+
+// Reject all expenses for a user
+function rejectAllForUser(userId, userName) {
+    var expenseIds = [];
+    
+    $('tr[data-expense-id]').each(function() {
+        var row = $(this);
+        var expId = row.data('expense-id');
+        var userCard = row.closest('.approval-item');
+        if (userCard.find('h5').text().includes(userName)) {
+            expenseIds.push(expId);
+        }
+    });
+    
+    if (expenseIds.length === 0) return;
+    
+    Swal.fire({
+        title: 'Reject All for ' + userName + '?',
+        input: 'textarea',
+        inputLabel: 'Rejection Reason (Required)',
+        inputPlaceholder: 'Enter reason...',
+        inputValidator: function(value) {
+            if (!value) return 'Please provide a reason';
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Reject All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: '/api/finance/expense-approvals/reject-bulk',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ expense_ids: expenseIds, reason: result.value }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Rejected', response.rejected_count + ' expense(s) rejected', 'success');
+                        loadExpenseApprovals();
+                    } else {
+                        Swal.fire('Error', response.error, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+                }
+            });
+        }
+    });
+}
+
+// Load expense approvals when tab is clicked
+$(document).on('click', '.approval-tab[data-tab="expense-approvals"]', function() {
+    loadExpenseApprovals();
+});
+
+// Load expense tracking when tab is clicked
+$(document).on('click', '.approval-tab[data-tab="expense-tracking"]', function() {
+    loadExpenseTracking();
+});
+
+// ============================================
+// Expense Tracking (Reimbursement Requests)
+// ============================================
+
+function loadExpenseTracking() {
+    var status = $('#expenseTrackingStatusFilter').val() || 'manager_approved';
+    
+    $.ajax({
+        url: '/api/expense-tracking?status=' + status,
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                renderExpenseTracking(data.trackings, status);
+                // Update badge - count manager_approved
+                if (status === 'manager_approved') {
+                    $('#badgeExpenseTracking').text(data.trackings.length);
+                }
+            }
+        },
+        error: function() {
+            $('#expenseTrackingList').html('<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error Loading Expense Tracking</h3></div>');
+        }
+    });
+}
+
+function renderExpenseTracking(trackings, status) {
+    var container = $('#expenseTrackingList');
+    container.empty();
+    
+    if (trackings.length === 0) {
+        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Expense Tracking Requests</h3><p>No requests in this status</p></div>');
+        return;
+    }
+    
+    // Group by employee for pending finance approval
+    if (status === 'manager_approved') {
+        var grouped = {};
+        trackings.forEach(function(t) {
+            var key = t.user_id;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    user_id: t.user_id,
+                    user_name: t.user_name,
+                    trackings: []
+                };
+            }
+            grouped[key].trackings.push(t);
+        });
+        
+        Object.values(grouped).forEach(function(group) {
+            var totalAmount = group.trackings.reduce(function(sum, t) { return sum + parseFloat(t.total_amount); }, 0);
+            
+            var html = '<div class="approval-item" style="display: block; border-left: 4px solid var(--info);">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">' +
+                    '<div>' +
+                        '<h5 style="margin: 0;"><i class="fas fa-user mr-2"></i>' + group.user_name + '</h5>' +
+                        '<small class="text-muted">' + group.trackings.length + ' request(s) - Total: <strong>' + formatCurrency(totalAmount) + '</strong></small>' +
+                    '</div>' +
+                    '<div>' +
+                        '<button class="btn-pill btn-pill-danger mr-2" onclick="rejectAllTrackingForUser(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-times"></i> Reject All</button>' +
+                        '<button class="btn-pill btn-pill-success" onclick="approveAllTrackingForUser(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-check"></i> Approve All</button>' +
+                    '</div>' +
+                '</div>' +
+                '<table class="balances-table" style="margin: 0;">' +
+                    '<thead><tr>' +
+                        '<th>Code</th>' +
+                        '<th>Date</th>' +
+                        '<th>Description</th>' +
+                        '<th>Items</th>' +
+                        '<th style="width: 150px;">Amount (Editable)</th>' +
+                        '<th>Manager Approved</th>' +
+                        '<th>Actions</th>' +
+                    '</tr></thead>' +
+                    '<tbody>';
+            
+            group.trackings.forEach(function(t) {
+                html += '<tr data-tracking-id="' + t.id + '">' +
+                    '<td><strong>' + t.tracking_code + '</strong></td>' +
+                    '<td>' + (t.tracking_date || '-') + '</td>' +
+                    '<td>' + (t.description || '-') + '</td>' +
+                    '<td><span class="badge badge-secondary">' + (t.item_count || 0) + ' items</span></td>' +
+                    '<td>' +
+                        '<div class="input-group input-group-sm">' +
+                            '<input type="number" class="form-control text-right font-weight-bold tracking-amount-input" ' +
+                                   'id="tracking_amount_' + t.id + '" ' +
+                                   'value="' + parseFloat(t.total_amount).toFixed(2) + '" ' +
+                                   'step="0.01" min="0" ' +
+                                   'onchange="autoSaveTrackingAmount(' + t.id + ')">' +
+                            '<div class="input-group-append"><span class="input-group-text">EGP</span></div>' +
+                        '</div>' +
+                    '</td>' +
+                    '<td><small>' + (t.manager_approved_at || '-') + '</small></td>' +
+                    '<td>' +
+                        '<button class="btn-pill btn-pill-outline" style="padding: 4px 8px; font-size: 11px;" onclick="viewTrackingDetails(' + t.id + ')"><i class="fas fa-eye"></i></button>' +
+                    '</td>' +
+                '</tr>';
+            });
+            
+            html += '</tbody></table></div>';
+            container.append(html);
+        });
+    } else {
+        // Approved/Rejected - flat list
+        trackings.forEach(function(t) {
+            var statusClass = t.status === 'approved' ? 'success' : 'danger';
+            var actionsHtml = t.status === 'approved' 
+                ? '<span class="text-success"><i class="fas fa-check-circle"></i> Approved</span>'
+                : '<span class="text-danger"><i class="fas fa-times-circle"></i> Rejected</span>';
+            
+            var html = '<div class="approval-item" style="border-left: 4px solid var(--' + statusClass + ');">' +
+                '<div class="item-info">' +
+                    '<span class="item-code">' + t.tracking_code + '</span>' +
+                    '<span class="item-type expense">EXPENSE TRACKING</span>' +
+                    '<div class="item-desc"><strong>User:</strong> ' + (t.user_name || 'N/A') + ' &bull; ' + (t.description || '') + '</div>' +
+                    '<div class="item-meta">Date: ' + (t.tracking_date || '-') + '</div>' +
+                '</div>' +
+                '<div class="item-amount" style="color: var(--' + statusClass + ');">' + formatCurrency(t.total_amount) + '</div>' +
+                '<div class="item-actions">' + actionsHtml + '</div>' +
+            '</div>';
+            container.append(html);
+        });
+    }
+}
+
+// Auto-save tracking amount
+function autoSaveTrackingAmount(trackingId) {
+    var input = $('#tracking_amount_' + trackingId);
+    var newAmount = parseFloat(input.val()) || 0;
+    
+    input.prop('disabled', true);
+    
+    $.ajax({
+        url: '/api/expense-tracking/' + trackingId + '/update-total',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ total_amount: newAmount }),
+        success: function(response) {
+            if (response.success) {
+                input.css('background-color', '#d4edda');
+                setTimeout(function() { input.css('background-color', ''); }, 1000);
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
+        },
+        complete: function() {
+            input.prop('disabled', false);
+        }
+    });
+}
+
+// View tracking details
+function viewTrackingDetails(trackingId) {
+    $.ajax({
+        url: '/api/expense-tracking/' + trackingId,
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                var t = data.tracking;
+                var items = data.items || [];
+                
+                var itemsHtml = '<table class="balances-table"><thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Notes</th></tr></thead><tbody>';
+                items.forEach(function(item, idx) {
+                    itemsHtml += '<tr><td>' + (idx+1) + '</td><td>' + item.item_description + '</td><td>' + formatCurrency(item.amount) + '</td><td>' + (item.notes || '-') + '</td></tr>';
+                });
+                itemsHtml += '</tbody></table>';
+                
+                Swal.fire({
+                    title: t.tracking_code,
+                    html: '<div style="text-align: left;">' +
+                          '<p><strong>User:</strong> ' + t.user_name + '</p>' +
+                          '<p><strong>Date:</strong> ' + (t.tracking_date || '-') + '</p>' +
+                          '<p><strong>Description:</strong> ' + (t.description || '-') + '</p>' +
+                          '<p><strong>Total:</strong> ' + formatCurrency(t.total_amount) + '</p>' +
+                          '<hr><h6>Items:</h6>' + itemsHtml + '</div>',
+                    width: '700px',
+                    confirmButtonText: 'Close'
+                });
+            }
+        }
+    });
+}
+
+// Approve all tracking for user
+function approveAllTrackingForUser(userId, userName) {
+    var trackingIds = [];
+    var trackings = [];
+    
+    $('tr[data-tracking-id]').each(function() {
+        var row = $(this);
+        var trkId = row.data('tracking-id');
+        var amount = parseFloat($('#tracking_amount_' + trkId).val()) || 0;
+        var userCard = row.closest('.approval-item');
+        if (userCard.find('h5').text().includes(userName)) {
+            trackingIds.push(trkId);
+            trackings.push({ id: trkId, amount: amount });
+        }
+    });
+    
+    if (trackingIds.length === 0) return;
+    
+    var totalAmount = trackings.reduce(function(sum, t) { return sum + t.amount; }, 0);
+    
+    Swal.fire({
+        title: 'Approve All for ' + userName + '?',
+        html: '<p>This will approve <strong>' + trackings.length + '</strong> expense tracking request(s)</p>' +
+              '<p>Total: <strong>' + formatCurrency(totalAmount) + '</strong></p>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Approve All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            // Approve each tracking
+            var promises = trackings.map(function(t) {
+                return $.ajax({
+                    url: '/api/expense-tracking/' + t.id + '/finance-approve',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ approved_amount: t.amount })
+                });
+            });
+            
+            Promise.all(promises).then(function() {
+                Swal.fire('Approved!', trackings.length + ' request(s) approved', 'success');
+                loadExpenseTracking();
+            }).catch(function() {
+                Swal.fire('Error', 'Some requests failed to approve', 'error');
+                loadExpenseTracking();
+            });
+        }
+    });
+}
+
+// Reject all tracking for user
+function rejectAllTrackingForUser(userId, userName) {
+    var trackingIds = [];
+    
+    $('tr[data-tracking-id]').each(function() {
+        var row = $(this);
+        var trkId = row.data('tracking-id');
+        var userCard = row.closest('.approval-item');
+        if (userCard.find('h5').text().includes(userName)) {
+            trackingIds.push(trkId);
+        }
+    });
+    
+    if (trackingIds.length === 0) return;
+    
+    Swal.fire({
+        title: 'Reject All for ' + userName + '?',
+        input: 'textarea',
+        inputLabel: 'Rejection Reason (Required)',
+        inputPlaceholder: 'Enter reason...',
+        inputValidator: function(value) {
+            if (!value) return 'Please provide a reason';
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Reject All'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            var promises = trackingIds.map(function(id) {
+                return $.ajax({
+                    url: '/api/expense-tracking/' + id + '/reject',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ reason: result.value })
+                });
+            });
+            
+            Promise.all(promises).then(function() {
+                Swal.fire('Rejected', trackingIds.length + ' request(s) rejected', 'success');
+                loadExpenseTracking();
+            }).catch(function() {
+                Swal.fire('Error', 'Some requests failed to reject', 'error');
+                loadExpenseTracking();
+            });
+        }
+    });
+}
+
+// Load expense tracking count on page load
+$(document).ready(function() {
+    // Get manager_approved count for badge
+    $.ajax({
+        url: '/api/expense-tracking?status=manager_approved',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                $('#badgeExpenseTracking').text(data.trackings.length);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

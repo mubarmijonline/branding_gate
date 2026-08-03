@@ -1,0 +1,1015 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Prevent chart scripts from loading -->
+<style>
+    .chart-container { display: none; }
+    .existing-document {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    .existing-document:hover {
+        background-color: #e9ecef;
+    }
+    .btn-group .btn {
+        margin-left: 2px;
+    }
+</style>
+<script>
+// Override chart demo scripts to prevent errors
+window.chartAreaDemo = function() {};
+window.chartPieDemo = function() {};
+</script>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'company_management' in user_roles %}
+    
+    <!-- Company Management Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Parent Company Management</h1>
+    </div>
+
+    <!-- Company Information Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Company Information</h2>
+            <button class="btn btn-primary" data-toggle="modal" data-target="#addCompanyModal">
+                <i class="fas fa-plus"></i> Add Company
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="companies-table" class="display table table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Company Name</th>
+                            <th>Industry/Sector</th>
+                            <th>Phone Number</th>
+                            <th>Email</th>
+                            <th>Primary Contact</th>
+                            <th>Added By</th>
+                            <th>Added Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Company Modal -->
+    <div class="modal fade" id="addCompanyModal" tabindex="-1" role="dialog" aria-labelledby="addCompanyModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCompanyModalLabel">Add Parent Company</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCompanyForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="company_name">1. Company Name *</label>
+                                    <input type="text" class="form-control" id="company_name" name="company_name" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="industry_sector">2. Industry / Sector *</label>
+                                    <input type="text" class="form-control" id="industry_sector" name="industry_sector" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="address">3. Address *</label>
+                            <textarea class="form-control" id="address" name="address" rows="2" required 
+                                placeholder="Street, City, State, Country, Postal Code"></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="tax_number">4. Tax Number</label>
+                                    <input type="text" class="form-control" id="tax_number" name="tax_number">
+                                    <small class="form-text text-muted">Optional - but documents will be required if provided</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="vat_number">5. VAT Number</label>
+                                    <input type="text" class="form-control" id="vat_number" name="vat_number">
+                                    <small class="form-text text-muted">Optional - but documents will be required if provided</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="phone_number">6. Phone Number *</label>
+                                    <input type="text" class="form-control" id="phone_number" name="phone_number" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="email_address">7. Email Address *</label>
+                                    <input type="email" class="form-control" id="email_address" name="email_address" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="website_social_media">8. Website / Social Media</label>
+                                    <input type="text" class="form-control" id="website_social_media" name="website_social_media">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="primary_contact_person">9. Primary Contact Person *</label>
+                            <input type="text" class="form-control" id="primary_contact_person" name="primary_contact_person" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="additional_notes">10. Additional Notes</label>
+                            <textarea class="form-control" id="additional_notes" name="additional_notes" rows="3" 
+                                placeholder="Remarks, special instructions, etc."></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="documents">11. Upload Documents <span id="documents-required-indicator" class="text-danger" style="display:none;">*</span></label>
+                            <input type="file" class="form-control-file" id="documents" name="documents" 
+                                multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.zip,.rar">
+                            <small class="form-text text-muted">
+                                <span id="documents-help-text">Upload documents (PDF, Word, Excel, PowerPoint, images, etc.). Max 20MB per file.</span>
+                                <span id="documents-required-text" class="text-danger" style="display:none;"><br><strong>Documents are required when Tax Number or VAT Number is provided</strong></span>
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>12. Attachment Links</label>
+                            <div id="addDocumentLinks"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addLinkBtn">
+                                <i class="fas fa-link"></i> Add Link
+                            </button>
+                            <small class="form-text text-muted">Add external URLs (Google Drive, Dropbox, websites, etc.).</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addCompany()">Add Company</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Company Modal -->
+    <div class="modal fade" id="editCompanyModal" tabindex="-1" role="dialog" aria-labelledby="editCompanyModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editCompanyModalLabel">Edit Company</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="editCompanyForm">
+                        <input type="hidden" id="edit_company_id" name="company_id">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_company_name">Company Name *</label>
+                                    <input type="text" class="form-control" id="edit_company_name" name="company_name" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_industry_sector">Industry / Sector *</label>
+                                    <input type="text" class="form-control" id="edit_industry_sector" name="industry_sector" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_address">Address *</label>
+                            <textarea class="form-control" id="edit_address" name="address" rows="2" required></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_tax_number">Tax Number</label>
+                                    <input type="text" class="form-control" id="edit_tax_number" name="tax_number">
+                                    <small class="form-text text-muted">Optional - but documents will be required if provided</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_vat_number">VAT Number</label>
+                                    <input type="text" class="form-control" id="edit_vat_number" name="vat_number">
+                                    <small class="form-text text-muted">Optional - but documents will be required if provided</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_phone_number">Phone Number *</label>
+                                    <input type="text" class="form-control" id="edit_phone_number" name="phone_number" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_email_address">Email Address *</label>
+                                    <input type="email" class="form-control" id="edit_email_address" name="email_address" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="edit_website_social_media">Website / Social Media</label>
+                                    <input type="text" class="form-control" id="edit_website_social_media" name="website_social_media">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_primary_contact_person">Primary Contact Person *</label>
+                            <input type="text" class="form-control" id="edit_primary_contact_person" name="primary_contact_person" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_additional_notes">Additional Notes</label>
+                            <textarea class="form-control" id="edit_additional_notes" name="additional_notes" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_documents">Upload Additional Documents <span id="edit-documents-required-indicator" class="text-danger" style="display:none;">*</span></label>
+                            <input type="file" class="form-control-file" id="edit_documents" name="documents" 
+                                multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.zip,.rar">
+                            <small class="form-text text-muted">
+                                <span id="edit-documents-help-text">Upload documents (PDF, Word, Excel, PowerPoint, images, etc.). Max 20MB per file.</span>
+                                <span id="edit-documents-required-text" class="text-danger" style="display:none;"><br><strong>Documents are required when Tax Number or VAT Number is provided</strong></span>
+                            </small>
+                            <div id="existing-documents" class="mt-2">
+                                <!-- Existing documents will be listed here -->
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Add Attachment Links</label>
+                            <div id="editDocumentLinks"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="editAddLinkBtn">
+                                <i class="fas fa-link"></i> Add Link
+                            </button>
+                            <small class="form-text text-muted">Add external URLs (Google Drive, Dropbox, websites, etc.).</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="updateCompany()">Update Company</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Access Denied!</h4>
+        <p>You don't have permission to access this page. Please contact your administrator.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- DataTables JavaScript -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap4.min.js"></script>
+
+<script>
+let companiesTable;
+
+$(document).ready(function() {
+    console.log('Document ready, jQuery version:', $.fn.jquery);
+    console.log('DataTable available:', typeof $.fn.DataTable);
+    
+    // Check if DataTable is available
+    if (typeof $.fn.DataTable === 'undefined') {
+        console.error('DataTable is not loaded');
+        // Try to load it after a delay
+        setTimeout(function() {
+            if (typeof $.fn.DataTable !== 'undefined') {
+                initializeDataTable();
+            } else {
+                $('#companies-table tbody').html('<tr><td colspan="9">DataTable failed to load. Please refresh the page.</td></tr>');
+            }
+        }, 2000);
+        return;
+    }
+    
+    initializeDataTable();
+    
+    // Add event listeners for tax and VAT number validation
+    $('#tax_number, #vat_number').on('input', function() {
+        validateDocumentRequirement();
+    });
+    
+    $('#edit_tax_number, #edit_vat_number').on('input', function() {
+        validateEditDocumentRequirement();
+    });
+    
+    // Add file size validation
+    $('#documents').on('change', function() {
+        validateFileSize(this, 'add');
+    });
+    
+    $('#edit_documents').on('change', function() {
+        validateFileSize(this, 'edit');
+    });
+
+    // --- Attachment Links UI ---
+    function appendLinkRow(containerSelector, label, url) {
+        var rowHtml = '<div class="input-group input-group-sm mb-2 doc-link-row">' +
+            '<input type="text" class="form-control doc-link-label" placeholder="Label (e.g. Drive folder)" value="' + (label || '').replace(/"/g,'&quot;') + '">' +
+            '<input type="url" class="form-control doc-link-url" placeholder="https://..." value="' + (url || '').replace(/"/g,'&quot;') + '">' +
+            '<div class="input-group-append">' +
+              '<button type="button" class="btn btn-outline-danger doc-link-remove" title="Remove"><i class="fas fa-times"></i></button>' +
+            '</div></div>';
+        $(containerSelector).append(rowHtml);
+    }
+    function collectLinks(containerSelector) {
+        var links = [];
+        $(containerSelector + ' .doc-link-row').each(function() {
+            var url = $(this).find('.doc-link-url').val().trim();
+            var label = $(this).find('.doc-link-label').val().trim();
+            if (url) links.push({ label: label || url, url: url });
+        });
+        return links;
+    }
+    $('#addLinkBtn').on('click', function() { appendLinkRow('#addDocumentLinks', '', ''); });
+    $('#editAddLinkBtn').on('click', function() { appendLinkRow('#editDocumentLinks', '', ''); });
+    $(document).on('click', '.doc-link-remove', function() { $(this).closest('.doc-link-row').remove(); });
+
+    // Reset add-modal link rows when modal closes
+    $('#addCompanyModal').on('hidden.bs.modal', function() {
+        $('#addDocumentLinks').empty();
+    });
+    $('#editCompanyModal').on('hidden.bs.modal', function() {
+        $('#editDocumentLinks').empty();
+    });
+});
+
+function validateDocumentRequirement() {
+    const taxNumber = $('#tax_number').val().trim();
+    const vatNumber = $('#vat_number').val().trim();
+    const hasNumberInfo = taxNumber || vatNumber;
+    
+    if (hasNumberInfo) {
+        $('#documents-required-indicator').show();
+        $('#documents-required-text').show();
+        $('#documents').attr('required', true);
+    } else {
+        $('#documents-required-indicator').hide();
+        $('#documents-required-text').hide();
+        $('#documents').removeAttr('required');
+    }
+}
+
+function validateEditDocumentRequirement() {
+    const taxNumber = $('#edit_tax_number').val().trim();
+    const vatNumber = $('#edit_vat_number').val().trim();
+    const hasNumberInfo = taxNumber || vatNumber;
+    
+    if (hasNumberInfo) {
+        $('#edit-documents-required-indicator').show();
+        $('#edit-documents-required-text').show();
+    } else {
+        $('#edit-documents-required-indicator').hide();
+        $('#edit-documents-required-text').hide();
+    }
+}
+
+function validateFileSize(fileInput, formType) {
+    const maxSize = 20 * 1024 * 1024; // 20MB in bytes
+    const files = fileInput.files;
+    let invalidFiles = [];
+    
+    for (let i = 0; i < files.length; i++) {
+        if (files[i].size > maxSize) {
+            invalidFiles.push(files[i].name);
+        }
+    }
+    
+    if (invalidFiles.length > 0) {
+        const fileList = invalidFiles.join(', ');
+        Swal.fire({
+            title: 'File Size Error',
+            text: `The following files exceed the 20MB limit: ${fileList}. Please select smaller files.`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+        
+        // Clear the file input
+        fileInput.value = '';
+        return false;
+    }
+    
+    return true;
+}
+
+function initializeDataTable() {
+    try {
+        // Initialize DataTable
+        companiesTable = $('#companies-table').DataTable({
+            responsive: true,
+            order: [[0, 'desc']],
+            columnDefs: [
+                { targets: [8], orderable: false } // Actions column
+            ],
+            language: {
+                processing: "Loading...",
+                emptyTable: "No companies found",
+                loadingRecords: "Loading...",
+                zeroRecords: "No matching companies found"
+            },
+            processing: true
+        });
+        
+        console.log('DataTable initialized successfully');
+        
+        // Load companies data
+        loadCompanies();
+    } catch (error) {
+        console.error('Error initializing DataTable:', error);
+        $('#companies-table tbody').html('<tr><td colspan="9">Failed to initialize table: ' + error.message + '</td></tr>');
+    }
+}
+
+function loadCompanies() {
+    if (!companiesTable) {
+        console.error('DataTable is not initialized');
+        return;
+    }
+    
+    console.log('Loading companies...');
+    
+    $.ajax({
+        url: '/api/companies',
+        method: 'GET',
+        beforeSend: function() {
+            if (companiesTable && companiesTable.processing) {
+                companiesTable.processing(true);
+            }
+        },
+        success: function(response) {
+            console.log('API Response:', response); // Debug log
+            
+            if (companiesTable && companiesTable.processing) {
+                companiesTable.processing(false);
+            }
+            
+            if (response.success) {
+                companiesTable.clear();
+                if (response.companies && response.companies.length > 0) {
+                    console.log('Adding', response.companies.length, 'companies to table');
+                    response.companies.forEach(function(company) {
+                        companiesTable.row.add([
+                            company.id,
+                            company.company_name || '',
+                            company.industry_sector || '',
+                            company.phone_number || '',
+                            company.email_address || '',
+                            company.primary_contact_person || '',
+                            company.added_by_name || 'N/A',
+                            company.added_date || '',
+                            `<button class="btn btn-sm btn-primary me-1" onclick="editCompany(${company.id})" title="Edit Company">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="btn btn-sm btn-info me-1" onclick="viewDocuments(${company.id})" title="View Documents">
+                                <i class="fas fa-file-alt"></i> Docs
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteCompany(${company.id})" title="Delete Company">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>`
+                        ]);
+                    });
+                } else {
+                    console.log('No companies found');
+                }
+                companiesTable.draw();
+            } else {
+                console.error('API Error:', response.error);
+                Swal.fire('Error', response.error || 'Failed to load companies', 'error');
+            }
+        },
+        error: function(xhr, status, error) {
+            if (companiesTable && companiesTable.processing) {
+                companiesTable.processing(false);
+            }
+            console.error('AJAX Error:', {
+                status: status,
+                error: error,
+                responseText: xhr.responseText,
+                xhr: xhr
+            });
+            Swal.fire('Error', 'Failed to load companies: ' + error, 'error');
+        }
+    });
+}
+
+function addCompany() {
+    // Validate file sizes first
+    const documentInput = $('#documents')[0];
+    if (documentInput.files.length > 0 && !validateFileSize(documentInput, 'add')) {
+        return; // File size validation failed
+    }
+    
+    // Check for missing tax/VAT warning
+    const taxNumber = $('#tax_number').val().trim();
+    const vatNumber = $('#vat_number').val().trim();
+    const documents = $('#documents')[0].files;
+    
+    // If no tax or VAT number, show warning
+    if (!taxNumber && !vatNumber) {
+        Swal.fire({
+            title: 'Warning!',
+            text: 'You have not provided Tax Number or VAT Number. Are you sure you want to continue?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, continue!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                submitCompanyForm();
+            }
+        });
+        return;
+    }
+    
+    // If tax or VAT number provided, check for documents (files OR links)
+    const linkCount = collectLinks('#addDocumentLinks').length;
+    if ((taxNumber || vatNumber) && documents.length === 0 && linkCount === 0) {
+        Swal.fire('Error', 'Documents are required when Tax Number or VAT Number is provided (upload a file or add an attachment link)', 'error');
+        return;
+    }
+    
+    submitCompanyForm();
+}
+
+function submitCompanyForm() {
+    // Create FormData for file upload
+    const formData = new FormData();
+    
+    // Collect form data
+    const fields = ['company_name', 'industry_sector', 'address', 'tax_number', 'vat_number',
+                   'phone_number', 'email_address', 'website_social_media', 
+                   'primary_contact_person', 'additional_notes'];
+    
+    fields.forEach(field => {
+        const value = $(`#${field}`).val();
+        formData.append(field, value || '');
+    });
+    
+    // Add files
+    const files = $('#documents')[0].files;
+    for (let i = 0; i < files.length; i++) {
+        formData.append('documents', files[i]);
+    }
+
+    // Add attachment links
+    const links = collectLinks('#addDocumentLinks');
+    formData.append('document_links', JSON.stringify(links));
+
+    console.log('Sending company data with files'); // Debug log
+    
+    $.ajax({
+        url: '/api/companies/add',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            console.log('Add company response:', response); // Debug log
+            if (response.success) {
+                Swal.fire('Success', 'Company added successfully', 'success');
+                $('#addCompanyModal').modal('hide');
+                $('#addCompanyForm')[0].reset();
+                validateDocumentRequirement(); // Reset validation UI
+                loadCompanies();
+            } else {
+                Swal.fire('Error', response.error || 'Failed to add company', 'error');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Add company error:', xhr.responseText);
+            Swal.fire('Error', 'Failed to add company: ' + error, 'error');
+        }
+    });
+}
+
+function editCompany(companyId) {
+    // Find company data from the table
+    const companies = companiesTable.data().toArray();
+    const companyRow = companies.find(row => row[0] == companyId);
+    
+    if (!companyRow) {
+        Swal.fire('Error', 'Company not found', 'error');
+        return;
+    }
+    
+    // Load company data for editing
+    $.ajax({
+        url: '/api/companies',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                const company = response.companies.find(c => c.id == companyId);
+                if (company) {
+                    // Populate edit form
+                    $('#edit_company_id').val(company.id);
+                    $('#edit_company_name').val(company.company_name);
+                    $('#edit_industry_sector').val(company.industry_sector);
+                    $('#edit_address').val(company.address);
+                    $('#edit_tax_number').val(company.tax_number);
+                    $('#edit_vat_number').val(company.vat_number);
+                    $('#edit_phone_number').val(company.phone_number);
+                    $('#edit_email_address').val(company.email_address);
+                    $('#edit_website_social_media').val(company.website_social_media);
+                    $('#edit_primary_contact_person').val(company.primary_contact_person);
+                    $('#edit_additional_notes').val(company.additional_notes);
+                    
+                    // Load existing documents
+                    loadExistingDocuments(companyId);
+                    
+                    // Validate document requirements
+                    validateEditDocumentRequirement();
+                    
+                    $('#editCompanyModal').modal('show');
+                }
+            }
+        }
+    });
+}
+
+function loadExistingDocuments(companyId) {
+    $.ajax({
+        url: `/api/companies/${companyId}/documents`,
+        method: 'GET',
+        success: function(response) {
+            const container = $('#existing-documents');
+            container.empty();
+            
+            if (response.success && response.documents && response.documents.length > 0) {
+                const documentsHtml = response.documents.map(doc => {
+                    const isLink = (doc.document_type === 'link');
+                    const sizeHtml = isLink
+                        ? `<small class="text-muted">External link</small>`
+                        : `<small class="text-muted">Size: ${(doc.file_size / 1024).toFixed(2)} KB</small>`;
+                    const openBtn = isLink
+                        ? `<a href="${doc.document_path}" target="_blank" rel="noopener" class="btn btn-sm btn-success" title="Open Link"><i class="fas fa-external-link-alt"></i></a>`
+                        : `<button type="button" class="btn btn-sm btn-success" onclick="downloadDocument(${doc.id}, '${doc.document_name}')" title="Download"><i class="fas fa-download"></i></button>`;
+                    const icon = isLink ? '<i class="fas fa-link text-info mr-1"></i>' : '<i class="fas fa-file text-secondary mr-1"></i>';
+                    return `<div class="existing-document mb-2 p-2 border rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="document-name font-weight-bold">${icon}${doc.document_name}</span>
+                                <small class="text-muted d-block">Uploaded: ${doc.uploaded_date}</small>
+                                ${sizeHtml}
+                            </div>
+                            <div class="btn-group">
+                                ${openBtn}
+                                <button type="button" class="btn btn-sm btn-danger" onclick="deleteDocument(${doc.id})" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+                container.html('<strong>Existing Documents:</strong>' + documentsHtml);
+            } else {
+                container.html('<small class="text-muted">No documents uploaded yet</small>');
+            }
+        },
+        error: function() {
+            $('#existing-documents').html('<small class="text-muted">Error loading documents</small>');
+        }
+    });
+}
+
+function deleteDocument(documentId) {
+    // First check if this deletion would violate business rules
+    const companyId = $('#edit_company_id').val();
+    const taxNumber = $('#edit_tax_number').val().trim();
+    const vatNumber = $('#edit_vat_number').val().trim();
+    const hasTaxOrVat = taxNumber || vatNumber;
+    
+    if (hasTaxOrVat) {
+        // Check how many documents this company currently has
+        $.ajax({
+            url: `/api/companies/${companyId}/documents`,
+            method: 'GET',
+            success: function(response) {
+                if (response.success && response.documents) {
+                    const currentDocumentCount = response.documents.length;
+                    
+                    // If this is the last document and tax/VAT numbers exist, prevent deletion
+                    if (currentDocumentCount <= 1) {
+                        Swal.fire({
+                            title: 'Cannot Delete Document',
+                            text: 'This company has Tax Number or VAT Number specified. At least one document must be kept as supporting documentation.',
+                            icon: 'error',
+                            confirmButtonText: 'OK'
+                        });
+                        return;
+                    }
+                    
+                    // Proceed with deletion confirmation
+                    proceedWithDocumentDeletion(documentId, companyId);
+                } else {
+                    // If we can't get document count, proceed with normal deletion
+                    proceedWithDocumentDeletion(documentId, companyId);
+                }
+            },
+            error: function() {
+                // If we can't check, proceed with normal deletion
+                proceedWithDocumentDeletion(documentId, companyId);
+            }
+        });
+    } else {
+        // No tax/VAT numbers, so deletion is always allowed
+        proceedWithDocumentDeletion(documentId, companyId);
+    }
+}
+
+function proceedWithDocumentDeletion(documentId, companyId) {
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/companies/documents/${documentId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Deleted!', 'Document has been deleted.', 'success');
+                        // Reload documents list
+                        loadExistingDocuments(companyId);
+                    } else {
+                        Swal.fire('Error', response.error || 'Failed to delete document', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMessage = 'Failed to delete document';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    Swal.fire('Error', errorMessage, 'error');
+                }
+            });
+        }
+    });
+}
+
+function updateCompany() {
+    // Validate file sizes first
+    const documentInput = $('#edit_documents')[0];
+    if (documentInput.files.length > 0 && !validateFileSize(documentInput, 'edit')) {
+        return; // File size validation failed
+    }
+    
+    const companyId = $('#edit_company_id').val();
+    const taxNumber = $('#edit_tax_number').val().trim();
+    const vatNumber = $('#edit_vat_number').val().trim();
+    const hasTaxOrVat = taxNumber || vatNumber;
+    
+    // If tax/VAT numbers are provided, check if there are documents
+    if (hasTaxOrVat) {
+        $.ajax({
+            url: `/api/companies/${companyId}/documents`,
+            method: 'GET',
+            success: function(response) {
+                const newFiles = $('#edit_documents')[0].files;
+                const existingDocuments = response.success ? response.documents.length : 0;
+                const newLinkCount = collectLinks('#editDocumentLinks').length;
+                const totalDocuments = existingDocuments + newFiles.length + newLinkCount;
+                
+                if (totalDocuments === 0) {
+                    Swal.fire({
+                        title: 'Documents Required',
+                        text: 'Tax Number or VAT Number requires supporting documents. Please upload at least one document or remove the tax/VAT numbers.',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                    return;
+                }
+                
+                // Proceed with update
+                submitCompanyUpdate();
+            },
+            error: function() {
+                // If we can't check existing documents, proceed anyway
+                submitCompanyUpdate();
+            }
+        });
+    } else {
+        // No tax/VAT numbers, proceed with update
+        submitCompanyUpdate();
+    }
+}
+
+function submitCompanyUpdate() {
+    const companyId = $('#edit_company_id').val();
+    
+    // Create FormData for file upload
+    const formData = new FormData();
+    
+    const fields = ['company_name', 'industry_sector', 'address', 'tax_number', 'vat_number',
+                   'phone_number', 'email_address', 'website_social_media', 
+                   'primary_contact_person', 'additional_notes'];
+    
+    fields.forEach(field => {
+        const value = $(`#edit_${field}`).val();
+        formData.append(field, value || '');
+    });
+    
+    // Add new files if any
+    const files = $('#edit_documents')[0].files;
+    for (let i = 0; i < files.length; i++) {
+        formData.append('documents', files[i]);
+    }
+
+    // Add attachment links
+    const links = collectLinks('#editDocumentLinks');
+    formData.append('document_links', JSON.stringify(links));
+
+    $.ajax({
+        url: `/api/companies/edit/${companyId}`,
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            if (response.success) {
+                Swal.fire('Success', 'Company updated successfully', 'success');
+                $('#editCompanyModal').modal('hide');
+                loadCompanies();
+            } else {
+                Swal.fire('Error', response.error || 'Failed to update company', 'error');
+            }
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = 'Failed to update company';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
+            }
+            Swal.fire('Error', errorMessage, 'error');
+        }
+    });
+}
+
+function deleteCompany(companyId) {
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/companies/delete/${companyId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Deleted!', 'Company has been deleted.', 'success');
+                        loadCompanies();
+                    } else {
+                        Swal.fire('Error', response.error || 'Failed to delete company', 'error');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error', 'Failed to delete company', 'error');
+                }
+            });
+        }
+    });
+}
+
+function downloadDocument(documentId, filename) {
+    // Create a temporary link to trigger download
+    const downloadUrl = `/api/companies/documents/${documentId}/download`;
+    
+    // First check if the document exists and is accessible
+    fetch(downloadUrl, {
+        method: 'HEAD'
+    }).then(response => {
+        if (response.ok) {
+            // Create a temporary anchor element and trigger download
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = filename;
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            Swal.fire('Error', 'Document not found or inaccessible', 'error');
+        }
+    }).catch(error => {
+        console.error('Download error:', error);
+        Swal.fire('Error', 'Failed to download document', 'error');
+    });
+}
+
+function viewDocuments(companyId) {
+    $.ajax({
+        url: `/api/companies/${companyId}/documents`,
+        method: 'GET',
+        success: function(response) {
+            if (response.success && response.documents) {
+                const documents = response.documents;
+                let documentsHtml = '<div class="list-group">';
+                
+                if (documents.length === 0) {
+                    documentsHtml += '<div class="alert alert-info">No documents found for this company.</div>';
+                } else {
+                    documents.forEach(doc => {
+                        const isLink = (doc.document_type === 'link');
+                        const sizeLine = isLink
+                            ? `<small>External link | Added: ${doc.uploaded_date}</small>`
+                            : `<small>Size: ${(doc.file_size / 1024).toFixed(2)} KB | Uploaded: ${doc.uploaded_date}</small>`;
+                        const actionBtn = isLink
+                            ? `<a href="${doc.document_path}" target="_blank" rel="noopener" class="btn btn-sm btn-info" title="Open Link"><i class="fas fa-external-link-alt"></i> Open</a>`
+                            : `<button type="button" class="btn btn-sm btn-primary" onclick="downloadDocument(${doc.id}, '${doc.document_name}')" title="Download Document"><i class="fas fa-download"></i> Download</button>`;
+                        const typeLabel = isLink ? 'Link' : (doc.document_type || 'General');
+                        documentsHtml += `
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">${doc.document_name}</h6>
+                                        <p class="mb-1">Type: ${typeLabel}</p>
+                                        ${sizeLine}
+                                    </div>
+                                    ${actionBtn}
+                                </div>
+                            </div>`;
+                    });
+                }
+                
+                documentsHtml += '</div>';
+                
+                Swal.fire({
+                    title: 'Company Documents',
+                    html: documentsHtml,
+                    width: '600px',
+                    showCloseButton: true,
+                    confirmButtonText: 'Close'
+                });
+            } else {
+                Swal.fire('Info', 'No documents found for this company', 'info');
+            }
+        },
+        error: function() {
+            Swal.fire('Error', 'Failed to load documents', 'error');
+        }
+    });
+}
+</script>
+{% endblock %}

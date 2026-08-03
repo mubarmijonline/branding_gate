@@ -1,0 +1,588 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+.expense-item-row {
+    background: #f8f9fc;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    border: 1px solid #e3e6f0;
+}
+.expense-item-row:hover {
+    border-color: #4e73df;
+}
+.status-badge {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-receipt mr-2"></i>Expense Tracking | تتبع المصروفات
+        </h1>
+        <button class="btn btn-primary" onclick="openNewTrackingModal()">
+            <i class="fas fa-plus mr-1"></i> New Expense Tracking | إضافة تتبع جديد
+        </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Pending Approval</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="pendingCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Awaiting Finance</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="awaitingFinanceCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-file-invoice-dollar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Approved</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="approvedCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Rejected</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="rejectedCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trackings Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">My Expense Trackings | تتبعات المصروفات الخاصة بي</h6>
+            <div>
+                <select class="form-control form-control-sm d-inline-block" style="width: auto;" id="statusFilter" onchange="loadMyTrackings()">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="manager_approved">Manager Approved</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="trackingsTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Items</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trackingsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Expense Tracking Modal -->
+<div class="modal fade" id="newTrackingModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-plus mr-2"></i>New Expense Tracking | تتبع مصروفات جديد</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="trackingForm">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Date | التاريخ <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="trackingDate" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Payment Method | طريقة الدفع <span class="text-danger">*</span></label>
+                                <select class="form-control" id="trackingPaymentMethod" required>
+                                    <option value="">Select Payment Method</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Description | الوصف</label>
+                                <input type="text" class="form-control" id="trackingDescription" placeholder="Brief description...">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6 class="font-weight-bold mb-3"><i class="fas fa-list mr-2"></i>Expense Items | عناصر المصروفات</h6>
+                    
+                    <div id="expenseItemsContainer">
+                        <!-- Dynamic items will be added here -->
+                    </div>
+                    
+                    <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="addExpenseItem()">
+                        <i class="fas fa-plus mr-1"></i> Add Item | إضافة عنصر
+                    </button>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label>Notes | ملاحظات</label>
+                                <textarea class="form-control" id="trackingNotes" rows="2" placeholder="Additional notes..."></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-1">Total Amount | المبلغ الإجمالي</h6>
+                                    <h3 class="font-weight-bold text-primary mb-0" id="totalAmount">0.00 EGP</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel | إلغاء</button>
+                <button type="button" class="btn btn-primary" onclick="submitExpenseTracking()">
+                    <i class="fas fa-paper-plane mr-1"></i> Submit for Approval | إرسال للموافقة
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Tracking Details Modal -->
+<div class="modal fade" id="viewTrackingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-eye mr-2"></i>Expense Tracking Details</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="viewTrackingContent">
+                <!-- Details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let expenseItemCounter = 0;
+
+$(document).ready(function() {
+    // Set default date to today
+    document.getElementById('trackingDate').valueAsDate = new Date();
+    
+    loadPaymentMethods();
+    loadMyTrackings();
+});
+
+function loadPaymentMethods() {
+    $.get('/api/finance/payment-methods', function(response) {
+        if (response.success) {
+            let options = '<option value="">Select Payment Method</option>';
+            response.payment_methods.forEach(pm => {
+                options += `<option value="${pm.id}">${pm.method_name}</option>`;
+            });
+            $('#trackingPaymentMethod').html(options);
+        }
+    });
+}
+
+function loadMyTrackings() {
+    const status = $('#statusFilter').val();
+    let url = '/api/expense-tracking?user_only=true';
+    if (status) {
+        url += `&status=${status}`;
+    }
+    
+    $.get(url, function(response) {
+        if (response.success) {
+            renderTrackingsTable(response.trackings);
+            updateSummaryCounts(response.trackings);
+        }
+    }).fail(function(xhr) {
+        console.error('Error loading trackings:', xhr.responseText);
+    });
+}
+
+function renderTrackingsTable(trackings) {
+    let html = '';
+    
+    if (trackings.length === 0) {
+        html = '<tr><td colspan="7" class="text-center text-muted py-4">No expense trackings found</td></tr>';
+    } else {
+        trackings.forEach(t => {
+            const statusBadge = getStatusBadge(t.status);
+            html += `
+                <tr>
+                    <td><strong>${t.tracking_code}</strong></td>
+                    <td>${t.tracking_date || '-'}</td>
+                    <td>${t.description || '-'}</td>
+                    <td><span class="badge badge-secondary">${t.item_count} items</span></td>
+                    <td><strong>${parseFloat(t.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="viewTracking(${t.id})" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    
+    $('#trackingsTableBody').html(html);
+}
+
+function updateSummaryCounts(trackings) {
+    let pending = 0, awaitingFinance = 0, approved = 0, rejected = 0;
+    
+    trackings.forEach(t => {
+        if (t.status === 'pending') pending++;
+        else if (t.status === 'manager_approved') awaitingFinance++;
+        else if (t.status === 'approved') approved++;
+        else if (t.status === 'rejected') rejected++;
+    });
+    
+    $('#pendingCount').text(pending);
+    $('#awaitingFinanceCount').text(awaitingFinance);
+    $('#approvedCount').text(approved);
+    $('#rejectedCount').text(rejected);
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span class="badge badge-warning status-badge">Pending</span>',
+        'manager_approved': '<span class="badge badge-info status-badge">Awaiting Finance</span>',
+        'approved': '<span class="badge badge-success status-badge">Approved</span>',
+        'rejected': '<span class="badge badge-danger status-badge">Rejected</span>'
+    };
+    return badges[status] || '<span class="badge badge-secondary status-badge">' + status + '</span>';
+}
+
+function openNewTrackingModal() {
+    // Reset form
+    $('#trackingForm')[0].reset();
+    document.getElementById('trackingDate').valueAsDate = new Date();
+    $('#expenseItemsContainer').empty();
+    expenseItemCounter = 0;
+    
+    // Add first item
+    addExpenseItem();
+    
+    updateTotalAmount();
+    $('#newTrackingModal').modal('show');
+}
+
+function addExpenseItem() {
+    expenseItemCounter++;
+    const html = `
+        <div class="expense-item-row" id="expenseItem_${expenseItemCounter}">
+            <div class="row align-items-center">
+                <div class="col-md-5">
+                    <div class="form-group mb-0">
+                        <label class="small">Description | الوصف <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm expense-description" 
+                               placeholder="What was this expense for?" required>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group mb-0">
+                        <label class="small">Amount | المبلغ <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control expense-amount" 
+                                   step="0.01" min="0.01" placeholder="0.00" required onchange="updateTotalAmount()">
+                            <div class="input-group-append">
+                                <span class="input-group-text">EGP</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group mb-0">
+                        <label class="small">Notes | ملاحظات</label>
+                        <input type="text" class="form-control form-control-sm expense-notes" placeholder="Optional notes">
+                    </div>
+                </div>
+                <div class="col-md-1 text-right">
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-4" onclick="removeExpenseItem(${expenseItemCounter})" title="Remove">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('#expenseItemsContainer').append(html);
+}
+
+function removeExpenseItem(id) {
+    if ($('.expense-item-row').length > 1) {
+        $(`#expenseItem_${id}`).remove();
+        updateTotalAmount();
+    } else {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Cannot Remove',
+            text: 'At least one expense item is required.'
+        });
+    }
+}
+
+function updateTotalAmount() {
+    let total = 0;
+    $('.expense-amount').each(function() {
+        total += parseFloat($(this).val()) || 0;
+    });
+    $('#totalAmount').text(total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' EGP');
+}
+
+function submitExpenseTracking() {
+    const trackingDate = $('#trackingDate').val();
+    const paymentMethodId = $('#trackingPaymentMethod').val();
+    const description = $('#trackingDescription').val();
+    const notes = $('#trackingNotes').val();
+    
+    if (!trackingDate) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Please select a date'});
+        return;
+    }
+    
+    if (!paymentMethodId) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Please select a payment method'});
+        return;
+    }
+    
+    // Collect items
+    const items = [];
+    let hasError = false;
+    
+    $('.expense-item-row').each(function() {
+        const desc = $(this).find('.expense-description').val();
+        const amount = parseFloat($(this).find('.expense-amount').val()) || 0;
+        const itemNotes = $(this).find('.expense-notes').val();
+        
+        if (!desc || amount <= 0) {
+            hasError = true;
+            return false;
+        }
+        
+        items.push({
+            description: desc,
+            amount: amount,
+            notes: itemNotes
+        });
+    });
+    
+    if (hasError || items.length === 0) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Please fill in all expense items with valid amounts'});
+        return;
+    }
+    
+    Swal.fire({
+        title: 'Submit for Approval?',
+        text: `Total: ${items.reduce((sum, i) => sum + i.amount, 0).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Submit',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: '/api/expense-tracking',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    tracking_date: trackingDate,
+                    payment_method_id: paymentMethodId,
+                    description: description,
+                    notes: notes,
+                    items: items
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        $('#newTrackingModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Submitted!',
+                            text: `Expense tracking ${response.tracking_code} submitted for approval.`
+                        });
+                        loadMyTrackings();
+                    } else {
+                        Swal.fire({icon: 'error', title: 'Error', text: response.error || 'Failed to submit'});
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+                }
+            });
+        }
+    });
+}
+
+function viewTracking(trackingId) {
+    $.get(`/api/expense-tracking/${trackingId}`, function(response) {
+        if (response.success) {
+            const t = response.tracking;
+            const items = response.items;
+            
+            let statusHtml = getStatusBadge(t.status);
+            
+            let approvalInfo = '';
+            if (t.manager_approved_by) {
+                approvalInfo += `
+                    <div class="alert alert-info">
+                        <strong><i class="fas fa-check mr-1"></i>Manager Approved:</strong> 
+                        ${t.manager_approved_by} on ${t.manager_approved_at || '-'}
+                        ${t.manager_notes ? '<br><small>Notes: ' + t.manager_notes + '</small>' : ''}
+                    </div>
+                `;
+            }
+            if (t.finance_approved_by) {
+                approvalInfo += `
+                    <div class="alert alert-success">
+                        <strong><i class="fas fa-check-double mr-1"></i>Finance Approved:</strong> 
+                        ${t.finance_approved_by} on ${t.finance_approved_at || '-'}
+                        ${t.finance_notes ? '<br><small>Notes: ' + t.finance_notes + '</small>' : ''}
+                    </div>
+                `;
+            }
+            if (t.rejected_by) {
+                approvalInfo += `
+                    <div class="alert alert-danger">
+                        <strong><i class="fas fa-times mr-1"></i>Rejected by:</strong> ${t.rejected_by}
+                        <br><small>Reason: ${t.rejection_reason || '-'}</small>
+                    </div>
+                `;
+            }
+            
+            let itemsHtml = '';
+            items.forEach((item, idx) => {
+                itemsHtml += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${item.item_description}</td>
+                        <td>${parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</td>
+                        <td>${item.category_name || '<span class="text-muted">Not assigned</span>'}</td>
+                        <td>${item.notes || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            const html = `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Tracking Code:</strong> ${t.tracking_code}</p>
+                        <p><strong>Submitted By:</strong> ${t.user_name}</p>
+                        <p><strong>Date:</strong> ${t.tracking_date || '-'}</p>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <p><strong>Status:</strong> ${statusHtml}</p>
+                        <p><strong>Payment Method:</strong> ${t.payment_method_name || '-'}</p>
+                        <h4 class="text-primary"><strong>Total: ${parseFloat(t.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></h4>
+                    </div>
+                </div>
+                
+                ${t.description ? '<p><strong>Description:</strong> ' + t.description + '</p>' : ''}
+                ${t.notes ? '<p><strong>Notes:</strong> ' + t.notes + '</p>' : ''}
+                
+                ${approvalInfo}
+                
+                <hr>
+                
+                <h6 class="font-weight-bold mb-3"><i class="fas fa-list mr-2"></i>Expense Items</h6>
+                <table class="table table-sm table-bordered">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Category</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itemsHtml}
+                    </tbody>
+                    <tfoot>
+                        <tr class="font-weight-bold">
+                            <td colspan="2">Total</td>
+                            <td>${parseFloat(t.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+            
+            $('#viewTrackingContent').html(html);
+            $('#viewTrackingModal').modal('show');
+        }
+    }).fail(function(xhr) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Failed to load tracking details'});
+    });
+}
+</script>
+{% endblock body %}

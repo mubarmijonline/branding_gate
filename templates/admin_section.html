@@ -1,0 +1,332 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+    .section-hero {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .section-hero h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .section-hero p { opacity: 0.9; margin-bottom: 0; font-size: 0.95rem; }
+
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        height: 100%;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.18); }
+    .stat-card .card-body { padding: 1.25rem; }
+    .stat-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; }
+
+    .feature-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        overflow: hidden;
+        height: 100%;
+    }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.2); }
+    .feature-card .card-header { border: none; padding: 1.25rem; }
+    .feature-card .card-header .card-icon { font-size: 2rem; opacity: .85; }
+    .feature-card .card-header h5 { margin-bottom: 0; }
+    .feature-card .card-header small { opacity: .8; }
+    .feature-card .card-body { padding: 1.25rem; }
+    .feature-card .card-body p { color: #6c757d; font-size: .9rem; }
+
+    .approval-badge {
+        background-color: #e74a3b;
+        color: white;
+        border-radius: 50%;
+        padding: 0.25rem 0.6rem;
+        font-size: 0.85rem;
+        font-weight: bold;
+        margin-left: auto;
+        min-width: 30px;
+        text-align: center;
+    }
+    .approval-badge.zero { background-color: #1cc88a; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% set has_any_admin_perm = 'admin' in user_roles or 'client_management' in user_roles or 'company_management' in user_roles or 'entity_management' in user_roles or 'supplier_management' in user_roles %}
+    {% if has_any_admin_perm %}
+
+    <!-- Hero Header -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-shield-alt mr-2"></i>Admin Department</h1>
+                <p>System administration, user management, and business entity oversight</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-light btn-sm mr-2"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-light btn-sm" id="refreshStatsBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-primary mb-1">Total Users</div>
+                            <div class="stat-value text-gray-800" id="statUsers">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-users fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-success mb-1">Total Clients</div>
+                            <div class="stat-value text-gray-800" id="statClients">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-handshake fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-info mb-1">Total Suppliers</div>
+                            <div class="stat-value text-gray-800" id="statSuppliers">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-truck fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-warning mb-1">Pending Approvals</div>
+                            <div class="stat-value text-gray-800" id="statApprovals">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-clipboard-check fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <h5 class="font-weight-bold text-gray-800 mb-3"><i class="fas fa-th-large mr-2"></i>Admin Modules</h5>
+    <div class="row mb-4">
+
+        <!-- Pending Approvals -->
+        {% if 'admin' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-clipboard-check card-icon mr-3"></i>
+                        <div>
+                            <h5>Pending Approvals</h5>
+                            <small>Review sales requests</small>
+                        </div>
+                        <span class="approval-badge ml-auto" id="approvalBadge">...</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Review and approve urgent sales requests that require admin authorization.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/approvals" class="btn btn-warning btn-lg text-dark"><i class="fas fa-clipboard-check mr-1"></i>Review Approvals</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Management -->
+        {% endif %}
+        {% if 'admin' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-users-cog card-icon mr-3"></i>
+                        <div>
+                            <h5>User, Team &amp; Role</h5>
+                            <small>Manage access controls</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Comprehensive management of users, teams, roles, and access controls in one unified interface.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/users" class="btn btn-primary btn-lg"><i class="fas fa-users-cog mr-1"></i>Manage Users</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Company -->
+        {% endif %}
+        {% if 'admin' in user_roles or 'company_management' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-building card-icon mr-3"></i>
+                        <div>
+                            <h5>Company Management</h5>
+                            <small>Parent companies &amp; hierarchy</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Add and manage parent company information, structure, and organizational hierarchy.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/company" class="btn btn-success btn-lg"><i class="fas fa-building mr-1"></i>Companies</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Management -->
+        {% endif %}
+        {% if 'admin' in user_roles or 'client_management' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-handshake card-icon mr-3"></i>
+                        <div>
+                            <h5>Client Management</h5>
+                            <small>Contacts &amp; relationships</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Manage client contacts and contact persons linked to parent companies.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/client" class="btn btn-info btn-lg"><i class="fas fa-handshake mr-1"></i>Clients</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Supplier Management -->
+        {% endif %}
+        {% if 'admin' in user_roles or 'supplier_management' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #858796 0%, #60616f 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-truck card-icon mr-3"></i>
+                        <div>
+                            <h5>Supplier Management</h5>
+                            <small>Vendor &amp; supply chain</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Manage supplier contacts and supplier information linked to parent companies.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/supplier" class="btn btn-secondary btn-lg"><i class="fas fa-truck mr-1"></i>Suppliers</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reports & Analytics -->
+        {% endif %}
+        {% if 'admin' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #5a5c69 0%, #3a3b45 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-chart-bar card-icon mr-3"></i>
+                        <div>
+                            <h5>Reports &amp; Analytics</h5>
+                            <small>Business insights</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Generate reports and view business analytics across all departments and operations.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="#" class="btn btn-dark btn-lg"><i class="fas fa-chart-bar mr-1"></i>Reports</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have admin permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    loadAdminStats();
+
+    $('#refreshStatsBtn').click(function() {
+        const btn = $(this);
+        btn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadAdminStats();
+        setTimeout(() => btn.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'), 1000);
+    });
+
+    function loadAdminStats() {
+        // Users count
+        $.get('/api/users', function(r) {
+            if (r.success) $('#statUsers').text((r.users || []).length);
+        }).fail(function() {});
+
+        // Clients count
+        $.get('/api/clients', function(r) {
+            if (r.success) $('#statClients').text((r.clients || []).length);
+        }).fail(function() {});
+
+        // Suppliers count
+        $.get('/api/suppliers', function(r) {
+            if (r.success) $('#statSuppliers').text((r.suppliers || []).length);
+        }).fail(function() {});
+
+        // Pending approvals count
+        $.get('/api/approvals/pending', function(r) {
+            if (r.success) {
+                const count = r.count || 0;
+                $('#statApprovals').text(count);
+                const badge = document.getElementById('approvalBadge');
+                if (badge) {
+                    badge.textContent = count;
+                    if (count === 0) { badge.classList.add('zero'); badge.textContent = '✓'; }
+                }
+            }
+        }).fail(function() {
+            const badge = document.getElementById('approvalBadge');
+            if (badge) { badge.textContent = '!'; badge.style.backgroundColor = '#858796'; }
+        });
+    }
+});
+</script>
+{% endblock %}

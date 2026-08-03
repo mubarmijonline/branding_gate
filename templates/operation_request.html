@@ -1,0 +1,2210 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Prevent chart scripts from loading -->
+<style>
+    .chart-container { display: none; }
+    /* Hide chart areas to prevent errors */
+    #myAreaChart, #myPieChart { display: none !important; }
+    
+    /* Item rows styling */
+    .item-row {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        margin-bottom: 10px;
+        padding: 15px;
+    }
+    
+    .item-row.border-success {
+        border-color: #28a745;
+        border-width: 2px;
+    }
+    
+    .item-row.border-warning {
+        border-color: #ffc107;
+        border-width: 2px;
+    }
+    
+    .item-row.border-danger {
+        border-color: #dc3545;
+        border-width: 3px;
+        background-color: #fff5f5;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .item-header {
+        font-weight: bold;
+        color: #495057;
+        margin-bottom: 10px;
+    }
+    
+    .cost-input {
+        background-color: #fff3cd;
+        border: 2px solid #ffc107;
+    }
+    
+    .cost-input:focus {
+        border-color: #ff6b35;
+        box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    }
+    
+    /* Item images and attachments styling */
+    .item-media-section {
+        background: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .item-image-preview {
+        max-width: 200px;
+        max-height: 200px;
+        border-radius: 0.375rem;
+        border: 2px solid #dee2e6;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .item-image-preview:hover {
+        transform: scale(1.05);
+        border-color: #17a2b8;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .attachment-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 0.25rem;
+        margin: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .attachment-badge:hover {
+        background: #cce5ff;
+        border-color: #80bdff;
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .attachment-badge i {
+        font-size: 18px;
+    }
+    
+    .no-media-message {
+        color: #6c757d;
+        font-style: italic;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    /* Price History Styling */
+    .price-history-section {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 15px;
+        margin-top: 15px;
+    }
+    
+    .price-history-toggle {
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px;
+        background: #6c757d;
+        color: white;
+        border-radius: 0.375rem;
+        transition: all 0.3s ease;
+    }
+    
+    .price-history-toggle:hover {
+        background: #5a6268;
+    }
+    
+    .price-history-toggle i {
+        transition: transform 0.3s ease;
+    }
+    
+    .price-history-toggle.collapsed i.fa-chevron-down {
+        transform: rotate(-90deg);
+    }
+    
+    .price-history-content {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 10px;
+    }
+    
+    .price-history-item {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 12px;
+        margin-bottom: 10px;
+        position: relative;
+        border-left: 4px solid #17a2b8;
+    }
+    
+    .price-history-item.cost-update {
+        border-left-color: #28a745;
+    }
+    
+    .price-history-item.sell-update {
+        border-left-color: #007bff;
+    }
+    
+    .price-history-item.negotiated {
+        border-left-color: #dc3545;
+    }
+    
+    .price-history-item.recosting {
+        border-left-color: #ff6b35;
+    }
+    
+    .price-history-version {
+        position: absolute;
+        top: -8px;
+        right: 10px;
+        background: #6c757d;
+        color: white;
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 10px;
+    }
+    
+    .price-history-date {
+        font-size: 12px;
+        color: #6c757d;
+    }
+    
+    .price-history-values {
+        display: flex;
+        gap: 20px;
+        margin-top: 8px;
+    }
+    
+    .price-history-values .value-box {
+        flex: 1;
+        text-align: center;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 0.25rem;
+    }
+    
+    .price-history-values .value-box label {
+        font-size: 11px;
+        color: #6c757d;
+        margin-bottom: 2px;
+        display: block;
+    }
+    
+    .price-history-values .value-box .value {
+        font-weight: bold;
+        font-size: 14px;
+    }
+    
+    .price-history-reason {
+        margin-top: 8px;
+        padding: 8px;
+        background: #fff3cd;
+        border-radius: 0.25rem;
+        font-size: 12px;
+    }
+    
+    /* Status badges (readable chip style) */
+    .op-status-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 12px;
+        font-size: 12px; font-weight: 600;
+        background: #f1f5f9; color: #1e293b;
+        border: 1px solid #cbd5e1; border-left-width: 4px;
+    }
+    .op-status-chip.status-pending   { border-left-color: #f59e0b; background: #fff8e6; color: #78350f; }
+    .op-status-chip.status-completed { border-left-color: #16a34a; background: #ecfdf5; color: #14532d; }
+    .op-status-chip.status-no-items  { border-left-color: #6b7280; background: #f3f4f6; color: #374151; }
+    .op-status-chip.status-recosting { border-left-color: #dc2626; background: #fef2f2; color: #7f1d1d; }
+    .op-status-counts { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; font-size:11px; }
+    .op-status-counts .op-c { padding:2px 7px; border-radius:10px; background:#f8fafc; border:1px solid #e2e8f0; color:#334155; }
+    .op-status-counts .op-c.ok   { background:#ecfdf5; border-color:#bbf7d0; color:#14532d; }
+    .op-status-counts .op-c.warn { background:#fffbeb; border-color:#fde68a; color:#78350f; }
+    .op-status-counts .op-c.dng  { background:#fef2f2; border-color:#fecaca; color:#7f1d1d; }
+    .op-status-counts .op-c i { margin-right:3px; opacity:.8; }
+
+    /* === Collapsible cost-item cards (cost modal) === */
+    .op-cost-item { margin-bottom: 14px; border: 1px solid #e0e6ed; border-radius: 10px;
+                    background:#fff; overflow:hidden; }
+    .op-cost-item.negotiation-required { border-color:#dc3545; }
+    .op-cost-item.costed { border-left:4px solid #28a745; }
+    .op-cost-item.pending { border-left:4px solid #ffc107; }
+    .op-ci-head { display:flex; justify-content:space-between; align-items:center;
+                  gap:12px; padding:10px 14px; cursor:pointer;
+                  background:linear-gradient(135deg,#f8fafc 0%,#eef2f7 100%);
+                  border-bottom:1px solid #e0e6ed; }
+    .op-ci-head:hover { background:linear-gradient(135deg,#eef2f7 0%,#e0e7f1 100%); }
+    .op-ci-head[aria-expanded="true"] .op-ci-chevron { transform: rotate(90deg); }
+    .op-ci-chevron { transition: transform .2s ease; color:#6b7280; }
+    .op-ci-head-main { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
+    .op-ci-head-main .item-icon { width:34px; height:34px; border-radius:8px;
+                                  background:#1e3a5f; color:#fff; display:flex;
+                                  align-items:center; justify-content:center; flex-shrink:0; }
+    .op-ci-title { min-width:0; }
+    .op-ci-name { font-weight:600; color:#1e3a5f; font-size:14px;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .op-ci-id { font-size:11px; color:#6b7280; }
+    .op-ci-summary { display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+                     justify-content:flex-end; }
+    .op-ci-summary-chip { display:inline-flex; align-items:center; gap:4px;
+                          padding:3px 8px; border-radius:10px; font-size:11px;
+                          font-weight:600; background:#f1f5f9; color:#334155;
+                          border:1px solid #e2e8f0; }
+    .op-ci-summary-chip.ok   { background:#ecfdf5; border-color:#bbf7d0; color:#14532d; }
+    .op-ci-summary-chip.warn { background:#fffbeb; border-color:#fde68a; color:#78350f; }
+    .op-ci-summary-chip i { font-size:10px; opacity:.8; }
+    .op-ci-quickinput { padding:8px 14px; background:#fafbfc;
+                        border-bottom:1px solid #eef0f5; }
+    .op-ci-quickinput label { font-size:11px; color:#4b5563; font-weight:600;
+                              margin-bottom:4px; display:block; }
+    .op-ci-quickinput .input-group-text { background:#1e3a5f; color:#fff;
+                                          border-color:#1e3a5f; font-weight:600; }
+    .op-ci-quickinput .input-group-append .input-group-text { background:#374151;
+                                                              border-color:#374151; }
+
+    /* === Operations Details Side Drawer === */
+    #opDetailsBackdrop { position:fixed; inset:0; background:rgba(0,0,0,.45);
+                         z-index:1055; opacity:0; pointer-events:none;
+                         transition:opacity .25s ease; }
+    #opDetailsBackdrop.show { opacity:1; pointer-events:auto; }
+    #opDetailsDrawer { position:fixed; top:0; right:0; bottom:0;
+                       width:88vw; max-width:1100px; background:#fff;
+                       z-index:1060; box-shadow:-4px 0 18px rgba(0,0,0,.18);
+                       transform:translateX(100%); transition:transform .3s ease;
+                       display:flex; flex-direction:column; }
+    #opDetailsDrawer.show { transform:translateX(0); }
+    #opDetailsDrawer .opd-hd { flex:0 0 auto; display:flex; align-items:center;
+                               gap:10px; padding:12px 18px;
+                               background:linear-gradient(90deg,#1e3a5f,#2d5a87);
+                               color:#fff; border-bottom:1px solid #e3e6f0; }
+    #opDetailsDrawer .opd-hd h5 { margin:0; flex:1; font-size:15px; font-weight:600; }
+    #opDetailsDrawer .opd-bd { flex:1 1 auto; min-height:0; overflow-y:auto;
+                               padding:18px 22px; background:#f8fafc; }
+    body.opd-open { overflow:hidden; }
+    .opd-section { background:#fff; border:1px solid #e0e6ed; border-radius:8px;
+                   padding:14px 16px; margin-bottom:14px; }
+    .opd-section h6 { margin:0 0 10px 0; font-weight:600; color:#1e3a5f;
+                      font-size:13px; padding-bottom:8px;
+                      border-bottom:1px solid #eef2f7; }
+    .opd-info-grid { display:grid;
+                     grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+                     gap:10px 16px; }
+    .opd-info-grid > div .k { font-size:10px; color:#6b7280; text-transform:uppercase;
+                              letter-spacing:.4px; font-weight:700; }
+    .opd-info-grid > div .v { font-size:13px; color:#1e3a5f; font-weight:500;
+                              margin-top:2px; word-break:break-word; }
+    .opd-items-table { width:100%; font-size:12.5px; }
+    .opd-items-table th { background:#f8fafc; color:#1e3a5f; font-weight:600;
+                          font-size:11px; text-transform:uppercase;
+                          padding:8px 10px; border-bottom:2px solid #e0e6ed; }
+    .opd-items-table td { padding:9px 10px; border-bottom:1px solid #eef2f7;
+                          vertical-align:top; }
+    .opd-log { border-left:3px solid #4e73df; padding:8px 12px; margin-bottom:8px;
+               background:#f8fafc; border-radius:0 6px 6px 0; }
+    .opd-log.cost { border-left-color:#28a745; background:#f0fdf4; }
+    .opd-log.recost { border-left-color:#dc3545; background:#fff5f5; }
+    .opd-log .h { font-weight:600; color:#1e3a5f; font-size:12.5px; }
+    .opd-log .m { font-size:12px; color:#334155; margin-top:3px; }
+    .opd-log .f { font-size:10.5px; color:#6b7280; margin-top:5px; }
+    @media (max-width:768px) {
+        #opDetailsDrawer { width:100vw; max-width:100vw; }
+        .op-ci-head { flex-direction:column; align-items:stretch; }
+        .op-ci-summary { justify-content:flex-start; }
+    }
+
+    /* Status badges (legacy classes kept for any other usages) */
+    .status-pending { background-color: #ffc107; }
+    .status-completed { background-color: #28a745; }
+    .status-no-items { background-color: #6c757d; }
+    
+    /* Request card styling */
+    .request-card {
+        border: 2px solid #17a2b8;
+        border-radius: 0.5rem;
+        margin-bottom: 20px;
+    }
+    
+    .request-card-header {
+        background-color: #17a2b8;
+        color: white;
+        padding: 15px;
+        border-radius: 0.5rem 0.5rem 0 0;
+    }
+    
+    /* Timeline styling for change log */
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-left: 0;
+    }
+    
+    .timeline-item:last-child {
+        border-bottom: none !important;
+    }
+
+    /* ========================================
+       ENHANCED ITEM CARD STYLING - COSTING MODAL
+       ======================================== */
+    .enhanced-item-card {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(30, 58, 95, 0.08);
+        margin-bottom: 20px;
+        overflow: hidden;
+        border: 1px solid #e0e6ed;
+        transition: all 0.3s ease;
+    }
+    
+    .enhanced-item-card:hover {
+        box-shadow: 0 4px 20px rgba(30, 58, 95, 0.12);
+    }
+    
+    .enhanced-item-card.negotiation-required {
+        border: 2px solid #dc3545;
+        background: linear-gradient(135deg, #ffffff 0%, #fff5f5 100%);
+    }
+    
+    .enhanced-item-card.costed {
+        border-left: 4px solid #28a745;
+    }
+    
+    .enhanced-item-card.pending {
+        border-left: 4px solid #ffc107;
+    }
+    
+    .enhanced-item-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        color: white;
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .enhanced-item-header.costed-header {
+        background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    }
+    
+    .enhanced-item-header.danger-header {
+        background: linear-gradient(135deg, #dc3545 0%, #ef4444 100%);
+    }
+    
+    .enhanced-item-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    
+    .enhanced-item-title h5 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.15rem;
+    }
+    
+    .enhanced-item-title .item-icon {
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+    
+    .enhanced-item-badges {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .enhanced-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .enhanced-badge.qty-badge {
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    .enhanced-badge.type-sell {
+        background: #28a745;
+        color: white;
+    }
+    
+    .enhanced-badge.type-rent {
+        background: #17a2b8;
+        color: white;
+    }
+    
+    .enhanced-badge.status-costed {
+        background: #28a745;
+        color: white;
+    }
+    
+    .enhanced-badge.status-pending {
+        background: #ffc107;
+        color: #212529;
+    }
+    
+    .enhanced-badge.status-negotiation {
+        background: #dc3545;
+        color: white;
+        animation: pulse 2s infinite;
+    }
+    
+    .enhanced-item-body {
+        padding: 20px;
+    }
+    
+    /* Media Section Enhanced */
+    .enhanced-media-section {
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border: 1px solid #e0e6ed;
+    }
+    
+    .enhanced-media-section .section-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1e3a5f;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .enhanced-media-section .section-title i {
+        color: #2d5a87;
+    }
+    
+    .enhanced-image-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .enhanced-image-thumbnail {
+        position: relative;
+        width: 150px;
+        height: 150px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 3px solid #e0e6ed;
+        transition: all 0.3s ease;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .enhanced-image-thumbnail:hover {
+        border-color: #2d5a87;
+        transform: scale(1.03);
+        box-shadow: 0 8px 25px rgba(30, 58, 95, 0.2);
+    }
+    
+    .enhanced-image-thumbnail img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        cursor: pointer;
+    }
+    
+    .enhanced-image-thumbnail .image-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(30, 58, 95, 0.8));
+        color: white;
+        padding: 8px;
+        font-size: 0.75rem;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .enhanced-image-thumbnail:hover .image-overlay {
+        opacity: 1;
+    }
+    
+    .enhanced-attachments-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .enhanced-attachment-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 15px;
+        background: white;
+        border: 1px solid #e0e6ed;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #495057;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .enhanced-attachment-badge:hover {
+        background: #1e3a5f;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(30, 58, 95, 0.2);
+        text-decoration: none;
+    }
+    
+    .enhanced-attachment-badge:hover i {
+        color: white !important;
+    }
+    
+    .enhanced-attachment-badge i.fa-file-pdf { color: #dc3545; }
+    .enhanced-attachment-badge i.fa-file-image { color: #28a745; }
+    .enhanced-attachment-badge i.fa-file-word { color: #0d6efd; }
+    .enhanced-attachment-badge i.fa-file-excel { color: #198754; }
+    
+    /* Info Grid */
+    .enhanced-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .enhanced-info-box {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 15px;
+        border: 1px solid #e0e6ed;
+    }
+    
+    .enhanced-info-box .info-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .enhanced-info-box .info-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1e3a5f;
+    }
+    
+    .enhanced-info-box .info-value.cost-value {
+        color: #1e3a5f;
+    }
+    
+    /* Formula Section Enhanced */
+    .enhanced-formula-section {
+        background: linear-gradient(135deg, #e8f0f8 0%, #d4e5f7 100%);
+        border: 1px solid #2d5a87;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+    }
+    
+    .enhanced-formula-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: #1e3a5f;
+    }
+    
+    .enhanced-formula-display {
+        background: white;
+        border-radius: 6px;
+        padding: 6px 10px;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #1e3a5f;
+        margin-bottom: 8px;
+        box-shadow: 0 1px 4px rgba(30, 58, 95, 0.1);
+    }
+    
+    .enhanced-formula-values {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 6px;
+    }
+    
+    .enhanced-formula-value-box {
+        background: white;
+        border-radius: 6px;
+        padding: 6px 8px;
+        text-align: center;
+        border: 1px solid rgba(30, 58, 95, 0.15);
+    }
+    
+    .enhanced-formula-value-box .value-label {
+        font-size: 0.6rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+    }
+    
+    .enhanced-formula-value-box .value-number {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e3a5f;
+    }
+    
+    .enhanced-formula-result {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        color: white;
+        border-radius: 6px;
+        padding: 8px 10px;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-top: 8px;
+    }
+    
+    /* Input Section Enhanced */
+    .enhanced-input-section {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e0e6ed;
+    }
+    
+    .enhanced-input-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    
+    @media (max-width: 768px) {
+        .enhanced-input-group {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .enhanced-input-box label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .enhanced-input-box .form-control {
+        border-radius: 8px;
+        border: 2px solid #2d5a87;
+        padding: 12px 15px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        background-color: #f8fafc;
+    }
+    
+    .enhanced-input-box .form-control:focus {
+        border-color: #1e3a5f;
+        box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.2);
+        background-color: white;
+    }
+    
+    .enhanced-result-display {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        color: white;
+        border-radius: 8px;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .enhanced-result-display .result-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+    }
+    
+    .enhanced-result-display .result-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    /* No Image Placeholder */
+    .no-image-placeholder {
+        width: 150px;
+        height: 150px;
+        background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af;
+        border: 2px dashed #d1d5db;
+    }
+    
+    .no-image-placeholder i {
+        font-size: 2.5rem;
+        margin-bottom: 8px;
+    }
+    
+    .no-image-placeholder span {
+        font-size: 0.8rem;
+    }
+</style>
+<script>
+// Override chart demo scripts to prevent errors
+window.chartAreaDemo = function() {
+    console.log('Chart area demo disabled for operations page');
+    return false;
+};
+window.chartPieDemo = function() {
+    console.log('Chart pie demo disabled for operations page');
+    return false;
+};
+</script>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'operation' in user_roles or 'operations' in user_roles %}
+    
+    <!-- Operations Request Management Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Operations Request Management</h1>
+    </div>
+
+    <!-- Filter Cards -->
+    <style>
+        .stat-filter-card { cursor:pointer; transition: transform .15s, box-shadow .15s; }
+        .stat-filter-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1.5rem rgba(58,59,69,.2)!important; }
+        .stat-filter-card.active-filter { transform: translateY(-3px); box-shadow: 0 .5rem 1.5rem rgba(58,59,69,.25)!important; border-width: 2px; }
+        .stat-filter-card.active-filter::after { content:'\f00c'; font-family:'Font Awesome 5 Free'; font-weight:900; position:absolute; top:8px; right:12px; color:#1cc88a; font-size:.9rem; }
+        .stat-filter-card { position:relative; }
+    </style>
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2 stat-filter-card" data-filter="Pending" title="Click to filter Pending requests">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Pending</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="pendingCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2 stat-filter-card" data-filter="Completed" title="Click to filter Completed requests">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Completed</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="completedCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2 stat-filter-card" data-filter="Recosting" title="Click to filter Re-costing requests">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                <i class="fas fa-handshake"></i> Needs Re-costing</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="noItemsCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-redo fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2 stat-filter-card" data-filter="" title="Click to show all requests">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Requests <small class="text-muted">(clear)</small></div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalRequestsCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operations Request Information Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Operations Requests</h2>
+            <div class="d-flex">
+                <select class="form-control mr-2" id="statusFilter" style="width: 200px;">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Recosting">Needs Re-costing</option>
+                    <option value="No Items">No Items</option>
+                </select>
+                <button class="btn btn-info" id="refreshBtn">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="operations-table" class="display table table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Request ID</th>
+                            <th>Client Name</th>
+                            <th>Status</th>
+                            <th>Items Count</th>
+                            <th>Total Cost</th>
+                            <th>Sales Added</th>
+                            <th>Costing Progress</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Items Modal -->
+    <div class="modal fade" id="costItemsModal" tabindex="-1" role="dialog" aria-labelledby="costItemsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="costItemsModalLabel">Add/Update Item Costs</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="requestInfo" class="request-card">
+                        <div class="request-card-header">
+                            <h6 class="m-0">Request Information</h6>
+                        </div>
+                        <div class="p-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Request ID:</strong> <span id="requestIdDisplay"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Client:</strong> <span id="clientNameDisplay"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <form id="costItemsForm">
+                        <input type="hidden" id="costRequestId" name="request_id">
+                        
+                        <div class="card">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="m-0">Add Cost Information to Items</h6>
+                                <small class="text-muted">You can cost individual items - leave others empty to update them later</small>
+                            </div>
+                            <div class="card-body">
+                                <div id="costItemsContainer">
+                                    <!-- Items will be loaded here dynamically -->
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="totalCostCalculated"><strong>Total Cost (Auto-calculated)</strong></label>
+                                            <input type="text" class="form-control" id="totalCostCalculated" readonly>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="saveCostsBtn">Update Item Costs</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Log Modal -->
+    <div class="modal fade" id="changeLogModal" tabindex="-1" role="dialog" aria-labelledby="changeLogModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="changeLogModalLabel">
+                        <i class="fas fa-history mr-2"></i>Request Change Log - Request #<span id="logRequestId"></span>
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="changeLogContent">
+                        <!-- Change log will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have operations permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<!-- ===== Operations Details Side Drawer ===== -->
+<div id="opDetailsBackdrop"></div>
+<div id="opDetailsDrawer" role="dialog" aria-modal="true">
+    <div class="opd-hd">
+        <h5 id="opdTitle"><i class="fas fa-file-invoice mr-2"></i>Request</h5>
+        <button type="button" id="opdClose" class="btn btn-light btn-sm" title="Close">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="opd-bd" id="opdBody"></div>
+</div>
+
+<!-- Include DataTables JavaScript at the bottom -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+// Format number with commas and 2 decimal places
+function formatNum(n) {
+    return parseFloat(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+$(document).ready(function() {
+    console.log('Operations Request page loaded successfully');
+    
+    // Check if user is admin (rendered by Jinja2)
+    var isAdminUser = JSON.parse('{{ "true" if "admin" in session.get("roles", []) else "false" }}');
+    
+    // Initialize DataTable
+    var table = $('#operations-table').DataTable({
+        "ajax": {
+            "url": "/api/operations/requests",
+            "type": "GET",
+            "dataSrc": function(json) {
+                console.log('Received data:', json);
+                if (json.success) {
+                    updateStatusCounts(json.requests);
+                    return json.requests;
+                } else {
+                    console.error('Error loading requests:', json.error);
+                    return [];
+                }
+            },
+            "error": function(xhr, error, code) {
+                console.error('AJAX Error:', error, code);
+                console.error('Response:', xhr.responseText);
+            }
+        },
+        "columns": [
+            { "data": "request_id" },
+            { "data": "client_name" },
+            { 
+                "data": "status",
+                "render": function(data, type, row) {
+                    if (type !== 'display') return data;
+                    var s = (data || '').toLowerCase();
+                    var statusClass = 'status-' + s.replace(/\s+/g, '-');
+                    var iconMap = { 'pending':'fa-clock', 'completed':'fa-check-circle',
+                                    'no items':'fa-inbox', 'no-items':'fa-inbox' };
+                    var ic = iconMap[s] || 'fa-info-circle';
+                    if (row.renegotiation_items_count > 0) {
+                        statusClass = 'status-recosting'; ic = 'fa-handshake';
+                        data = 'Re-costing';
+                    }
+                    var chip = '<span class="op-status-chip ' + statusClass + '">' +
+                               '<i class="fas ' + ic + '"></i>' + (data || '-') + '</span>';
+                    var counts = '<div class="op-status-counts">';
+                    var total = row.items_count || 0;
+                    counts += '<span class="op-c"><i class="fas fa-cubes"></i>' + total + ' Items</span>';
+                    if (row.costed_items_count > 0) {
+                        counts += '<span class="op-c ok"><i class="fas fa-check"></i>' +
+                                  row.costed_items_count + '/' + total + ' Costed</span>';
+                    }
+                    if (row.pending_items_count > 0) {
+                        counts += '<span class="op-c warn"><i class="fas fa-clock"></i>' +
+                                  row.pending_items_count + ' Pending</span>';
+                    }
+                    if (row.renegotiation_items_count > 0) {
+                        counts += '<span class="op-c dng"><i class="fas fa-handshake"></i>' +
+                                  row.renegotiation_items_count + ' Re-cost</span>';
+                    }
+                    counts += '</div>';
+                    return chip + counts;
+                }
+            },
+            { "data": "items_count" },
+            { 
+                "data": "total_cost",
+                "render": function(data, type, row) {
+                    return data ? 'EGP ' + formatNum(data) : 'Not costed';
+                }
+            },
+            { "data": "sales_added_date" },
+            { 
+                "data": "costed_items_count",
+                "render": function(data, type, row) {
+                    var html = '<div style="line-height: 1.4;">';
+                    
+                    // Costed items (green badge)
+                    if (data > 0) {
+                        html += '<span class="badge badge-success mr-1 mb-1">' + data + '/' + row.items_count + ' Costed</span><br>';
+                    }
+                    
+                    // Re-costing needed (red/orange badge)
+                    if (row.renegotiation_items_count > 0) {
+                        html += '<span class="badge badge-danger mr-1 mb-1"><i class="fas fa-handshake"></i> ' + row.renegotiation_items_count + ' Re-costing</span><br>';
+                    }
+                    
+                    // Pending first-time costing (yellow badge)
+                    if (row.pending_items_count > 0) {
+                        html += '<span class="badge badge-warning mr-1 mb-1">' + row.pending_items_count + ' Pending</span>';
+                    }
+                    
+                    html += '</div>';
+                    return html;
+                }
+            },
+            {
+                "data": null,
+                "orderable": false,
+                "render": function(data, type, row) {
+                    var actions = '';
+                    
+                    // Determine if items need costing
+                    var needsCosting = (row.pending_items_count > 0) || (row.renegotiation_items_count > 0);
+                    var allCosted = row.costed_items_count === row.items_count;
+                    
+                    // Show appropriate cost button
+                    // Re-costing takes priority - show red button if any items need re-costing
+                    if (row.renegotiation_items_count > 0) {
+                        actions += '<button class="btn btn-sm btn-danger cost-btn" data-id="' + row.request_id + '"><i class="fas fa-handshake"></i> Re-cost Items</button> ';
+                    } else if (row.pending_items_count > 0) {
+                        // Items need first-time costing
+                        actions += '<button class="btn btn-sm btn-warning cost-btn" data-id="' + row.request_id + '">Add Costs</button> ';
+                    } else if (allCosted && row.items_count > 0) {
+                        // All items costed (and no re-costing needed)
+                        actions += '<button class="btn btn-sm btn-success cost-btn" data-id="' + row.request_id + '">Update Costs</button> ';
+                    } else if (row.items_count === 0) {
+                        actions += '<span class="badge badge-secondary">No Items</span> ';
+                    }
+                    
+                    actions += '<button class="btn btn-sm btn-info view-btn" data-id="' + row.request_id + '">View Details</button> ';
+                    actions += '<button class="btn btn-sm btn-secondary log-btn" data-id="' + row.request_id + '"><i class="fas fa-history"></i> Log</button>';
+                    
+                    return actions;
+                }
+            }
+        ],
+        "order": [[ 0, "desc" ]],
+        "pageLength": 25,
+        "responsive": true
+    });
+
+    // Update status counts
+    function updateStatusCounts(requests) {
+        var pending = 0;
+        var completed = 0;
+        var needsRecosting = 0;
+        var total = requests.length;
+        
+        requests.forEach(function(request) {
+            // Check if completed (all items costed)
+            if (request.costed_items_count === request.items_count && request.items_count > 0) {
+                completed++;
+            }
+            // Check if has re-costing items
+            else if (request.renegotiation_items_count > 0) {
+                needsRecosting++;
+            }
+            // Otherwise it's pending
+            else if (request.pending_items_count > 0 || request.costed_items_count < request.items_count) {
+                pending++;
+            }
+        });
+        
+        $('#pendingCount').text(pending);
+        $('#completedCount').text(completed);
+        $('#noItemsCount').text(needsRecosting); // Reuse this stat box for re-costing count
+        $('#totalRequestsCount').text(total);
+    }
+
+    // Custom filter for Recosting (uses renegotiation_items_count from row data)
+    var recostingFilterActive = false;
+    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+        if (settings.nTable.id !== 'operations-table') return true;
+        if (!recostingFilterActive) return true;
+        var row = settings.aoData[dataIndex]._aData;
+        return (row && row.renegotiation_items_count > 0);
+    });
+
+    // Status filter
+    $('#statusFilter').change(function() {
+        var status = $(this).val();
+        // Reset both filters first
+        recostingFilterActive = false;
+        table.column(2).search('');
+        if (status === 'Recosting') {
+            recostingFilterActive = true;
+        } else if (status) {
+            table.column(2).search(status);
+        }
+        table.draw();
+        // Visual active card sync
+        $('.stat-filter-card').removeClass('active-filter');
+        var key = status || '';
+        $('.stat-filter-card[data-filter="' + key + '"]').addClass('active-filter');
+    });
+
+    // Stat-card click → set filter
+    $(document).on('click', '.stat-filter-card', function() {
+        var f = $(this).attr('data-filter') || '';
+        $('#statusFilter').val(f).trigger('change');
+    });
+
+    // Refresh button
+    $('#refreshBtn').click(function() {
+        table.ajax.reload();
+    });
+
+    // Add Costs button
+    $(document).on('click', '.cost-btn', function() {
+        var requestId = $(this).data('id');
+        console.log('Add costs to request:', requestId);
+        
+        // Load request details
+        $.get('/api/operations/requests/' + requestId, function(response) {
+            if (response.success) {
+                var request = response.request;
+                
+                // Populate request info
+                $('#requestIdDisplay').text(request.request_id);
+                $('#clientNameDisplay').text(request.client_name);
+                $('#costRequestId').val(request.request_id);
+                
+                // Load items for costing
+                $('#costItemsContainer').empty();
+                console.log('Loading items for costing:', request.items);
+                if (request.items && request.items.length > 0) {
+                    request.items.forEach(function(item, index) {
+                        console.log('Processing item:', item);
+                        
+                        // Calculate dimension multiplier
+                        var dimensionMultiplier = 1;
+                        var dimensionDisplay = '';
+                        if (item.dimension_calc && item.dimension_calc.length > 0) {
+                            var dims = item.dimension_calc.split('*');
+                            var dimValues = [];
+                            var dimLabels = [];
+                            dims.forEach(function(dim) {
+                                if (dim === 'W' && item.width) {
+                                    dimValues.push(parseFloat(item.width));
+                                    dimLabels.push('W:' + item.width);
+                                } else if (dim === 'H' && item.height) {
+                                    dimValues.push(parseFloat(item.height));
+                                    dimLabels.push('H:' + item.height);
+                                } else if (dim === 'D' && item.depth) {
+                                    dimValues.push(parseFloat(item.depth));
+                                    dimLabels.push('D:' + item.depth);
+                                }
+                            });
+                            if (dimValues.length > 0) {
+                                dimensionMultiplier = dimValues.reduce(function(a, b) { return a * b; }, 1);
+                                dimensionDisplay = dimLabels.join(' × ');
+                            }
+                        }
+                        
+                        // Determine if this is Sell or Rent
+                        var isSell = item.sell_type === 'sell';
+                        var rentalDays = isSell ? 1 : (item.rental_days || 1);
+                        var includeDaysInCalc = item.include_days_in_calc !== false;
+                        var includeQtyInCalc = item.include_qty_in_calc !== false;
+                        
+                        // Determine card status
+                        var isNegotiation = item.approval_status === 'pending_negotiation' && item.negotiation_status === 'pending_negotiation';
+                        var isRecosted = item.approval_status === 'pending_negotiation' && item.negotiation_status === 'negotiated';
+                        var isCosted = item.unit_cost && item.unit_cost > 0;
+                        var cardClass = isNegotiation ? 'negotiation-required' : (isCosted ? 'costed' : 'pending');
+                        var headerClass = isNegotiation ? 'danger-header' : (isCosted ? 'costed-header' : '');
+                        
+                        // Build enhanced image display
+                        var imageHtml = '';
+                        if (item.image_url) {
+                            imageHtml = `
+                                <div class="enhanced-image-container">
+                                    <div class="enhanced-image-thumbnail">
+                                        <img src="${item.image_url}" alt="${item.item_name}" 
+                                             onclick="window.open('${item.image_url}', '_blank')" 
+                                             title="Click to view full size">
+                                        <div class="image-overlay">
+                                            <i class="fas fa-search-plus"></i> View Full
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            imageHtml = `
+                                <div class="enhanced-image-container">
+                                    <div class="no-image-placeholder">
+                                        <i class="fas fa-image"></i>
+                                        <span>No Image</span>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        // Build enhanced attachments
+                        var attachmentsHtml = '';
+                        if (item.attachments && item.attachments.length > 0) {
+                            var attachmentItems = '';
+                            item.attachments.forEach(function(attachment) {
+                                var icon = 'fa-file';
+                                if (attachment.file_type === 'application/pdf') icon = 'fa-file-pdf';
+                                else if (attachment.file_type && attachment.file_type.startsWith('image/')) icon = 'fa-file-image';
+                                else if (attachment.file_type && attachment.file_type.includes('word')) icon = 'fa-file-word';
+                                else if (attachment.file_type && attachment.file_type.includes('excel')) icon = 'fa-file-excel';
+                                
+                                attachmentItems += '<a href="' + attachment.file_url + '" target="_blank" class="enhanced-attachment-badge"><i class="fas ' + icon + '"></i>' + attachment.original_name + '</a>';
+                            });
+                            
+                            attachmentsHtml = `
+                                <div class="mt-3">
+                                    <div class="section-title"><i class="fas fa-paperclip"></i> Attachments (${item.attachments.length})</div>
+                                    <div class="enhanced-attachments-container">${attachmentItems}</div>
+                                </div>
+                            `;
+                        }
+                        
+                        // Build media section
+                        var mediaSectionHtml = `
+                            <div class="enhanced-media-section">
+                                <div class="section-title"><i class="fas fa-images"></i> Item Media</div>
+                                ${imageHtml}
+                                ${attachmentsHtml}
+                            </div>
+                        `;
+                        
+                        // Build negotiation alert if needed (only show client's request to admin users)
+                        var negotiationAlert = '';
+                        if (isNegotiation) {
+                            if (isAdminUser) {
+                                // Admin sees full negotiation details including client's request
+                                negotiationAlert = `
+                                    <div class="alert alert-danger mb-4" style="border-left: 5px solid #dc3545; border-radius: 8px;">
+                                        <div class="d-flex align-items-start">
+                                            <div class="mr-3">
+                                                <div style="width: 50px; height: 50px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                                    <i class="fas fa-handshake text-danger fa-lg"></i>
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h6 class="alert-heading mb-2" style="color: #dc3545;"><strong>⚠️ Re-Costing Required - Negotiation #${item.negotiation_count || 1}</strong></h6>
+                                                <div class="bg-white p-3 rounded border mb-3">
+                                                    <label class="text-muted mb-1 small"><i class="fas fa-comment-dots mr-1"></i>Client's Request:</label>
+                                                    <p class="mb-0 font-weight-bold" style="font-size: 1.1em; color: #374151;">"${item.negotiation_reason || 'Client requested better pricing'}"</p>
+                                                </div>
+                                                <span class="badge badge-danger p-2"><i class="fas fa-clock mr-1"></i>Action Required: Update Cost</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            } else {
+                                // Non-admin users see simplified alert without client's comment
+                                negotiationAlert = `
+                                    <div class="alert alert-danger mb-4" style="border-left: 5px solid #dc3545; border-radius: 8px;">
+                                        <div class="d-flex align-items-start">
+                                            <div class="mr-3">
+                                                <div style="width: 50px; height: 50px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                                    <i class="fas fa-handshake text-danger fa-lg"></i>
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h6 class="alert-heading mb-2" style="color: #dc3545;"><strong>⚠️ Re-Costing Required - Negotiation #${item.negotiation_count || 1}</strong></h6>
+                                                <span class="badge badge-danger p-2"><i class="fas fa-clock mr-1"></i>Action Required: Update Cost</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        } else if (isRecosted) {
+                            negotiationAlert = `
+                                <div class="alert alert-success mb-4" style="border-left: 5px solid #28a745; border-radius: 8px;">
+                                    <div class="d-flex align-items-start">
+                                        <div class="mr-3">
+                                            <div style="width: 50px; height: 50px; background: #d1fae5; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                                <i class="fas fa-check-circle text-success fa-lg"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="alert-heading mb-2" style="color: #059669;"><strong>✅ Re-Costing Completed</strong></h6>
+                                            <p class="mb-0 text-muted">This item has been re-costed and is awaiting re-pricing from Sales team.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        // Build dimensions display
+                        var dimensionsHtml = '';
+                        if (item.width || item.height || item.depth) {
+                            var dimParts = [];
+                            if (item.width) dimParts.push('W: ' + item.width + 'cm');
+                            if (item.height) dimParts.push('H: ' + item.height + 'cm');
+                            if (item.depth) dimParts.push('D: ' + item.depth + 'cm');
+                            dimensionsHtml = '<div class="enhanced-info-box"><div class="info-label"><i class="fas fa-ruler-combined"></i> Dimensions</div><div class="info-value">' + dimParts.join(' × ') + '</div></div>';
+                        }
+                        
+                        // Calculate current cost if exists
+                        var effectiveDays = (isSell || !includeDaysInCalc) ? 1 : rentalDays;
+                        var effectiveQty = includeQtyInCalc ? item.total_quantity : 1;
+                        var currentTotalCost = item.unit_cost ? formatNum(item.unit_cost * effectiveQty * effectiveDays * dimensionMultiplier) : '';
+                        
+                        // Build the enhanced item card (COLLAPSIBLE)
+                        var collapseId = 'opCostItem_' + item.id;
+                        var statusBadgeHtml = isNegotiation
+                            ? '<span class="enhanced-badge status-negotiation"><i class="fas fa-handshake mr-1"></i>RE-COST</span>'
+                            : (isCosted
+                                ? '<span class="enhanced-badge status-costed"><i class="fas fa-check mr-1"></i>COSTED</span>'
+                                : '<span class="enhanced-badge status-pending"><i class="fas fa-clock mr-1"></i>PENDING</span>');
+                        var dimsSummary = dimensionDisplay
+                            ? '<span class="op-ci-summary-chip"><i class="fas fa-ruler-combined"></i> ' + dimensionDisplay + '</span>'
+                            : '';
+                        var daysSummary = !isSell
+                            ? '<span class="op-ci-summary-chip"><i class="fas fa-calendar-day"></i> ' + rentalDays + 'd</span>'
+                            : '';
+                        var costSummaryNow = item.unit_cost
+                            ? '<span class="op-ci-summary-chip ok"><i class="fas fa-tag"></i> EGP ' + formatNum(item.unit_cost) + '</span>'
+                            : '<span class="op-ci-summary-chip warn"><i class="fas fa-exclamation-circle"></i> Not costed</span>';
+
+                        var itemHtml = `
+                            <div class="enhanced-item-card op-cost-item ${cardClass}"
+                                 data-rental-days="${rentalDays}"
+                                 data-dimension-multiplier="${dimensionMultiplier}"
+                                 data-quantity="${item.total_quantity}">
+                                <!-- Collapsed Summary Header -->
+                                <div class="op-ci-head" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false">
+                                    <div class="op-ci-head-main">
+                                        <i class="fas fa-chevron-right op-ci-chevron"></i>
+                                        <div class="item-icon"><i class="fas fa-cube"></i></div>
+                                        <div class="op-ci-title">
+                                            <div class="op-ci-name">${item.item_name}</div>
+                                            <div class="op-ci-id">ID: ${item.id}</div>
+                                        </div>
+                                    </div>
+                                    <div class="op-ci-summary">
+                                        <span class="op-ci-summary-chip"><i class="fas fa-layer-group"></i> ${item.total_quantity} ${item.unit || 'pcs'}</span>
+                                        ${dimsSummary}
+                                        ${daysSummary}
+                                        ${costSummaryNow}
+                                        ${statusBadgeHtml}
+                                    </div>
+                                </div>
+
+                                <!-- Always-visible quick cost input -->
+                                <div class="op-ci-quickinput">
+                                    <label><i class="fas fa-tag"></i> Unit Cost (EGP)</label>
+                                    <div class="input-group input-group-sm">
+                                        <div class="input-group-prepend">
+                                            <span class="input-group-text">EGP</span>
+                                        </div>
+                                        <input type="number" class="form-control item-cost-per-unit"
+                                               name="items[${item.id}][cost_per_item]"
+                                               data-item-id="${item.id}"
+                                               data-quantity="${item.total_quantity}"
+                                               data-rental-days="${rentalDays}"
+                                               data-dimension-multiplier="${dimensionMultiplier}"
+                                               data-is-sell="${isSell ? 'true' : 'false'}"
+                                               data-include-days="${includeDaysInCalc ? 'true' : 'false'}"
+                                               data-include-qty="${includeQtyInCalc ? 'true' : 'false'}"
+                                               value="${item.unit_cost || ''}"
+                                               step="0.01" min="0" placeholder="Unit cost...">
+                                        <div class="input-group-append">
+                                            <span class="input-group-text">= EGP <span class="item-total-cost-display ml-1" data-item-id="${item.id}">${currentTotalCost || '0.00'}</span></span>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" class="item-total-cost"
+                                           name="items[${item.id}][total_cost]"
+                                           data-item-id="${item.id}"
+                                           value="${currentTotalCost}">
+                                </div>
+
+                                <!-- Expandable Body -->
+                                <div class="collapse" id="${collapseId}">
+                                    <div class="enhanced-item-body">
+                                        ${negotiationAlert}
+                                        ${mediaSectionHtml}
+
+                                        <div class="enhanced-info-grid">
+                                            <div class="enhanced-info-box">
+                                                <div class="info-label"><i class="fas fa-cubes"></i> Quantity</div>
+                                                <div class="info-value">${item.total_quantity} ${item.unit || 'pcs'}</div>
+                                            </div>
+                                            ${dimensionsHtml}
+                                            ${dimensionMultiplier > 1 ? `
+                                            <div class="enhanced-info-box">
+                                                <div class="info-label"><i class="fas fa-expand-arrows-alt"></i> Dimension Multiplier</div>
+                                                <div class="info-value">${formatNum(dimensionMultiplier)}</div>
+                                            </div>
+                                            ` : ''}
+                                            ${!isSell ? `
+                                            <div class="enhanced-info-box">
+                                                <div class="info-label"><i class="fas fa-calendar-day"></i> Rental Days</div>
+                                                <div class="info-value">${rentalDays} days ${includeDaysInCalc ? '' : '(excluded)'}</div>
+                                            </div>
+                                            ` : ''}
+                                        </div>
+
+                                        ${item.item_comment ? `
+                                        <div class="enhanced-info-box mb-4" style="background: #fef3c7; border-color: #fbbf24;">
+                                            <div class="info-label" style="color: #92400e;"><i class="fas fa-comment"></i> Item Comment</div>
+                                            <div class="info-value" style="font-size: 1rem; color: #78350f;">${item.item_comment}</div>
+                                        </div>
+                                        ` : ''}
+
+                                        <div class="enhanced-formula-section">
+                                            <div class="enhanced-formula-header">
+                                                <i class="fas fa-calculator"></i>
+                                                <span>Costing Formula</span>
+                                            </div>
+                                            <div class="enhanced-formula-display">
+                                                Total = Unit Cost${includeQtyInCalc ? ' × Quantity' : ''}${!isSell && includeDaysInCalc ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dimensions' : ''}
+                                            </div>
+                                            <div class="enhanced-formula-values">
+                                                <div class="enhanced-formula-value-box">
+                                                    <div class="value-label">Unit Cost</div>
+                                                    <div class="value-number" id="unitCostDisplay_${item.id}">${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) : 'EGP ?'}</div>
+                                                </div>
+                                                ${includeQtyInCalc ? `
+                                                <div class="enhanced-formula-value-box">
+                                                    <div class="value-label">Quantity</div>
+                                                    <div class="value-number">${item.total_quantity}</div>
+                                                </div>
+                                                ` : ''}
+                                                ${!isSell && includeDaysInCalc ? `
+                                                <div class="enhanced-formula-value-box">
+                                                    <div class="value-label">Days</div>
+                                                    <div class="value-number">${rentalDays}</div>
+                                                </div>
+                                                ` : ''}
+                                                ${dimensionMultiplier > 1 ? `
+                                                <div class="enhanced-formula-value-box">
+                                                    <div class="value-label">Dimensions</div>
+                                                    <div class="value-number">${formatNum(dimensionMultiplier)}</div>
+                                                </div>
+                                                ` : ''}
+                                            </div>
+                                            <div class="enhanced-formula-result" id="formulaDetail_${item.id}">
+                                                ${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) + (includeQtyInCalc ? ' × ' + item.total_quantity.toLocaleString() : '') + ((!isSell && includeDaysInCalc) ? ' × ' + rentalDays : '') + (dimensionMultiplier > 1 ? ' × ' + formatNum(dimensionMultiplier) : '') + ' = EGP ' + currentTotalCost : 'Enter unit cost to calculate total'}
+                                            </div>
+                                        </div>
+
+                                        <div class="price-history-section mt-4">
+                                            <div class="price-history-toggle collapsed" data-toggle="collapse" data-target="#priceHistory_${item.id}" onclick="loadItemPriceHistory(${item.id})">
+                                                <span><i class="fas fa-history mr-2"></i>Cost History</span>
+                                                <i class="fas fa-chevron-down"></i>
+                                            </div>
+                                            <div class="collapse" id="priceHistory_${item.id}">
+                                                <div class="price-history-content" id="priceHistoryContent_${item.id}">
+                                                    <div class="text-center py-3">
+                                                        <i class="fas fa-spinner fa-spin text-secondary"></i> Loading...
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        $('#costItemsContainer').append(itemHtml);
+                    });
+                    
+                    // Calculate initial total cost
+                    calculateTotalCost();
+                }
+                
+                $('#costItemsModal').modal('show');
+            } else {
+                Swal.fire('Error!', 'Failed to load request details.', 'error');
+            }
+        }).fail(function() {
+            Swal.fire('Error!', 'Failed to load request details.', 'error');
+        });
+    });
+
+    // Calculate total cost when item costs change
+    $(document).on('input', '.item-cost-per-unit', function() {
+        var costPerUnit = parseFloat($(this).val()) || 0;
+        var quantity = parseFloat($(this).data('quantity')) || 1;
+        var rentalDays = parseFloat($(this).data('rental-days')) || 1;
+        var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
+        var isSell = $(this).data('is-sell') === 'true' || $(this).data('is-sell') === true;
+        var includeDays = $(this).data('include-days') === 'true' || $(this).data('include-days') === true;
+        var includeQty = $(this).data('include-qty') === 'true' || $(this).data('include-qty') === true;
+        var itemId = $(this).data('item-id');
+        
+        // For Sell items or if days excluded, don't multiply by days (days = 1)
+        var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+        var effectiveQty = includeQty ? quantity : 1;
+        
+        // Calculate total: Unit Cost × Quantity (if included) × Days (if rent AND include_days) × Dimension Multiplier
+        var totalItemCost = costPerUnit * effectiveQty * effectiveDays * dimensionMultiplier;
+        $('input[name="items[' + itemId + '][total_cost]"]').val(totalItemCost.toFixed(2));
+        
+        // Update the unit cost display in the info section
+        $('#unitCostDisplay_' + itemId).text(costPerUnit > 0 ? 'EGP ' + formatNum(costPerUnit) : 'EGP ?');
+        
+        // Update the total cost display (new enhanced element)
+        $(`.item-total-cost-display[data-item-id="${itemId}"]`).text(formatNum(totalItemCost));
+        
+        // Update the formula result text
+        var formulaText = '';
+        if (costPerUnit > 0) {
+            formulaText = 'EGP ' + formatNum(costPerUnit);
+            if (includeQty) {
+                formulaText += ' × ' + quantity.toLocaleString();
+            }
+            if (!isSell && includeDays) {
+                formulaText += ' × ' + rentalDays;
+            }
+            if (dimensionMultiplier > 1) {
+                formulaText += ' × ' + formatNum(dimensionMultiplier);
+            }
+            formulaText += ' = EGP ' + formatNum(totalItemCost);
+        } else {
+            formulaText = 'Enter unit cost to calculate total';
+        }
+        $('#formulaDetail_' + itemId).html(formulaText);
+        
+        // Recalculate overall total cost
+        calculateTotalCost();
+    });
+
+    // Calculate total cost (using new formula: Qty × Days (if rent AND include_days) × Dimension × Unit Cost)
+    function calculateTotalCost() {
+        var totalCost = 0;
+        var itemsWithCost = 0;
+        
+        $('.item-cost-per-unit').each(function() {
+            var costValue = $(this).val();
+            
+            // Skip empty fields
+            if (!costValue || costValue.trim() === '') {
+                return true; // Continue to next item
+            }
+            
+            var costPerUnit = parseFloat(costValue) || 0;
+            var quantity = parseFloat($(this).data('quantity')) || 1;
+            var rentalDays = parseFloat($(this).data('rental-days')) || 1;
+            var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
+            var isSell = $(this).data('is-sell') === 'true' || $(this).data('is-sell') === true;
+            var includeDays = $(this).data('include-days') === 'true' || $(this).data('include-days') === true;
+            var includeQty = $(this).data('include-qty') === 'true' || $(this).data('include-qty') === true;
+            
+            // For Sell items or if days excluded, don't multiply by days
+            var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+            var effectiveQty = includeQty ? quantity : 1;
+            
+            if (costPerUnit > 0) {
+                // Total = Unit Cost × Qty (if included) × Days (if rent AND include_days) × Dimension Multiplier
+                totalCost += costPerUnit * effectiveQty * effectiveDays * dimensionMultiplier;
+                itemsWithCost++;
+            }
+        });
+        
+        if (itemsWithCost > 0) {
+            $('#totalCostCalculated').val('EGP ' + formatNum(totalCost) + ' (for ' + itemsWithCost + ' item' + (itemsWithCost !== 1 ? 's' : '') + ')');
+        } else {
+            $('#totalCostCalculated').val('EGP 0.00 (no items costed yet)');
+        }
+        
+    }
+    // Save Costs
+    $('#saveCostsBtn').click(function() {
+        console.log('Save costs button clicked');
+        
+        var requestId = $('#costRequestId').val();
+        var items = [];
+        var totalCost = 0;
+        
+        // Collect item costs - only for items that have been filled in
+        var hasError = false;
+        var itemsToUpdate = 0;
+        
+        $('.item-cost-per-unit').each(function() {
+            var costValue = $(this).val();
+            var itemId = $(this).data('item-id');
+            var quantity = parseInt($(this).data('quantity'));
+            
+            // Skip empty fields - allow partial costing
+            if (!costValue || costValue.trim() === '') {
+                console.log('Skipping empty cost for item:', itemId);
+                return true; // Continue to next item
+            }
+            
+            var cost = parseFloat(costValue);
+            
+            // Get dimension and rental day data for formula calculation
+            var rentalDays = parseFloat($(this).data('rental-days')) || 1;
+            var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
+            var isSell = $(this).data('is-sell') === 'true' || $(this).data('is-sell') === true;
+            var includeDays = $(this).data('include-days') === 'true' || $(this).data('include-days') === true;
+            var includeQty = $(this).data('include-qty') === 'true' || $(this).data('include-qty') === true;
+            
+            // For Sell items or if days excluded, don't multiply by days
+            var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+            var effectiveQty = includeQty ? quantity : 1;
+            
+            // Calculate total using formula: Unit Cost × Qty (if included) × Days × Dimension Multiplier
+            var itemTotalCost = cost * effectiveQty * effectiveDays * dimensionMultiplier;
+            
+            console.log('Processing item:', { 
+                itemId: itemId, 
+                cost: cost, 
+                quantity: quantity, 
+                rentalDays: rentalDays,
+                effectiveDays: effectiveDays,
+                dimensionMultiplier: dimensionMultiplier,
+                itemTotalCost: itemTotalCost
+            });
+            
+            if (isNaN(cost) || cost < 0) {
+                Swal.fire('Error!', 'Please enter valid costs (must be 0 or greater).', 'error');
+                hasError = true;
+                return false;
+            }
+            
+            if (!itemId) {
+                console.error('Missing item ID for cost input');
+                Swal.fire('Error!', 'Missing item ID. Please refresh and try again.', 'error');
+                hasError = true;
+                return false;
+            }
+            
+            items.push({
+                id: itemId,  // This should match the primary key in sales_request_items table
+                cost_per_item: cost,  // This matches the database column name
+                total_cost: itemTotalCost  // NOW USING CORRECT FORMULA
+            });
+            
+            totalCost += itemTotalCost;
+            itemsToUpdate++;
+        });
+        
+        if (hasError) {
+            return;
+        }
+        
+        if (itemsToUpdate === 0) {
+            Swal.fire('Error!', 'Please enter costs for at least one item.', 'error');
+            return;
+        }
+        
+        var formData = {
+            request_id: requestId,
+            items: items,
+            total_cost: totalCost
+        };
+        
+        console.log('Sending cost data:', formData);
+        console.log('Request ID:', requestId);
+        console.log('Items to update:', items);
+        console.log('Total cost:', totalCost);
+        
+        $.ajax({
+            url: '/api/operations/requests/add-costs',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                console.log('Cost response:', response);
+                if (response.success) {
+                    $('#costItemsModal').modal('hide');
+                    table.ajax.reload();
+                    
+                    var message = 'Costs updated successfully for ' + itemsToUpdate + ' item' + (itemsToUpdate !== 1 ? 's' : '') + '!';
+                    if (response.status) {
+                        message += '\nRequest status: ' + response.status;
+                        if (response.costed_items && response.total_items) {
+                            message += ' (' + response.costed_items + '/' + response.total_items + ' items costed)';
+                        }
+                    }
+                    
+                    Swal.fire('Success!', message, 'success');
+                } else {
+                    console.error('API Error:', response.error);
+                    Swal.fire('Error!', response.error || 'Unknown error occurred', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error);
+                console.error('Status:', status);
+                console.error('Response Text:', xhr.responseText);
+                console.error('Response Status:', xhr.status);
+                try {
+                    var errorResponse = JSON.parse(xhr.responseText);
+                    console.error('Parsed Error Response:', errorResponse);
+                    Swal.fire('Error!', 'Error adding costs: ' + (errorResponse.error || error), 'error');
+                } catch (e) {
+                    Swal.fire('Error!', 'Error adding costs: ' + error + ' (Status: ' + xhr.status + ')', 'error');
+                }
+            }
+        });
+    });
+
+    // View Details button (opens side drawer with costing-only info)
+    $(document).on('click', '.view-btn', function() {
+        var requestId = $(this).data('id');
+        openOpDetailsDrawer(requestId);
+    });
+
+    function openOpDetailsDrawer(requestId) {
+        $('#opdTitle').text('Request #' + requestId);
+        $('#opdBody').html('<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><p class="mt-2 text-muted">Loading...</p></div>');
+        $('#opDetailsBackdrop').addClass('show');
+        $('#opDetailsDrawer').addClass('show');
+        $('body').addClass('opd-open');
+
+        var detailsReq = $.get('/api/operations/requests/' + requestId);
+        var logReq = $.get('/api/sales/requests/' + requestId + '/changelog');
+
+        $.when(detailsReq, logReq).done(function(dRes, lRes){
+            var resp = dRes[0]; var lresp = lRes[0];
+            if (!resp || !resp.success) {
+                $('#opdBody').html('<div class="alert alert-danger m-3">Failed to load request details.</div>');
+                return;
+            }
+            var r = resp.request;
+            var logs = (lresp && lresp.success && lresp.logs) ? lresp.logs : [];
+            $('#opdBody').html(buildOpDetailsHtml(r, logs));
+        }).fail(function(){
+            $('#opdBody').html('<div class="alert alert-danger m-3">Failed to load request details.</div>');
+        });
+    }
+
+    function escHtml(s){
+        return (s === null || s === undefined) ? ''
+            : String(s).replace(/[&<>"']/g, function(c){
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            });
+    }
+
+    function isCostRelatedLog(log){
+        var at = (log.action_type || '').toUpperCase();
+        var fn = (log.field_name || '').toLowerCase();
+        var cd = (log.change_description || '').toLowerCase();
+        // Action types directly related to costing/recosting
+        if (at === 'COST_UPDATE' || at === 'COST_ADDED' || at === 'COST_CHANGED'
+            || at === 'RECOSTING' || at === 'RECOSTED' || at === 'NEGOTIATION'
+            || at === 'NEGOTIATION_REQUEST' || at === 'NEGOTIATION_RESPONSE'
+            || at === 'OPERATION_STATUS_CHANGE' || at === 'OPERATION_UPDATE') return true;
+        // Field-name signals
+        if (/cost|negotiat|recost|re_?cost|operation/i.test(fn)) return true;
+        // Description signals
+        if (/\b(cost|costed|costing|re-?cost|negotiat)\b/i.test(cd)) return true;
+        return false;
+    }
+
+    function buildOpDetailsHtml(r, logs){
+        // Filter logs to cost/recost-related only
+        var filtered = (logs || []).filter(isCostRelatedLog);
+
+        // Header / request info (no selling info; only sales_added_date)
+        var info = '<div class="opd-section"><h6><i class="fas fa-info-circle mr-1 text-primary"></i>Request Information</h6>' +
+                   '<div class="opd-info-grid">' +
+                   '<div><div class="k">Request ID</div><div class="v">SR-' + escHtml(r.request_id) + '</div></div>' +
+                   '<div><div class="k">Client</div><div class="v">' + escHtml(r.client_name || '-') + '</div></div>' +
+                   '<div><div class="k">Status</div><div class="v">' + escHtml(r.status || '-') + '</div></div>' +
+                   '<div><div class="k">Total Items</div><div class="v">' + ((r.items && r.items.length) || 0) + '</div></div>' +
+                   '<div><div class="k">Total Cost</div><div class="v">' + (r.total_cost ? 'EGP ' + formatNum(r.total_cost) : '<span class="text-muted">Not costed</span>') + '</div></div>' +
+                   '<div><div class="k">Sales Added</div><div class="v">' + escHtml(r.sales_added_date || '-') + '</div></div>' +
+                   '</div></div>';
+
+        // Items table (no selling/profit/percentage columns)
+        var rows = '';
+        if (r.items && r.items.length) {
+            r.items.forEach(function(it){
+                var dims = [];
+                if (it.width)  dims.push('W:' + it.width);
+                if (it.height) dims.push('H:' + it.height);
+                if (it.depth)  dims.push('D:' + it.depth);
+                var dimsHtml = dims.length
+                    ? '<small class="text-muted"><i class="fas fa-ruler-combined"></i> ' + dims.join(' × ') + '</small>'
+                    : '<small class="text-muted">-</small>';
+                var unitCost = (it.unit_cost && it.unit_cost > 0)
+                    ? 'EGP ' + formatNum(it.unit_cost) : '<span class="text-muted">Not costed</span>';
+                var totalCost = (it.unit_cost && it.unit_cost > 0)
+                    ? 'EGP ' + formatNum(it.unit_cost * it.total_quantity) : '<span class="text-muted">-</span>';
+                var costStatus = (it.unit_cost && it.unit_cost > 0)
+                    ? '<span class="badge badge-success">Costed</span>'
+                    : '<span class="badge badge-warning text-dark">Pending</span>';
+                if (it.approval_status === 'pending_negotiation' && it.negotiation_status === 'pending_negotiation') {
+                    costStatus = '<span class="badge badge-danger">Re-cost</span>';
+                }
+                rows += '<tr>' +
+                        '<td><strong>' + escHtml(it.item_name) + '</strong><br>' +
+                          '<small class="text-muted">ID: ' + escHtml(it.id) + '</small></td>' +
+                        '<td>' + escHtml(it.total_quantity) + ' ' + escHtml(it.unit || 'pcs') + '</td>' +
+                        '<td>' + dimsHtml + '</td>' +
+                        '<td>' + unitCost + '</td>' +
+                        '<td>' + totalCost + '</td>' +
+                        '<td>' + costStatus + '</td>' +
+                        '<td>' + escHtml(it.item_comment || '') + '</td>' +
+                        '</tr>';
+            });
+        } else {
+            rows = '<tr><td colspan="7" class="text-center text-muted py-3">No items.</td></tr>';
+        }
+        var itemsBlock = '<div class="opd-section"><h6><i class="fas fa-boxes mr-1 text-primary"></i>Items (Cost View)</h6>' +
+                        '<div class="table-responsive"><table class="opd-items-table">' +
+                        '<thead><tr><th>Item</th><th>Qty</th><th>Dimensions</th>' +
+                        '<th>Unit Cost</th><th>Total Cost</th><th>Status</th><th>Comment</th></tr></thead>' +
+                        '<tbody>' + rows + '</tbody></table></div></div>';
+
+        // Activity log (costing-related only)
+        var logHtml = '';
+        if (!filtered.length) {
+            logHtml = '<div class="text-muted text-center py-3"><i class="fas fa-info-circle mr-1"></i>No cost-related activity found.</div>';
+        } else {
+            filtered.forEach(function(log){
+                var cls = 'opd-log';
+                var at = (log.action_type || '').toUpperCase();
+                if (/RECOST|NEGOTIAT/.test(at) || /recost|negotiat/i.test(log.field_name || '') || /recost|negotiat/i.test(log.change_description || ''))
+                    cls += ' recost';
+                else if (/COST/.test(at) || /cost/i.test(log.field_name || ''))
+                    cls += ' cost';
+                var title = escHtml(log.change_description || at || 'Change');
+                var detail = '';
+                if (log.field_name) {
+                    detail = '<b>' + escHtml(log.field_name) + ':</b> ';
+                    detail += '<span style="color:#c0392b">' + escHtml(log.old_value || '—') + '</span>';
+                    detail += ' → <span style="color:#155724">' + escHtml(log.new_value || '—') + '</span>';
+                }
+                logHtml += '<div class="' + cls + '">' +
+                           '<div class="h">' + title + '</div>' +
+                           (detail ? '<div class="m">' + detail + '</div>' : '') +
+                           '<div class="f"><i class="fas fa-user mr-1"></i>' + escHtml(log.action_by || '-') +
+                           ' &nbsp;·&nbsp; <i class="fas fa-clock mr-1"></i>' + escHtml(log.action_date || '-') + '</div>' +
+                           '</div>';
+            });
+        }
+        var logBlock = '<div class="opd-section"><h6><i class="fas fa-history mr-1 text-warning"></i>Costing Activity Log</h6>' + logHtml + '</div>';
+
+        return info + itemsBlock + logBlock;
+    }
+
+    $(document).on('click', '#opdClose, #opDetailsBackdrop', function(){
+        $('#opDetailsDrawer').removeClass('show');
+        $('#opDetailsBackdrop').removeClass('show');
+        $('body').removeClass('opd-open');
+    });
+    $(document).on('keydown', function(e){
+        if (e.key === 'Escape' && $('#opDetailsDrawer').hasClass('show')) {
+            $('#opdClose').click();
+        }
+    });
+
+    // View Change Log button
+    $(document).on('click', '.log-btn', function() {
+        var requestId = $(this).data('id');
+        console.log('Loading change log for request:', requestId);
+        
+        $('#logRequestId').text(requestId);
+        $('#changeLogModal').modal('show');
+        
+        // Load change log
+        loadChangeLog(requestId);
+    });
+
+    // Function to load change log
+    function loadChangeLog(requestId) {
+        $('#changeLogContent').html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-warning"></i><p class="mt-2">Loading change log...</p></div>');
+        
+        $.get('/api/sales/requests/' + requestId + '/changelog', function(response) {
+            if (response.success) {
+                displayChangeLog(response.logs);
+            } else {
+                $('#changeLogContent').html('<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-2"></i>Failed to load change log.</div>');
+            }
+        }).fail(function() {
+            $('#changeLogContent').html('<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-2"></i>Error loading change log.</div>');
+        });
+    }
+
+    // Function to display change log
+    function displayChangeLog(logs) {
+        if (logs.length === 0) {
+            $('#changeLogContent').html('<div class="alert alert-info"><i class="fas fa-info-circle mr-2"></i>No change log entries found for this request.</div>');
+            return;
+        }
+        
+        var logHtml = '<div class="timeline">';
+        
+        logs.forEach(function(log) {
+            var iconClass = 'fa-plus-circle';
+            var badgeClass = 'badge-success';
+            
+            switch(log.action_type) {
+                case 'CREATE':
+                    iconClass = 'fa-plus-circle';
+                    badgeClass = 'badge-success';
+                    break;
+                case 'UPDATE':
+                    iconClass = 'fa-edit';
+                    badgeClass = 'badge-primary';
+                    break;
+                case 'DELETE':
+                    iconClass = 'fa-trash';
+                    badgeClass = 'badge-danger';
+                    break;
+                case 'STATUS_CHANGE':
+                    iconClass = 'fa-exchange-alt';
+                    badgeClass = 'badge-info';
+                    break;
+                case 'COST_UPDATE':
+                    iconClass = 'fa-dollar-sign';
+                    badgeClass = 'badge-warning';
+                    break;
+                case 'SELLING_PRICE_UPDATE':
+                    iconClass = 'fa-tags';
+                    badgeClass = 'badge-success';
+                    break;
+                default:
+                    iconClass = 'fa-info-circle';
+                    badgeClass = 'badge-secondary';
+            }
+            
+            logHtml += '<div class="timeline-item mb-3 pb-3 border-bottom">';
+            logHtml += '  <div class="d-flex justify-content-between align-items-start">';
+            logHtml += '    <div class="flex-grow-1">';
+            logHtml += '      <h6 class="mb-1">';
+            logHtml += '        <i class="fas ' + iconClass + ' mr-2 text-' + badgeClass.replace('badge-', '') + '"></i>';
+            logHtml += '        <span class="badge ' + badgeClass + '">' + log.action_type + '</span>';
+            if (log.field_name) {
+                logHtml += '        <small class="text-muted ml-2">Field: <strong>' + log.field_name + '</strong></small>';
+            }
+            logHtml += '      </h6>';
+            
+            if (log.change_description) {
+                logHtml += '      <p class="mb-2">' + log.change_description + '</p>';
+            }
+            
+            if (log.old_value || log.new_value) {
+                logHtml += '      <div class="small">';
+                if (log.old_value) {
+                    logHtml += '        <div><strong>Old value:</strong> <code>' + log.old_value + '</code></div>';
+                }
+                if (log.new_value) {
+                    logHtml += '        <div><strong>New value:</strong> <code>' + log.new_value + '</code></div>';
+                }
+                logHtml += '      </div>';
+            }
+            
+            logHtml += '    </div>';
+            logHtml += '    <div class="text-right ml-3" style="min-width: 180px;">';
+            logHtml += '      <small class="text-muted d-block">';
+            logHtml += '        <i class="fas fa-user mr-1"></i>' + (log.action_by || 'Unknown');
+            logHtml += '      </small>';
+            logHtml += '      <small class="text-muted d-block">';
+            logHtml += '        <i class="fas fa-clock mr-1"></i>' + (log.action_date || 'Unknown');
+            logHtml += '      </small>';
+            logHtml += '    </div>';
+            logHtml += '  </div>';
+            logHtml += '</div>';
+        });
+        
+        logHtml += '</div>';
+        
+        $('#changeLogContent').html(logHtml);
+    }
+    
+    // Toggle collapse state for price history
+    $(document).on('click', '.price-history-toggle', function() {
+        $(this).toggleClass('collapsed');
+    });
+});
+
+// Function to load price history for an item (outside document.ready for global access)
+function loadItemPriceHistory(itemId) {
+    var contentDiv = $('#priceHistoryContent_' + itemId);
+    
+    // Check if already loaded
+    if (contentDiv.data('loaded')) {
+        return;
+    }
+    
+    $.get('/api/client-approval/items/' + itemId + '/price-history', function(response) {
+        if (response.success) {
+            var html = '';
+            
+            if (response.history && response.history.length > 0) {
+                response.history.forEach(function(record) {
+                    // Determine the type class based on status
+                    var typeClass = '';
+                    var typeBadge = '';
+                    var typeIcon = '';
+                    
+                    switch(record.status) {
+                        case 'negotiated':
+                            typeClass = 'negotiated';
+                            typeBadge = '<span class="badge badge-danger">Negotiated</span>';
+                            typeIcon = 'fa-handshake';
+                            break;
+                        case 'cost_update':
+                            typeClass = 'cost-update';
+                            typeBadge = '<span class="badge badge-success">Cost Update</span>';
+                            typeIcon = 'fa-tag';
+                            break;
+                        case 'recosting_after_negotiation':
+                            typeClass = 'recosting';
+                            typeBadge = '<span class="badge badge-warning">Re-costing</span>';
+                            typeIcon = 'fa-redo';
+                            break;
+                        case 'sell_price_update':
+                            typeClass = 'sell-update';
+                            typeBadge = '<span class="badge badge-primary">Sell Price Update</span>';
+                            typeIcon = 'fa-dollar-sign';
+                            break;
+                        default:
+                            typeClass = '';
+                            typeBadge = '<span class="badge badge-secondary">' + (record.status || 'Update') + '</span>';
+                            typeIcon = 'fa-history';
+                    }
+                    
+                    html += '<div class="price-history-item ' + typeClass + '">';
+                    html += '  <span class="price-history-version">v' + record.version + '</span>';
+                    html += '  <div class="d-flex justify-content-between align-items-center">';
+                    html += '    <div>' + typeBadge + '</div>';
+                    html += '    <div class="price-history-date"><i class="fas fa-clock mr-1"></i>' + record.formatted_date + '</div>';
+                    html += '  </div>';
+                    html += '  <div class="price-history-values">';
+                    html += '    <div class="value-box">';
+                    html += '      <label><i class="fas fa-tag mr-1"></i>Cost/Item</label>';
+                    html += '      <div class="value text-success">EGP ' + (record.cost_per_item ? formatNum(record.cost_per_item) : '0.00') + '</div>';
+                    html += '    </div>';
+                    html += '    <div class="value-box">';
+                    html += '      <label><i class="fas fa-coins mr-1"></i>Total Cost</label>';
+                    html += '      <div class="value">EGP ' + (record.total_cost ? formatNum(record.total_cost) : '0.00') + '</div>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    
+                    if (record.negotiation_reason) {
+                        html += '  <div class="price-history-reason">';
+                        html += '    <i class="fas fa-comment mr-1"></i><strong>Reason:</strong> ' + record.negotiation_reason;
+                        html += '  </div>';
+                    }
+                    
+                    html += '  <div class="mt-2 text-muted small"><i class="fas fa-user mr-1"></i>By: ' + (record.created_by || 'Unknown') + '</div>';
+                    html += '</div>';
+                });
+            } else {
+                html = '<div class="text-center py-3 text-muted">';
+                html += '  <i class="fas fa-info-circle mr-2"></i>No price history available for this item.';
+                html += '</div>';
+            }
+            
+            // Add current price info
+            if (response.current) {
+                var current = response.current;
+                html = '<div class="mb-3 p-2 bg-light rounded border">';
+                html += '  <strong class="text-primary"><i class="fas fa-info-circle mr-1"></i>Current Prices:</strong>';
+                html += '  <div class="d-flex gap-3 mt-2">';
+                html += '    <span><strong>Cost:</strong> EGP ' + (current.cost_per_item ? parseFloat(current.cost_per_item).toFixed(2) : 'Not set') + '</span>';
+                if (current.negotiation_count > 0) {
+                    html += '    <span class="ml-3 badge badge-warning">Negotiation Count: ' + current.negotiation_count + '</span>';
+                }
+                html += '  </div>';
+                html += '</div>' + html;
+            }
+            
+            contentDiv.html(html);
+            contentDiv.data('loaded', true);
+        } else {
+            contentDiv.html('<div class="text-danger py-3"><i class="fas fa-exclamation-circle mr-2"></i>Error loading price history.</div>');
+        }
+    }).fail(function() {
+        contentDiv.html('<div class="text-danger py-3"><i class="fas fa-exclamation-circle mr-2"></i>Failed to load price history.</div>');
+    });
+}
+</script>
+{% endblock %}

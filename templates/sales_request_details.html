@@ -1,0 +1,647 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+  .srd-wrap { padding: 20px; max-width: 1280px; margin: 0 auto; }
+  .srd-card { background: #fff; border: 1px solid #e3e6f0; border-radius: 8px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 18px; }
+  .srd-card .hd { padding: 14px 18px; border-bottom: 1px solid #f0f1f5;
+                   display: flex; justify-content: space-between; align-items: center; }
+  .srd-card .hd h5 { margin: 0; font-weight: 600; color: #2c3e50; }
+  .srd-card .bd { padding: 16px 18px; }
+  .srd-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 22px; }
+  .srd-meta .lbl { font-size: 11px; color: #858796; text-transform: uppercase; letter-spacing: .5px; }
+  .srd-meta .val { font-size: 14px; color: #2c3e50; font-weight: 500; margin-top: 2px; word-break: break-word; }
+  .srd-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .srd-badge.status-pending  { background: #fff3cd; color: #856404; }
+  .srd-badge.status-approved { background: #d4edda; color: #155724; }
+  .srd-badge.status-rejected { background: #f8d7da; color: #721c24; }
+  .srd-badge.status-default  { background: #e2e3e5; color: #383d41; }
+  .srd-badge.prio-high   { background: #f8d7da; color: #721c24; }
+  .srd-badge.prio-normal { background: #d1ecf1; color: #0c5460; }
+  .srd-badge.prio-low    { background: #d4edda; color: #155724; }
+
+  /* Items */
+  .srd-item { border: 1px solid #eef0f5; border-radius: 8px; padding: 14px;
+              margin-bottom: 12px; background: #fff; }
+  .srd-item-head { display: flex; gap: 14px; align-items: flex-start; }
+  .srd-item-thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 6px;
+                     border: 1px solid #e3e6f0; background: #f8f9fc; flex: 0 0 84px; }
+  .srd-item-thumb.placeholder { display: flex; align-items: center; justify-content: center;
+                                  color: #b9bdc7; font-size: 22px; }
+  .srd-item-title { font-weight: 600; color: #2c3e50; font-size: 15px; }
+  .srd-item-sub   { color: #858796; font-size: 12px; margin-top: 2px; }
+  .srd-item-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                    gap: 10px 16px; margin-top: 12px; padding-top: 10px;
+                    border-top: 1px dashed #f0f1f5; font-size: 13px; }
+  .srd-item-grid .k { color: #858796; font-size: 11px; text-transform: uppercase; }
+  .srd-item-grid .v { color: #2c3e50; font-weight: 500; }
+  .srd-item-thumbs { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .srd-item-thumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: 4px;
+                         border: 1px solid #e3e6f0; cursor: pointer; }
+  .srd-item-attachments a { display: inline-flex; align-items: center; gap: 6px;
+                            font-size: 12px; margin-right: 10px; }
+  .srd-item-notes { margin-top: 10px; padding: 8px 10px; background: #fffbe6;
+                     border-left: 3px solid #ffc107; border-radius: 4px;
+                     font-size: 12px; color: #5a5c69; }
+
+  /* Templates */
+  .srd-tpl { background: #f8f9fc; border: 1px solid #eef0f5; border-radius: 6px;
+              padding: 12px 14px; margin-bottom: 12px; }
+  .srd-tpl-head { display: flex; justify-content: space-between; align-items: center;
+                   margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e3e6f0; }
+  .srd-tpl-head .name { font-weight: 600; color: #2c3e50; }
+  .srd-tpl-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                     gap: 8px 16px; font-size: 13px; }
+  .srd-tpl-fields .k { color: #858796; font-size: 11px; text-transform: uppercase; }
+  .srd-tpl-fields .v { color: #2c3e50; font-weight: 500; word-break: break-word; }
+  .srd-tpl-fields .full { grid-column: 1 / -1; }
+
+  /* Flow timeline */
+  .srd-flow { position: relative; padding-left: 28px; }
+  .srd-flow::before { content: ''; position: absolute; left: 10px; top: 4px; bottom: 4px;
+                       width: 2px; background: #e3e6f0; }
+  .srd-flow-item { position: relative; padding: 8px 0 14px 0; }
+  .srd-flow-item::before { content: ''; position: absolute; left: -23px; top: 14px;
+                            width: 12px; height: 12px; border-radius: 50%;
+                            background: #4e73df; border: 2px solid #fff;
+                            box-shadow: 0 0 0 2px #e3e6f0; }
+  .srd-flow-item.status::before { background: #1cc88a; }
+  .srd-flow-item.change::before { background: #f6c23e; }
+  .srd-flow-item.create::before { background: #36b9cc; }
+  .srd-flow-item.delete::before { background: #e74a3b; }
+  .srd-flow-head { display: flex; justify-content: space-between; align-items: baseline;
+                    gap: 10px; flex-wrap: wrap; }
+  .srd-flow-title { font-weight: 600; color: #2c3e50; font-size: 13px; }
+  .srd-flow-when  { color: #858796; font-size: 11px; }
+  .srd-flow-body  { color: #5a5c69; font-size: 12px; margin-top: 4px;
+                     white-space: pre-wrap; word-break: break-word; }
+  .srd-flow-diff  { font-size: 12px; background: #f8f9fc;
+                     border-radius: 4px; padding: 8px 10px; margin-top: 6px;
+                     color: #5a5c69; border: 1px solid #eef0f5; }
+  .srd-flow-diff .field-label { display:block; color:#4e73df; font-weight:600;
+                                 margin-bottom:6px; font-size:12px; }
+  .srd-flow-diff .o { color: #c0392b; text-decoration: line-through; }
+  .srd-flow-diff .n { color: #155724; }
+  .srd-flow-diff .arrow { color:#858796; text-align:center; margin:4px 0; font-size:13px; }
+  .srd-flow-diff .o-block { background:#fff5f5; border-left:3px solid #e74a3b;
+                            padding:6px 8px; border-radius:3px; margin-top:4px; }
+  .srd-flow-diff .n-block { background:#f0fdf4; border-left:3px solid #1cc88a;
+                            padding:6px 8px; border-radius:3px; margin-top:4px; }
+  .srd-flow-kv   { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+                   gap:4px 12px; }
+  .srd-flow-kv > div { font-size:12px; line-height:1.4; }
+  .srd-flow-kv .k { color:#858796; font-weight:600; }
+  .srd-flow-kv .v { color:#2c3e50; }
+  .srd-flow-list { margin:0; padding-left:18px; }
+
+  /* Template first-container summary */
+  .srd-tpl-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr));
+                     gap:8px 14px; padding:10px 12px; margin-bottom:10px;
+                     background:#eaf3ff; border:1px solid #cfe0fb;
+                     border-left:4px solid #4e73df; border-radius:6px; }
+  .srd-tpl-summary > div .k { color:#4e73df; font-size:10px; text-transform:uppercase;
+                              font-weight:700; letter-spacing:.4px; }
+  .srd-tpl-summary > div .v { color:#2c3e50; font-size:13px; font-weight:500;
+                              margin-top:2px; word-break:break-word; }
+  .srd-flow-actor { display: inline-block; font-size: 11px; color: #4e73df;
+                     font-weight: 600; margin-right: 6px; }
+
+  .srd-empty { color: #858796; font-style: italic; text-align: center; padding: 20px; }
+  .srd-loading { text-align: center; padding: 40px; color: #858796; }
+  .srd-error   { text-align: center; padding: 40px; color: #c0392b; }
+  .srd-back { margin-bottom: 14px; }
+  .srd-tabs .nav-link { color: #5a5c69; font-weight: 500; padding: 4px 10px; }
+  .srd-tabs .nav-link.active { color: #fff; background: #4e73df; border-radius: 12px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="srd-wrap">
+
+  <div class="srd-back">
+    <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i> Back
+    </a>
+    <a href="/sales_request" class="btn btn-sm btn-outline-primary ml-1">
+      <i class="fas fa-list"></i> All Sales Requests
+    </a>
+    <button id="srdOpenChat" class="btn btn-sm btn-outline-success ml-1">
+      <i class="fas fa-comments"></i> Open Chat
+    </button>
+  </div>
+
+  <div id="srdLoading" class="srd-loading">
+    <i class="fas fa-spinner fa-spin fa-2x"></i>
+    <div class="mt-2">Loading sales request details...</div>
+  </div>
+
+  <div id="srdError" class="srd-error" style="display:none;">
+    <i class="fas fa-exclamation-triangle fa-2x"></i>
+    <div class="mt-2" id="srdErrorMsg">Unable to load request details.</div>
+  </div>
+
+  <div id="srdContent" style="display:none;">
+    <!-- Header card -->
+    <div class="srd-card">
+      <div class="hd">
+        <h5>
+          <i class="fas fa-hashtag text-success"></i>
+          <span id="srdTitle">SR-{{ request_id }}</span>
+        </h5>
+        <div>
+          <span id="srdStatus"></span>
+          <span id="srdPriority"></span>
+        </div>
+      </div>
+      <div class="bd">
+        <div class="srd-meta">
+          <div><div class="lbl">Request #</div><div class="val">SR-{{ request_id }}</div></div>
+          <div><div class="lbl">Client</div><div class="val" id="srdClient">-</div></div>
+          <div><div class="lbl">Company</div><div class="val" id="srdCompany">-</div></div>
+          <div><div class="lbl">Request Type(s)</div><div class="val" id="srdRequestTypes">-</div></div>
+          <div><div class="lbl">Start Date</div><div class="val" id="srdStart">-</div></div>
+          <div><div class="lbl">End Date</div><div class="val" id="srdEnd">-</div></div>
+          <div><div class="lbl">Duration</div><div class="val" id="srdDuration">-</div></div>
+          <div><div class="lbl">Created</div><div class="val" id="srdCreated">-</div></div>
+          <div><div class="lbl">Created By</div><div class="val" id="srdCreatedBy">-</div></div>
+          <div><div class="lbl">Last Modified</div><div class="val" id="srdModified">-</div></div>
+          <div><div class="lbl">Total Cost</div><div class="val" id="srdTotalCost">-</div></div>
+          <div><div class="lbl">Total Sell</div><div class="val" id="srdTotalSell">-</div></div>
+        </div>
+        <div id="srdDescriptionWrap" style="margin-top: 16px; display: none;">
+          <div class="lbl" style="font-size:11px; color:#858796; text-transform:uppercase;">Description</div>
+          <div class="val" id="srdDescription" style="white-space:pre-wrap;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Template Instances (with field values) -->
+    <div class="srd-card" id="srdTemplatesCard" style="display:none;">
+      <div class="hd"><h5><i class="fas fa-layer-group text-info"></i> Template Details</h5></div>
+      <div class="bd" id="srdTemplates"></div>
+    </div>
+
+    <!-- Items (full details) -->
+    <div class="srd-card">
+      <div class="hd">
+        <h5><i class="fas fa-boxes text-primary"></i> Items
+          <span class="text-muted" id="srdItemsCount" style="font-weight:normal; font-size:13px;"></span>
+        </h5>
+      </div>
+      <div class="bd" id="srdItemsBody">
+        <div class="srd-empty">No items.</div>
+      </div>
+    </div>
+
+    <!-- Activity Flow (status history + change log) -->
+    <div class="srd-card">
+      <div class="hd">
+        <h5><i class="fas fa-stream text-warning"></i> Activity Flow</h5>
+        <ul class="nav nav-pills srd-tabs" role="tablist" style="margin:0;">
+          <li class="nav-item"><a class="nav-link active" data-flow="all" href="#">All</a></li>
+          <li class="nav-item"><a class="nav-link" data-flow="status" href="#">Status</a></li>
+          <li class="nav-item"><a class="nav-link" data-flow="change" href="#">Changes</a></li>
+        </ul>
+      </div>
+      <div class="bd">
+        <div id="srdFlowLoading" class="srd-empty">
+          <i class="fas fa-spinner fa-spin"></i> Loading activity...
+        </div>
+        <div id="srdFlow" class="srd-flow" style="display:none;"></div>
+        <div id="srdFlowEmpty" class="srd-empty" style="display:none;">No activity recorded.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var REQUEST_ID = {{ request_id|int }};
+  var flowEvents = [];
+
+  function esc(s){
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function money(n){
+    if (n === null || n === undefined || n === '' || isNaN(Number(n))) return '-';
+    var v = Number(n);
+    return 'EGP ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function statusBadge(s){
+    if (!s) return '';
+    var k = String(s).toLowerCase();
+    var cls = 'status-default';
+    if (k.indexOf('approve') >= 0) cls = 'status-approved';
+    else if (k.indexOf('reject') >= 0) cls = 'status-rejected';
+    else if (k.indexOf('pending') >= 0 || k.indexOf('progress') >= 0
+          || k.indexOf('negotia') >= 0 || k.indexOf('repric') >= 0) cls = 'status-pending';
+    return '<span class="srd-badge ' + cls + '">' + esc(s) + '</span>';
+  }
+  function prioBadge(p){
+    if (!p) return '';
+    var k = String(p).toLowerCase();
+    var cls = 'prio-normal';
+    if (k === 'high' || k === 'urgent') cls = 'prio-high';
+    else if (k === 'low') cls = 'prio-low';
+    return '<span class="srd-badge ' + cls + '" style="margin-left:6px;">' + esc(p) + '</span>';
+  }
+  function fmtKey(k){
+    return String(k || '')
+      .replace(/[_\-]+/g, ' ')
+      .replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+  }
+  function fmtVal(v){
+    if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
+    if (Array.isArray(v)) return esc(v.join(', '));
+    if (typeof v === 'object') {
+      try { return '<code>' + esc(JSON.stringify(v)) + '</code>'; } catch(e) { return ''; }
+    }
+    var s = String(v);
+    if (/^https?:\/\//i.test(s)) return '<a href="' + esc(s) + '" target="_blank">' + esc(s) + '</a>';
+    return esc(s);
+  }
+
+  // ===== Readable log-value helpers (used by Activity Flow) =====
+  function parseMaybeJson(s){
+    if (s === null || s === undefined || s === '') return null;
+    if (typeof s === 'object') return s;
+    var t = String(s).trim();
+    if (!(t.charAt(0) === '{' || t.charAt(0) === '[')) return null;
+    try { return JSON.parse(t); } catch(e) { return null; }
+  }
+  function renderInline(v){
+    if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
+    if (Array.isArray(v)) return v.length ? esc(v.join(', ')) : '<span class="text-muted">(empty)</span>';
+    if (typeof v === 'object') {
+      var k = Object.keys(v);
+      return k.length ? esc(JSON.stringify(v)) : '<span class="text-muted">(empty)</span>';
+    }
+    return esc(String(v));
+  }
+  function renderLogValue(raw){
+    var obj = parseMaybeJson(raw);
+    if (obj === null) {
+      if (raw === null || raw === undefined || raw === '') return '<span class="text-muted">—</span>';
+      return esc(String(raw));
+    }
+    if (Array.isArray(obj)) {
+      if (!obj.length) return '<span class="text-muted">(empty)</span>';
+      return '<ul class="srd-flow-list">' + obj.map(function(x){
+        return '<li>' + renderInline(x) + '</li>';
+      }).join('') + '</ul>';
+    }
+    var keys = Object.keys(obj);
+    if (!keys.length) return '<span class="text-muted">(empty)</span>';
+    return '<div class="srd-flow-kv">' + keys.map(function(k){
+      return '<div><span class="k">' + esc(fmtKey(k)) + ':</span> '
+           + '<span class="v">' + renderInline(obj[k]) + '</span></div>';
+    }).join('') + '</div>';
+  }
+  function prettyFieldName(field){
+    if (!field) return '';
+    var s = String(field);
+    var m = s.match(/^item_(\d+)(?:_(.+))?$/);
+    if (m) return 'Item #' + m[1] + (m[2] ? ' — ' + fmtKey(m[2]) : '');
+    if (s.indexOf('template_field_') === 0) return 'Template Field — ' + fmtKey(s.replace('template_field_', ''));
+    return fmtKey(s);
+  }
+  function hasValue(v){
+    if (v === null || v === undefined) return false;
+    var s = String(v).trim();
+    return s !== '' && s !== '—' && s.toLowerCase() !== 'none' && s.toLowerCase() !== 'null';
+  }
+
+  // ===== Items =====
+  function renderItems(items){
+    if (!items || !items.length) {
+      $('#srdItemsBody').html('<div class="srd-empty">No items in this request.</div>');
+      return;
+    }
+    $('#srdItemsCount').text('(' + items.length + ')');
+    var html = items.map(function(it, idx){
+      var name = it.name || it.item_name || ('Item ' + (idx + 1));
+      var img = (it.image_url || (it.images && it.images[0] && it.images[0].path)) || '';
+      var thumbHtml = img
+        ? '<img class="srd-item-thumb" src="/' + esc(String(img).replace(/^\//,'')) + '" onerror="this.outerHTML=\'<div class=&quot;srd-item-thumb placeholder&quot;><i class=&quot;fas fa-image&quot;></i></div>\'">'
+        : '<div class="srd-item-thumb placeholder"><i class="fas fa-image"></i></div>';
+
+      var dims = [];
+      if (it.width)  dims.push('W ' + it.width);
+      if (it.height) dims.push('H ' + it.height);
+      if (it.depth)  dims.push('D ' + it.depth);
+
+      var subBits = [];
+      if (it.request_type) subBits.push('<span class="text-info">' + esc(it.request_type) + '</span>');
+      if (it.sell_type) subBits.push(esc(it.sell_type));
+      if (dims.length) subBits.push(dims.join(' · '));
+      if (it.dimension_calc) subBits.push('calc: ' + esc(it.dimension_calc));
+
+      var facts = [];
+      facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || '')]);
+      if (it.sell_type === 'rent' || it.rental_days)
+        facts.push(['Rental Days', esc(it.rental_days || 1)]);
+      facts.push(['Unit Cost', money(it.cost_per_item)]);
+      facts.push(['Unit Sell', money(it.sell_per_item)]);
+      facts.push(['Total Cost', money(it.total_cost)]);
+      facts.push(['Total Sell', money(it.total_sell)]);
+      facts.push(['Approval', statusBadge(it.approval_status || 'pending')]);
+      if (it.negotiation_status)
+        facts.push(['Negotiation', statusBadge(it.negotiation_status)
+          + (it.negotiation_count ? ' <span class="text-muted">×' + it.negotiation_count + '</span>' : '')]);
+
+      var factsHtml = facts.map(function(f){
+        return '<div><div class="k">' + esc(f[0]) + '</div><div class="v">' + f[1] + '</div></div>';
+      }).join('');
+
+      var thumbs = '';
+      if (it.images && it.images.length > 1) {
+        thumbs = '<div class="srd-item-thumbs">' + it.images.map(function(im){
+          return '<img src="/' + esc(String(im.path).replace(/^\//,'')) + '" title="' + esc(im.name||'') + '" onclick="window.open(this.src, \'_blank\')">';
+        }).join('') + '</div>';
+      }
+
+      var atts = '';
+      if (it.attachments && it.attachments.length) {
+        atts = '<div class="srd-item-attachments" style="margin-top:8px;">' + it.attachments.map(function(a){
+          var icon = (a.file_type && a.file_type.indexOf('pdf') >= 0) ? 'fa-file-pdf' : 'fa-file-image';
+          return '<a href="' + esc(a.file_url) + '" target="_blank"><i class="fas ' + icon + '"></i> ' + esc(a.original_name||'file') + '</a>';
+        }).join('') + '</div>';
+      }
+
+      var notes = '';
+      if (it.description || it.comment) {
+        notes += '<div class="srd-item-notes"><b>Description:</b> ' + esc(it.description || it.comment) + '</div>';
+      }
+      if (it.negotiation_reason) {
+        notes += '<div class="srd-item-notes" style="background:#fdecea;border-left-color:#e74a3b;"><b>Negotiation reason:</b> ' + esc(it.negotiation_reason) + '</div>';
+      }
+      if (it.client_feedback) {
+        notes += '<div class="srd-item-notes" style="background:#eaf3ff;border-left-color:#4e73df;"><b>Client feedback:</b> ' + esc(it.client_feedback) + '</div>';
+      }
+
+      return '<div class="srd-item">' +
+        '<div class="srd-item-head">' +
+          thumbHtml +
+          '<div style="flex:1;">' +
+            '<div class="srd-item-title">#' + (idx + 1) + ' · ' + esc(name) + '</div>' +
+            (subBits.length ? '<div class="srd-item-sub">' + subBits.join(' · ') + '</div>' : '') +
+            thumbs +
+            atts +
+          '</div>' +
+        '</div>' +
+        '<div class="srd-item-grid">' + factsHtml + '</div>' +
+        notes +
+      '</div>';
+    }).join('');
+    $('#srdItemsBody').html(html);
+  }
+
+  // ===== Template instances (with field values) =====
+  function renderTemplates(instances, sr){
+    if (!instances || !instances.length) {
+      $('#srdTemplatesCard').hide();
+      return;
+    }
+    sr = sr || {};
+    // Build a "first container" summary card with general request info
+    var summaryParts = [];
+    function addS(label, val){
+      if (val === null || val === undefined || val === '') return;
+      summaryParts.push('<div><div class="k">' + esc(label) + '</div><div class="v">' + esc(val) + '</div></div>');
+    }
+    addS('Request #', 'SR-' + REQUEST_ID);
+    addS('Client',    sr.client_name);
+    addS('Company',   sr.company_name);
+    var sRT = (sr.request_types && sr.request_types.length) ? sr.request_types.join(', ') : (sr.request_type || '');
+    addS('Request Type(s)', sRT);
+    addS('Start Date', sr.start_date);
+    addS('End Date',   sr.end_date);
+    addS('Duration',   sr.duration || (sr.duration_days ? sr.duration_days + ' days' : ''));
+    addS('Created',    sr.sales_added_date);
+    addS('Created By', sr.sales_added_by);
+    var summaryHtml = summaryParts.length
+      ? '<div class="srd-tpl-summary">' + summaryParts.join('') + '</div>' : '';
+
+    var html = instances.map(function(t, idx){
+      var name = t.template_name || t.template_code || ('Template ' + (t.template_id || (idx + 1)));
+      var rt = t.request_type || '';
+      var fields = t.fields || {};
+      var keys = Object.keys(fields);
+      var fieldsHtml;
+      if (!keys.length) {
+        fieldsHtml = '<div class="srd-empty" style="padding:8px;">No field values captured for this template.</div>';
+      } else {
+        fieldsHtml = '<div class="srd-tpl-fields">' + keys.map(function(k){
+          var v = fields[k];
+          var isLong = (typeof v === 'string' && v.length > 80);
+          return '<div' + (isLong ? ' class="full"' : '') + '>' +
+                  '<div class="k">' + esc(fmtKey(k)) + '</div>' +
+                  '<div class="v">' + fmtVal(v) + '</div>' +
+                '</div>';
+        }).join('') + '</div>';
+      }
+      return '<div class="srd-tpl">' +
+        '<div class="srd-tpl-head">' +
+          '<div class="name"><i class="fas fa-file-alt text-info"></i> ' + esc(name) +
+            (rt ? ' · <span class="text-info">' + esc(rt) + '</span>' : '') +
+          '</div>' +
+          '<div class="text-muted" style="font-size:12px;">' +
+            (t.items ? (t.items.length + ' item' + (t.items.length === 1 ? '' : 's')) : '') +
+          '</div>' +
+        '</div>' +
+        fieldsHtml +
+      '</div>';
+    }).join('');
+    $('#srdTemplates').html(summaryHtml + html);
+    $('#srdTemplatesCard').show();
+  }
+
+  // ===== Activity flow =====
+  function buildFlowEvents(timeline){
+    var events = [];
+
+    (timeline.status_history || []).forEach(function(h){
+      var title = (h.old_status ? esc(h.old_status) + ' → ' : '') + esc(h.new_status || 'Status set');
+      events.push({
+        kind: 'status',
+        when: h.changed_at,
+        title: title,
+        actor: h.changed_by,
+        body:  h.note || ''
+      });
+    });
+
+    (timeline.change_log || []).forEach(function(c){
+      var t = (c.action_type || '').toUpperCase();
+      var kind = 'change';
+      if (t.indexOf('CREATE') >= 0 || t === 'ITEM_ADD' || t === 'ATTACHMENT_ADD') kind = 'create';
+      else if (t.indexOf('DELETE') >= 0 || t === 'ITEM_DELETE' || t === 'ATTACHMENT_REMOVE') kind = 'delete';
+      else if (t.indexOf('STATUS') >= 0) kind = 'status';
+
+      var title = c.change_description || c.action_type || 'Change';
+      var diff = '';
+      if (c.field_name || hasValue(c.old_value) || hasValue(c.new_value)) {
+        var label = c.field_name
+          ? '<span class="field-label">' + esc(prettyFieldName(c.field_name)) + '</span>'
+          : '';
+        var oldR = renderLogValue(c.old_value);
+        var newR = renderLogValue(c.new_value);
+        if (hasValue(c.old_value) && hasValue(c.new_value)) {
+          diff = '<div class="srd-flow-diff">' + label +
+                   '<div class="o-block">' + oldR + '</div>' +
+                   '<div class="arrow">↓</div>' +
+                   '<div class="n-block">' + newR + '</div>' +
+                 '</div>';
+        } else if (hasValue(c.new_value)) {
+          diff = '<div class="srd-flow-diff">' + label +
+                   '<div class="n-block">' + newR + '</div>' +
+                 '</div>';
+        } else if (hasValue(c.old_value)) {
+          diff = '<div class="srd-flow-diff">' + label +
+                   '<div class="o-block">' + oldR + '</div>' +
+                 '</div>';
+        } else if (c.field_name) {
+          diff = '<div class="srd-flow-diff">' + label + '</div>';
+        }
+      }
+      events.push({
+        kind: kind,
+        when: c.action_date,
+        title: esc(title),
+        actor: c.action_by,
+        body: '',
+        extra: diff
+      });
+    });
+
+    // Newest first
+    events.sort(function(a, b){
+      return String(b.when || '').localeCompare(String(a.when || ''));
+    });
+    return events;
+  }
+
+  function renderFlow(filter){
+    filter = filter || 'all';
+    var rows = flowEvents.filter(function(e){
+      if (filter === 'all') return true;
+      if (filter === 'status') return e.kind === 'status';
+      if (filter === 'change') return e.kind === 'change' || e.kind === 'create' || e.kind === 'delete';
+      return true;
+    });
+    if (!rows.length) {
+      $('#srdFlow').hide();
+      $('#srdFlowEmpty').show();
+      return;
+    }
+    var html = rows.map(function(e){
+      return '<div class="srd-flow-item ' + esc(e.kind) + '">' +
+        '<div class="srd-flow-head">' +
+          '<div class="srd-flow-title">' +
+            (e.actor ? '<span class="srd-flow-actor">' + esc(e.actor) + '</span>' : '') +
+            e.title +
+          '</div>' +
+          '<div class="srd-flow-when">' + esc(e.when || '') + '</div>' +
+        '</div>' +
+        (e.body ? '<div class="srd-flow-body">' + esc(e.body) + '</div>' : '') +
+        (e.extra || '') +
+      '</div>';
+    }).join('');
+    $('#srdFlowEmpty').hide();
+    $('#srdFlow').html(html).show();
+  }
+
+  function loadFlow(){
+    $.ajax({ url: '/api/workflow/request/' + REQUEST_ID + '/timeline', type: 'GET', cache: false })
+      .done(function(r){
+        $('#srdFlowLoading').hide();
+        if (!r || !r.success) {
+          $('#srdFlowEmpty').text('Unable to load activity.').show();
+          return;
+        }
+        flowEvents = buildFlowEvents(r);
+        renderFlow('all');
+      })
+      .fail(function(xhr){
+        $('#srdFlowLoading').hide();
+        if (xhr.status === 403) $('#srdFlowEmpty').text('No permission to view activity.').show();
+        else $('#srdFlowEmpty').text('Failed to load activity (' + xhr.status + ').').show();
+      });
+  }
+
+  // ===== Main render =====
+  function render(sr){
+    document.title = 'SR-' + REQUEST_ID + ' · ' + (sr.title || 'Details');
+    $('#srdTitle').text('SR-' + REQUEST_ID + ' · ' + (sr.title || ''));
+    $('#srdStatus').html(statusBadge(sr.status));
+    $('#srdPriority').html(prioBadge(sr.priority));
+    $('#srdClient').text(sr.client_name || '-');
+    $('#srdCompany').text(sr.company_name || '-');
+    var rt = sr.request_types && sr.request_types.length
+        ? sr.request_types.join(', ')
+        : (sr.request_type || '-');
+    $('#srdRequestTypes').text(rt);
+    $('#srdStart').text(sr.start_date || '-');
+    $('#srdEnd').text(sr.end_date || '-');
+    $('#srdDuration').text(sr.duration || (sr.duration_days ? sr.duration_days + ' days' : '-'));
+    $('#srdCreated').text(sr.sales_added_date || '-');
+    $('#srdCreatedBy').text(sr.sales_added_by || '-');
+    $('#srdModified').text(sr.last_modified || '-');
+    $('#srdTotalCost').text(money(sr.total_cost));
+    $('#srdTotalSell').text(money(sr.total_sell));
+    if (sr.description) {
+      $('#srdDescription').text(sr.description);
+      $('#srdDescriptionWrap').show();
+    }
+    renderItems(sr.items);
+    renderTemplates(sr.template_instances, sr);
+
+    $('#srdLoading').hide();
+    $('#srdContent').show();
+  }
+
+  function showError(msg){
+    $('#srdLoading').hide();
+    $('#srdErrorMsg').text(msg || 'Unable to load request details.');
+    $('#srdError').show();
+  }
+
+  $(document).ready(function(){
+    $.ajax({ url: '/api/sales/requests/' + REQUEST_ID, type: 'GET', cache: false })
+      .done(function(r){
+        if (r && r.success && r.request) {
+          render(r.request);
+          loadFlow();
+        } else {
+          showError((r && r.error) || 'Request not found.');
+        }
+      })
+      .fail(function(xhr){
+        if (xhr.status === 403) showError('You do not have permission to view this sales request.');
+        else if (xhr.status === 404) showError('Sales request not found.');
+        else showError('Server error loading request (' + xhr.status + ').');
+      });
+
+    $('#srdOpenChat').on('click', function(){
+      if (typeof window.openChatDrawerForRequest === 'function') {
+        window.openChatDrawerForRequest(REQUEST_ID);
+      } else {
+        $('#chatDrawerToggle').trigger('click');
+      }
+    });
+
+    $(document).on('click', '.srd-tabs .nav-link', function(e){
+      e.preventDefault();
+      $('.srd-tabs .nav-link').removeClass('active');
+      $(this).addClass('active');
+      renderFlow($(this).data('flow'));
+    });
+  });
+})();
+</script>
+{% endblock %}

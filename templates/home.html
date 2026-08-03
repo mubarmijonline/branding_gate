@@ -1,0 +1,487 @@
+{% extends "main.html" %}
+
+{% block body %}
+<style>
+  /* ===== Home Page Portal Styles ===== */
+  .home-hero {
+    background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    margin-bottom: 2rem;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .home-hero::after {
+    content: '';
+    position: absolute;
+    top: -60%;
+    right: -10%;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    pointer-events: none;
+  }
+  .home-hero h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .home-hero p { opacity: 0.85; margin-bottom: 0; font-size: 0.95rem; }
+
+  .portals-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  @media (max-width: 992px) {
+    .portals-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Portal Card */
+  .portal-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(58,59,69,.08);
+    transition: transform .25s ease, box-shadow .25s ease;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: visible;
+    min-height: 230px;
+  }
+  .portal-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 8px 28px rgba(58,59,69,.16);
+  }
+
+  /* Card Header — gradient strip */
+  .portal-card-header {
+    padding: 1.25rem 1.5rem;
+    border-radius: 14px 14px 0 0;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: 0.01em;
+  }
+  .portal-card-header i { font-size: 1.4rem; opacity: 0.9; }
+
+  /* Gradient themes per department */
+  .portal-theme-admin    { background: linear-gradient(135deg, #4e73df 0%, #224abe 100%); }
+  .portal-theme-sales    { background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%); }
+  .portal-theme-ops      { background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%); color: #1a1a2e; }
+  .portal-theme-pricing  { background: linear-gradient(135deg, #e74a3b 0%, #be2617 100%); }
+  .portal-theme-marketing{ background: linear-gradient(135deg, #fd7e14 0%, #e8590c 100%); }
+  .portal-theme-finance  { background: linear-gradient(135deg, #36b9cc 0%, #258391 100%); }
+  .portal-theme-account  { background: linear-gradient(135deg, #858796 0%, #60616f 100%); }
+  .portal-theme-2d       { background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%); }
+  .portal-theme-3d       { background: linear-gradient(135deg, #5a5c69 0%, #3a3b45 100%); }
+
+  /* Card Body */
+  .portal-card-body {
+    padding: 1.25rem 1.5rem;
+    flex: 1;
+  }
+  .portal-card-body p {
+    color: #5a5c69;
+    font-size: 0.92rem;
+    margin-bottom: 0;
+    line-height: 1.6;
+  }
+
+  /* Card Footer with actions */
+  .portal-card-footer {
+    padding: 0.5rem 1.5rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-top: 1px solid #f0f0f5;
+    margin-top: auto;
+  }
+
+  .portal-btn-main {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: #fff;
+    transition: filter .2s, transform .15s;
+  }
+  .portal-btn-main:hover { filter: brightness(1.1); transform: translateY(-1px); text-decoration: none; color: #fff; }
+
+  /* Quick-links toggle button */
+  .portal-btn-quick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1.5px solid #dee2e6;
+    background: #fff;
+    color: #6c757d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+  }
+  .portal-btn-quick:hover { background: #f8f9fc; border-color: #4e73df; color: #4e73df; }
+
+  /* Dropdown inside portal card — must NOT be clipped */
+  .portal-card .portal-dropdown {
+    position: relative;
+  }
+  .portal-card .portal-dropdown-menu {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    min-width: 220px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.15);
+    z-index: 1050;
+    padding: 0.4rem 0;
+    margin-bottom: 6px;
+    border: 1px solid rgba(0,0,0,.06);
+  }
+  .portal-card .portal-dropdown-menu.show { display: block; }
+
+  .portal-dropdown-menu a {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
+    color: #4a4a5a;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all .15s;
+  }
+  .portal-dropdown-menu a:hover {
+    background: #f0f4ff;
+    color: #224abe;
+    text-decoration: none;
+  }
+  .portal-dropdown-menu a i { width: 18px; text-align: center; opacity: 0.7; }
+
+  /* Disabled / Coming Soon cards */
+  .portal-card.coming-soon { opacity: 0.7; }
+  .portal-card.coming-soon .portal-card-header::after {
+    content: 'Coming Soon';
+    margin-left: auto;
+    font-size: 0.65rem;
+    background: rgba(255,255,255,.25);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  @media (max-width: 576px) {
+    .portals-grid { grid-template-columns: 1fr; }
+    .home-hero { padding: 1.5rem 1.25rem; }
+    .home-hero h1 { font-size: 1.4rem; }
+    .portal-card { min-height: auto; }
+  }
+</style>
+
+<div class="container-fluid" style="padding: 0 2rem;">
+
+  <!-- Hero Section -->
+  <div class="home-hero">
+    <div class="d-flex align-items-center justify-content-between flex-wrap">
+      <div>
+        <h1><i class="fas fa-th-large mr-2"></i>Department Portals</h1>
+        <p>Welcome back, {{ session.get('name', 'User') }}. Select a department to get started.</p>
+      </div>
+      <button id="refreshRolesBtn" class="btn btn-outline-light btn-sm mt-2 mt-md-0" title="Refresh user roles">
+        <i class="fas fa-sync-alt mr-1"></i> Refresh Access
+      </button>
+    </div>
+  </div>
+
+  <!-- Portals Grid -->
+  <div class="portals-grid" id="role-portals-container">
+    <!-- Rendered by JS -->
+  </div>
+</div>
+
+<!-- Inject user_id as a JS variable for use in AJAX -->
+<script>
+window.sessionUserId = "{{ session['user_id'] }}";
+</script>
+
+<script>
+// Map role name to portal info
+const rolePortals = {
+  'admin': {
+    icon: 'fas fa-shield-alt',
+    title: 'Admin',
+    desc: 'System administration, user management, and business entity oversight.',
+    link: '/management_admin',
+    theme: 'admin',
+    subLinks: [
+      { name: 'Users & Roles', url: '/users', icon: 'fas fa-users-cog' },
+      { name: 'Company', url: '/company', icon: 'fas fa-building' },
+      { name: 'Client', url: '/client', icon: 'fas fa-handshake' },
+      { name: 'Supplier', url: '/supplier', icon: 'fas fa-truck' },
+      { name: 'Approvals', url: '/approvals', icon: 'fas fa-clipboard-check' }
+    ]
+  },
+  'sales': {
+    icon: 'fas fa-chart-line',
+    title: 'Sales',
+    desc: 'Manage sales requests, client approvals, and performance metrics.',
+    link: '/sales_mainpage',
+    theme: 'sales',
+    subLinks: [
+      { name: 'Sales Requests', url: '/sales_request', icon: 'fas fa-clipboard-list' },
+      { name: 'Client Approval', url: '/client_approval', icon: 'fas fa-check-circle' },
+      { name: 'Sales Head Approval', url: '/sales-head-approval', icon: 'fas fa-user-check' }
+    ]
+  },
+  'operation': {
+    icon: 'fas fa-cogs',
+    title: 'Operations',
+    desc: 'Costing, approved items, workflow timelines, and inventory management.',
+    link: '/operation_mainpage',
+    theme: 'ops',
+    subLinks: [
+      { name: 'Operation Request', url: '/operation_request', icon: 'fas fa-tools' },
+      { name: 'Approved Items', url: '/approved-items', icon: 'fas fa-check-circle' },
+      { name: 'Workflow Timeline', url: '/workflow_timeline', icon: 'fas fa-stream' },
+      { name: 'Item Management', url: '/item_management', icon: 'fas fa-warehouse' },
+      { name: 'Supplier Report', url: '/supplier-report', icon: 'fas fa-truck' }
+    ]
+  },
+  'pricing': {
+    icon: 'fas fa-dollar-sign',
+    title: 'Pricing',
+    desc: 'Pricing calculators, repricing tools, and operation dashboard.',
+    link: '/pricing',
+    theme: 'pricing',
+    subLinks: [
+      { name: 'Operation Dashboard', url: '/pricing', icon: 'fas fa-tachometer-alt' }
+    ]
+  },
+  'marketing': {
+    icon: 'fas fa-bullhorn',
+    title: 'Marketing',
+    desc: 'Access marketing campaigns and analytics.',
+    link: '#',
+    theme: 'marketing',
+    comingSoon: true
+  },
+  'finance': {
+    icon: 'fas fa-coins',
+    title: 'Finance',
+    desc: 'Financial statements, transactions, expenses, and approvals.',
+    link: '/finance',
+    theme: 'finance',
+    subLinks: [
+      { name: 'Finance Management', url: '/finance_management', icon: 'fas fa-wallet' },
+      { name: 'Finance Approvals', url: '/finance/approvals', icon: 'fas fa-check-double' },
+      { name: 'Expense Tracking', url: '/expense-tracking', icon: 'fas fa-receipt' },
+      { name: 'Expense Approval', url: '/expense-tracking-approval', icon: 'fas fa-clipboard-check' },
+      { name: 'My Expenses', url: '/my-expenses', icon: 'fas fa-user-tag' }
+    ]
+  },
+  'account manager': {
+    icon: 'fas fa-user-tie',
+    title: 'Account Manager',
+    desc: 'Oversee client accounts and ensure customer satisfaction.',
+    link: '#',
+    theme: 'account',
+    comingSoon: true
+  },
+  '2D designer': {
+    icon: 'fas fa-pencil-ruler',
+    title: '2D Designer',
+    desc: 'Access 2D design tools, assets, and project boards.',
+    link: '#',
+    theme: '2d',
+    comingSoon: true
+  },
+  '3D graphic': {
+    icon: 'fas fa-cube',
+    title: '3D Graphic',
+    desc: 'Access 3D modeling, rendering, and visualization resources.',
+    link: '#',
+    theme: '3d',
+    comingSoon: true
+  }
+};
+
+function renderRolePortals(roles) {
+  const container = document.getElementById('role-portals-container');
+  container.innerHTML = '';
+  
+  const uniqueRoles = Array.from(new Set(roles));
+  const isAdmin = uniqueRoles.includes('admin');
+  
+  if (isAdmin) {
+    Object.entries(rolePortals).forEach(([role, portal]) => {
+      if (role !== 'users') container.innerHTML += createPortalCard(portal);
+    });
+  } else {
+    uniqueRoles.forEach(role => {
+      if (role !== 'users' && rolePortals[role]) {
+        container.innerHTML += createPortalCard(rolePortals[role]);
+      }
+    });
+  }
+
+  // Bind custom dropdown toggles (NOT bootstrap dropdowns — avoids z-index issues)
+  document.querySelectorAll('.portal-btn-quick').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const menu = this.closest('.portal-dropdown').querySelector('.portal-dropdown-menu');
+      // Close all other open menus
+      document.querySelectorAll('.portal-dropdown-menu.show').forEach(m => {
+        if (m !== menu) m.classList.remove('show');
+      });
+      menu.classList.toggle('show');
+    });
+  });
+  // Close dropdown when clicking outside
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.portal-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+  });
+}
+
+function createPortalCard(portal) {
+  const comingSoonClass = portal.comingSoon ? ' coming-soon' : '';
+  const themeClass = `portal-theme-${portal.theme || 'admin'}`;
+
+  // Build sub-links dropdown HTML
+  let quickLinksHtml = '';
+  if (portal.subLinks && portal.subLinks.length > 0) {
+    const links = portal.subLinks.map(s =>
+      `<a href="${s.url}"><i class="${s.icon}"></i>${s.name}</a>`
+    ).join('');
+    quickLinksHtml = `
+      <div class="portal-dropdown">
+        <button class="portal-btn-quick" title="Quick links">
+          <i class="fas fa-ellipsis-v"></i>
+        </button>
+        <div class="portal-dropdown-menu">${links}</div>
+      </div>`;
+  }
+
+  // Choose button colour based on theme
+  const btnBg = {
+    admin: '#4e73df', sales: '#1cc88a', ops: '#dda20a', finance: '#36b9cc',
+    pricing: '#e74a3b', marketing: '#fd7e14', account: '#858796', '2d': '#6f42c1', '3d': '#5a5c69'
+  }[portal.theme] || '#4e73df';
+
+  return `
+    <div class="portal-card${comingSoonClass}">
+      <div class="portal-card-header ${themeClass}">
+        <i class="${portal.icon}"></i>
+        ${portal.title}
+      </div>
+      <div class="portal-card-body">
+        <p>${portal.desc}</p>
+      </div>
+      <div class="portal-card-footer">
+        <a href="${portal.link}" class="portal-btn-main" style="background:${btnBg}">
+          <i class="fas fa-arrow-right"></i> Open Section
+        </a>
+        ${quickLinksHtml}
+      </div>
+    </div>`;
+}
+
+// Fetch roles for the current user and render portals
+function fetchAndRenderRoles() {
+  fetch('/api/users/' + window.sessionUserId + '/all_roles')
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        // Combine user_roles and team_roles
+        const allRoles = [...(data.user_roles || []), ...(data.team_roles || [])];
+        renderRolePortals(allRoles);
+      }
+    });
+}
+
+// Refresh roles and update session
+function refreshUserRolesAndPortals() {
+  const btn = document.getElementById('refreshRolesBtn');
+  const originalText = btn.innerHTML;
+  
+  // Show loading state
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+  btn.disabled = true;
+  
+  fetch('/api/refresh-roles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      // Re-fetch and render roles with updated session
+      fetchAndRenderRoles();
+      
+      // Show success message
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Access Updated',
+          text: 'Your role access has been refreshed successfully.',
+          timer: 2000,
+          showConfirmButton: false
+        });
+      } else {
+        alert('Your role access has been refreshed successfully.');
+      }
+    } else {
+      console.error('Failed to refresh roles:', data.error);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Refresh Failed',
+          text: 'Failed to refresh role access. Please try again.',
+        });
+      } else {
+        alert('Failed to refresh role access. Please try again.');
+      }
+    }
+  })
+  .catch(error => {
+    console.error('Error refreshing roles:', error);
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'An error occurred while refreshing roles.',
+      });
+    } else {
+      alert('An error occurred while refreshing roles.');
+    }
+  })
+  .finally(() => {
+    // Restore button state
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  fetchAndRenderRoles();
+  
+  // Add click handler for refresh button
+  document.getElementById('refreshRolesBtn').addEventListener('click', refreshUserRolesAndPortals);
+});
+</script>
+{% endblock %}

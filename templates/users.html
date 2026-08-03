@@ -1,0 +1,959 @@
+{% extends "main.html" %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles %}
+    <!-- Teams Table and Add Team Button -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Teams</h2>
+            <button class="btn btn-success" data-toggle="modal" data-target="#addTeamModal">
+                <i class="fas fa-users"></i> Add Team
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="teams-table" class="display table table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Team Name</th>
+                            <th>Department Name</th>
+                            <th>Roles</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Users</h2>
+            <button class="btn btn-primary" data-toggle="modal" data-target="#addUserModal">
+                <i class="fas fa-plus"></i> Add User
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="users-table" class="display table table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Mobile</th>
+                            <th>Email</th>
+                            <th>Password</th>
+                            <th>Team ID</th>
+                            <th>Team Name</th>
+                            <th>Department Name</th>
+                            <th>Username</th>
+                            <th>Title</th>
+                            <th>Added By</th>
+                            <th>Date</th>
+                            <th>Modified Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-danger mt-5">You do not have permission to view this page.</div>
+    {% endif %}
+</div>
+
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css"/>
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css"/>
+
+<!-- Required Scripts -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" />
+
+<script>
+// Job-function roles (shown in the multi-select Roles picker)
+const roles_list = ['admin','pricing','sales','marketing','sales operation','operation','account manager','2D designer','finance','3D graphic'];
+
+// Module-access permissions (shown as toggle switches OUTSIDE the Roles picker)
+// These grant access to specific admin sub-modules independently of the user's job role.
+const MODULE_PERMISSIONS = [
+    { key: 'client_management',   label: 'Client Management',          icon: 'fa-handshake', desc: 'Create / edit / delete clients' },
+    { key: 'company_management',  label: 'Company Management',         icon: 'fa-building',  desc: 'Create / edit / delete companies' },
+    { key: 'entity_management',   label: 'Parent Company (Entity) Management', icon: 'fa-sitemap', desc: 'Manage parent companies / entities' },
+    { key: 'supplier_management', label: 'Supplier Management',        icon: 'fa-truck',     desc: 'Create / edit / delete suppliers' }
+];
+const PERM_KEYS = MODULE_PERMISSIONS.map(p => p.key);
+
+// Render the toggle-switch checkboxes inside a container element
+function renderPermSwitches(containerSelector, idPrefix) {
+    const $c = $(containerSelector);
+    $c.empty();
+    MODULE_PERMISSIONS.forEach(function(p) {
+        const id = idPrefix + '_' + p.key;
+        $c.append(
+            '<div class="custom-control custom-switch py-1">' +
+            '<input type="checkbox" class="custom-control-input perm-switch" id="' + id + '" value="' + p.key + '">' +
+            '<label class="custom-control-label" for="' + id + '">' +
+            '<i class="fas ' + p.icon + ' text-primary mr-1"></i><strong>' + p.label + '</strong>' +
+            '<br><small class="text-muted">' + p.desc + '</small>' +
+            '</label></div>'
+        );
+    });
+}
+
+// Read the values of all checked switches inside container
+function getCheckedPerms(containerSelector) {
+    return $(containerSelector + ' .perm-switch:checked').map(function(){return this.value;}).get();
+}
+
+// Pre-check switches based on a roles array (e.g., when opening the edit modal)
+function setCheckedPerms(containerSelector, rolesArr, disabledKeys) {
+    const set = new Set((rolesArr || []).map(r => String(r).trim()));
+    const dis = new Set(disabledKeys || []);
+    $(containerSelector + ' .perm-switch').each(function(){
+        this.checked  = set.has(this.value);
+        this.disabled = dis.has(this.value);
+    });
+}
+
+function populateTeamDropdown() {
+    $.getJSON('/api/teams', function(response) {
+        if (response.success && response.teams) {
+            const $teamSelect = $('#team_id');
+            const currentVal = $teamSelect.val();
+            $teamSelect.empty();
+            $teamSelect.append('<option value="">Select a team</option>');
+            response.teams.forEach(function(team) {
+                $teamSelect.append(`<option value="${team.team_id}">${team.team_name}</option>`);
+            });
+            // Try to restore previous selection if possible
+            if (currentVal) $teamSelect.val(currentVal);
+        }
+    });
+}
+
+function loadTeamsTable() {
+    $.getJSON('/api/teams', function(response) {
+        if (response.success) {
+            const teams = response.teams.map(team => [
+                team.team_id,
+                team.team_name,
+                team.department_name || '',
+                team.roles,
+                `<button class="btn btn-info btn-sm edit-team" data-id="${team.team_id}" data-name="${team.team_name}" data-department="${team.department_name || ''}"><i class="fas fa-edit"></i> Edit</button>`
+            ]);
+            if ($.fn.DataTable.isDataTable('#teams-table')) {
+                $('#teams-table').DataTable().clear().rows.add(teams).draw();
+            } else {
+                $('#teams-table').DataTable({
+                    data: teams,
+                    columns: [
+                        { title: "ID" },
+                        { title: "Team Name" },
+                        { title: "Department Name" },
+
+                        { title: "Roles" },
+                        { title: "Actions", orderable: false, searchable: false }
+                    ],
+                    dom: 'Bfrtip',
+                    buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+                    pageLength: 10,
+                    order: [[0, 'desc']],
+                    responsive: true
+                });
+            }
+        }
+    });
+}
+
+// Add this function to handle table loading/reloading
+function loadUsersTable() {
+    $.getJSON('/api/users', function(response) {
+        if (response.success) {
+            const users = response.users.map(user => [
+                user.id,
+                user.name,
+                user.mobile,
+                user.email,
+                user.password,
+                user.team_id,
+                user.team_name,
+                user.department_name,
+                user.username,
+                user.title,
+                user.added_by,
+                user.date,
+                user.modified_date,
+                `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
+                    <i class="fas fa-trash"></i> Delete
+                </button>`
+            ]);
+
+            if ($.fn.DataTable.isDataTable('#users-table')) {
+                $('#users-table').DataTable().clear().rows.add(users).draw();
+            } else {
+                $('#users-table').DataTable({
+                    data: users,
+                    columns: [
+                        { title: "ID" },
+                        { title: "Name" },
+                        { title: "Mobile" },
+                        { title: "Email" },
+                        { title: "Password" },
+                        { title: "Team ID" },
+                        { title: "Team Name" },
+                        { title: "Department Name" },
+                        { title: "Username" },
+                        { title: "Title" },
+                        { title: "Added By" },
+                        { title: "Date" },
+                        { title: "Modified Date" },
+                        { title: "Actions", orderable: false, searchable: false }
+                    ],
+                    dom: 'Bfrtip',
+                    buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+                    pageLength: 10,
+                    order: [[0, 'desc']],
+                    responsive: true
+                });
+            }
+        }
+    });
+}
+
+$(document).ready(function() {
+    $.getJSON('/api/users', function(response) {
+        if (response.success) {
+            const users = response.users.map(user => [
+                user.id,
+                user.name,
+                user.mobile,
+                user.email,
+                user.password,
+                user.team_id,
+                user.team_name,
+                user.department_name,
+                user.username,
+                user.title,
+                user.added_by,
+                user.date,
+                user.modified_date,
+                `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
+                    <i class="fas fa-trash"></i> Delete
+                </button>`
+            ]);
+            if ($.fn.DataTable.isDataTable('#users-table')) {
+                $('#users-table').DataTable().clear().rows.add(users).draw();
+            } else {
+                $('#users-table').DataTable({
+                    data: users,
+                    columns: [
+                        { title: "ID" },
+                        { title: "Name" },
+                        { title: "Mobile" },
+                        { title: "Email" },
+                        { title: "Password" },
+                        { title: "Team ID" },
+                        { title: "Team Name" },
+                        { title: "Department Name" },
+                        { title: "Username" },
+                        { title: "Title" },
+                        { title: "Added By" },
+                        { title: "Date" },
+                        { title: "Modified Date" },
+                        { title: "Actions", orderable: false, searchable: false }
+                    ],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy', 'csv', 'excel', 'pdf', 'print'
+                    ],
+                    pageLength: 25,
+                    order: [[0, 'desc']], // Sort by ID in descending order
+                    responsive: true,
+                    language: {
+                        search: "Search users:",
+                        lengthMenu: "Show _MENU_ users per page",
+                        info: "Showing _START_ to _END_ of _TOTAL_ users"
+                    }
+                });
+            }
+        } else {
+            alert('Failed to load users: ' + (response.error || 'Unknown error'));
+        }
+    }).fail(function(jqXHR, textStatus, errorThrown) {
+        console.error('Error fetching users:', textStatus, errorThrown);
+        alert('Failed to load users. Please try again later.');
+    });
+
+    // Load teams table on page load
+    loadTeamsTable();
+
+    // Initialize Select2 for edit_roles_select ONCE on page load
+    $('#edit_roles_select').select2({
+        placeholder: 'Select roles',
+        width: '100%'
+    });
+
+    // Always repopulate and set selected roles in the edit modal
+    function populateEditRolesSelect(selectedRoles) {
+        const $editRoles = $('#edit_roles_select');
+        $editRoles.empty();
+        roles_list.forEach(function(role) {
+            $editRoles.append(new Option(role, role));
+        });
+        // Ensure all selectedRoles are strings and trimmed
+        const cleanSelected = (selectedRoles || []).map(r => String(r).trim());
+        $editRoles.val(cleanSelected).trigger('change');
+    }
+
+    // Handle edit team button click
+    $(document).on('click', '.edit-team', function() {
+        const teamId = $(this).data('id');
+        const teamName = $(this).data('name');
+        const departmentName = $(this).data('department');
+        $('#edit_team_id').val(teamId);
+        $('#edit_team_name').val(teamName);
+        $('#edit_department_name').val(departmentName);
+        // Get roles from the table row (4th column, zero-based index 3)
+        const $row = $(this).closest('tr');
+        let rolesStr = $row.find('td').eq(3).text();
+        let allRoles = rolesStr.split(',').map(r => r.trim()).filter(r => r.length > 0);
+        // Split into job-roles (for the multi-select) vs module-perms (for the switches)
+        let jobRoles = allRoles.filter(r => !PERM_KEYS.includes(r));
+        let permRoles = allRoles.filter(r =>  PERM_KEYS.includes(r));
+        populateEditRolesSelect(jobRoles);
+        setCheckedPerms('#edit_team_perms', permRoles);
+        $('#editTeamModal').modal('show');
+    });
+
+    // Handle edit team form submission
+    $('#editTeamForm').on('submit', function(e) {
+        e.preventDefault();
+        const teamId = $('#edit_team_id').val();
+        const teamName = $('#edit_team_name').val();
+        const departmentName = $('#edit_department_name').val();
+        const baseRoles = $('#edit_roles_select').val() || [];
+        const perms = getCheckedPerms('#edit_team_perms');
+        const roles = Array.from(new Set([...baseRoles, ...perms]));
+        $.ajax({
+            url: `/api/teams/edit/${teamId}`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ team_name: teamName, department_name: departmentName, roles: roles }),
+            success: function(response) {
+                if (response.success) {
+                    $('#editTeamModal').modal('hide');
+                    loadTeamsTable();
+                    populateTeamDropdown();
+                    Swal.fire('Updated!', 'Team has been updated.', 'success');
+                } else {
+                    Swal.fire('Error!', response.error || 'Failed to update team', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                Swal.fire('Error!', 'Failed to update team', 'error');
+                console.error('Error:', error);
+            }
+        });
+    });
+
+    // Handle delete user
+    $(document).on('click', '.delete-user', function() {
+        const userId = $(this).data('id');
+        
+        Swal.fire({
+            title: 'Are you sure?',
+            text: "You won't be able to revert this!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `/api/users/delete/${userId}`,
+                    method: 'DELETE',
+                    success: function(response) {
+                        if (response.success) {
+                            // Refresh the table
+                            $.getJSON('/api/users', function(response) {
+                                if (response.success) {
+                                    const users = response.users.map(user => [
+                                        user.id,
+                                        user.name,
+                                        user.mobile,
+                                        user.email,
+                                        user.password,
+                                        user.team_id,
+                                        user.team_name,
+                                        user.department_name,
+                                        user.username,
+                                        user.title,
+                                        user.added_by,
+                                        user.date,
+                                        user.modified_date,
+                                        `<button class=\"btn btn-danger btn-sm delete-user\" data-id=\"${user.id}\"><i class=\"fas fa-trash\"></i> Delete</button>`
+                                    ]);
+                                    const table = $('#users-table').DataTable();
+                                    table.clear().rows.add(users).draw();
+                                }
+                            });
+                            
+                            Swal.fire(
+                                'Deleted!',
+                                'User has been deleted.',
+                                'success'
+                            );
+                        } else {
+                            Swal.fire(
+                                'Error!',
+                                response.error || 'Failed to delete user',
+                                'error'
+                            );
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        Swal.fire(
+                            'Error!',
+                            'Failed to delete user',
+                            'error'
+                        );
+                        console.error('Error:', error);
+                    }
+                });
+            }
+        });
+    });
+
+    $('#addUserForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Validate password match
+        if ($('#password').val() !== $('#confirmPassword').val()) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Validation Error',
+                text: 'Passwords do not match!'
+            });
+            return;
+        }
+
+        const rawTeamId = $('#team_id').val();
+        const baseRoles = $('#add_user_roles').val() || [];
+        const perms = getCheckedPerms('#add_user_perms');
+        const userData = {
+            name: $('#name').val(),
+            username: $('#username').val(),
+            title: $('#title').val(),
+            team_id: rawTeamId && rawTeamId !== '' ? rawTeamId : null,
+            mobile: $('#mobile').val(),
+            email: $('#email').val(),
+            password: $('#password').val(),
+            user_roles: Array.from(new Set([...baseRoles, ...perms]))
+        };
+
+        $.ajax({
+            url: '/api/users/add',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(userData),
+            success: function(response) {
+                if (response.success) {
+                    // Close modal, reset form and clean up modal artifacts
+                    $('#addUserModal').modal('hide');
+                    $('#addUserForm')[0].reset();
+                    $('#add_user_roles').val(null).trigger('change');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    
+                    // Refresh the table by fetching data again
+                    $.getJSON('/api/users', function(response) {
+                        if (response.success) {
+                            const users = response.users.map(user => [
+                                user.id,
+                                user.name,
+                                user.mobile,
+                                user.email,
+                                user.password,
+                                user.team_id,
+                                user.team_name,
+                                user.department_name,
+                                user.username,
+                                user.title,
+                                user.added_by,
+                                user.date,
+                                user.modified_date,
+                                `<button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>`
+                            ]);
+                            const table = $('#users-table').DataTable();
+                            table.clear().rows.add(users).draw();
+                        }
+                    });
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'User added successfully!'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: response.error || 'Failed to add user'
+                    });
+                }
+            },
+            error: function(xhr, status, error) {
+                let errorMessage = 'Failed to add user';
+                
+                // Try to get detailed error from response
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                }
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: errorMessage
+                });
+                console.error('Error:', error);
+            }
+        });
+    });
+
+    // Populate roles select2
+    roles_list.forEach(function(role) {
+        $('#roles_select').append(`<option value="${role}">${role}</option>`);
+    });
+    $('#roles_select').select2({
+        placeholder: 'Select roles',
+        width: '100%'
+    });
+
+    // Render the module-access toggle switches in all 4 modals (one-time)
+    renderPermSwitches('#add_team_perms',  'addteam');
+    renderPermSwitches('#edit_team_perms', 'editteam');
+    renderPermSwitches('#add_user_perms',  'adduser');
+    renderPermSwitches('#edit_user_perms', 'edituser');
+
+    // Reset Add modals' perm switches whenever they're opened
+    $('#addTeamModal').on('show.bs.modal', function(){ setCheckedPerms('#add_team_perms', []); });
+    $('#addUserModal').on('show.bs.modal', function(){ setCheckedPerms('#add_user_perms', []); });
+
+    // Handle add team form submission (AJAX to backend)
+    $('#addTeamForm').on('submit', function(e) {
+        e.preventDefault();
+        const baseRoles = $('#roles_select').val() || [];
+        const perms = getCheckedPerms('#add_team_perms');
+        const teamData = {
+            team_name: $('#team_name').val(),
+            department_name: $('#department_name').val(),
+            roles: Array.from(new Set([...baseRoles, ...perms]))
+        };
+        $.ajax({
+            url: '/create_team',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(teamData),
+            success: function(response) {
+                if (response.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Team Created',
+                        text: response.message
+                    });
+                    $('#addTeamModal').modal('hide');
+                    setTimeout(function() {
+                        $('body').removeClass('modal-open');
+                        $('.modal-backdrop').remove();
+                        populateTeamDropdown(); // Refresh team dropdown after adding a team
+                    }, 400);
+                    $('#addTeamForm')[0].reset();
+                    $('#roles_select').val(null).trigger('change');
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: response.message || 'Failed to create team.'
+                    });
+                }
+            },
+            error: function(xhr) {
+                let msg = 'Failed to create team.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                }
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: msg
+                });
+            }
+        });
+    });
+
+    // Populate team dropdown on page load
+    populateTeamDropdown();
+
+    // Initialize Select2 for add user roles
+    roles_list.forEach(function(role) {
+        $('#add_user_roles').append(`<option value="${role}">${role}</option>`);
+    });
+    $('#add_user_roles').select2({
+        placeholder: 'Select roles (optional)',
+        width: '100%'
+    });
+
+    // When Add User modal is shown, refresh the team dropdown
+    $('#addUserModal').on('show.bs.modal', function() {
+        populateTeamDropdown();
+    });
+
+    // Helper to fetch user and team roles for edit modal
+    function fetchUserRolesForEdit(userId, callback) {
+        $.getJSON(`/api/users/${userId}/all_roles`, function(response) {
+            if (response.success) {
+                callback(response);
+            } else {
+                callback({user_roles: [], team_roles: []});
+            }
+        });
+    }
+
+    // Initialize Select2 for edit_user_roles ONCE on page load
+    $('#edit_user_roles').select2({
+        placeholder: 'Select user-only roles',
+        width: '100%'
+    });
+
+    // Helper to repopulate roles in Edit User modal (like Edit Team modal)
+    function populateEditUserRolesSelect(userRoles, teamRoles) {
+        const $rolesSelect = $('#edit_user_roles');
+        $rolesSelect.empty();
+        // Ensure all roles are strings and trimmed
+        const cleanUserRoles = (userRoles || []).map(r => String(r).trim());
+        const cleanTeamRoles = (teamRoles || []).map(r => String(r).trim());
+        roles_list.forEach(function(role) {
+            const isTeamRole = cleanTeamRoles.includes(role);
+            const isUserRole = cleanUserRoles.includes(role);
+            // Value is always the role name, text can be with (from team)
+            const option = new Option(role + (isTeamRole ? ' (from team)' : ''), role, false, isUserRole);
+            if (isTeamRole) option.disabled = true;
+            $rolesSelect.append(option);
+        });
+        // Set value after all options are appended
+        $rolesSelect.val(cleanUserRoles).trigger('change');
+    }
+
+    // Handle edit user button click (ensure listener works after DataTable redraws)
+    $('#users-table').on('click', '.edit-user', function() {
+        const userId = $(this).data('id');
+        const $row = $(this).closest('tr');
+        const userData = {
+            id: userId,
+            name: $row.find('td').eq(1).text(),
+            mobile: $row.find('td').eq(2).text(),
+            email: $row.find('td').eq(3).text(),
+            username: $row.find('td').eq(8).text(),
+            title: $row.find('td').eq(9).text()
+        };
+
+        $('#edit_user_id').val(userData.id);
+        $('#edit_user_name').val(userData.name);
+        $('#edit_user_mobile').val(userData.mobile);
+        $('#edit_user_email').val(userData.email);
+        $('#edit_user_username').val(userData.username);
+        $('#edit_user_title').val(userData.title);
+
+        // Fetch user and team roles, then populate select2 + module switches
+        fetchUserRolesForEdit(userId, function(data) {
+            const userRoles = data.user_roles || [];
+            const teamRoles = data.team_roles || [];
+            // Job roles only (filter out module perms) -> select2
+            populateEditUserRolesSelect(
+                userRoles.filter(r => !PERM_KEYS.includes(r)),
+                teamRoles.filter(r => !PERM_KEYS.includes(r))
+            );
+            // Module perms -> switches.  Team-granted perms are pre-checked AND disabled.
+            const userPerms = userRoles.filter(r => PERM_KEYS.includes(r));
+            const teamPerms = teamRoles.filter(r => PERM_KEYS.includes(r));
+            setCheckedPerms('#edit_user_perms', [...userPerms, ...teamPerms], teamPerms);
+        });
+        $('#editUserModal').modal('show');
+    });
+
+    // Handle edit user form submission
+    $('#editUserForm').on('submit', function(e) {
+        e.preventDefault();
+        const userId = $('#edit_user_id').val();
+        const baseRoles = $('#edit_user_roles').val() || [];
+        // Only collect ENABLED switches (team-granted perms are disabled and shouldn't be re-saved as user perms)
+        const perms = $('#edit_user_perms .perm-switch:checked:not(:disabled)').map(function(){return this.value;}).get();
+        const userData = {
+            name: $('#edit_user_name').val(),
+            mobile: $('#edit_user_mobile').val(),
+            email: $('#edit_user_email').val(),
+            username: $('#edit_user_username').val(),
+            password: $('#edit_user_password').val(),
+            title: $('#edit_user_title').val(),
+            user_roles: Array.from(new Set([...baseRoles, ...perms]))
+        };
+
+        $.ajax({
+            url: `/api/users/edit/${userId}`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(userData),
+            success: function(response) {
+                if (response.success) {
+                    $('#editUserModal').modal('hide');
+                    loadUsersTable();
+                    Swal.fire('Updated!', 'User has been updated.', 'success');
+                } else {
+                    Swal.fire('Error!', response.error || 'Failed to update user', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                Swal.fire('Error!', 'Failed to update user', 'error');
+                console.error('Error:', error);
+            }
+        });
+    });
+});
+</script>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" class="form-control" id="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="title">Title</label>
+                        <input type="text" class="form-control" id="title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="team_id">Team</label>
+                        <select class="form-control" id="team_id">
+                            <option value="">Select a team (optional)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="add_user_roles">User Roles</label>
+                        <select id="add_user_roles" class="form-control" multiple="multiple" style="width:100%"></select>
+                        <small class="form-text text-muted">Assign roles directly to this user (in addition to any team roles).</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold"><i class="fas fa-key text-warning mr-1"></i>Module Access Permissions</label>
+                        <small class="form-text text-muted mb-2">Toggle access to specific admin sub-modules. These work independently of the job roles above.</small>
+                        <div id="add_user_perms" class="border rounded p-2 bg-light"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mobile">Mobile</label>
+                        <input type="tel" class="form-control" id="mobile" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" class="form-control" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" class="form-control" id="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password</label>
+                        <input type="password" class="form-control" id="confirmPassword" required>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Team Modal -->
+<div class="modal fade" id="addTeamModal" tabindex="-1" role="dialog" aria-labelledby="addTeamModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addTeamModalLabel">Add New Team</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="addTeamForm">
+          <div class="form-group">
+            <label for="team_name">Team Name</label>
+            <input type="text" class="form-control" id="team_name" name="team_name" required>
+          </div>
+          <div class="form-group">
+            <label for="department_name">Department Name</label>
+            <input type="text" class="form-control" id="department_name" name="department_name" required>
+          </div>
+          <div class="form-group">
+            <label for="roles_select">Roles</label>
+            <select id="roles_select" name="roles" class="form-control" multiple="multiple" style="width:100%">
+              <!-- Options will be populated by JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="font-weight-bold"><i class="fas fa-key text-warning mr-1"></i>Module Access Permissions</label>
+            <small class="form-text text-muted mb-2">Toggle access to specific admin sub-modules for every member of this team.</small>
+            <div id="add_team_perms" class="border rounded p-2 bg-light"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Team</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Team Modal -->
+<div class="modal fade" id="editTeamModal" tabindex="-1" role="dialog" aria-labelledby="editTeamModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editTeamModalLabel">Edit Team</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="editTeamForm">
+          <input type="hidden" id="edit_team_id">
+          <div class="form-group">
+            <label for="edit_team_name">Team Name</label>
+            <input type="text" class="form-control" id="edit_team_name" required>
+          </div>
+          <div class="form-group">
+            <label for="edit_department_name">Department Name</label>
+            <input type="text" class="form-control" id="edit_department_name" required>
+          </div>
+          <div class="form-group">
+            <label for="edit_roles_select">Roles</label>
+            <select id="edit_roles_select" class="form-control" multiple="multiple" style="width:100%"></select>
+          </div>
+          <div class="form-group">
+            <label class="font-weight-bold"><i class="fas fa-key text-warning mr-1"></i>Module Access Permissions</label>
+            <small class="form-text text-muted mb-2">Toggle access to specific admin sub-modules for every member of this team.</small>
+            <div id="edit_team_perms" class="border rounded p-2 bg-light"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="editUserForm">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_user_id">
+                    <div class="form-group">
+                        <label for="edit_user_name">Name</label>
+                        <input type="text" class="form-control" id="edit_user_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_mobile">Mobile</label>
+                        <input type="text" class="form-control" id="edit_user_mobile" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_email">Email</label>
+                        <input type="email" class="form-control" id="edit_user_email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_username">Username</label>
+                        <input type="text" class="form-control" id="edit_user_username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_password">Password</label>
+                        <input type="password" class="form-control" id="edit_user_password">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_title">Title</label>
+                        <input type="text" class="form-control" id="edit_user_title">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_user_roles">User Roles (not from team)</label>
+                        <select id="edit_user_roles" class="form-control" multiple="multiple" style="width:100%"></select>
+                        <small class="form-text text-muted">Team roles are shown but cannot be changed here.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold"><i class="fas fa-key text-warning mr-1"></i>Module Access Permissions</label>
+                        <small class="form-text text-muted mb-2">Toggle access to specific admin sub-modules. Greyed-out switches are inherited from the user's team.</small>
+                        <div id="edit_user_perms" class="border rounded p-2 bg-light"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

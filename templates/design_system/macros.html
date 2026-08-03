@@ -1,0 +1,32 @@
+{% macro page_header(title, subtitle='', icon='fas fa-layer-group') -%}
+<header class="bg-page-header">
+  <div>
+    <h1 class="bg-page-title"><i class="{{ icon }} mr-2"></i>{{ title }}</h1>
+    {% if subtitle %}<p class="text-muted mb-0">{{ subtitle }}</p>{% endif %}
+  </div>
+  <div class="bg-toolbar">
+    {{ caller() if caller else '' }}
+  </div>
+</header>
+{%- endmacro %}
+
+{% macro status(label, tone='neutral') -%}
+<span class="bg-status-pill {{ tone }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro data_card(title, icon='fas fa-table') -%}
+<section class="card shadow mb-4">
+  <div class="card-header py-3">
+    <h6 class="m-0 font-weight-bold"><i class="{{ icon }} mr-2"></i>{{ title }}</h6>
+  </div>
+  <div class="card-body">
+    {{ caller() }}
+  </div>
+</section>
+{%- endmacro %}
+
+{% macro table_shell() -%}
+<div class="table-responsive">
+  {{ caller() }}
+</div>
+{%- endmacro %}

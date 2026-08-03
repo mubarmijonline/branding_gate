@@ -1,0 +1,716 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    /* ============================================
+       INVENTORY SELECTION LANDING PAGE
+       Professional Design with Entity Cards
+       ============================================ */
+    
+    /* Hero Section */
+    .inventory-hero {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%);
+        color: white;
+        padding: 50px 40px;
+        border-radius: 20px;
+        margin-bottom: 40px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(30, 58, 95, 0.4);
+    }
+    
+    .inventory-hero::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .inventory-hero::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .hero-content {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .hero-content h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 15px;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    
+    .hero-content p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-bottom: 0;
+    }
+    
+    .hero-stats {
+        display: flex;
+        gap: 30px;
+        margin-top: 30px;
+    }
+    
+    .hero-stat {
+        background: rgba(255,255,255,0.15);
+        backdrop-filter: blur(10px);
+        padding: 20px 30px;
+        border-radius: 15px;
+        text-align: center;
+        min-width: 140px;
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .hero-stat .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        display: block;
+    }
+    
+    .hero-stat .stat-label {
+        font-size: 0.85rem;
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* Section Headers */
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e0e6ed;
+    }
+    
+    .section-header h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e3a5f;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .section-header h2 i {
+        width: 45px;
+        height: 45px;
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    
+    .section-header .btn-manage {
+        background: transparent;
+        border: 2px solid #1e3a5f;
+        color: #1e3a5f;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .section-header .btn-manage:hover {
+        background: #1e3a5f;
+        color: white;
+    }
+    
+    /* Entity Cards Grid */
+    .entity-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 25px;
+        margin-bottom: 50px;
+    }
+    
+    /* Entity Card */
+    .entity-card {
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        cursor: pointer;
+        position: relative;
+        border: 2px solid transparent;
+    }
+    
+    .entity-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 20px 60px rgba(30, 58, 95, 0.2);
+        border-color: #1e3a5f;
+    }
+    
+    .entity-card-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        padding: 25px;
+        color: white;
+        position: relative;
+    }
+    
+    .entity-card-header::after {
+        content: '';
+        position: absolute;
+        bottom: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 40px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .entity-logo-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .entity-logo {
+        width: 60px;
+        height: 60px;
+        border-radius: 15px;
+        background: rgba(255,255,255,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        font-weight: 700;
+        border: 3px solid rgba(255,255,255,0.3);
+    }
+    
+    .entity-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 12px;
+    }
+    
+    .entity-title h3 {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin: 0 0 5px 0;
+    }
+    
+    .entity-title .entity-code {
+        font-size: 0.85rem;
+        opacity: 0.8;
+        font-family: monospace;
+        background: rgba(255,255,255,0.2);
+        padding: 3px 10px;
+        border-radius: 5px;
+    }
+    
+    .entity-card-body {
+        padding: 35px 25px 25px;
+    }
+    
+    .entity-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .entity-stat-box {
+        background: #f8f9fc;
+        padding: 15px;
+        border-radius: 12px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .entity-stat-box:hover {
+        background: #e8f0f8;
+    }
+    
+    .entity-stat-box .stat-icon {
+        width: 35px;
+        height: 35px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+    }
+    
+    .entity-stat-box.items .stat-icon { background: rgba(23, 162, 184, 0.15); color: #17a2b8; }
+    .entity-stat-box.stock .stat-icon { background: rgba(40, 167, 69, 0.15); color: #28a745; }
+    .entity-stat-box.low .stat-icon { background: rgba(255, 193, 7, 0.15); color: #ffc107; }
+    .entity-stat-box.value .stat-icon { background: rgba(30, 58, 95, 0.15); color: #1e3a5f; }
+    
+    .entity-stat-box .stat-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #1e3a5f;
+        display: block;
+    }
+    
+    .entity-stat-box .stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .entity-card-footer {
+        padding: 0 25px 25px;
+    }
+    
+    .btn-enter-inventory {
+        width: 100%;
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        border: none;
+        color: white;
+        padding: 15px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+    
+    .btn-enter-inventory:hover {
+        transform: scale(1.02);
+        box-shadow: 0 10px 30px rgba(30, 58, 95, 0.3);
+        color: white;
+    }
+    
+    .btn-enter-inventory i {
+        transition: transform 0.3s ease;
+    }
+    
+    .entity-card:hover .btn-enter-inventory i {
+        transform: translateX(5px);
+    }
+    
+    /* Status Badge on Card */
+    .entity-status-badge {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .entity-status-badge.active {
+        background: rgba(40, 167, 69, 0.9);
+        color: white;
+    }
+    
+    .entity-status-badge.inactive {
+        background: rgba(108, 117, 125, 0.9);
+        color: white;
+    }
+    
+    /* Credit Inventory Special Card */
+    .credit-inventory-section {
+        margin-top: 20px;
+    }
+    
+    .credit-card {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        border: 2px solid #dc3545;
+    }
+    
+    .credit-card .entity-card-header {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+    
+    .credit-card .btn-enter-inventory {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+    
+    .credit-card .entity-stat-box {
+        background: rgba(255,255,255,0.7);
+    }
+    
+    /* No Entities State */
+    .no-entities {
+        background: linear-gradient(135deg, #f8f9fc 0%, #e8f0f8 100%);
+        border: 2px dashed #1e3a5f;
+        border-radius: 20px;
+        padding: 60px 40px;
+        text-align: center;
+    }
+    
+    .no-entities i {
+        font-size: 4rem;
+        color: #1e3a5f;
+        opacity: 0.5;
+        margin-bottom: 20px;
+    }
+    
+    .no-entities h3 {
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    
+    .no-entities p {
+        color: #6c757d;
+        margin-bottom: 25px;
+    }
+    
+    .btn-create-entity {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        border: none;
+        color: white;
+        padding: 15px 35px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 10px 30px rgba(30, 58, 95, 0.3);
+    }
+    
+    .btn-create-entity:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(30, 58, 95, 0.4);
+        color: white;
+    }
+    
+    /* Loading Skeleton */
+    .skeleton-card {
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    }
+    
+    .skeleton-header {
+        height: 100px;
+        background: linear-gradient(90deg, #e0e6ed 25%, #f0f3f7 50%, #e0e6ed 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+    }
+    
+    .skeleton-body {
+        padding: 35px 25px 25px;
+    }
+    
+    .skeleton-line {
+        height: 20px;
+        background: linear-gradient(90deg, #e0e6ed 25%, #f0f3f7 50%, #e0e6ed 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+    
+    .skeleton-line.short { width: 60%; }
+    .skeleton-line.medium { width: 80%; }
+    
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .hero-content h1 { font-size: 1.8rem; }
+        .hero-stats { flex-wrap: wrap; gap: 15px; }
+        .hero-stat { min-width: 100px; padding: 15px 20px; }
+        .entity-cards-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'inventory' in user_roles %}
+    
+    <!-- Hero Section -->
+    <div class="inventory-hero">
+        <div class="hero-content">
+            <h1><i class="fas fa-warehouse mr-3"></i>Inventory Management System</h1>
+            <p>Select an entity to manage its inventory or access the credit inventory system</p>
+            
+            <div class="hero-stats" id="heroStats">
+                <div class="hero-stat">
+                    <span class="stat-number" id="totalEntitiesStat">-</span>
+                    <span class="stat-label">Entities</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="stat-number" id="totalItemsStat">-</span>
+                    <span class="stat-label">Total Items</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="stat-number" id="totalStockStat">-</span>
+                    <span class="stat-label">Total Stock</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="stat-number" id="creditItemsStat">-</span>
+                    <span class="stat-label">Credit Items</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Entity Inventory Section -->
+    <div class="section-header">
+        <h2><i class="fas fa-building"></i>Entity Inventories</h2>
+        <a href="/entity-management" class="btn btn-manage">
+            <i class="fas fa-cog mr-2"></i>Manage Entities
+        </a>
+    </div>
+    
+    <div class="entity-cards-grid" id="entityCardsContainer">
+        <!-- Loading Skeletons -->
+        <div class="skeleton-card">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-body">
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-line medium"></div>
+                <div class="skeleton-line"></div>
+            </div>
+        </div>
+        <div class="skeleton-card">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-body">
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-line medium"></div>
+                <div class="skeleton-line"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Credit Inventory Section -->
+    <div class="credit-inventory-section">
+        <div class="section-header">
+            <h2><i class="fas fa-hand-holding-usd" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);"></i>Credit/Consignment Inventory</h2>
+        </div>
+        
+        <div class="entity-cards-grid">
+            <div class="entity-card credit-card" onclick="window.location.href='/inventory?type=credit'">
+                <div class="entity-card-header">
+                    <div class="entity-logo-wrapper">
+                        <div class="entity-logo">
+                            <i class="fas fa-hand-holding-usd"></i>
+                        </div>
+                        <div class="entity-title">
+                            <h3>Credit Inventory</h3>
+                            <span class="entity-code">Consignment Items</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="entity-card-body">
+                    <div class="entity-stats-grid" id="creditStats">
+                        <div class="entity-stat-box items">
+                            <div class="stat-icon"><i class="fas fa-boxes"></i></div>
+                            <span class="stat-value" id="creditTotalItems">-</span>
+                            <span class="stat-label">Total Items</span>
+                        </div>
+                        <div class="entity-stat-box stock">
+                            <div class="stat-icon"><i class="fas fa-cubes"></i></div>
+                            <span class="stat-value" id="creditTotalStock">-</span>
+                            <span class="stat-label">In Stock</span>
+                        </div>
+                        <div class="entity-stat-box low">
+                            <div class="stat-icon"><i class="fas fa-truck"></i></div>
+                            <span class="stat-value" id="creditSuppliers">-</span>
+                            <span class="stat-label">Suppliers</span>
+                        </div>
+                        <div class="entity-stat-box value">
+                            <div class="stat-icon"><i class="fas fa-coins"></i></div>
+                            <span class="stat-value" id="creditAmountDue">-</span>
+                            <span class="stat-label">Amount Due</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="entity-card-footer">
+                    <button class="btn-enter-inventory">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Enter Credit Inventory
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        You don't have permission to access Inventory Management.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    console.log('Inventory Selection page loaded');
+    
+    // Load entities and statistics
+    loadEntitiesAndStats();
+    
+    function loadEntitiesAndStats() {
+        $.ajax({
+            url: '/api/entities/inventory-stats',
+            type: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    renderEntityCards(response.entities);
+                    updateHeroStats(response.global_stats);
+                    updateCreditStats(response.credit_stats);
+                } else {
+                    showNoEntitiesState();
+                }
+            },
+            error: function() {
+                showNoEntitiesState();
+            }
+        });
+    }
+    
+    function renderEntityCards(entities) {
+        var container = $('#entityCardsContainer');
+        container.empty();
+        
+        if (!entities || entities.length === 0) {
+            showNoEntitiesState();
+            return;
+        }
+        
+        entities.forEach(function(entity) {
+            var logoHtml = entity.logo_url 
+                ? '<img src="' + entity.logo_url + '" alt="' + entity.entity_name + '">'
+                : entity.entity_name.charAt(0).toUpperCase();
+            
+            var card = `
+                <div class="entity-card" onclick="window.location.href='/inventory?entity_id=${entity.id}'">
+                    <span class="entity-status-badge ${entity.status}">${entity.status}</span>
+                    <div class="entity-card-header">
+                        <div class="entity-logo-wrapper">
+                            <div class="entity-logo">${logoHtml}</div>
+                            <div class="entity-title">
+                                <h3>${entity.entity_name}</h3>
+                                <span class="entity-code">${entity.entity_code}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="entity-card-body">
+                        <div class="entity-stats-grid">
+                            <div class="entity-stat-box items">
+                                <div class="stat-icon"><i class="fas fa-boxes"></i></div>
+                                <span class="stat-value">${entity.total_items || 0}</span>
+                                <span class="stat-label">Total Items</span>
+                            </div>
+                            <div class="entity-stat-box stock">
+                                <div class="stat-icon"><i class="fas fa-cubes"></i></div>
+                                <span class="stat-value">${entity.total_stock || 0}</span>
+                                <span class="stat-label">In Stock</span>
+                            </div>
+                            <div class="entity-stat-box low">
+                                <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                                <span class="stat-value">${entity.low_stock_items || 0}</span>
+                                <span class="stat-label">Low Stock</span>
+                            </div>
+                            <div class="entity-stat-box value">
+                                <div class="stat-icon"><i class="fas fa-coins"></i></div>
+                                <span class="stat-value">${formatCurrency(entity.total_inventory_value)}</span>
+                                <span class="stat-label">Value</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="entity-card-footer">
+                        <button class="btn-enter-inventory">
+                            <i class="fas fa-sign-in-alt"></i>
+                            Enter Inventory
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            container.append(card);
+        });
+    }
+    
+    function updateHeroStats(stats) {
+        if (stats) {
+            $('#totalEntitiesStat').text(stats.total_entities || 0);
+            $('#totalItemsStat').text(stats.total_items || 0);
+            $('#totalStockStat').text(formatNumber(stats.total_stock || 0));
+            $('#creditItemsStat').text(stats.credit_items || 0);
+        }
+    }
+    
+    function updateCreditStats(stats) {
+        if (stats) {
+            $('#creditTotalItems').text(stats.total_items || 0);
+            $('#creditTotalStock').text(formatNumber(stats.total_stock || 0));
+            $('#creditSuppliers').text(stats.supplier_count || 0);
+            $('#creditAmountDue').text(formatCurrency(stats.total_amount_due));
+        }
+    }
+    
+    function showNoEntitiesState() {
+        var container = $('#entityCardsContainer');
+        container.html(`
+            <div class="no-entities" style="grid-column: 1 / -1;">
+                <i class="fas fa-building"></i>
+                <h3>No Entities Found</h3>
+                <p>Create your first entity to start managing inventory</p>
+                <a href="/entity-management" class="btn btn-create-entity">
+                    <i class="fas fa-plus mr-2"></i>Create Entity
+                </a>
+            </div>
+        `);
+    }
+    
+    function formatCurrency(value) {
+        var num = parseFloat(value) || 0;
+        if (num === 0) return '0';
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toFixed(0);
+    }
+    
+    function formatNumber(value) {
+        var num = parseFloat(value) || 0;
+        if (num === 0) return '0';
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,1256 @@
+<!-- ============================================================================
+     SALES REQUEST COMMENTS & NOTES WIDGET
+     Reusable component for all sales request pages
+     Supports: Comments, Notes, @Mentions, Source filtering
+     ============================================================================ -->
+
+<style>
+    /* Comments Widget Styling */
+    .comments-widget {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .comments-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .comments-header h5 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+    
+    .comments-tabs {
+        display: flex;
+        gap: 10px;
+        padding: 15px 20px;
+        border-bottom: 2px solid #f0f0f0;
+        background: #f8f9fa;
+    }
+    
+    .comment-tab {
+        padding: 8px 16px;
+        border-radius: 20px;
+        border: 2px solid transparent;
+        background: white;
+        color: #6c757d;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .comment-tab:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+    
+    .comment-tab.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .comment-input-area {
+        padding: 20px;
+        background: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+        position: relative;
+        flex: 1; /* Take remaining space */
+    }
+    
+    /* New: Input Wrapper for Side-by-Side Layout */
+    .comment-input-wrapper {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    /* New: Users Panel (Right Side) */
+    .users-panel {
+        width: 300px;
+        background: #ffffff;
+        border-left: 2px solid #e9ecef;
+        display: flex;
+        flex-direction: column;
+        max-height: 500px;
+    }
+    
+    .users-panel-header {
+        padding: 15px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 700;
+        font-size: 0.95rem;
+        border-bottom: 2px solid #5568d3;
+    }
+    
+    .users-panel-search {
+        padding: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .user-search-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 2px solid #e9ecef;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        transition: border-color 0.3s ease;
+    }
+    
+    .user-search-input:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+    
+    .users-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+    }
+    
+    .user-item {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        cursor: grab;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .user-item:hover {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+    
+    .user-item:active {
+        cursor: grabbing;
+    }
+    
+    .user-item-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+    }
+    
+    .user-item:hover .user-item-avatar {
+        background: white;
+        color: #667eea;
+    }
+    
+    .user-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .user-item-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .user-item-mobile {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .user-item-drag-icon {
+        color: #adb5bd;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .user-item:hover .user-item-drag-icon {
+        color: white;
+    }
+    
+    .comment-textarea {
+        width: 100%;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 0.95rem;
+        resize: vertical;
+        min-height: 80px;
+        transition: all 0.3s ease;
+    }
+    
+    .comment-textarea:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+    
+    .comment-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 10px;
+    }
+    
+    .comment-source-select {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 2px solid #e9ecef;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .comment-source-select:focus {
+        border-color: #667eea;
+        outline: none;
+    }
+    
+    .mention-suggestions {
+        position: absolute !important;
+        background: #ffff00 !important; /* BRIGHT YELLOW for debugging */
+        border: 5px solid #ff0000 !important; /* THICK RED BORDER for debugging */
+        border-radius: 8px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        max-height: 200px !important;
+        overflow-y: auto !important;
+        z-index: 10500 !important; /* Higher than Bootstrap modal (1050) */
+        min-width: 250px !important;
+        display: none !important; /* Hidden by default */
+        padding: 10px !important; /* Add padding to make it easier to see */
+    }
+    
+    .mention-suggestions.show {
+        display: block !important; /* Show when has .show class */
+    }
+    
+    .mention-item {
+        padding: 10px 15px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .mention-item:hover {
+        background: #f8f9fa;
+    }
+    
+    .mention-item:last-child {
+        border-bottom: none;
+    }
+    
+    .mention-item-name {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .mention-item-team {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    
+    .comments-list {
+        padding: 20px;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    
+    .comment-item {
+        background: white;
+        border: 2px solid #e9ecef;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+    }
+    
+    .comment-item:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-color: #667eea;
+    }
+    
+    .comment-item.is-note {
+        background: #fff3cd;
+        border-color: #ffc107;
+    }
+    
+    .comment-item.has-mention {
+        border-left: 4px solid #667eea;
+    }
+    
+    .comment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .comment-author {
+        font-weight: 700;
+        color: #2c3e50;
+        font-size: 0.95rem;
+    }
+    
+    .comment-time {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    
+    .comment-source-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+    
+    .source-general { background: #e9ecef; color: #495057; }
+    .source-client_approval { background: #d4edda; color: #155724; }
+    .source-costing { background: #f8d7da; color: #721c24; }
+    .source-selling_price { background: #d1ecf1; color: #0c5460; }
+    .source-operations { background: #fff3cd; color: #856404; }
+    .source-logistics { background: #f5c6cb; color: #721c24; }
+    .source-design { background: #d6d8db; color: #383d41; }
+    .source-production { background: #c3e6cb; color: #155724; }
+    
+    .comment-text {
+        color: #495057;
+        line-height: 1.6;
+        font-size: 0.95rem;
+    }
+    
+    .mention-tag {
+        color: #667eea;
+        font-weight: 600;
+        background: rgba(102, 126, 234, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    .comment-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .comment-actions-btns {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .comment-btn {
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: none;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .comment-btn-edit {
+        background: #ffc107;
+        color: white;
+    }
+    
+    .comment-btn-delete {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .comment-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .empty-comments {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+    }
+    
+    .empty-comments i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.3;
+    }
+    
+    .btn-post-comment {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-post-comment:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .note-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .note-toggle input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .mention-count-badge {
+        background: #dc3545;
+        color: white;
+        border-radius: 12px;
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-left: 10px;
+    }
+</style>
+
+<!-- Comments Widget HTML -->
+<div class="comments-widget" id="commentsWidget" style="display: none;" data-user-id="{{ session.get('user_id', 0) }}">
+    <div class="comments-header">
+        <h5>
+            <i class="fas fa-comments"></i> Comments & Notes
+            <span class="mention-count-badge" id="unreadMentionsBadge" style="display: none;">0</span>
+        </h5>
+        <button class="btn btn-sm btn-light" onclick="toggleCommentsWidget()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    
+    <!-- Source Filter Tabs -->
+    <div class="comments-tabs">
+        <div class="comment-tab active" data-source="all" onclick="filterCommentsBySource('all')">
+            <i class="fas fa-th"></i> All
+        </div>
+        <div class="comment-tab" data-source="general" onclick="filterCommentsBySource('general')">
+            <i class="fas fa-comment"></i> General
+        </div>
+        <div class="comment-tab" data-source="client_approval" onclick="filterCommentsBySource('client_approval')">
+            <i class="fas fa-check-circle"></i> Approval
+        </div>
+        <div class="comment-tab" data-source="costing" onclick="filterCommentsBySource('costing')">
+            <i class="fas fa-dollar-sign"></i> Costing
+        </div>
+        <div class="comment-tab" data-source="selling_price" onclick="filterCommentsBySource('selling_price')">
+            <i class="fas fa-tags"></i> Pricing
+        </div>
+    </div>
+    
+    <!-- Comment Input Area with User List Side Panel -->
+    <div class="comment-input-wrapper">
+        <!-- Left Side: Comment Input -->
+        <div class="comment-input-area">
+            <textarea 
+                id="commentTextarea" 
+                class="comment-textarea" 
+                placeholder="Write a comment... (Drag names from the list or use @)"
+                rows="3"></textarea>
+            
+            <div class="comment-actions">
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <select id="commentSource" class="comment-source-select">
+                    <option value="general">General</option>
+                    <option value="client_approval">Client Approval</option>
+                    <option value="costing">Costing</option>
+                    <option value="selling_price">Selling Price</option>
+                    <option value="operations">Operations</option>
+                    <option value="logistics">Logistics</option>
+                    <option value="design">Design</option>
+                    <option value="production">Production</option>
+                </select>
+                
+                <div class="note-toggle">
+                    <input type="checkbox" id="isNoteCheckbox">
+                    <label for="isNoteCheckbox" style="margin: 0; font-weight: 600; font-size: 0.85rem;">
+                        <i class="fas fa-sticky-note"></i> Internal Note
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn-post-comment" onclick="postComment()">
+                <i class="fas fa-paper-plane"></i> Post
+            </button>
+        </div>
+    </div>
+    
+    <!-- Right Side: Draggable User List -->
+    <div class="users-panel">
+        <div class="users-panel-header">
+            <i class="fas fa-users mr-2"></i>
+            <span>Tag Users</span>
+        </div>
+        <div class="users-panel-search">
+            <input type="text" id="userSearchInput" placeholder="Search users..." class="user-search-input">
+        </div>
+        <div class="users-list" id="usersList">
+            <div class="text-center py-3">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p class="small mb-0 mt-2">Loading users...</p>
+            </div>
+        </div>
+    </div>
+</div>
+    
+    <!-- Comments List -->
+    <div class="comments-list" id="commentsList">
+        <div class="empty-comments">
+            <i class="fas fa-comments"></i>
+            <p>No comments yet. Be the first to comment!</p>
+        </div>
+    </div>
+</div>
+
+<!-- Floating Comments Button -->
+<button 
+    class="btn btn-primary" 
+    id="floatingCommentsBtn"
+    onclick="toggleCommentsWidget()"
+    style="position: fixed; bottom: 20px; right: 20px; z-index: 999; border-radius: 50%; width: 60px; height: 60px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+    <i class="fas fa-comments"></i>
+    <span class="mention-count-badge" id="floatingMentionsBadge" style="position: absolute; top: -5px; right: -5px; display: none;">0</span>
+</button>
+
+<script>
+// Global variables for comments system
+let currentRequestId = null;
+let currentCommentSource = 'all';
+let mentionedUsers = [];
+let allUsers = [];
+let currentUserId = null; // Will be set during initialization
+
+// Initialize comments widget
+function initCommentsWidget(requestId, defaultSource = 'general') {
+    console.log('===== INITIALIZING COMMENTS WIDGET =====');
+    console.log('Request ID:', requestId);
+    console.log('Default Source:', defaultSource);
+    
+    // Reset state variables
+    currentRequestId = requestId;
+    currentMentionPosition = -1;
+    currentMentionTrigger = null;
+    
+    // Set default source
+    $('#commentSource').val(defaultSource);
+    
+    // Clear textarea
+    $('#commentTextarea').val('');
+    
+    // IMPORTANT: Load users first, then load comments
+    // This ensures highlightMentions() has access to user list
+    loadUsersPanel(function() {
+        // Callback: After users are loaded, load comments
+        loadComments();
+    });
+    
+    console.log('===== WIDGET INITIALIZATION COMPLETE =====');
+}
+
+// Load users into the side panel
+function loadUsersPanel(callback) {
+    console.log('Loading users for side panel...');
+    
+    $.ajax({
+        url: '/api/users/search',
+        type: 'GET',
+        data: { q: '' }, // Empty query to get all users
+        success: function(response) {
+            console.log('Users loaded:', response);
+            if (response.success && response.users && response.users.length > 0) {
+                renderUsersPanel(response.users);
+                console.log('Users rendered successfully. User count:', response.users.length);
+            } else {
+                $('#usersList').html('<div class="text-center py-3 text-muted"><i class="fas fa-users-slash"></i><p class="small mb-0 mt-2">No users found</p></div>');
+            }
+            
+            // Execute callback after users are loaded and rendered
+            if (callback && typeof callback === 'function') {
+                console.log('Executing callback after users loaded');
+                callback();
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading users:', error);
+            $('#usersList').html('<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-triangle"></i><p class="small mb-0 mt-2">Error loading users</p></div>');
+            
+            // Execute callback even on error (so comments still load)
+            if (callback && typeof callback === 'function') {
+                console.log('Executing callback after user load error');
+                callback();
+            }
+        }
+    });
+}
+
+// Render users in the panel
+function renderUsersPanel(users) {
+    console.log('Rendering users panel with', users.length, 'users');
+    let html = '';
+    
+    users.forEach(user => {
+        const initials = user.name.substring(0, 2).toUpperCase();
+        html += `
+            <div class="user-item" draggable="true" data-user-id="${user.id}" data-user-name="${user.name}">
+                <div class="user-item-avatar">${initials}</div>
+                <div class="user-item-info">
+                    <div class="user-item-name">${user.name}</div>
+                    <div class="user-item-mobile">${user.mobile || 'No phone'}</div>
+                </div>
+                <i class="fas fa-grip-vertical user-item-drag-icon"></i>
+            </div>
+        `;
+    });
+    
+    $('#usersList').html(html);
+    
+    // Setup drag and drop
+    setupDragAndDrop();
+}
+
+// Setup drag and drop functionality
+function setupDragAndDrop() {
+    const userItems = document.querySelectorAll('.user-item');
+    const textarea = document.getElementById('commentTextarea');
+    let isDragging = false;
+    
+    // Drag start
+    userItems.forEach(item => {
+        item.addEventListener('dragstart', function(e) {
+            isDragging = true;
+            const userName = this.getAttribute('data-user-name');
+            e.dataTransfer.setData('text/plain', '@' + userName + ' ');
+            e.dataTransfer.effectAllowed = 'copy';
+            this.style.opacity = '0.5';
+        });
+        
+        item.addEventListener('dragend', function(e) {
+            this.style.opacity = '1';
+            // Reset dragging flag after a short delay to allow drop to complete
+            setTimeout(() => {
+                isDragging = false;
+            }, 100);
+        });
+        
+        // Also support click to insert
+        item.addEventListener('click', function(e) {
+            // Only insert on click if we're NOT dragging
+            if (!isDragging) {
+                const userName = this.getAttribute('data-user-name');
+                insertMentionAtCursor('@' + userName + ' ');
+            }
+        });
+    });
+    
+    // Drop zone (textarea)
+    textarea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        this.style.borderColor = '#667eea';
+        this.style.backgroundColor = '#f0f4ff';
+    });
+    
+    textarea.addEventListener('dragleave', function(e) {
+        this.style.borderColor = '#e9ecef';
+        this.style.backgroundColor = 'white';
+    });
+    
+    textarea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const mention = e.dataTransfer.getData('text/plain');
+        
+        // Insert at cursor position
+        const cursorPos = this.selectionStart;
+        const textBefore = this.value.substring(0, cursorPos);
+        const textAfter = this.value.substring(cursorPos);
+        this.value = textBefore + mention + textAfter;
+        
+        // Move cursor after the inserted mention
+        const newCursorPos = cursorPos + mention.length;
+        this.setSelectionRange(newCursorPos, newCursorPos);
+        this.focus();
+        
+        // Reset styles
+        this.style.borderColor = '#e9ecef';
+        this.style.backgroundColor = 'white';
+        
+        console.log('Dropped mention:', mention);
+    });
+}
+
+// Insert mention at current cursor position
+function insertMentionAtCursor(mention) {
+    const textarea = document.getElementById('commentTextarea');
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.substring(0, cursorPos);
+    const textAfter = textarea.value.substring(cursorPos);
+    
+    textarea.value = textBefore + mention + textAfter;
+    
+    // Move cursor after the inserted mention
+    const newCursorPos = cursorPos + mention.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+    
+    console.log('Inserted mention at cursor:', mention);
+}
+
+// Search users in the panel
+$(document).on('input', '#userSearchInput', function() {
+    const searchTerm = $(this).val().toLowerCase();
+    console.log('Searching users:', searchTerm);
+    
+    $('.user-item').each(function() {
+        const userName = $(this).find('.user-item-name').text().toLowerCase();
+        const userMobile = $(this).find('.user-item-mobile').text().toLowerCase();
+        
+        if (userName.includes(searchTerm) || userMobile.includes(searchTerm)) {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+});
+
+// Toggle comments widget visibility
+function toggleCommentsWidget() {
+    const widget = $('#commentsWidget');
+    if (widget.is(':visible')) {
+        widget.slideUp(300);
+    } else {
+        widget.slideDown(300);
+        if (currentRequestId) {
+            loadComments();
+        }
+    }
+}
+
+// Filter comments by source
+function filterCommentsBySource(source) {
+    currentCommentSource = source;
+    
+    // Update active tab
+    $('.comment-tab').removeClass('active');
+    $(`.comment-tab[data-source="${source}"]`).addClass('active');
+    
+    loadComments();
+}
+
+// Load comments from server
+function loadComments() {
+    if (!currentRequestId) {
+        console.warn('Cannot load comments: no request ID set');
+        return;
+    }
+    
+    console.log('Loading comments for request:', currentRequestId, 'source:', currentCommentSource);
+    
+    const params = new URLSearchParams();
+    if (currentCommentSource && currentCommentSource !== 'all') {
+        params.append('source', currentCommentSource);
+    }
+    
+    const url = `/api/sales/requests/${currentRequestId}/comments?${params.toString()}`;
+    console.log('Fetching from:', url);
+    
+    $.get(url, function(response) {
+        console.log('Comments loaded:', response);
+        if (response.success) {
+            renderComments(response.comments);
+            updateUnreadMentionsCount(response.unread_mentions);
+        }
+    }).fail(function(xhr, status, error) {
+        console.error('Failed to load comments:', xhr, status, error);
+        console.error('Response:', xhr.responseText);
+        Swal.fire('Error', 'Failed to load comments', 'error');
+    });
+}
+
+// Render comments in the list
+function renderComments(comments) {
+    const container = $('#commentsList');
+    
+    if (comments.length === 0) {
+        container.html(`
+            <div class="empty-comments">
+                <i class="fas fa-comments"></i>
+                <p>No comments yet. Be the first to comment!</p>
+            </div>
+        `);
+        return;
+    }
+    
+    let html = '';
+    comments.forEach(comment => {
+        const isOwnComment = comment.user_id == currentUserId;
+        const commentClass = comment.is_note ? 'is-note' : '';
+        
+        // Highlight mentions in text - match only known usernames
+        let commentText = escapeHtml(comment.comment_text);
+        commentText = highlightMentions(commentText);
+        
+        html += `
+            <div class="comment-item ${commentClass}" data-comment-id="${comment.id}">
+                <div class="comment-header">
+                    <div>
+                        <span class="comment-author">
+                            <i class="fas fa-user-circle"></i> ${comment.user_name}
+                        </span>
+                        <span class="comment-source-badge source-${comment.source}">
+                            ${formatSourceLabel(comment.source)}
+                        </span>
+                        ${comment.is_note ? '<span class="badge badge-warning ml-2"><i class="fas fa-sticky-note"></i> Note</span>' : ''}
+                    </div>
+                    <span class="comment-time">
+                        <i class="far fa-clock"></i> ${formatRelativeTime(comment.created_at)}
+                    </span>
+                </div>
+                
+                <div class="comment-text">${commentText}</div>
+                
+                ${comment.mentioned_users ? `
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: #6c757d;">
+                        <i class="fas fa-at"></i> Mentioned: ${comment.mentioned_users}
+                    </div>
+                ` : ''}
+                
+                ${isOwnComment ? `
+                    <div class="comment-footer">
+                        <div></div>
+                        <div class="comment-actions-btns">
+                            <button class="comment-btn comment-btn-delete" onclick="deleteComment(${comment.id})">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    });
+    
+    container.html(html);
+}
+
+// Extract mentions from comment text and populate mentionedUsers array
+function extractMentionsFromText(text) {
+    console.log('Extracting mentions from text:', text);
+    
+    // Clear previous mentions
+    mentionedUsers = [];
+    
+    // Match all @mentions in the text (supports dots, underscores, hyphens, spaces)
+    // Pattern: @ followed by word chars, dots, hyphens (and optional spaces followed by more of these)
+    const mentionRegex = /@([\w\.\-]+(?:\s[\w\.\-]+)*)/g;
+    const matches = text.matchAll(mentionRegex);
+    
+    const extractedUsernames = [];
+    for (const match of matches) {
+        const username = match[1].trim(); // Remove any trailing spaces
+        if (username && !extractedUsernames.includes(username)) {
+            extractedUsernames.push(username);
+        }
+    }
+    
+    console.log('Extracted usernames:', extractedUsernames);
+    
+    // Match usernames to user IDs from the loaded users panel
+    $('.user-item').each(function() {
+        const userName = $(this).data('user-name');
+        const userId = $(this).data('user-id');
+        
+        if (extractedUsernames.includes(userName) && !mentionedUsers.includes(userId)) {
+            mentionedUsers.push(userId);
+        }
+    });
+    
+    console.log('Resolved user IDs:', mentionedUsers);
+}
+
+// Highlight mentions in text by matching exact usernames from user list
+function highlightMentions(text) {
+    // Get all known usernames from the user panel
+    const knownUsernames = [];
+    $('.user-item').each(function() {
+        const userName = $(this).data('user-name');
+        if (userName) {
+            knownUsernames.push(userName);
+        }
+    });
+    
+    // If no users loaded yet, return text as-is
+    if (knownUsernames.length === 0) {
+        return text;
+    }
+    
+    // Sort usernames by length (longest first) to avoid partial matches
+    // Example: Match "@John Smith" before "@John" to avoid incorrect partial match
+    knownUsernames.sort((a, b) => b.length - a.length);
+    
+    // Escape special regex characters in usernames and create pattern
+    let highlightedText = text;
+    knownUsernames.forEach(username => {
+        // Escape special regex characters in username
+        const escapedUsername = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Create regex: @ followed by exact username, followed by word boundary or space
+        const regex = new RegExp(`@(${escapedUsername})(?=\\s|$|[.,!?;:)])`, 'gi');
+        
+        // Replace with highlighted version
+        highlightedText = highlightedText.replace(regex, '<span class="mention-tag">@$1</span>');
+    });
+    
+    return highlightedText;
+}
+
+// Post new comment
+function postComment() {
+    console.log('postComment() called');
+    
+    const commentText = $('#commentTextarea').val().trim();
+    const source = $('#commentSource').val();
+    const isNote = $('#isNoteCheckbox').is(':checked');
+    
+    // Extract all mentions from text and match to user IDs
+    extractMentionsFromText(commentText);
+    
+    console.log('Comment data:', { commentText, source, isNote, currentRequestId, mentionedUsers });
+    
+    if (!commentText) {
+        Swal.fire('Warning', 'Please enter a comment', 'warning');
+        return;
+    }
+    
+    if (!currentRequestId) {
+        Swal.fire('Error', 'No request selected', 'error');
+        return;
+    }
+    
+    const data = {
+        comment_text: commentText,
+        source: source,
+        is_note: isNote,
+        mentioned_users: mentionedUsers
+    };
+    
+    console.log('Sending comment to API:', data);
+    
+    $.ajax({
+        url: `/api/sales/requests/${currentRequestId}/comments`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            console.log('Comment posted successfully:', response);
+            if (response.success) {
+                $('#commentTextarea').val('');
+                $('#isNoteCheckbox').prop('checked', false);
+                mentionedUsers = [];
+                loadComments();
+                
+                // Update comment count in details modal if function exists
+                if (typeof fetchCommentsCount === 'function' && currentRequestId) {
+                    fetchCommentsCount(currentRequestId);
+                }
+                
+                if (response.notifications_sent > 0) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Comment Posted!',
+                        text: `Notifications sent to ${response.notifications_sent} user(s)`,
+                        timer: 2000
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Comment Posted!',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                }
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Failed to post comment:', xhr, status, error);
+            console.error('Response:', xhr.responseText);
+            Swal.fire('Error', 'Failed to post comment: ' + (xhr.responseJSON?.error || error), 'error');
+        }
+    });
+}
+
+// Delete comment
+function deleteComment(commentId) {
+    Swal.fire({
+        title: 'Delete Comment?',
+        text: 'This action cannot be undone',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        confirmButtonText: 'Yes, delete it'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/sales/requests/comments/${commentId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    if (response.success) {
+                        loadComments();
+                        
+                        // Update comment count in details modal if function exists
+                        if (typeof fetchCommentsCount === 'function' && currentRequestId) {
+                            fetchCommentsCount(currentRequestId);
+                        }
+                        
+                        Swal.fire('Deleted!', 'Comment has been deleted', 'success');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error', 'Failed to delete comment', 'error');
+                }
+            });
+        }
+    });
+}
+
+// @Mention functionality - Use delegated event handler
+$(document).on('input', '#commentTextarea', function(e) {
+    const text = $(this).val();
+    const cursorPos = this.selectionStart;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    
+    // Check if @ symbol was just typed
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    
+    if (atMatch) {
+        const searchTerm = atMatch[1];
+        searchUsersForMention(searchTerm);
+    } else {
+        $('#mentionSuggestions').removeClass('show');
+    }
+});
+
+// Search users for mention
+function searchUsersForMention(searchTerm) {
+    // Show all users when just @ is typed (no search term yet)
+    // searchTerm will be empty string "" when user types just @
+    
+    $.get(`/api/users/search?q=${searchTerm}`, function(response) {
+        if (response.success && response.users.length > 0) {
+            renderMentionSuggestions(response.users);
+        } else {
+            $('#mentionSuggestions').removeClass('show');
+        }
+    });
+}
+
+// Render mention suggestions
+function renderMentionSuggestions(users) {
+    console.log('Rendering mention suggestions for users:', users);
+    const container = $('#mentionSuggestions');
+    let html = '';
+    
+    users.forEach(user => {
+        html += `
+            <div class="mention-item" data-user-id="${user.id}" data-user-name="${user.name}">
+                <div class="mention-item-name">${user.name}</div>
+                <div class="mention-item-team">${user.mobile || ''}</div>
+            </div>
+        `;
+    });
+    
+    container.html(html);
+    
+    // Position dropdown relative to textarea
+    const textarea = $('#commentTextarea');
+    const textareaPosition = textarea.position(); // Use position() instead of offset() for relative positioning
+    const textareaHeight = textarea.outerHeight();
+    
+    // Set position relative to the parent container
+    container.css({
+        'top': (textareaPosition.top + textareaHeight) + 'px',
+        'left': textareaPosition.left + 'px'
+    });
+    
+    // Show dropdown by adding class
+    container.addClass('show');
+    
+    console.log('Mention suggestions dropdown displayed with', users.length, 'users');
+    console.log('Dropdown position:', {
+        top: textareaPosition.top + textareaHeight,
+        left: textareaPosition.left,
+        visible: container.is(':visible'),
+        display: container.css('display'),
+        zIndex: container.css('z-index'),
+        hasShowClass: container.hasClass('show')
+    });
+    console.log('Dropdown element:', container[0]);
+    
+    // ENHANCED DEBUG: Check actual computed styles and dimensions
+    setTimeout(() => {
+        const computedStyle = window.getComputedStyle(container[0]);
+        console.log('COMPUTED STYLES:', {
+            display: computedStyle.display,
+            visibility: computedStyle.visibility,
+            opacity: computedStyle.opacity,
+            position: computedStyle.position,
+            top: computedStyle.top,
+            left: computedStyle.left,
+            zIndex: computedStyle.zIndex,
+            width: computedStyle.width,
+            height: computedStyle.height,
+            overflow: computedStyle.overflow
+        });
+        console.log('BOUNDING RECT:', container[0].getBoundingClientRect());
+        console.log('INNER HTML:', container[0].innerHTML);
+        console.log('PARENT ELEMENT:', container.parent()[0]);
+        console.log('PARENT OVERFLOW:', window.getComputedStyle(container.parent()[0]).overflow);
+    }, 100);
+}
+
+// DEBUG: Test function to manually show dropdown
+window.testMentionDropdown = function() {
+    console.log('TEST: Manually triggering mention dropdown');
+    const testUsers = [
+        {id: 1, name: 'Test User 1', mobile: '123456'},
+        {id: 2, name: 'Test User 2', mobile: '789012'}
+    ];
+    renderMentionSuggestions(testUsers);
+};
+
+// Handle mention item click using event delegation
+$(document).on('click', '.mention-item', function() {
+    const userId = $(this).data('user-id');
+    const userName = $(this).data('user-name');
+    console.log('Mention item clicked:', userId, userName);
+    selectMention(userId, userName);
+});
+
+// Select a user from mention suggestions
+function selectMention(userId, userName) {
+    console.log('Selecting mention:', userId, userName);
+    const textarea = $('#commentTextarea')[0];
+    const text = textarea.value;
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    const textAfterCursor = text.substring(cursorPos);
+    
+    // Find the @ symbol position
+    const atPos = textBeforeCursor.lastIndexOf('@');
+    
+    // Replace @partial with @username
+    const newText = textBeforeCursor.substring(0, atPos) + `@${userName} ` + textAfterCursor;
+    textarea.value = newText;
+    
+    // Move cursor after the mention
+    const newCursorPos = atPos + userName.length + 2;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+    
+    // Add to mentioned users list
+    if (!mentionedUsers.includes(userId)) {
+        mentionedUsers.push(userId);
+    }
+    
+    $('#mentionSuggestions').removeClass('show');
+}
+
+// Load unread mentions count
+function loadUnreadMentionsCount() {
+    if (!currentRequestId) return;
+    
+    $.get(`/api/sales/requests/${currentRequestId}/comments`, function(response) {
+        if (response.success) {
+            updateUnreadMentionsCount(response.unread_mentions);
+        }
+    });
+}
+
+// Update unread mentions count display
+function updateUnreadMentionsCount(count) {
+    if (count > 0) {
+        $('#unreadMentionsBadge').text(count).show();
+        $('#floatingMentionsBadge').text(count).show();
+    } else {
+        $('#unreadMentionsBadge').hide();
+        $('#floatingMentionsBadge').hide();
+    }
+}
+
+// Utility functions
+function formatSourceLabel(source) {
+    const labels = {
+        'general': 'General',
+        'client_approval': 'Client Approval',
+        'costing': 'Costing',
+        'selling_price': 'Selling Price',
+        'operations': 'Operations',
+        'logistics': 'Logistics',
+        'design': 'Design',
+        'production': 'Production'
+    };
+    return labels[source] || source;
+}
+
+function formatRelativeTime(timestamp) {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now - past;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return past.toLocaleDateString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Hide mention suggestions when clicking outside
+$(document).on('click', function(e) {
+    if (!$(e.target).closest('#commentTextarea, #mentionSuggestions').length) {
+        $('#mentionSuggestions').removeClass('show');
+    }
+});
+</script>

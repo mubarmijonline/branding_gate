@@ -1,0 +1,353 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+    .section-hero {
+        background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .section-hero h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .section-hero p { opacity: 0.9; margin-bottom: 0; font-size: 0.95rem; }
+
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        height: 100%;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.18); }
+    .stat-card .card-body { padding: 1.25rem; }
+    .stat-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; }
+
+    .feature-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        overflow: hidden;
+        height: 100%;
+    }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.2); }
+    .feature-card .card-header {
+        border: none;
+        padding: 1.25rem;
+    }
+    .feature-card .card-header .card-icon { font-size: 2rem; opacity: .85; }
+    .feature-card .card-header h5 { margin-bottom: 0; }
+    .feature-card .card-header small { opacity: .8; }
+    .feature-card .card-body { padding: 1.25rem; }
+    .feature-card .card-body p { color: #6c757d; font-size: .9rem; }
+
+    .mini-stat { border-right: 1px solid #e3e6f0; }
+    .mini-stat:last-child { border-right: none; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'finance' in user_roles or 'sales' in user_roles %}
+
+    <!-- Hero Header -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-coins mr-2"></i>Finance Department</h1>
+                <p>Manage financial statements, transactions, expenses, and approvals</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-light btn-sm mr-2"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-light btn-sm" id="refreshStatsBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-success mb-1">Total Balance</div>
+                            <div class="stat-value text-gray-800" id="statTotalBalance">EGP 0.00</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-wallet fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-primary mb-1">Total Income</div>
+                            <div class="stat-value text-gray-800" id="statTotalIncome">EGP 0.00</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-arrow-circle-down fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-danger">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-danger mb-1">Total Expenses</div>
+                            <div class="stat-value text-gray-800" id="statTotalExpense">EGP 0.00</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-arrow-circle-up fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-warning mb-1">Pending Transactions</div>
+                            <div class="stat-value text-gray-800" id="statPending">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- This Month Summary -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="font-weight-bold text-gray-800 mb-3"><i class="fas fa-calendar-alt mr-2 text-info"></i>This Month's Summary</h6>
+                    <div class="row text-center">
+                        <div class="col-md-4 mini-stat">
+                            <div class="stat-label text-primary mb-1">Monthly Income</div>
+                            <div class="h4 font-weight-bold text-gray-800" id="statMonthIncome">EGP 0.00</div>
+                        </div>
+                        <div class="col-md-4 mini-stat">
+                            <div class="stat-label text-danger mb-1">Monthly Expenses</div>
+                            <div class="h4 font-weight-bold text-gray-800" id="statMonthExpense">EGP 0.00</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-label text-success mb-1">Monthly Net</div>
+                            <div class="h4 font-weight-bold text-gray-800" id="statMonthNet">EGP 0.00</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <h5 class="font-weight-bold text-gray-800 mb-3"><i class="fas fa-th-large mr-2"></i>Finance Modules</h5>
+    <div class="row mb-4">
+
+        <!-- Finance Management -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-wallet card-icon mr-3"></i>
+                        <div>
+                            <h5>Finance Management</h5>
+                            <small>Transactions, reports &amp; analytics</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Full financial management with transactions, income statements, balance sheets, payment methods, and detailed reporting.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/finance_management" class="btn btn-success btn-lg"><i class="fas fa-wallet mr-1"></i>Open Finance</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Finance Approvals -->
+        {% if 'admin' in user_roles or 'finance' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-double card-icon mr-3"></i>
+                        <div>
+                            <h5>Finance Approvals</h5>
+                            <small>Review &amp; approve transactions</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Review pending financial transactions and approve or reject them. Two-stage approval workflow for admin and finance roles.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-6 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="pendingApprovalCount">0</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h6 mb-0 font-weight-bold" id="approvedTodayCount">0</div>
+                            <small class="text-muted">Approved Today</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/finance/approvals" class="btn btn-primary btn-lg"><i class="fas fa-check-double mr-1"></i>Approvals</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Expense Tracking -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-receipt card-icon mr-3"></i>
+                        <div>
+                            <h5>Expense Tracking</h5>
+                            <small>Track &amp; submit expenses</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Submit expense reimbursement requests, track spending, and manage receipts with multi-stage approval workflow.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/expense-tracking" class="btn btn-warning btn-lg text-dark"><i class="fas fa-receipt mr-1"></i>Expenses</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expense Approval (Admin) -->
+        {% if 'admin' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #e74a3b 0%, #be2617 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-clipboard-check card-icon mr-3"></i>
+                        <div>
+                            <h5>Expense Approval</h5>
+                            <small>Manager expense approval</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Review and approve employee expense reimbursement requests. First-stage manager approval before finance review.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/expense-tracking-approval" class="btn btn-danger btn-lg"><i class="fas fa-clipboard-check mr-1"></i>Approve</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Finance Expense Approval -->
+        {% if 'admin' in user_roles or 'finance' in user_roles %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-file-invoice-dollar card-icon mr-3"></i>
+                        <div>
+                            <h5>Finance Expense Approval</h5>
+                            <small>Final finance review</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Final-stage finance approval for employee expenses. Disburse approved amounts and complete the reimbursement cycle.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/finance-expense-approval" class="btn btn-info btn-lg"><i class="fas fa-file-invoice-dollar mr-1"></i>Review</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- My Expenses -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #858796 0%, #60616f 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-user-tag card-icon mr-3"></i>
+                        <div>
+                            <h5>My Personal Expenses</h5>
+                            <small>Your spending &amp; balance</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>View your personal expense history, current balance, and submit new expense requests for reimbursement.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/my-expenses" class="btn btn-secondary btn-lg"><i class="fas fa-user-tag mr-1"></i>My Expenses</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have finance permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    loadFinanceSectionStats();
+
+    $('#refreshStatsBtn').click(function() {
+        const btn = $(this);
+        btn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadFinanceSectionStats();
+        setTimeout(() => btn.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'), 1000);
+    });
+
+    function fmt(n) {
+        return 'EGP ' + Number(n || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function loadFinanceSectionStats() {
+        $.get('/api/finance/statistics', function(r) {
+            if (r.success) {
+                $('#statTotalBalance').text(fmt(r.total_balance));
+                $('#statTotalIncome').text(fmt(r.total_income));
+                $('#statTotalExpense').text(fmt(r.total_expense));
+                $('#statPending').text(r.pending_transactions || 0);
+                $('#statMonthIncome').text(fmt(r.this_month.income));
+                $('#statMonthExpense').text(fmt(r.this_month.expense));
+                const monthNet = r.this_month.net || 0;
+                $('#statMonthNet').text(fmt(monthNet)).css('color', monthNet >= 0 ? '#1cc88a' : '#e74a3b');
+            }
+        }).fail(function() { console.error('Failed to load finance statistics'); });
+
+        // Load pending approvals count
+        $.get('/api/finance/transactions', {status: 'pending', per_page: 1}, function(r) {
+            if (r.success) {
+                $('#pendingApprovalCount').text(r.total || 0);
+            }
+        }).fail(function() { console.error('Failed to load pending count'); });
+
+        // Load today's approved count
+        const today = new Date().toISOString().split('T')[0];
+        $.get('/api/finance/transactions', {status: 'approved', date_from: today, date_to: today, per_page: 1}, function(r) {
+            if (r.success) {
+                $('#approvedTodayCount').text(r.total || 0);
+            }
+        }).fail(function() { console.error('Failed to load approved today count'); });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,221 @@
+<!-- ============================================================================
+     INTEGRATION EXAMPLE: Adding Comments Widget to sales_request.html
+     ============================================================================ -->
+
+<!-- STEP 1: Include the widget at the bottom of your page, before closing </div> -->
+{% include 'comments_widget.html' %}
+
+<!-- STEP 2: Add initialization script -->
+<script>
+$(document).ready(function() {
+    // Global variable to track current request
+    window.currentViewingRequestId = null;
+    
+    // Initialize comments when viewing request details
+    $(document).on('click', '.details-btn', function() {
+        const requestId = $(this).data('request-id');
+        window.currentViewingRequestId = requestId;
+        
+        // Initialize comments widget
+        initCommentsWidget(requestId, 'general');
+        
+        // Open comments widget automatically
+        $('#commentsWidget').slideDown(300);
+    });
+    
+    // When editing a request
+    $(document).on('click', '.edit-btn', function() {
+        const requestId = $(this).data('request-id');
+        window.currentViewingRequestId = requestId;
+        initCommentsWidget(requestId, 'general');
+    });
+    
+    // When viewing in client approval section
+    // (if on client_approval.html page)
+    if (window.location.pathname.includes('client_approval')) {
+        // Auto-set source to client_approval
+        $('#commentSource').val('client_approval');
+        
+        // Get request ID from URL or page context
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestId = urlParams.get('request_id');
+        
+        if (requestId) {
+            initCommentsWidget(requestId, 'client_approval');
+        }
+    }
+    
+    // When in set price modal
+    $(document).on('shown.bs.modal', '#setPriceModal', function() {
+        const requestId = $(this).data('request-id');
+        if (requestId) {
+            $('#commentSource').val('selling_price');
+            initCommentsWidget(requestId, 'selling_price');
+        }
+    });
+});
+
+// Helper function to get current request ID from page context
+function getCurrentRequestId() {
+    // Try multiple methods to get request ID
+    
+    // Method 1: From URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    let requestId = urlParams.get('request_id');
+    
+    // Method 2: From global variable
+    if (!requestId && window.currentViewingRequestId) {
+        requestId = window.currentViewingRequestId;
+    }
+    
+    // Method 3: From open modal
+    if (!requestId) {
+        const modal = $('.modal.show');
+        if (modal.length) {
+            requestId = modal.data('request-id');
+        }
+    }
+    
+    // Method 4: From selected row in table
+    if (!requestId) {
+        const selectedRow = $('#requests-table tbody tr.selected');
+        if (selectedRow.length) {
+            requestId = selectedRow.data('request-id');
+        }
+    }
+    
+    return requestId;
+}
+
+// Auto-update comments when actions are performed
+function onRequestActionCompleted(requestId, actionType) {
+    // Automatically post a system comment when certain actions happen
+    
+    const systemComments = {
+        'status_changed': 'Request status updated',
+        'items_added': 'New items added to request',
+        'prices_updated': 'Prices have been updated',
+        'approval_submitted': 'Submitted for client approval',
+        'approved': 'Request approved by client',
+        'rejected': 'Request rejected by client'
+    };
+    
+    if (systemComments[actionType]) {
+        // Optionally auto-post system comment
+        // This is just an example - implement based on your needs
+        console.log(`Action completed: ${actionType} for request ${requestId}`);
+        
+        // Reload comments to show any new activity
+        if (currentRequestId === requestId) {
+            loadComments();
+        }
+    }
+}
+
+// Context-aware comment source setting
+function setCommentSourceBasedOnContext() {
+    // Detect current page/section and set appropriate source
+    
+    const path = window.location.pathname;
+    
+    if (path.includes('client_approval')) {
+        $('#commentSource').val('client_approval');
+    } else if (path.includes('operation')) {
+        $('#commentSource').val('operations');
+    } else if ($('#setPriceModal').hasClass('show')) {
+        $('#commentSource').val('selling_price');
+    } else if ($('#costingSection').is(':visible')) {
+        $('#commentSource').val('costing');
+    } else {
+        $('#commentSource').val('general');
+    }
+}
+</script>
+
+<!-- STEP 3: Add CSS override if needed (optional) -->
+<style>
+/* Custom positioning for comments widget on this page */
+#commentsWidget {
+    position: fixed;
+    right: 20px;
+    top: 100px;
+    width: 450px;
+    max-height: 80vh;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+/* Adjust floating button position */
+#floatingCommentsBtn {
+    bottom: 30px;
+    right: 30px;
+}
+
+/* Make comments list scrollable */
+.comments-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #commentsWidget {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        max-height: 70vh;
+        border-radius: 16px 16px 0 0;
+    }
+}
+</style>
+
+<!-- STEP 4: Example button to open comments (optional) -->
+<!-- Add this button anywhere in your page -->
+<button class="btn btn-info btn-sm" onclick="toggleCommentsWidget()" style="margin-left: 10px;">
+    <i class="fas fa-comments"></i> Comments
+    <span class="badge badge-danger" id="commentBadge" style="display: none;">0</span>
+</button>
+
+<!-- STEP 5: Example of programmatically adding a comment (optional) -->
+<script>
+// Function to add a quick comment from anywhere in your code
+function addQuickComment(requestId, commentText, source = 'general') {
+    $.ajax({
+        url: `/api/sales/requests/${requestId}/comments`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            comment_text: commentText,
+            source: source,
+            is_note: false,
+            mentioned_users: []
+        }),
+        success: function(response) {
+            if (response.success) {
+                console.log('Comment added successfully');
+                loadComments();
+            }
+        }
+    });
+}
+
+// Example usage:
+// addQuickComment(123, 'Status changed to In Progress', 'general');
+</script>
+
+<!-- ============================================================================
+     NOTES FOR IMPLEMENTATION:
+     
+     1. The widget is hidden by default - click floating button to show
+     2. Initialize with: initCommentsWidget(requestId, source)
+     3. Source can be: general, client_approval, costing, selling_price, 
+        operations, logistics, design, production
+     4. Mentions work automatically when user types @username
+     5. Users receive push notifications when mentioned
+     6. Comments are soft-deleted (not permanently removed)
+     7. Only comment author or admin can delete
+     
+     ============================================================================ -->

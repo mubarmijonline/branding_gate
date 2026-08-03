@@ -1,0 +1,1154 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+.status-badge {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+}
+.table-hover tbody tr:hover {
+    background-color: #f8f9fc;
+}
+.editable-amount {
+    width: 120px;
+    text-align: right;
+    font-weight: bold;
+}
+.amount-changed {
+    background-color: #fff3cd !important;
+    border-color: #ffc107 !important;
+}
+.original-amount {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-decoration: line-through;
+}
+.nav-pills .nav-link.active {
+    background-color: #4e73df;
+    color: #fff !important;
+}
+.nav-pills .nav-link {
+    color: #4e73df !important;
+    background-color: #e9ecef;
+    margin-right: 5px;
+    border-radius: 0.35rem;
+}
+.expense-type-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+.type-personal {
+    background-color: #e0f2fe;
+    color: #0369a1;
+}
+.type-reimbursement {
+    background-color: #dcfce7;
+    color: #166534;
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-clipboard-check mr-2"></i>Expense Approval | موافقة المصروفات
+        </h1>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Personal Expenses</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="personalCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-user-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Pending Amount</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalPendingAmount">0.00 EGP</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Approved Today</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="approvedTodayCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-double fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-pills mb-3" id="expenseTypeTabs">
+        <li class="nav-item">
+            <a class="nav-link active" data-toggle="pill" href="#allExpenses">
+                <i class="fas fa-list mr-1"></i> All Pending <span class="badge badge-primary ml-1" id="allBadge">0</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="pill" href="#personalExpenses">
+                <i class="fas fa-user mr-1"></i> Personal Expenses <span class="badge badge-primary ml-1" id="personalBadge">0</span>
+            </a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+        <!-- All Pending -->
+        <div class="tab-pane fade show active" id="allExpenses">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-hourglass-half mr-2"></i>All Pending Expenses | جميع المصروفات المعلقة
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Code</th>
+                                    <th>SR</th>
+                                    <th>Client</th>
+                                    <th>Company</th>
+                                    <th>Submitted By</th>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                    <th>Submitted At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allExpensesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Personal Expenses -->
+        <div class="tab-pane fade" id="personalExpenses">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-warning">
+                        <i class="fas fa-user mr-2"></i>Personal Expenses | المصروفات الشخصية
+                    </h6>
+                </div>
+                <div class="card-body" id="personalExpensesContainer">
+                    <!-- Grouped by employee -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Reimbursement Requests tab removed -->
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-success">
+                <i class="fas fa-history mr-2"></i>Recently Processed | معالجة مؤخراً
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Type</th>
+                            <th>Code</th>
+                            <th>User</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Processed At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Personal Expense Approval Modal -->
+<div class="modal fade" id="personalApprovalModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-user mr-2"></i>Review Personal Expense</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="personalApprovalModalContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="rejectPersonalExpense()">
+                    <i class="fas fa-times mr-1"></i> Reject
+                </button>
+                <button type="button" class="btn btn-success" onclick="approvePersonalExpense()">
+                    <i class="fas fa-check mr-1"></i> Approve (Deduct from Balance)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reimbursement Approval Modal -->
+<div class="modal fade" id="reimbursementApprovalModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-clipboard-check mr-2"></i>Review & Edit Reimbursement Request</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="reimbursementApprovalModalContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="saveItemChanges()" id="saveChangesBtn" style="display: none;">
+                    <i class="fas fa-save mr-1"></i> Save Changes
+                </button>
+                <button type="button" class="btn btn-danger" onclick="rejectReimbursement()">
+                    <i class="fas fa-times mr-1"></i> Reject
+                </button>
+                <button type="button" class="btn btn-success" onclick="approveReimbursement()">
+                    <i class="fas fa-check mr-1"></i> Approve & Send to Finance
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rejection Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-times mr-2"></i>Reject Expense</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Rejection Reason <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejectionReason" rows="3" placeholder="Please provide a reason for rejection..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmReject()">
+                    <i class="fas fa-times mr-1"></i> Confirm Rejection
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentExpenseId = null;
+let currentExpenseType = null; // 'personal' or 'reimbursement'
+let currentTrackingId = null;
+let currentItems = [];
+let originalAmounts = {};
+let hasChanges = false;
+let currentBulkUserId = null;
+let currentBulkUserName = null;
+
+let personalExpenses = [];
+let reimbursementExpenses = [];
+
+$(document).ready(function() {
+    loadAllExpenses();
+});
+
+function loadAllExpenses() {
+    // Load personal expenses
+    $.get('/api/finance/expense-approvals?status=submitted', function(response) {
+        if (response.success) {
+            personalExpenses = response.expenses || [];
+            renderPersonalExpenses();
+            updateCounts();
+        }
+    });
+    
+    // Load reimbursement requests
+    $.get('/api/expense-tracking?status=manager_pending', function(response) {
+        if (response.success) {
+            reimbursementExpenses = response.trackings || [];
+            renderReimbursementExpenses();
+            updateCounts();
+        }
+    });
+    
+    // Load recent activity
+    loadRecentActivity();
+}
+
+function updateCounts() {
+    const personalCount = personalExpenses.length;
+    const reimbursementCount = reimbursementExpenses.length;
+    const totalCount = personalCount + reimbursementCount;
+    
+    $('#personalCount').text(personalCount);
+    $('#reimbursementCount').text(reimbursementCount);
+    $('#personalBadge').text(personalCount);
+    $('#reimbursementBadge').text(reimbursementCount);
+    $('#allBadge').text(totalCount);
+    
+    // Calculate total amount
+    let totalAmount = 0;
+    personalExpenses.forEach(e => totalAmount += parseFloat(e.amount || 0));
+    reimbursementExpenses.forEach(e => totalAmount += parseFloat(e.total_amount || 0));
+    $('#totalPendingAmount').text(totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' EGP');
+    
+    // Render all expenses combined
+    renderAllExpenses();
+}
+
+function renderAllExpenses() {
+    let html = '';
+    
+    // Add personal expenses
+    personalExpenses.forEach(e => {
+        const submittedAt = e.submitted_at ? new Date(e.submitted_at).toLocaleString() : '-';
+        const srDisplay = e.sales_request_id ? `<span class="badge badge-info">SR-${e.sales_request_id}</span>` : '-';
+        html += `
+            <tr>
+                <td><span class="expense-type-badge type-personal">Personal</span></td>
+                <td><strong>${e.tracking_code || '-'}</strong></td>
+                <td>${srDisplay}</td>
+                <td>${e.client_name || '-'}</td>
+                <td>${e.company_name || '-'}</td>
+                <td>${e.user_name || '-'}</td>
+                <td>${e.expense_date || '-'}</td>
+                <td>${e.description || '-'}</td>
+                <td><strong class="text-primary">${parseFloat(e.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
+                <td><small>${submittedAt}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="openPersonalApprovalModal(${e.id})" title="Review">
+                        <i class="fas fa-eye"></i> Review
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    // Add reimbursement requests
+    reimbursementExpenses.forEach(e => {
+        html += `
+            <tr>
+                <td><span class="expense-type-badge type-reimbursement">Reimbursement</span></td>
+                <td><strong>${e.tracking_code}</strong></td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>${e.user_name}</td>
+                <td>${e.tracking_date || '-'}</td>
+                <td>${e.description || '-'}</td>
+                <td><strong class="text-primary">${parseFloat(e.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
+                <td><small>${e.created_at || '-'}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-info" onclick="openReimbursementApprovalModal(${e.id})" title="Review">
+                        <i class="fas fa-eye"></i> Review
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    if (html === '') {
+        html = '<tr><td colspan="11" class="text-center text-muted py-4"><i class="fas fa-check-circle mr-2"></i>No pending expenses</td></tr>';
+    }
+    
+    $('#allExpensesTableBody').html(html);
+}
+
+function renderPersonalExpenses() {
+    if (personalExpenses.length === 0) {
+        $('#personalExpensesContainer').html('<div class="text-center text-muted py-4"><i class="fas fa-check-circle mr-2"></i>No pending personal expenses</div>');
+        return;
+    }
+    
+    // Group by employee
+    const grouped = {};
+    personalExpenses.forEach(e => {
+        const key = e.user_id;
+        if (!grouped[key]) {
+            grouped[key] = {
+                user_id: e.user_id,
+                user_name: e.user_name,
+                expenses: []
+            };
+        }
+        grouped[key].expenses.push(e);
+    });
+    
+    let html = '';
+    Object.values(grouped).forEach(group => {
+        const totalAmount = group.expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+        
+        html += `
+            <div class="card mb-3 border-left-warning">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-0 font-weight-bold">
+                            <i class="fas fa-user mr-2"></i>${group.user_name}
+                        </h6>
+                        <small class="text-muted">${group.expenses.length} expense(s) - Total: <strong>${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></small>
+                    </div>
+                    <div>
+                        <button class="btn btn-danger btn-sm mr-2" onclick="rejectAllForEmployee(${group.user_id}, '${group.user_name}')">
+                            <i class="fas fa-times mr-1"></i> Reject All
+                        </button>
+                        <button class="btn btn-success" onclick="approveAllForEmployee(${group.user_id}, '${group.user_name}')">
+                            <i class="fas fa-check mr-1"></i> Approve All
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Code</th>
+                                <th>SR</th>
+                                <th>Client</th>
+                                <th>Company</th>
+                                <th>Date</th>
+                                <th>Supplier</th>
+                                <th>Description</th>
+                                <th width="150">Amount (Editable)</th>
+                                <th>Requested</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+        
+        group.expenses.forEach(e => {
+            const requestedAmount = e.requested_amount ? parseFloat(e.requested_amount) : parseFloat(e.amount);
+            const srBadge = e.sales_request_id ? `<span class="badge badge-info">SR-${e.sales_request_id}</span>` : '-';
+            html += `
+                            <tr>
+                                <td><strong>${e.tracking_code || '-'}</strong></td>
+                                <td>${srBadge}</td>
+                                <td>${e.client_name || '-'}</td>
+                                <td>${e.company_name || '-'}</td>
+                                <td>${e.expense_date || '-'}</td>
+                                <td>${e.supplier_display || e.supplier_name || '-'}</td>
+                                <td>${e.description || '-'}</td>
+                                <td>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control text-right font-weight-bold" 
+                                               id="amount_${e.id}" 
+                                               value="${parseFloat(e.amount).toFixed(2)}" 
+                                               step="0.01" min="0"
+                                               onchange="autoSaveAmount(${e.id})">
+                                        <div class="input-group-append">
+                                            <span class="input-group-text">EGP</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-muted">${requestedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                            </tr>`;
+        });
+        
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    });
+    
+    $('#personalExpensesContainer').html(html);
+}
+
+function renderReimbursementExpenses() {
+    let html = '';
+    
+    if (reimbursementExpenses.length === 0) {
+        html = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-check-circle mr-2"></i>No pending reimbursement requests</td></tr>';
+    } else {
+        reimbursementExpenses.forEach(e => {
+            html += `
+                <tr>
+                    <td><strong>${e.tracking_code}</strong></td>
+                    <td>${e.user_name}</td>
+                    <td>${e.tracking_date || '-'}</td>
+                    <td>${e.description || '-'}</td>
+                    <td><span class="badge badge-secondary">${e.item_count} items</span></td>
+                    <td><strong class="text-primary">${parseFloat(e.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
+                    <td><small>${e.created_at || '-'}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="openReimbursementApprovalModal(${e.id})" title="Review">
+                            <i class="fas fa-eye"></i> Review
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    
+    $('#reimbursementTableBody').html(html);
+}
+
+function loadRecentActivity() {
+    let recentItems = [];
+    
+    $.get('/api/finance/expense-approvals?status=approved', function(response) {
+        if (response.success && response.expenses) {
+            response.expenses.slice(0, 5).forEach(e => {
+                recentItems.push({
+                    type: 'Personal',
+                    code: e.tracking_code,
+                    user: e.user_name,
+                    amount: parseFloat(e.amount),
+                    status: 'approved',
+                    date: e.approved_at
+                });
+            });
+        }
+        renderRecentActivity(recentItems);
+    });
+    
+    $.get('/api/expense-tracking', function(response) {
+        if (response.success && response.trackings) {
+            response.trackings.filter(t => t.status === 'manager_approved' || t.status === 'approved' || t.status === 'rejected')
+                .slice(0, 5).forEach(t => {
+                recentItems.push({
+                    type: 'Reimbursement',
+                    code: t.tracking_code,
+                    user: t.user_name,
+                    amount: parseFloat(t.total_amount),
+                    status: t.status,
+                    date: t.manager_approved_at || t.finance_approved_at
+                });
+            });
+        }
+        renderRecentActivity(recentItems);
+    });
+}
+
+function renderRecentActivity(items) {
+    let html = '';
+    
+    if (items.length === 0) {
+        html = '<tr><td colspan="6" class="text-center text-muted py-3">No recent activity</td></tr>';
+    } else {
+        items.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10).forEach(item => {
+            const typeClass = item.type === 'Personal' ? 'type-personal' : 'type-reimbursement';
+            const statusBadge = getStatusBadge(item.status);
+            
+            html += `
+                <tr>
+                    <td><span class="expense-type-badge ${typeClass}">${item.type}</span></td>
+                    <td>${item.code || '-'}</td>
+                    <td>${item.user || '-'}</td>
+                    <td>${item.amount.toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</td>
+                    <td>${statusBadge}</td>
+                    <td><small>${item.date || '-'}</small></td>
+                </tr>
+            `;
+        });
+    }
+    
+    $('#recentTableBody').html(html);
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span class="badge badge-warning">Pending</span>',
+        'submitted': '<span class="badge badge-warning">Submitted</span>',
+        'manager_approved': '<span class="badge badge-info">Sent to Finance</span>',
+        'approved': '<span class="badge badge-success">Approved</span>',
+        'rejected': '<span class="badge badge-danger">Rejected</span>'
+    };
+    return badges[status] || '<span class="badge badge-secondary">' + status + '</span>';
+}
+
+// ==================== PERSONAL EXPENSE FUNCTIONS ====================
+
+function autoSaveAmount(expenseId) {
+    const input = $(`#amount_${expenseId}`);
+    const newAmount = parseFloat(input.val()) || 0;
+    
+    input.prop('disabled', true);
+    
+    $.ajax({
+        url: `/api/finance/expense-approvals/${expenseId}/update-amount`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ amount: newAmount }),
+        success: function(response) {
+            if (response.success) {
+                input.addClass('bg-success text-white');
+                setTimeout(() => {
+                    input.removeClass('bg-success text-white');
+                }, 1000);
+                // Update local data
+                const expense = personalExpenses.find(e => e.id === expenseId);
+                if (expense) expense.amount = newAmount;
+                updateCounts();
+            } else {
+                Swal.fire({icon: 'error', title: 'Error', text: response.error});
+            }
+        },
+        error: function(xhr) {
+            Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+        },
+        complete: function() {
+            input.prop('disabled', false);
+        }
+    });
+}
+
+function approveAllForEmployee(userId, userName) {
+    const userExpenses = personalExpenses.filter(e => e.user_id === userId);
+    const expenseIds = userExpenses.map(e => e.id);
+    const totalAmount = userExpenses.reduce((sum, e) => {
+        const amt = parseFloat($(`#amount_${e.id}`).val()) || parseFloat(e.amount);
+        return sum + amt;
+    }, 0);
+    
+    Swal.fire({
+        title: `Approve All for ${userName}?`,
+        html: `<p>This will approve <strong>${expenseIds.length}</strong> expense(s)</p>
+               <p>Total: <strong>${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></p>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Approve All',
+        confirmButtonColor: '#28a745'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Collect amounts from inputs
+            const expenses = expenseIds.map(id => ({
+                id: id,
+                amount: parseFloat($(`#amount_${id}`).val()) || 0
+            }));
+            
+            $.ajax({
+                url: '/api/finance/expense-approvals/approve-bulk',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ expenses: expenses }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Approved!',
+                            text: `${response.approved_count} expense(s) approved for ${userName}`
+                        });
+                        loadAllExpenses();
+                    } else {
+                        Swal.fire({icon: 'error', title: 'Error', text: response.error});
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+                }
+            });
+        }
+    });
+}
+
+function rejectAllForEmployee(userId, userName) {
+    currentExpenseType = 'personal-bulk';
+    currentBulkUserId = userId;
+    currentBulkUserName = userName;
+    $('#rejectionReason').val('');
+    $('#rejectModal').modal('show');
+}
+
+function openPersonalApprovalModal(expenseId) {
+    currentExpenseId = expenseId;
+    currentExpenseType = 'personal';
+    
+    const expense = personalExpenses.find(e => e.id === expenseId);
+    if (!expense) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Expense not found'});
+        return;
+    }
+    
+    const amount = parseFloat(expense.amount);
+    const requestedAmount = expense.requested_amount ? parseFloat(expense.requested_amount) : amount;
+    
+    const srDisplay = expense.sales_request_id ? `SR-${expense.sales_request_id}` : '-';
+    const html = `
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <p><strong>Tracking Code:</strong> ${expense.tracking_code || '-'}</p>
+                <p><strong>Submitted By:</strong> ${expense.user_name}</p>
+                <p><strong>Date:</strong> ${expense.expense_date || '-'}</p>
+                <p><strong>Supplier:</strong> ${expense.supplier_display || expense.supplier_name || '-'}</p>
+                <p><strong>Sales Request:</strong> <span class="badge badge-info">${srDisplay}</span></p>
+                <p><strong>Client:</strong> ${expense.client_name || '-'}</p>
+                <p><strong>Company:</strong> ${expense.company_name || '-'}</p>
+            </div>
+            <div class="col-md-6">
+                <label class="small text-muted">Amount (Editable)</label>
+                <div class="input-group">
+                    <input type="number" class="form-control form-control-lg text-right font-weight-bold" 
+                           id="personalEditAmount" value="${amount.toFixed(2)}" step="0.01" min="0">
+                    <div class="input-group-append">
+                        <span class="input-group-text">EGP</span>
+                    </div>
+                </div>
+                <small class="text-muted">Requested: ${requestedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</small>
+            </div>
+        </div>
+        
+        <p><strong>Description:</strong> ${expense.description || '-'}</p>
+        
+        <div class="form-group mt-3">
+            <label>Notes (Optional)</label>
+            <textarea class="form-control" id="personalApprovalNotes" rows="2" placeholder="Add notes..."></textarea>
+        </div>
+    `;
+    
+    $('#personalApprovalModalContent').html(html);
+    $('#personalApprovalModal').modal('show');
+}
+
+function approvePersonalExpense() {
+    if (!currentExpenseId) return;
+    
+    const editedAmount = parseFloat($('#personalEditAmount').val()) || 0;
+    
+    Swal.fire({
+        title: 'Approve Expense?',
+        text: `Approve ${editedAmount.toFixed(2)} EGP?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Approve',
+        confirmButtonColor: '#28a745'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/finance/expense-approvals/${currentExpenseId}/approve`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ 
+                    notes: $('#personalApprovalNotes').val(),
+                    edited_amount: editedAmount
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        $('#personalApprovalModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Approved!',
+                            text: 'Expense approved.'
+                        });
+                        loadAllExpenses();
+                    } else {
+                        Swal.fire({icon: 'error', title: 'Error', text: response.error});
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+                }
+            });
+        }
+    });
+}
+
+function rejectPersonalExpense() {
+    currentExpenseType = 'personal';
+    $('#personalApprovalModal').modal('hide');
+    $('#rejectionReason').val('');
+    $('#rejectModal').modal('show');
+}
+
+// ==================== REIMBURSEMENT FUNCTIONS ====================
+
+function openReimbursementApprovalModal(trackingId) {
+    currentTrackingId = trackingId;
+    currentExpenseType = 'reimbursement';
+    hasChanges = false;
+    originalAmounts = {};
+    $('#saveChangesBtn').hide();
+    
+    $.get(`/api/expense-tracking/${trackingId}`, function(response) {
+        if (response.success) {
+            const t = response.tracking;
+            currentItems = response.items;
+            
+            // Store original amounts
+            currentItems.forEach(item => {
+                originalAmounts[item.id] = parseFloat(item.amount);
+            });
+            
+            let itemsHtml = '';
+            currentItems.forEach((item, idx) => {
+                itemsHtml += `
+                    <tr data-item-id="${item.id}">
+                        <td>${idx + 1}</td>
+                        <td>${item.item_description}</td>
+                        <td>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control editable-amount" 
+                                       id="amount_${item.id}" 
+                                       value="${parseFloat(item.amount).toFixed(2)}" 
+                                       step="0.01" min="0"
+                                       onchange="onAmountChange(${item.id})">
+                                <div class="input-group-append">
+                                    <span class="input-group-text">EGP</span>
+                                </div>
+                            </div>
+                            <div class="original-amount" id="original_${item.id}" style="display: none;">
+                                Original: ${parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP
+                            </div>
+                        </td>
+                        <td>${item.notes || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            const html = `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Tracking Code:</strong> ${t.tracking_code}</p>
+                        <p><strong>Submitted By:</strong> ${t.user_name}</p>
+                        <p><strong>Date:</strong> ${t.tracking_date || '-'}</p>
+                        <p><strong>Payment Method:</strong> ${t.payment_method_name || '-'}</p>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <div class="card bg-light">
+                            <div class="card-body py-2">
+                                <h6 class="mb-1 text-muted">Total Amount</h6>
+                                <h3 class="text-primary mb-0" id="modalTotalAmount">${parseFloat(t.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                ${t.description ? '<p><strong>Description:</strong> ' + t.description + '</p>' : ''}
+                ${t.notes ? '<p><strong>Notes:</strong> ' + t.notes + '</p>' : ''}
+                
+                <hr>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>Manager can edit amounts:</strong> Click on any amount to modify it.
+                </div>
+                
+                <h6 class="font-weight-bold mb-3"><i class="fas fa-list mr-2"></i>Expense Items (Editable)</h6>
+                <table class="table table-sm table-bordered">
+                    <thead class="thead-light">
+                        <tr>
+                            <th width="5%">#</th>
+                            <th width="45%">Description</th>
+                            <th width="30%">Amount</th>
+                            <th width="20%">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itemsHtml}
+                    </tbody>
+                </table>
+                
+                <div class="form-group mt-3">
+                    <label>Approval Notes (Optional)</label>
+                    <textarea class="form-control" id="reimbursementApprovalNotes" rows="2" placeholder="Add notes for finance team..."></textarea>
+                </div>
+            `;
+            
+            $('#reimbursementApprovalModalContent').html(html);
+            $('#reimbursementApprovalModal').modal('show');
+        }
+    }).fail(function() {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Failed to load tracking details'});
+    });
+}
+
+function onAmountChange(itemId) {
+    const input = $(`#amount_${itemId}`);
+    const newAmount = parseFloat(input.val()) || 0;
+    const originalAmount = originalAmounts[itemId];
+    
+    if (newAmount !== originalAmount) {
+        input.addClass('amount-changed');
+        $(`#original_${itemId}`).show();
+        hasChanges = true;
+        $('#saveChangesBtn').show();
+    } else {
+        input.removeClass('amount-changed');
+        $(`#original_${itemId}`).hide();
+    }
+    
+    recalculateTotal();
+    checkForChanges();
+}
+
+function recalculateTotal() {
+    let total = 0;
+    currentItems.forEach(item => {
+        const amount = parseFloat($(`#amount_${item.id}`).val()) || 0;
+        total += amount;
+    });
+    $('#modalTotalAmount').text(total.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' EGP');
+}
+
+function checkForChanges() {
+    hasChanges = false;
+    currentItems.forEach(item => {
+        const newAmount = parseFloat($(`#amount_${item.id}`).val()) || 0;
+        if (newAmount !== originalAmounts[item.id]) {
+            hasChanges = true;
+        }
+    });
+    
+    if (hasChanges) {
+        $('#saveChangesBtn').show();
+    } else {
+        $('#saveChangesBtn').hide();
+    }
+}
+
+function saveItemChanges() {
+    if (!currentTrackingId || !hasChanges) return;
+    
+    const items = currentItems.map(item => ({
+        id: item.id,
+        amount: parseFloat($(`#amount_${item.id}`).val()) || 0
+    }));
+    
+    $.ajax({
+        url: `/api/expense-tracking/${currentTrackingId}/update-items`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ items: items }),
+        success: function(response) {
+            if (response.success) {
+                items.forEach(item => {
+                    originalAmounts[item.id] = item.amount;
+                    $(`#amount_${item.id}`).removeClass('amount-changed');
+                    $(`#original_${item.id}`).hide();
+                });
+                
+                hasChanges = false;
+                $('#saveChangesBtn').hide();
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Saved!',
+                    text: `New total: ${response.new_total.toLocaleString('en-US', {minimumFractionDigits: 2})} EGP`,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                
+                loadAllExpenses();
+            } else {
+                Swal.fire({icon: 'error', title: 'Error', text: response.error});
+            }
+        },
+        error: function(xhr) {
+            Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+        }
+    });
+}
+
+function approveReimbursement() {
+    if (!currentTrackingId) return;
+    
+    if (hasChanges) {
+        Swal.fire({
+            title: 'Unsaved Changes',
+            text: 'Save changes before approving?',
+            icon: 'warning',
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: 'Save & Approve',
+            denyButtonText: 'Approve without saving',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                saveAndApproveReimbursement();
+            } else if (result.isDenied) {
+                doApproveReimbursement();
+            }
+        });
+    } else {
+        doApproveReimbursement();
+    }
+}
+
+function saveAndApproveReimbursement() {
+    const items = currentItems.map(item => ({
+        id: item.id,
+        amount: parseFloat($(`#amount_${item.id}`).val()) || 0
+    }));
+    
+    $.ajax({
+        url: `/api/expense-tracking/${currentTrackingId}/update-items`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ items: items }),
+        success: function(response) {
+            if (response.success) {
+                doApproveReimbursement();
+            } else {
+                Swal.fire({icon: 'error', title: 'Error', text: response.error});
+            }
+        },
+        error: function(xhr) {
+            Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+        }
+    });
+}
+
+function doApproveReimbursement() {
+    const notes = $('#reimbursementApprovalNotes').val();
+    
+    Swal.fire({
+        title: 'Approve & Send to Finance?',
+        text: 'This will send the request to finance for final approval.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Approve',
+        confirmButtonColor: '#28a745'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/expense-tracking/${currentTrackingId}/manager-approve`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ notes: notes }),
+                success: function(response) {
+                    if (response.success) {
+                        $('#reimbursementApprovalModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Approved!',
+                            text: 'Request sent to finance.'
+                        });
+                        loadAllExpenses();
+                    } else {
+                        Swal.fire({icon: 'error', title: 'Error', text: response.error});
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+                }
+            });
+        }
+    });
+}
+
+function rejectReimbursement() {
+    currentExpenseType = 'reimbursement';
+    $('#reimbursementApprovalModal').modal('hide');
+    $('#rejectionReason').val('');
+    $('#rejectModal').modal('show');
+}
+
+// ==================== SHARED REJECTION FUNCTION ====================
+
+function confirmReject() {
+    const reason = $('#rejectionReason').val().trim();
+    
+    if (!reason) {
+        Swal.fire({icon: 'error', title: 'Error', text: 'Please provide a rejection reason'});
+        return;
+    }
+    
+    if (currentExpenseType === 'personal-bulk') {
+        // Bulk reject for employee
+        const userExpenses = personalExpenses.filter(e => e.user_id === currentBulkUserId);
+        const expenseIds = userExpenses.map(e => e.id);
+        
+        $.ajax({
+            url: '/api/finance/expense-approvals/reject-bulk',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ expense_ids: expenseIds, reason: reason }),
+            success: function(response) {
+                if (response.success) {
+                    $('#rejectModal').modal('hide');
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Rejected',
+                        text: `${response.rejected_count} expense(s) rejected for ${currentBulkUserName}`
+                    });
+                    loadAllExpenses();
+                } else {
+                    Swal.fire({icon: 'error', title: 'Error', text: response.error});
+                }
+            },
+            error: function(xhr) {
+                Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+            }
+        });
+        return;
+    }
+    
+    let url;
+    
+    if (currentExpenseType === 'personal') {
+        url = `/api/finance/expense-approvals/${currentExpenseId}/reject`;
+    } else {
+        url = `/api/expense-tracking/${currentTrackingId}/reject`;
+    }
+    
+    $.ajax({
+        url: url,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ reason: reason }),
+        success: function(response) {
+            if (response.success) {
+                $('#rejectModal').modal('hide');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Rejected',
+                    text: 'Expense has been rejected.'
+                });
+                loadAllExpenses();
+            } else {
+                Swal.fire({icon: 'error', title: 'Error', text: response.error});
+            }
+        },
+        error: function(xhr) {
+            Swal.fire({icon: 'error', title: 'Error', text: xhr.responseJSON?.error || 'Server error'});
+        }
+    });
+}
+</script>
+{% endblock body %}

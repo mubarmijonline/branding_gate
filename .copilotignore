@@ -1,0 +1,114 @@
+# ============================================
+# COPILOT IGNORE - PERFORMANCE OPTIMIZATION
+# ============================================
+# This file tells Copilot which files to NEVER index or touch
+# Prevents hanging, slowness, and unauthorized file recreation
+
+# ============================================
+# CRITICAL: SQL & MARKDOWN DOCUMENTATION
+# ============================================
+# NEVER index or recreate these files
+*.sql
+*.md
+**/*.sql
+**/*.md
+
+# ============================================
+# VIRTUAL ENVIRONMENTS (HUGE - CAUSES HANGS)
+# ============================================
+branding_gate_VENV/
+**/venv/
+**/.venv/
+**/env/
+**/ENV/
+**/__pycache__/
+
+# ============================================
+# PYTHON COMPILED & CACHE FILES
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ============================================
+# STATIC ASSETS (TOO LARGE FOR CONTEXT)
+# ============================================
+static/
+**/static/**
+static/selectize.js-master/
+static/js/vendor/
+static/css/vendor/
+templates/
+
+# ============================================
+# UPLOADS AND USER DATA
+# ============================================
+uploads/
+**/uploads/**
+
+# ============================================
+# CERTIFICATES, KEYS & SECRETS
+# ============================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+brandinggate-*-firebase-adminsdk-*.json
+eltime-*-firebase-adminsdk-*.json
+
+# ============================================
+# DATABASE FILES
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# LOGS & OUTPUT FILES
+# ============================================
+*.log
+logs/
+nohup.out
+install_log.txt
+
+# ============================================
+# GIT & VERSION CONTROL
+# ============================================
+.git/
+.gitignore
+
+# ============================================
+# IDE & EDITOR FILES
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+.DS_Store
+Thumbs.db
+
+# Documentation that shouldn't be auto-modified
+*.md
+!README.md
+
+# SQL migrations and schema (prevent auto-recreation)
+*.sql
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Large minified files
+*.min.js
+*.min.css
+
+# Node modules (if any)
+node_modules/

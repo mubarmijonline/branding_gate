@@ -1,0 +1,24 @@
+[Unit]
+Description=Branding Gate Flask Application (Gunicorn)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+User=ahmeddiab
+Group=ahmeddiab
+WorkingDirectory=/development/projects/branding_gate
+Environment="PATH=/development/projects/branding_gate/branding_gate_VENV/bin:/usr/bin"
+ExecStart=/development/projects/branding_gate/branding_gate_VENV/bin/gunicorn \
+    --workers 6 \
+    --bind unix:/development/projects/branding_gate/branding_gate.sock \
+    --access-logfile /development/projects/branding_gate/gunicorn_access.log \
+    --error-logfile /development/projects/branding_gate/gunicorn_error.log \
+    --log-level info \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    wsgi:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

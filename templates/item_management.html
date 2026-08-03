@@ -1,0 +1,3233 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- SweetAlert2 CSS - CRITICAL: Must be loaded before custom styles -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+
+<style>
+    /* ========================================
+       CRITICAL FIX: Force Tab Visibility with Maximum Specificity
+       ======================================== */
+    
+    /* Target all possible tab combinations */
+    .card-header .nav-tabs,
+    .card .card-header .nav-tabs,
+    .nav-tabs.card-header-tabs,
+    #mainTabs,
+    ul.nav-tabs {
+        background-color: #f8f9fa !important;
+        background: #f8f9fa !important;
+        border-bottom: 2px solid #dee2e6 !important;
+        margin-bottom: 0 !important;
+    }
+    
+    /* Force tab link visibility - ALL SELECTORS */
+    .nav-tabs .nav-item .nav-link,
+    .nav-tabs .nav-link,
+    .card-header-tabs .nav-link,
+    .card-header .nav-tabs .nav-link,
+    #mainTabs .nav-link,
+    #inventory-tab,
+    #approved-tab,
+    #credit-tab,
+    #transactions-tab,
+    #alerts-tab,
+    a.nav-link {
+        color: #495057 !important;
+        background-color: transparent !important;
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        border-radius: 4px 4px 0 0 !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: 600 !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        display: inline-block !important;
+    }
+    
+    /* Hover state */
+    .nav-tabs .nav-item .nav-link:hover,
+    .nav-tabs .nav-link:hover,
+    .card-header-tabs .nav-link:hover,
+    #mainTabs .nav-link:hover {
+        color: #000 !important;
+        background-color: #e9ecef !important;
+        background: #e9ecef !important;
+        border-color: #dee2e6 #dee2e6 transparent !important;
+    }
+    
+    /* ACTIVE TAB - Maximum visibility */
+    .nav-tabs .nav-item .nav-link.active,
+    .nav-tabs .nav-link.active,
+    .card-header-tabs .nav-link.active,
+    #mainTabs .nav-link.active,
+    a.nav-link.active {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: 1px solid #dee2e6 !important;
+        border-bottom: 1px solid #ffffff !important;
+        border-bottom-color: #ffffff !important;
+        font-weight: 700 !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    
+    /* Force icon and text visibility */
+    .nav-tabs .nav-link i,
+    .nav-tabs .nav-link .fas,
+    #mainTabs .nav-link i,
+    #mainTabs i {
+        color: inherit !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    
+    /* Card styling with borders and shadows */
+    .card {
+        border: 1px solid #dee2e6 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    }
+    
+    .card-header {
+        background-color: #f8f9fa !important;
+        border-bottom: 1px solid #dee2e6 !important;
+        border-radius: 8px 8px 0 0 !important;
+        padding: 1rem !important;
+    }
+    
+    /* Simple table borders */
+    .table {
+        border: 1px solid #e3e6f0 !important;
+    }
+    
+    .table thead th {
+        border: 1px solid #e3e6f0 !important;
+        background-color: #f8f9fc !important;
+    }
+    
+    .table tbody td {
+        border: 1px solid #e3e6f0 !important;
+    }
+    
+    /* Keep stats cards nice */
+    .stats-card {
+        border: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 0.5rem 2rem 0 rgba(58, 59, 69, 0.25) !important;
+    }
+    
+    .stats-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        margin-bottom: 1rem;
+    }
+    
+    .stats-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 0;
+        line-height: 1;
+    }
+    
+    .stats-label {
+        color: #858796;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+    
+    /* ========================================
+       Button Styling - Match System Theme
+       ======================================== */
+    
+    .btn {
+        font-weight: 600 !important;
+        border-radius: 0.35rem !important;
+        font-size: 0.875rem !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.15s ease-in-out !important;
+    }
+    
+    .btn-primary {
+        background-color: #4e73df !important;
+        border-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    .btn-primary:hover {
+        background-color: #2e59d9 !important;
+        border-color: #2653d4 !important;
+    }
+    
+    .btn-success {
+        background-color: #1cc88a !important;
+        border-color: #1cc88a !important;
+        color: #fff !important;
+    }
+    
+    .btn-success:hover {
+        background-color: #17a673 !important;
+        border-color: #169b6b !important;
+    }
+    
+    .btn-info {
+        background-color: #36b9cc !important;
+        border-color: #36b9cc !important;
+        color: #fff !important;
+    }
+    
+    .btn-info:hover {
+        background-color: #2c9faf !important;
+        border-color: #2a96a5 !important;
+    }
+    
+    .btn-warning {
+        background-color: #f6c23e !important;
+        border-color: #f6c23e !important;
+        color: #fff !important;
+    }
+    
+    .btn-warning:hover {
+        background-color: #f4b619 !important;
+        border-color: #f4b30d !important;
+    }
+    
+    .btn-danger {
+        background-color: #e74a3b !important;
+        border-color: #e74a3b !important;
+        color: #fff !important;
+    }
+    
+    .btn-gradient {
+        background: linear-gradient(180deg, #4e73df 10%, #224abe 100%) !important;
+        border: none !important;
+        color: #fff !important;
+    }
+    
+    .btn-gradient:hover {
+        background: linear-gradient(180deg, #2e59d9 10%, #1a3a9e 100%) !important;
+        color: #fff !important;
+    }
+    
+    /* Outline Buttons */
+    .btn-outline-primary {
+        color: #4e73df !important;
+        border-color: #4e73df !important;
+        background-color: transparent !important;
+    }
+    
+    .btn-outline-primary:hover {
+        color: #fff !important;
+        background-color: #4e73df !important;
+        border-color: #4e73df !important;
+    }
+    
+    .btn-outline-success {
+        color: #1cc88a !important;
+        border-color: #1cc88a !important;
+        background-color: transparent !important;
+    }
+    
+    .btn-outline-success:hover {
+        color: #fff !important;
+        background-color: #1cc88a !important;
+        border-color: #1cc88a !important;
+    }
+    
+    .btn-outline-info {
+        color: #36b9cc !important;
+        border-color: #36b9cc !important;
+        background-color: transparent !important;
+    }
+    
+    .btn-outline-info:hover {
+        color: #fff !important;
+        background-color: #36b9cc !important;
+        border-color: #36b9cc !important;
+    }
+    
+    .btn-outline-warning {
+        color: #f6c23e !important;
+        border-color: #f6c23e !important;
+        background-color: transparent !important;
+    }
+    
+    .btn-outline-warning:hover {
+        color: #fff !important;
+        background-color: #f6c23e !important;
+        border-color: #f6c23e !important;
+    }
+    
+    .btn-outline-danger {
+        color: #e74a3b !important;
+        border-color: #e74a3b !important;
+        background-color: transparent !important;
+    }
+    
+    .btn-outline-danger:hover {
+        color: #fff !important;
+        background-color: #e74a3b !important;
+        border-color: #e74a3b !important;
+    }
+    
+    /* ========================================
+       Form Controls - Match System Theme
+       ======================================== */
+    
+    .form-control {
+        font-size: 0.875rem !important;
+        border-radius: 0.35rem !important;
+        border: 1px solid #d1d3e2 !important;
+        background-color: #fff !important;
+        color: #6e707e !important;
+        padding: 0.375rem 0.75rem !important;
+    }
+    
+    .form-control:focus {
+        border-color: #bac8f3 !important;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25) !important;
+        background-color: #fff !important;
+        color: #6e707e !important;
+    }
+    
+    .form-control::placeholder {
+        color: #858796 !important;
+    }
+    
+    /* ========================================
+       Badge Styling - Match System Theme
+       ======================================== */
+    
+    .badge {
+        font-weight: 700 !important;
+        padding: 0.35em 0.65em !important;
+        border-radius: 0.35rem !important;
+        font-size: 0.75rem !important;
+    }
+    
+    .badge-primary {
+        background-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    .badge-success {
+        background-color: #1cc88a !important;
+        color: #fff !important;
+    }
+    
+    .badge-info {
+        background-color: #36b9cc !important;
+        color: #fff !important;
+    }
+    
+    .badge-warning {
+        background-color: #f6c23e !important;
+        color: #fff !important;
+    }
+    
+    .badge-danger {
+        background-color: #e74a3b !important;
+        color: #fff !important;
+    }
+    
+    .badge-secondary {
+        background-color: #858796 !important;
+        color: #fff !important;
+    }
+    
+    /* ========================================
+       Alert Styling - Match System Theme
+       ======================================== */
+    
+    .alert {
+        border-radius: 0.35rem !important;
+        border: 1px solid transparent !important;
+        padding: 0.75rem 1.25rem !important;
+    }
+    
+    .alert-info {
+        background-color: #d1ecf1 !important;
+        border-color: #bee5eb !important;
+        color: #0c5460 !important;
+    }
+    
+    .alert-success {
+        background-color: #d4edda !important;
+        border-color: #c3e6cb !important;
+        color: #155724 !important;
+    }
+    
+    .alert-warning {
+        background-color: #fff3cd !important;
+        border-color: #ffeaa7 !important;
+        color: #856404 !important;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da !important;
+        border-color: #f5c6cb !important;
+        color: #721c24 !important;
+    }
+    
+    /* ========================================
+       Modal Styling - Match System Theme
+       ======================================== */
+    
+    .modal-content {
+        border: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem !important;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .modal-header {
+        background-color: #4e73df !important;
+        border-bottom: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem 0.35rem 0 0 !important;
+        padding: 1rem 1.25rem !important;
+    }
+    
+    .modal-header .modal-title {
+        color: #fff !important;
+        font-weight: 700 !important;
+    }
+    
+    .modal-header .close {
+        color: #fff !important;
+        opacity: 0.8 !important;
+        text-shadow: none !important;
+    }
+    
+    .modal-header .close:hover {
+        opacity: 1 !important;
+    }
+    
+    .modal-body {
+        padding: 1.25rem !important;
+        background-color: #fff !important;
+    }
+    
+    .modal-footer {
+        background-color: #f8f9fc !important;
+        border-top: 1px solid #e3e6f0 !important;
+        padding: 0.75rem !important;
+    }
+    
+    /* ========================================
+       Typography - Match System Theme
+       ======================================== */
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #5a5c69 !important;
+        font-weight: 700 !important;
+    }
+    
+    .text-gray-800 {
+        color: #5a5c69 !important;
+    }
+    
+    .text-primary {
+        color: #4e73df !important;
+    }
+    
+    .text-success {
+        color: #1cc88a !important;
+    }
+    
+    .text-info {
+        color: #36b9cc !important;
+    }
+    
+    .text-warning {
+        color: #f6c23e !important;
+    }
+    
+    .text-danger {
+        color: #e74a3b !important;
+    }
+    
+    .text-muted {
+        color: #858796 !important;
+    }
+    
+    /* ========================================
+       Specific Component Styles
+       ======================================== */
+    
+    /* Item Type Badges */
+    .item-type-badge {
+        padding: 0.35em 0.65em;
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    
+    .item-type-simple {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .item-type-composite {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    /* Stock Status */
+    .stock-status {
+        padding: 0.35em 0.65em;
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    
+    .stock-ok {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .stock-low {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .stock-out {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    /* Credit Status */
+    .credit-status {
+        padding: 0.35em 0.65em;
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    
+    .credit-active {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .credit-settled {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .credit-overdue {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    /* Transaction Type Badges */
+    .trans-purchase { background-color: #d4edda; color: #155724; }
+    .trans-sale { background-color: #cce5ff; color: #004085; }
+    .trans-credit_in { background-color: #fff3cd; color: #856404; }
+    .trans-credit_out { background-color: #f8d7da; color: #721c24; }
+    .trans-adjustment { background-color: #e2e3e5; color: #383d41; }
+    .trans-return { background-color: #d1ecf1; color: #0c5460; }
+    
+    /* Loading Spinner */
+    .loading-spinner {
+        display: inline-block;
+        width: 2rem;
+        height: 2rem;
+        border: 0.25em solid rgba(78, 115, 223, 0.2);
+        border-right-color: #4e73df;
+        border-radius: 50%;
+        animation: spinner-border 0.75s linear infinite;
+    }
+    
+    @keyframes spinner-border {
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #858796;
+        background-color: #fff;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        color: #dddfeb;
+        margin-bottom: 1rem;
+    }
+    
+    /* Component Item Display */
+    .component-item {
+        background-color: #f8f9fc;
+        padding: 0.75rem;
+        border-radius: 0.35rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid #4e73df;
+    }
+    
+    /* DataTables Customization */
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 0.5rem 1rem !important;
+        margin: 0 0.25rem !important;
+        border-radius: 0.35rem !important;
+        border: 1px solid #dddfeb !important;
+        background-color: #fff !important;
+        color: #5a5c69 !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        background-color: #4e73df !important;
+        border-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+        background-color: #eaecf4 !important;
+        border-color: #dddfeb !important;
+        color: #4e73df !important;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .container-fluid {
+            padding: 1rem !important;
+        }
+        
+        .stats-value {
+            font-size: 1.5rem;
+        }
+        
+        .btn {
+            font-size: 0.75rem !important;
+            padding: 0.375rem 0.75rem !important;
+        }
+    }
+    
+    /* ========================================
+       Additional Styles from Sales Request
+       ======================================== */
+    
+    /* Enhanced Card Borders */
+    .card.border-left-primary {
+        border-left: 0.25rem solid #4e73df !important;
+    }
+    
+    .card.border-left-success {
+        border-left: 0.25rem solid #1cc88a !important;
+    }
+    
+    .card.border-left-info {
+        border-left: 0.25rem solid #36b9cc !important;
+    }
+    
+    .card.border-left-warning {
+        border-left: 0.25rem solid #f6c23e !important;
+    }
+    
+    .card.border-left-danger {
+        border-left: 0.25rem solid #e74a3b !important;
+    }
+    
+    /* Button Group Styling */
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+    
+    .btn-group .btn:not(:first-child) {
+        margin-left: -1px;
+    }
+    
+    /* Enhanced Table Numbers */
+    .table td:first-child {
+        font-weight: 700 !important;
+        color: #4e73df !important;
+    }
+    
+    /* Smooth Transitions */
+    * {
+        transition: all 0.15s ease-in-out;
+    }
+    
+    /* Focus States */
+    button:focus,
+    .btn:focus,
+    input:focus,
+    select:focus,
+    textarea:focus {
+        outline: none !important;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25) !important;
+    }
+    
+    /* Custom File Input */
+    .custom-file-label::after {
+        background-color: #4e73df !important;
+        color: #fff !important;
+        border-color: #4e73df !important;
+    }
+    
+    .custom-file-input:focus ~ .custom-file-label {
+        border-color: #bac8f3 !important;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25) !important;
+    }
+    
+    /* Input Group */
+    .input-group-text {
+        background-color: #f8f9fc !important;
+        border: 1px solid #d1d3e2 !important;
+        color: #6e707e !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Select2 Enhancements */
+    .select2-container {
+        font-size: 0.875rem !important;
+    }
+    
+    .select2-selection {
+        border: 1px solid #d1d3e2 !important;
+        border-radius: 0.35rem !important;
+        min-height: calc(1.5em + 0.75rem + 2px) !important;
+    }
+    
+    .select2-selection:focus {
+        border-color: #bac8f3 !important;
+    }
+    
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #4e73df !important;
+    }
+    
+    .select2-container--default .select2-results__option {
+        padding: 0.5rem 1rem !important;
+    }
+    
+    /* Enhanced Form Text */
+    .form-text {
+        font-size: 0.8rem !important;
+        color: #858796 !important;
+        margin-top: 0.25rem !important;
+    }
+    
+    .form-text i {
+        margin-right: 0.25rem;
+    }
+    
+    /* Priority Badges */
+    .priority-urgent {
+        background-color: #e74a3b !important;
+        color: #fff !important;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.7;
+        }
+    }
+    
+    /* Status Progress Indicators */
+    .progress {
+        height: 0.5rem !important;
+        border-radius: 0.35rem !important;
+        background-color: #eaecf4 !important;
+    }
+    
+    .progress-bar {
+        background-color: #4e73df !important;
+    }
+    
+    /* Dropdown Menu Styling */
+    .dropdown-menu {
+        border: 1px solid #e3e6f0 !important;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15) !important;
+        border-radius: 0.35rem !important;
+    }
+    
+    .dropdown-item {
+        font-size: 0.875rem !important;
+        padding: 0.5rem 1.5rem !important;
+        color: #5a5c69 !important;
+    }
+    
+    .dropdown-item:hover {
+        background-color: #f8f9fc !important;
+        color: #4e73df !important;
+    }
+    
+    .dropdown-item:active {
+        background-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    /* Image Preview */
+    .image-preview {
+        max-width: 100%;
+        border-radius: 0.35rem;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+    
+    .image-preview img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 0.35rem;
+        border: 1px solid #e3e6f0;
+        transition: transform 0.3s ease;
+    }
+    
+    .image-preview img:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Thumbnail Styling */
+    .img-thumbnail {
+        padding: 0.25rem !important;
+        background-color: #fff !important;
+        border: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem !important;
+        max-width: 100px !important;
+        height: auto !important;
+        cursor: pointer !important;
+    }
+    
+    .img-thumbnail:hover {
+        border-color: #4e73df !important;
+        box-shadow: 0 0.25rem 0.5rem rgba(78, 115, 223, 0.3) !important;
+    }
+    
+    /* ========================================
+       SweetAlert2 Z-Index Fix - CRITICAL
+       ======================================== */
+    
+    .swal2-container {
+        z-index: 99999 !important;
+    }
+    
+    .swal2-popup {
+        z-index: 99999 !important;
+    }
+    
+    .swal2-backdrop-show {
+        z-index: 99998 !important;
+    }
+    
+    /* ========================================
+       Bootstrap Modal Z-Index Fix - CRITICAL
+       ======================================== */
+    
+    .modal-backdrop {
+        z-index: 1040 !important;
+    }
+    
+    .modal {
+        z-index: 1050 !important;
+    }
+    
+    #createFromSalesModal {
+        z-index: 1050 !important;
+    }
+    
+    #createFromSalesModal .modal-dialog {
+        z-index: 1051 !important;
+        position: relative;
+    }
+    
+    /* Force modal to be visible and centered */
+    .modal.fade .modal-dialog {
+        transform: translate(0, 0) !important;
+    }
+    
+    .modal.show .modal-dialog {
+        transform: translate(0, 0) !important;
+    }
+    
+    /* List Group Styling */
+    .list-group-item {
+        border: 1px solid #e3e6f0 !important;
+        padding: 0.75rem 1.25rem !important;
+        background-color: #fff !important;
+        color: #5a5c69 !important;
+    }
+    
+    .list-group-item:hover {
+        background-color: #f8f9fc !important;
+    }
+    
+    .list-group-item.active {
+        background-color: #4e73df !important;
+        border-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    /* Pagination Styling */
+    .pagination .page-link {
+        color: #4e73df !important;
+        background-color: #fff !important;
+        border: 1px solid #dddfeb !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.875rem !important;
+    }
+    
+    .pagination .page-link:hover {
+        background-color: #eaecf4 !important;
+        border-color: #dddfeb !important;
+    }
+    
+    .pagination .page-item.active .page-link {
+        background-color: #4e73df !important;
+        border-color: #4e73df !important;
+        color: #fff !important;
+    }
+    
+    /* Breadcrumb Styling */
+    .breadcrumb {
+        background-color: #f8f9fc !important;
+        border: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem !important;
+        padding: 0.75rem 1rem !important;
+    }
+    
+    .breadcrumb-item {
+        color: #858796 !important;
+    }
+    
+    .breadcrumb-item.active {
+        color: #5a5c69 !important;
+        font-weight: 600 !important;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: #d1d3e2 !important;
+    }
+    
+    /* Tooltip Styling */
+    .tooltip .tooltip-inner {
+        background-color: #5a5c69 !important;
+        border-radius: 0.35rem !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.8rem !important;
+    }
+    
+    /* Popover Styling */
+    .popover {
+        border: 1px solid #e3e6f0 !important;
+        border-radius: 0.35rem !important;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .popover-header {
+        background-color: #f8f9fc !important;
+        border-bottom: 1px solid #e3e6f0 !important;
+        color: #5a5c69 !important;
+        font-weight: 700 !important;
+    }
+    
+    .popover-body {
+        color: #5a5c69 !important;
+    }
+    
+    /* Spinner Utilities */
+    .spinner-border {
+        border-color: rgba(78, 115, 223, 0.2) !important;
+        border-right-color: #4e73df !important;
+    }
+    
+    .spinner-border-sm {
+        width: 1rem !important;
+        height: 1rem !important;
+        border-width: 0.15em !important;
+    }
+    
+    /* Collapsible Card */
+    .card .card-header[data-toggle="collapse"] {
+        cursor: pointer !important;
+        user-select: none !important;
+    }
+    
+    .card .card-header[data-toggle="collapse"]:hover {
+        background-color: #eaecf4 !important;
+    }
+    
+    /* Utility Borders */
+    .border-bottom-primary {
+        border-bottom: 2px solid #4e73df !important;
+    }
+    
+    .border-bottom-success {
+        border-bottom: 2px solid #1cc88a !important;
+    }
+    
+    .border-bottom-info {
+        border-bottom: 2px solid #36b9cc !important;
+    }
+    
+    .border-bottom-warning {
+        border-bottom: 2px solid #f6c23e !important;
+    }
+    
+    .border-bottom-danger {
+        border-bottom: 2px solid #e74a3b !important;
+    }
+    
+    /* Animation Utilities */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideInUp {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideInFromLeft {
+        from {
+            transform: translateX(-20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    .slide-in-up {
+        animation: slideInUp 0.5s ease-in-out;
+    }
+    
+    .slide-in-left {
+        animation: slideInFromLeft 0.5s ease-in-out;
+    }
+    
+    /* Spacing Utilities */
+    .mb-30 {
+        margin-bottom: 30px !important;
+    }
+    
+    .mt-30 {
+        margin-top: 30px !important;
+    }
+    
+    .p-30 {
+        padding: 30px !important;
+    }
+    
+    /* Text Utilities */
+    .text-xs {
+        font-size: 0.7rem !important;
+    }
+    
+    .text-lg {
+        font-size: 1.2rem !important;
+    }
+    
+    .text-xl {
+        font-size: 1.5rem !important;
+    }
+    
+    .font-weight-bold {
+        font-weight: 700 !important;
+    }
+    
+    .font-weight-medium {
+        font-weight: 600 !important;
+    }
+    
+    /* Background Utilities */
+    .bg-gradient-primary {
+        background: linear-gradient(180deg, #4e73df 10%, #224abe 100%) !important;
+        color: #fff !important;
+    }
+    
+    .bg-gradient-success {
+        background: linear-gradient(180deg, #1cc88a 10%, #13855c 100%) !important;
+        color: #fff !important;
+    }
+    
+    .bg-gradient-info {
+        background: linear-gradient(180deg, #36b9cc 10%, #258391 100%) !important;
+        color: #fff !important;
+    }
+    
+    .bg-gradient-warning {
+        background: linear-gradient(180deg, #f6c23e 10%, #dda20a 100%) !important;
+        color: #fff !important;
+    }
+    
+    .bg-gradient-danger {
+        background: linear-gradient(180deg, #e74a3b 10%, #be2617 100%) !important;
+        color: #fff !important;
+    }
+    
+    /* Enhanced Scrollbar */
+    ::-webkit-scrollbar {
+        width: 0.5rem;
+        height: 0.5rem;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background-color: #f8f9fc;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background-color: #d1d3e2;
+        border-radius: 0.35rem;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: #b7b9cc;
+    }
+    
+    /* Print Styles */
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        
+        .card {
+            box-shadow: none !important;
+            border: 1px solid #000 !important;
+        }
+        
+        .btn {
+            display: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid px-4 py-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-warehouse mr-2"></i>Item Management & Inventory
+            </h1>
+            <p class="text-muted mb-0">Manage stock, track credit items, and monitor inventory levels</p>
+        </div>
+        <div>
+            <button class="btn btn-info" id="refreshDashboard">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <button class="btn btn-gradient" data-toggle="modal" data-target="#addItemModal">
+                <i class="fas fa-plus-circle"></i> Add New Item
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistics Dashboard -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stats-card bg-white">
+                <div class="card-body">
+                    <div class="stats-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <i class="fas fa-boxes"></i>
+                    </div>
+                    <h2 class="stats-value text-primary" id="totalItems">0</h2>
+                    <p class="stats-label mb-0">Total Items</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stats-card bg-white">
+                <div class="card-body">
+                    <div class="stats-icon" style="background: #ffeaa7; color: #fdcb6e;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h2 class="stats-value text-warning" id="lowStockItems">0</h2>
+                    <p class="stats-label mb-0">Low Stock Items</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stats-card bg-white">
+                <div class="card-body">
+                    <div class="stats-icon" style="background: #ff7675; color: white;">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <h2 class="stats-value text-danger" id="outOfStockItems">0</h2>
+                    <p class="stats-label mb-0">Out of Stock</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stats-card bg-white">
+                <div class="card-body">
+                    <div class="stats-icon" style="background: #55efc4; color: #00b894;">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <h2 class="stats-value text-success" id="totalValue">EGP 0</h2>
+                    <p class="stats-label mb-0">Inventory Value</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Tabs -->
+    <div class="card shadow-sm">
+        <div class="card-header" style="background-color: #f8f9fa !important; padding: 1rem;">
+            <ul class="nav nav-tabs card-header-tabs" id="mainTabs" role="tablist" style="background-color: #f8f9fa !important; border-bottom: 2px solid #dee2e6 !important;">
+                <li class="nav-item">
+                    <a class="nav-link active" id="inventory-tab" data-toggle="tab" href="#inventory" role="tab" style="color: #000 !important; background-color: #fff !important; border: 1px solid #dee2e6 !important; border-bottom-color: #fff !important;">
+                        <i class="fas fa-boxes mr-2"></i>Inventory Items
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="approved-tab" data-toggle="tab" href="#approved" role="tab" style="color: #495057 !important; background-color: transparent !important;">
+                        <i class="fas fa-check-circle mr-2"></i>Approved from Sales
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="credit-tab" data-toggle="tab" href="#credit" role="tab" style="color: #495057 !important; background-color: transparent !important;">
+                        <i class="fas fa-handshake mr-2"></i>Credit Items
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="transactions-tab" data-toggle="tab" href="#transactions" role="tab" style="color: #495057 !important; background-color: transparent !important;">
+                        <i class="fas fa-exchange-alt mr-2"></i>Transactions
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="alerts-tab" data-toggle="tab" href="#alerts" role="tab" style="color: #495057 !important; background-color: transparent !important;">
+                        <i class="fas fa-bell mr-2"></i>Alerts <span class="badge badge-danger" id="alertBadge">0</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="mainTabsContent">
+                <!-- Inventory Items Tab -->
+                <div class="tab-pane fade show active" id="inventory" role="tabpanel">
+                    <div class="mb-3">
+                        <input type="text" class="form-control" id="inventorySearch" placeholder="Search items by name, SKU, or category...">
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm" id="inventoryTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Item Name</th>
+                                    <th>Type</th>
+                                    <th>Unit</th>
+                                    <th>Dimensions (W×H×D)</th>
+                                    <th>Category</th>
+                                    <th>Stock</th>
+                                    <th>Min Level</th>
+                                    <th>Avg Cost</th>
+                                    <th>Last Cost</th>
+                                    <th>Supplier</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data loaded via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Approved Items Tab -->
+                <div class="tab-pane fade" id="approved" role="tabpanel">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        These are approved items from sales requests that can be added to your inventory system.
+                    </div>
+                    <div id="approvedItemsList">
+                        <div class="text-center py-5">
+                            <div class="loading-spinner"></div>
+                            <p class="mt-3">Loading approved items...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Credit Items Tab -->
+                <div class="tab-pane fade" id="credit" role="tabpanel">
+                    <div class="mb-3">
+                        <button class="btn btn-primary" data-toggle="modal" data-target="#addCreditModal">
+                            <i class="fas fa-plus"></i> Receive Credit Item
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="creditTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Supplier</th>
+                                    <th>Received</th>
+                                    <th>Sold</th>
+                                    <th>Remaining</th>
+                                    <th>Amount Due</th>
+                                    <th>Status</th>
+                                    <th>Due Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data loaded via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Transactions Tab -->
+                <div class="tab-pane fade" id="transactions" role="tabpanel">
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <select class="form-control" id="filterTransType">
+                                    <option value="">All Types</option>
+                                    <option value="purchase">Purchase</option>
+                                    <option value="sale">Sale</option>
+                                    <option value="credit_in">Credit In</option>
+                                    <option value="credit_out">Credit Out</option>
+                                    <option value="adjustment">Adjustment</option>
+                                    <option value="return">Return</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-control" id="filterTransItem">
+                                    <option value="">All Items</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 text-right">
+                                <button class="btn btn-success" data-toggle="modal" data-target="#addTransactionModal">
+                                    <i class="fas fa-plus"></i> Record Transaction
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover" id="transactionsTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Item</th>
+                                    <th>Type</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Cost</th>
+                                    <th>Total Cost</th>
+                                    <th>Balance After</th>
+                                    <th>Reference</th>
+                                    <th>By</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data loaded via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Alerts Tab -->
+                <div class="tab-pane fade" id="alerts" role="tabpanel">
+                    <div id="alertsList">
+                        <div class="text-center py-5">
+                            <div class="loading-spinner"></div>
+                            <p class="mt-3">Loading alerts...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle mr-2"></i>Add New Inventory Item</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="addItemForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Item Code/SKU</label>
+                                <input type="text" class="form-control" name="item_code" placeholder="Leave empty for auto-generation">
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle"></i> Will be auto-generated if empty or duplicate
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Item Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="item_name" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Item Type</label>
+                                <select class="form-control" name="item_type" id="itemType">
+                                    <option value="simple">Simple Item</option>
+                                    <option value="composite">Composite Item (with sub-items)</option>
+                                </select>
+                                <small class="form-text text-muted">Composite items contain multiple sub-items</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Category</label>
+                                <input type="text" class="form-control" name="category" list="categoryList">
+                                <datalist id="categoryList">
+                                    <option value="Raw Materials">
+                                    <option value="Audio Equipment">
+                                    <option value="Visual Equipment">
+                                    <option value="Event Equipment">
+                                    <option value="Office Supplies">
+                                    <option value="Electronics">
+                                </datalist>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Unit of Measure</label>
+                                <select class="form-control" name="unit_of_measure">
+                                    <option value="PCS">Pieces (PCS)</option>
+                                    <option value="SET">Set</option>
+                                    <option value="KG">Kilograms (KG)</option>
+                                    <option value="M">Meters (M)</option>
+                                    <option value="BOX">Box</option>
+                                    <option value="PACK">Pack</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Minimum Stock Level</label>
+                                <input type="number" class="form-control" name="minimum_stock_level" value="10" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Reorder Level</label>
+                                <input type="number" class="form-control" name="reorder_level" value="20" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Initial Stock Quantity</label>
+                                <input type="number" step="0.01" class="form-control" name="quantity_in_stock" value="0" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Average Cost</label>
+                                <input type="number" step="0.01" class="form-control" name="average_cost" value="0" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Preferred Supplier</label>
+                                <select class="form-control" name="preferred_supplier_id" id="supplierSelect">
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Composite Item Components -->
+                    <div id="componentsSection" style="display: none;">
+                        <hr>
+                        <h6><i class="fas fa-puzzle-piece mr-2"></i>Sub-Items / Components</h6>
+                        <div id="componentsList"></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="addComponentBtn">
+                            <i class="fas fa-plus"></i> Add Component
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gradient">
+                        <i class="fas fa-save"></i> Create Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Credit Item Modal -->
+<div class="modal fade" id="addCreditModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-handshake mr-2"></i>Receive Credit Item</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="addCreditForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Item <span class="text-danger">*</span></label>
+                        <select class="form-control select2" name="item_id" required id="creditItemSelect">
+                            <option value="">Select Item...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Supplier <span class="text-danger">*</span></label>
+                        <select class="form-control select2" name="supplier_id" required id="creditSupplierSelect">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Quantity Received <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control" name="quantity_received" required min="0.01">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Agreed Cost Per Item</label>
+                                <input type="number" step="0.01" class="form-control" name="agreed_cost_per_item" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Payment Due Date</label>
+                                <input type="date" class="form-control" name="payment_due_date">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Return Due Date</label>
+                                <input type="date" class="form-control" name="due_date">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gradient">
+                        <i class="fas fa-check"></i> Receive Credit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Transaction Modal -->
+<div class="modal fade" id="addTransactionModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-exchange-alt mr-2"></i>Record Transaction</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="addTransactionForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Item <span class="text-danger">*</span></label>
+                        <select class="form-control select2" name="item_id" required id="transItemSelect">
+                            <option value="">Select Item...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Transaction Type <span class="text-danger">*</span></label>
+                        <select class="form-control" name="transaction_type" required>
+                            <option value="purchase">Purchase (Stock In)</option>
+                            <option value="sale">Sale (Stock Out)</option>
+                            <option value="adjustment">Stock Adjustment</option>
+                            <option value="return">Return to Supplier</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Quantity <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control" name="quantity" required>
+                                <small class="form-text text-muted">Use negative for stock out</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Unit Cost</label>
+                                <input type="number" step="0.01" class="form-control" name="unit_cost" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Supplier/Client</label>
+                        <select class="form-control" name="supplier_id" id="transSupplierSelect">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gradient">
+                        <i class="fas fa-save"></i> Record Transaction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create from Sales Modal - NEW VERSION -->
+<div class="modal" id="inventoryCreationModal" tabindex="-1" role="dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog" role="document" style="position: relative; margin: 50px auto; max-width: 600px;">
+        <div class="modal-content" style="background: white; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <div class="modal-header bg-success" style="background: #28a745 !important; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
+                <h5 class="modal-title text-white" style="color: white !important;"><i class="fas fa-shopping-cart mr-2"></i>Add to Inventory</h5>
+                <button type="button" class="close text-white" onclick="closeInventoryModal()" style="color: white !important; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="createFromSalesForm">
+                <input type="hidden" id="modalSalesItemId" name="sales_item_id">
+                <div class="modal-body" style="padding: 20px;">
+                    <p class="mb-3">Add <strong id="modalItemName"></strong> to inventory?</p>
+                    
+                    <div class="form-group">
+                        <label>Initial Quantity:</label>
+                        <input type="number" id="modalQuantity" name="initial_quantity" class="form-control" value="0" min="0" step="0.01">
+                        <small class="form-text text-muted">Leave as 0 if you'll add stock later</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Preferred Supplier (Optional):</label>
+                        <select id="modalSupplier" name="preferred_supplier_id" class="form-control">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Category:</label>
+                        <input type="text" id="modalCategory" name="category" class="form-control" placeholder="e.g., Printing, Event, etc.">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label>Min Stock Level:</label>
+                                <input type="number" id="modalMinStock" name="minimum_stock_level" class="form-control" value="10" min="0">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label>Reorder Level:</label>
+                                <input type="number" id="modalReorder" name="reorder_level" class="form-control" value="20" min="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 15px; border-top: 1px solid #dee2e6;">
+                    <button type="button" class="btn btn-secondary" onclick="closeInventoryModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Add to Inventory
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Credit from Sales Modal (No supplier required - links to sales request) -->
+<div class="modal" id="creditCreationModal" tabindex="-1" role="dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog" role="document" style="position: relative; margin: 50px auto; max-width: 600px;">
+        <div class="modal-content" style="background: white; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <div class="modal-header bg-warning" style="background: #f6c23e !important; color: #333; padding: 15px; border-radius: 8px 8px 0 0;">
+                <h5 class="modal-title" style="color: #333 !important;"><i class="fas fa-handshake mr-2"></i>Receive on Credit/Consignment</h5>
+                <button type="button" class="close" onclick="closeCreditModal()" style="color: #333 !important; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="createCreditFromSalesForm">
+                <input type="hidden" id="creditModalSalesItemId" name="sales_item_id">
+                <div class="modal-body" style="padding: 20px;">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <strong>Credit Item:</strong> This item will be linked to the sales request. 
+                        You can optionally specify a supplier, but it's not required.
+                    </div>
+                    
+                    <p class="mb-3">Receive <strong id="creditModalItemName"></strong> on credit?</p>
+                    
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Cost/Unit</small>
+                            <strong class="text-danger">EGP <span id="creditModalCost">0.00</span></strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Sell/Unit</small>
+                            <strong class="text-success">EGP <span id="creditModalSell">0.00</span></strong>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Initial Quantity:</label>
+                        <input type="number" id="creditModalQuantity" name="initial_quantity" class="form-control" value="0" min="0" step="0.01">
+                        <small class="form-text text-muted">Leave as 0 if you'll add stock later</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Supplier (Optional):</label>
+                        <select id="creditModalSupplier" name="supplier_id" class="form-control">
+                            <option value="">No Supplier (Link to Sales Request Only)</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-link mr-1"></i>Item will be automatically linked to the sales request
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Category:</label>
+                        <input type="text" id="creditModalCategory" name="category" class="form-control" placeholder="e.g., Printing, Event, etc.">
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 15px; border-top: 1px solid #dee2e6;">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-handshake"></i> Receive on Credit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Stock Modal (Custom Bootstrap Modal - replaces SweetAlert2) -->
+<div class="modal" id="addStockModal" tabindex="-1" role="dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog" role="document" style="position: relative; margin: 50px auto; max-width: 600px;">
+        <div class="modal-content" style="background: white; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <div class="modal-header bg-success" style="background: #1cc88a !important; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
+                <h5 class="modal-title text-white" style="color: white !important;"><i class="fas fa-plus mr-2"></i>Add Stock</h5>
+                <button type="button" class="close text-white" onclick="closeAddStockModal()" style="color: white !important; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="addStockForm">
+                <input type="hidden" id="stockItemId">
+                <div class="modal-body" style="padding: 20px;">
+                    <div class="form-group">
+                        <label><strong>Item:</strong></label>
+                        <input type="text" id="stockItemName" class="form-control" readonly style="background-color: #f8f9fc;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Transaction Type <span class="text-danger">*</span></label>
+                        <select class="form-control" id="stockTransactionType" required>
+                            <option value="purchase">Purchase</option>
+                            <option value="adjustment">Adjustment</option>
+                            <option value="return">Return</option>
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Quantity <span class="text-danger">*</span></label>
+                                <input type="number" id="stockQuantity" class="form-control" min="1" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Unit Cost (EGP)</label>
+                                <input type="number" id="stockUnitCost" class="form-control" min="0" step="0.01" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Supplier</label>
+                        <select class="form-control" id="stockSupplierId">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea class="form-control" id="stockNotes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 15px; border-top: 1px solid #dee2e6;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddStockModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Add Stock
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Item Modal (Custom Bootstrap Modal - replaces SweetAlert2) -->
+<div class="modal" id="editItemModal" tabindex="-1" role="dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog" role="document" style="position: relative; margin: 50px auto; max-width: 600px;">
+        <div class="modal-content" style="background: white; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <div class="modal-header bg-warning" style="background: #f6c23e !important; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
+                <h5 class="modal-title text-white" style="color: white !important;"><i class="fas fa-edit mr-2"></i>Edit Item</h5>
+                <button type="button" class="close text-white" onclick="closeEditItemModal()" style="color: white !important; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="editItemForm">
+                <input type="hidden" id="editItemId">
+                <div class="modal-body" style="padding: 20px; max-height: 500px; overflow-y: auto;">
+                    <div class="form-group">
+                        <label>Item Name <span class="text-danger">*</span></label>
+                        <input type="text" id="editItemName" class="form-control" required>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Category</label>
+                                <input type="text" id="editCategory" class="form-control">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Status</label>
+                                <select id="editStatus" class="form-control">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="discontinued">Discontinued</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="editDescription" class="form-control" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Unit</label>
+                                <select id="editUnit" class="form-control">
+                                    <option value="PCS">PCS</option>
+                                    <option value="BOX">BOX</option>
+                                    <option value="KG">KG</option>
+                                    <option value="M">M</option>
+                                    <option value="M2">M2</option>
+                                    <option value="SET">SET</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Min Level</label>
+                                <input type="number" id="editMinLevel" class="form-control" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Reorder Level</label>
+                                <input type="number" id="editReorderLevel" class="form-control" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Preferred Supplier</label>
+                        <select id="editSupplierId" class="form-control">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 15px; border-top: 1px solid #dee2e6;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditItemModal()">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Item Details Modal -->
+<div class="modal fade" id="itemDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-info-circle mr-2"></i>Item Details</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="itemDetailsContent">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include DataTables and Select2 JavaScript -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<!-- SweetAlert2 JS - MUST be loaded after jQuery -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('Item Management page loaded');
+    
+    // Initialize Select2
+    $('.select2').select2({
+        theme: 'bootstrap4',
+        width: '100%'
+    });
+    
+    // Load initial data
+    loadDashboardStatistics();
+    loadInventoryItems();
+    loadSuppliers();
+    
+    // Refresh button
+    $('#refreshDashboard').click(function() {
+        loadDashboardStatistics();
+        loadInventoryItems();
+        loadCreditItems();
+        loadTransactions();
+        loadAlerts();
+        loadApprovedItems();
+    });
+    
+    // Tab switching handlers
+    $('#approved-tab').on('shown.bs.tab', function() {
+        loadApprovedItems();
+    });
+    
+    $('#credit-tab').on('shown.bs.tab', function() {
+        loadCreditItems();
+    });
+    
+    $('#transactions-tab').on('shown.bs.tab', function() {
+        loadTransactions();
+    });
+    
+    $('#alerts-tab').on('shown.bs.tab', function() {
+        loadAlerts();
+    });
+    
+    // Item type change handler
+    $('#itemType').change(function() {
+        if ($(this).val() === 'composite') {
+            $('#componentsSection').slideDown();
+            loadAvailableItems();
+        } else {
+            $('#componentsSection').slideUp();
+        }
+    });
+    
+    // Add component button
+    $('#addComponentBtn').click(function() {
+        addComponentRow();
+    });
+    
+    // Form submissions
+    $('#addItemForm').submit(function(e) {
+        e.preventDefault();
+        addInventoryItem();
+    });
+    
+    $('#addCreditForm').submit(function(e) {
+        e.preventDefault();
+        addCreditItem();
+    });
+    
+    $('#addTransactionForm').submit(function(e) {
+        e.preventDefault();
+        addTransaction();
+    });
+    
+    // Search functionality
+    $('#inventorySearch').on('keyup', function() {
+        $('#inventoryTable').DataTable().search(this.value).draw();
+    });
+    
+    // Transaction filters
+    $('#filterTransType, #filterTransItem').on('change', function() {
+        loadTransactions();
+    });
+    
+    // Delegate event handlers for dynamically loaded buttons
+    $(document).on('click', '.btn-create-from-sales', function() {
+        createItemFromSales($(this));
+    });
+    
+    $(document).on('click', '.btn-add-credit-from-sales', function() {
+        showCreditFromSalesModal($(this));
+    });
+    
+    // View inventory item from approved items
+    $(document).on('click', '.view-inventory-item', function(e) {
+        e.preventDefault();
+        const itemId = $(this).data('item-id');
+        
+        // Switch to inventory tab
+        $('#inventory-tab').tab('show');
+        
+        // Wait for tab to load then search for the item
+        setTimeout(function() {
+            // Use DataTable search to filter by item ID
+            const table = $('#inventoryTable').DataTable();
+            table.search('').draw(); // Clear any existing search
+            
+            // Highlight the row
+            $('#inventoryTable tbody tr').removeClass('table-warning');
+            $('#inventoryTable tbody tr').each(function() {
+                const viewBtn = $(this).find('.btn-view-item');
+                if (viewBtn.data('id') == itemId) {
+                    $(this).addClass('table-warning');
+                    // Scroll to the row
+                    $('html, body').animate({
+                        scrollTop: $(this).offset().top - 200
+                    }, 500);
+                }
+            });
+        }, 300);
+    });
+    
+    // Inventory table button handlers
+    $(document).on('click', '.btn-view-item', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const itemId = $(this).data('id');
+        console.log('View button clicked for item:', itemId);
+        viewItemDetails(itemId);
+    });
+    
+    $(document).on('click', '.btn-add-stock', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const itemId = $(this).data('id');
+        const itemName = $(this).data('name');
+        console.log('Add Stock button clicked for item:', itemId, itemName);
+        showAddStockModal(itemId, itemName);
+    });
+    
+    $(document).on('click', '.btn-edit-item', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const itemId = $(this).data('id');
+        console.log('Edit button clicked for item:', itemId);
+        editInventoryItem(itemId);
+    });
+});
+
+// Utility function to format numbers with thousand separators
+function formatNumber(num) {
+    if (num === null || num === undefined || num === '') {
+        return '0.00';
+    }
+    return parseFloat(num).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+// Utility function to escape HTML to prevent XSS attacks
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+// Load dashboard statistics
+function loadDashboardStatistics() {
+    $.get('/api/inventory/statistics', function(response) {
+        if (response.success) {
+            const stats = response.statistics;
+            $('#totalItems').text(stats.total_items);
+            $('#lowStockItems').text(stats.low_stock_items);
+            $('#outOfStockItems').text(stats.out_of_stock_items);
+            $('#totalValue').text('EGP ' + formatNumber(stats.total_inventory_value));
+            $('#alertBadge').text(stats.unresolved_alerts);
+            
+            if (stats.unresolved_alerts > 0) {
+                $('#alertBadge').show();
+            } else {
+                $('#alertBadge').hide();
+            }
+        }
+    }).fail(function() {
+        console.error('Failed to load statistics');
+    });
+}
+
+// Load inventory items
+function loadInventoryItems() {
+    $.get('/api/inventory/items', function(response) {
+        if (response.success) {
+            const items = response.items;
+            
+            // Populate inventory table
+            const tbody = $('#inventoryTable tbody');
+            tbody.empty();
+            
+            if (items.length === 0) {
+                tbody.html('<tr><td colspan="13" class="text-center py-4"><div class="empty-state"><i class="fas fa-box-open"></i><p>No items in inventory yet</p></div></td></tr>');
+                return;
+            }
+            
+            items.forEach(function(item) {
+                const stockStatus = getStockStatus(item.quantity_in_stock, item.minimum_stock_level);
+                const typeClass = item.item_type === 'composite' ? 'item-type-composite' : 'item-type-simple';
+                
+                // Format dimensions
+                let dimensionsHtml = '-';
+                if (item.width || item.height || item.depth) {
+                    const w = item.width || 0;
+                    const h = item.height || 0;
+                    const d = item.depth || 0;
+                    dimensionsHtml = `<small>${w} × ${h} × ${d}</small>`;
+                }
+                
+                // Component count for composite items
+                let nameDisplay = item.item_name;
+                if (item.item_type === 'composite' && item.components && item.components.length > 0) {
+                    nameDisplay += ` <small class="text-muted">(${item.components.length} parts)</small>`;
+                }
+                
+                const row = `
+                    <tr data-item-id="${item.id}">
+                        <td><code>${item.item_code}</code></td>
+                        <td><strong>${nameDisplay}</strong></td>
+                        <td><span class="item-type-badge ${typeClass}">${item.item_type}</span></td>
+                        <td>${item.unit_of_measure || '-'}</td>
+                        <td>${dimensionsHtml}</td>
+                        <td>${item.category || '-'}</td>
+                        <td><span class="${stockStatus.class}">${item.quantity_in_stock} ${item.unit_of_measure}</span></td>
+                        <td>${item.minimum_stock_level}</td>
+                        <td>EGP ${formatNumber(item.average_cost)}</td>
+                        <td>EGP ${formatNumber(item.last_purchase_cost || 0)}</td>
+                        <td><small>${item.supplier_name || '-'}</small></td>
+                        <td><span class="badge badge-${item.status === 'active' ? 'success' : 'secondary'}">${item.status}</span></td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary btn-view-item" data-id="${item.id}" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-info btn-add-stock" data-id="${item.id}" data-name="${escapeHtml(item.item_name)}" title="Add Stock">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button class="btn btn-outline-warning btn-edit-item" data-id="${item.id}" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+            
+            // Destroy existing DataTable if it exists
+            if ($.fn.DataTable.isDataTable('#inventoryTable')) {
+                $('#inventoryTable').DataTable().destroy();
+            }
+            
+            // Initialize DataTable
+            $('#inventoryTable').DataTable({
+                order: [[1, 'asc']],
+                pageLength: 25,
+                language: {
+                    search: "Search:",
+                    lengthMenu: "Show _MENU_ items per page",
+                    info: "Showing _START_ to _END_ of _TOTAL_ items",
+                    infoEmpty: "No items to display",
+                    infoFiltered: "(filtered from _MAX_ total items)"
+                }
+            });
+            
+            // Populate dropdowns
+            populateItemDropdowns(items);
+        }
+    }).fail(function(xhr) {
+        console.error('Failed to load inventory items:', xhr.responseText);
+        Swal.fire('Error', 'Failed to load inventory items', 'error');
+    });
+}
+
+// Get stock status
+function getStockStatus(currentStock, minLevel) {
+    if (currentStock === 0) {
+        return {class: 'stock-status stock-out', text: 'Out of Stock'};
+    } else if (currentStock <= minLevel) {
+        return {class: 'stock-status stock-low', text: 'Low Stock'};
+    } else {
+        return {class: 'stock-status stock-ok', text: 'In Stock'};
+    }
+}
+
+// Populate item dropdowns
+function populateItemDropdowns(items) {
+    const selects = ['#creditItemSelect', '#transItemSelect'];
+    selects.forEach(function(selector) {
+        const select = $(selector);
+        select.empty().append('<option value="">Select Item...</option>');
+        items.forEach(function(item) {
+            select.append(`<option value="${item.id}">${item.item_name} (Stock: ${item.quantity_in_stock})</option>`);
+        });
+    });
+}
+
+// Load suppliers
+function loadSuppliers() {
+    $.get('/api/suppliers/simple', function(response) {
+        // Handle both response formats: direct array or {success: true, suppliers: [...]}
+        const suppliers = Array.isArray(response) ? response : (response.suppliers || []);
+        
+        const selects = ['#supplierSelect', '#creditSupplierSelect', '#transSupplierSelect'];
+        
+        selects.forEach(function(selector) {
+            const select = $(selector);
+            select.empty().append('<option value="">Select Supplier...</option>');
+            
+            suppliers.forEach(function(supplier) {
+                // Use display_name if available, otherwise construct from name/company
+                let displayText = supplier.display_name || supplier.name || supplier.supplier_name;
+                
+                // If company name exists and not already in display, add it in parentheses
+                if (supplier.company && !displayText.includes(supplier.company)) {
+                    displayText = `${displayText} (${supplier.company})`;
+                } else if (supplier.company_name && !displayText.includes(supplier.company_name)) {
+                    displayText = `${displayText} (${supplier.company_name})`;
+                }
+                
+                select.append(`<option value="${supplier.id}">${displayText}</option>`);
+            });
+        });
+        
+        console.log(`Loaded ${suppliers.length} suppliers into dropdowns`);
+    }).fail(function(xhr) {
+        console.error('Failed to load suppliers:', xhr.responseText);
+        Swal.fire('Error', 'Failed to load suppliers for dropdowns', 'error');
+    });
+}
+
+// Load approved items from sales
+function loadApprovedItems() {
+    $('#approvedItemsList').html('<div class="text-center py-5"><div class="loading-spinner"></div><p class="mt-3">Loading...</p></div>');
+    
+    $.get('/api/inventory/approved-items', function(response) {
+        if (response.success) {
+            const items = response.approved_items;
+            
+            if (items.length === 0) {
+                $('#approvedItemsList').html('<div class="empty-state"><i class="fas fa-check-circle"></i><p>No approved items waiting to be added to inventory</p></div>');
+                return;
+            }
+            
+            let html = '<div class="row">';
+            items.forEach(function(item) {
+                const profitPerUnit = item.expected_profit_per_unit || 0;
+                const totalProfit = item.total_profit || 0;
+                const alreadyAdded = item.already_in_inventory;
+                
+                // Format dimensions
+                let dimensionsHtml = '';
+                if (item.width || item.height || item.depth) {
+                    const dims = [];
+                    if (item.width) dims.push(`W: ${item.width}`);
+                    if (item.height) dims.push(`H: ${item.height}`);
+                    if (item.depth) dims.push(`D: ${item.depth}`);
+                    dimensionsHtml = `
+                        <div class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-ruler-combined mr-1"></i><strong>Dimensions:</strong> 
+                                <span class="badge badge-info">${dims.join(' × ')}</span>
+                                ${item.unit ? ` <span class="badge badge-secondary">${item.unit}</span>` : ''}
+                            </small>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card shadow-sm ${alreadyAdded ? 'border-success' : ''}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h6 class="card-title mb-0">${item.item_name}</h6>
+                                    ${alreadyAdded ? '<span class="badge badge-success"><i class="fas fa-check"></i> Added</span>' : ''}
+                                </div>
+                                <p class="text-muted mb-2 mt-1">
+                                    <small>
+                                        <i class="fas fa-file-alt mr-1"></i>${item.request_number || 'SR-' + item.sales_request_id} | 
+                                        <i class="fas fa-user ml-2 mr-1"></i>${item.client_name}
+                                        ${item.company_name ? ' (' + item.company_name + ')' : ''}
+                                    </small>
+                                </p>
+                                ${dimensionsHtml}
+                                <div class="row text-center mb-2">
+                                    <div class="col-4 border-right">
+                                        <small class="text-muted d-block">Quantity</small>
+                                        <strong>${item.quantity}</strong>
+                                    </div>
+                                    <div class="col-4 border-right">
+                                        <small class="text-muted d-block">Cost/Unit</small>
+                                        <strong>EGP ${formatNumber(item.cost_per_item)}</strong>
+                                    </div>
+                                    <div class="col-4">
+                                        <small class="text-muted d-block">Sell/Unit</small>
+                                        <strong class="text-primary">EGP ${formatNumber(item.sell_per_item)}</strong>
+                                    </div>
+                                </div>
+                                <div class="row text-center mb-3">
+                                    <div class="col-6 border-right">
+                                        <small class="text-muted d-block">Profit/Unit</small>
+                                        <strong class="text-success">+${formatNumber(profitPerUnit)} EGP</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted d-block">Total Profit</small>
+                                        <strong class="text-success">+${formatNumber(totalProfit)} EGP</strong>
+                                    </div>
+                                </div>
+                                ${alreadyAdded ? `
+                                    <div class="alert alert-success mb-2 py-2">
+                                        <small>
+                                            <i class="fas fa-check-circle mr-1"></i>Already in inventory 
+                                            <a href="#" class="alert-link view-inventory-item" data-item-id="${item.inventory_item_id}">
+                                                <i class="fas fa-external-link-alt ml-1"></i> View Item #${item.inventory_item_id}
+                                            </a>
+                                        </small>
+                                    </div>
+                                ` : `
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-success btn-sm btn-create-from-sales" 
+                                                data-sales-item-id="${item.sales_item_id}"
+                                                data-item-name="${escapeHtml(item.item_name)}"
+                                                data-cost="${item.cost_per_item}"
+                                                data-sell="${item.sell_per_item}"
+                                                title="Buy items and add to owned inventory">
+                                            <i class="fas fa-shopping-cart"></i> Buy & Add to Inventory
+                                        </button>
+                                        <button class="btn btn-warning btn-sm btn-add-credit-from-sales" 
+                                                data-sales-item-id="${item.sales_item_id}"
+                                                data-item-name="${escapeHtml(item.item_name)}"
+                                                data-cost="${item.cost_per_item}"
+                                                data-sell="${item.sell_per_item}"
+                                                title="Receive on credit/consignment from supplier">
+                                            <i class="fas fa-handshake"></i> Receive on Credit
+                                        </button>
+                                    </div>
+                                `}
+                                <small class="text-muted d-block mt-2">
+                                    <i class="fas fa-calendar-check mr-1"></i>Approved: ${item.approval_date}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            $('#approvedItemsList').html(html);
+        }
+    }).fail(function() {
+        $('#approvedItemsList').html('<div class="alert alert-danger">Failed to load approved items</div>');
+    });
+}
+
+// Load credit items
+function loadCreditItems() {
+    $.get('/api/inventory/credit-items', function(response) {
+        if (response.success) {
+            const items = response.credit_items;
+            const tbody = $('#creditTable tbody');
+            tbody.empty();
+            
+            if (items.length === 0) {
+                tbody.html('<tr><td colspan="9" class="text-center py-4"><div class="empty-state"><i class="fas fa-handshake"></i><p>No credit items</p></div></td></tr>');
+                return;
+            }
+            
+            items.forEach(function(item) {
+                const statusClass = item.status === 'active' ? 'credit-active' : item.status === 'settled' ? 'credit-settled' : 'credit-overdue';
+                
+                // Format dimensions similar to approved items
+                let dimensionsHtml = '';
+                if (item.width || item.height || item.depth) {
+                    const w = item.width ? item.width : 0;
+                    const h = item.height ? item.height : 0;
+                    const d = item.depth ? item.depth : 0;
+                    dimensionsHtml = `<div class="mt-1"><span class="badge badge-info">W: ${w} × H: ${h} × D: ${d} ${item.unit_of_measure || ''}</span></div>`;
+                }
+                
+                const row = `
+                    <tr>
+                        <td>
+                            <strong>${item.item_name}</strong>
+                            ${dimensionsHtml}
+                        </td>
+                        <td>${item.supplier_name}</td>
+                        <td>${item.quantity_received}</td>
+                        <td>${item.quantity_sold}</td>
+                        <td>${item.quantity_remaining}</td>
+                        <td><strong>EGP ${formatNumber(item.amount_due)}</strong></td>
+                        <td><span class="credit-status ${statusClass}">${item.status}</span></td>
+                        <td>${item.due_date || '-'}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-success btn-credit-sell" data-id="${item.id}" title="Record Sale">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </button>
+                                <button class="btn btn-outline-info btn-credit-return" data-id="${item.id}" title="Return to Supplier">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                <button class="btn btn-outline-primary btn-credit-payment" data-id="${item.id}" title="Record Payment">
+                                    <i class="fas fa-money-bill"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+    });
+}
+
+// Load transactions
+function loadTransactions() {
+    const transType = $('#filterTransType').val();
+    const itemId = $('#filterTransItem').val();
+    
+    let url = '/api/inventory/transactions?';
+    if (transType) url += 'transaction_type=' + transType + '&';
+    if (itemId) url += 'item_id=' + itemId;
+    
+    $.get(url, function(response) {
+        if (response.success) {
+            const transactions = response.transactions;
+            const tbody = $('#transactionsTable tbody');
+            tbody.empty();
+            
+            if (transactions.length === 0) {
+                tbody.html('<tr><td colspan="9" class="text-center py-4"><div class="empty-state"><i class="fas fa-exchange-alt"></i><p>No transactions</p></div></td></tr>');
+                return;
+            }
+            
+            transactions.forEach(function(trans) {
+                const typeClass = 'trans-' + trans.transaction_type;
+                const row = `
+                    <tr>
+                        <td><small>${trans.transaction_date}</small></td>
+                        <td>${trans.item_name}</td>
+                        <td><span class="badge ${typeClass}">${trans.transaction_type}</span></td>
+                        <td>${trans.quantity > 0 ? '+' : ''}${trans.quantity}</td>
+                        <td>EGP ${formatNumber(trans.unit_cost)}</td>
+                        <td>EGP ${formatNumber(trans.total_cost)}</td>
+                        <td><strong>${trans.balance_after}</strong></td>
+                        <td><small>${trans.reference_type || '-'}</small></td>
+                        <td><small>${trans.performed_by || '-'}</small></td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+    });
+}
+
+// Load alerts
+function loadAlerts() {
+    $('#alertsList').html('<div class="text-center py-5"><div class="loading-spinner"></div><p class="mt-3">Loading...</p></div>');
+    
+    $.get('/api/inventory/alerts', function(response) {
+        if (response.success) {
+            const alerts = response.alerts;
+            
+            if (alerts.length === 0) {
+                $('#alertsList').html('<div class="empty-state"><i class="fas fa-check-circle"></i><p>No active alerts</p></div>');
+                return;
+            }
+            
+            let html = '';
+            alerts.forEach(function(alert) {
+                const severityClass = 'alert-' + alert.severity;
+                const iconClass = alert.alert_type === 'low_stock' ? 'fa-exclamation-triangle' : 
+                                 
+                                 alert.alert_type === 'out_of_stock' ? 'fa-times-circle' : 'fa-bell';
+                
+                html += `
+                    <div class="alert-card alert alert-warning ${severityClass}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="alert-heading mb-1">
+                                    <i class="fas ${iconClass} mr-2"></i>${alert.item_name} (${alert.item_code})
+                                </h6>
+                                <p class="mb-2">${alert.alert_message}</p>
+                                <small class="text-muted"><i class="fas fa-clock mr-1"></i>${alert.created_at}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-success btn-resolve-alert" data-id="${alert.id}">
+                                <i class="fas fa-check"></i> Resolve
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            $('#alertsList').html(html);
+        }
+    });
+}
+
+// Add inventory item
+function addInventoryItem() {
+    const formData = $('#addItemForm').serializeArray();
+    const data = {};
+    
+    formData.forEach(function(field) {
+        // Convert empty strings to null for integer fields
+        if (field.value === '' && ['preferred_supplier_id', 'sales_request_item_id', 'credit_supplier_id'].includes(field.name)) {
+            data[field.name] = null;
+        } else if (field.value === '' && ['quantity_in_stock', 'minimum_stock_level', 'reorder_level', 'average_cost', 'unit_selling_price'].includes(field.name)) {
+            data[field.name] = 0;
+        } else {
+            data[field.name] = field.value;
+        }
+    });
+    
+    // Get components if composite
+    if (data.item_type === 'composite') {
+        data.components = [];
+        $('#componentsList .component-row').each(function() {
+            const componentId = $(this).find('select[name="component_id"]').val();
+            const quantity = $(this).find('input[name="quantity_required"]').val();
+            if (componentId && quantity) {
+                data.components.push({
+                    component_id: parseInt(componentId),
+                    quantity_required: parseFloat(quantity),
+                    unit_of_measure: 'PCS'
+                });
+            }
+        });
+    }
+    
+    $.ajax({
+        url: '/api/inventory/items/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                Swal.fire('Success', response.message, 'success');
+                $('#addItemModal').modal('hide');
+                $('#addItemForm')[0].reset();
+                loadInventoryItems();
+                loadDashboardStatistics();
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', 'Failed to add item: ' + xhr.responseText, 'error');
+        }
+    });
+}
+
+// Add credit item
+function addCreditItem() {
+    const formData = $('#addCreditForm').serializeArray();
+    const data = {};
+    
+    formData.forEach(function(field) {
+        // Convert empty strings to null for integer fields
+        if (field.value === '' && ['item_id', 'supplier_id', 'sales_request_item_id'].includes(field.name)) {
+            data[field.name] = null;
+        } else if (field.value === '' && ['quantity_received', 'agreed_cost_per_item'].includes(field.name)) {
+            data[field.name] = 0;
+        } else {
+            data[field.name] = field.value;
+        }
+    });
+    
+    $.ajax({
+        url: '/api/inventory/credit-items/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                Swal.fire('Success', response.message, 'success');
+                $('#addCreditModal').modal('hide');
+                $('#addCreditForm')[0].reset();
+                loadCreditItems();
+                loadInventoryItems();
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', 'Failed to add credit item', 'error');
+        }
+    });
+}
+
+// Add transaction
+function addTransaction() {
+    const formData = $('#addTransactionForm').serializeArray();
+    const data = {};
+    
+    formData.forEach(function(field) {
+        // Convert empty strings to null for integer fields
+        if (field.value === '' && ['item_id', 'supplier_id'].includes(field.name)) {
+            data[field.name] = null;
+        } else if (field.value === '' && ['quantity', 'unit_cost'].includes(field.name)) {
+            data[field.name] = 0;
+        } else {
+            data[field.name] = field.value;
+        }
+    });
+    
+    // Calculate total cost
+    data.total_cost = parseFloat(data.quantity || 0) * parseFloat(data.unit_cost || 0);
+    
+    $.ajax({
+        url: '/api/inventory/transactions/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                Swal.fire('Success', response.message, 'success');
+                $('#addTransactionModal').modal('hide');
+                $('#addTransactionForm')[0].reset();
+                loadTransactions();
+                loadInventoryItems();
+                loadDashboardStatistics();
+            } else {
+                Swal.fire('Error', response.error, 'error');
+            }
+        },
+        error: function(xhr) {
+            Swal.fire('Error', 'Failed to record transaction', 'error');
+        }
+    });
+}
+
+// Add component row
+let componentCounter = 0;
+function addComponentRow() {
+    componentCounter++;
+    const html = `
+        <div class="component-row mb-2">
+            <div class="row">
+                <div class="col-md-8">
+                    <select class="form-control form-control-sm" name="component_id" required>
+                        <option value="">Select sub-item...</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="number" step="0.01" class="form-control form-control-sm" name="quantity_required" placeholder="Qty" required>
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-sm btn-danger btn-remove-component">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    $('#componentsList').append(html);
+    loadAvailableItems();
+}
+
+// Load available items for components
+function loadAvailableItems() {
+    $.get('/api/inventory/items', function(response) {
+        if (response.success) {
+            $('.component-row select[name="component_id"]').each(function() {
+                const select = $(this);
+                const currentValue = select.val();
+                select.empty().append('<option value="">Select sub-item...</option>');
+                
+                response.items.forEach(function(item) {
+                    if (item.item_type === 'simple') {
+                        // Build display text with dimensions
+                        let displayText = item.item_name;
+                        
+                        // Add unit
+                        if (item.unit_of_measure) {
+                            displayText += ` (${item.unit_of_measure})`;
+                        }
+                        
+                        // Add dimensions if available
+                        if (item.width || item.height || item.depth) {
+                            const w = item.width || 0;
+                            const h = item.height || 0;
+                            const d = item.depth || 0;
+                            displayText += ` - ${w}×${h}×${d}`;
+                        }
+                        
+                        // Add stock info
+                        displayText += ` [Stock: ${item.quantity_in_stock}]`;
+                        
+                        select.append(`<option value="${item.id}">${displayText}</option>`);
+                    }
+                });
+                
+                if (currentValue) {
+                    select.val(currentValue);
+                }
+            });
+        }
+    });
+}
+
+// Remove component
+$(document).on('click', '.btn-remove-component', function() {
+    $(this).closest('.component-row').remove();
+});
+
+// Resolve alert
+$(document).on('click', '.btn-resolve-alert', function() {
+    const alertId = $(this).data('id');
+    
+    $.ajax({
+        url: '/api/inventory/alerts/' + alertId + '/resolve',
+        method: 'POST',
+        success: function(response) {
+            if (response.success) {
+                Swal.fire('Success', response.message, 'success');
+                loadAlerts();
+                loadDashboardStatistics();
+            }
+        }
+    });
+});
+
+// View item details in modal
+function viewItemDetails(itemId) {
+    $.get('/api/inventory/items', function(response) {
+        if (response.success) {
+            const item = response.items.find(i => i.id === itemId);
+            if (!item) {
+                Swal.fire('Error', 'Item not found', 'error');
+                return;
+            }
+            
+            // Build dimensions display
+            let dimensionsHtml = 'N/A';
+            if (item.width || item.height || item.depth) {
+                dimensionsHtml = `${item.width || 0} × ${item.height || 0} × ${item.depth || 0} ${item.unit_of_measure || ''}`;
+            }
+            
+            // Build components list for composite items
+            let componentsHtml = '';
+            if (item.item_type === 'composite' && item.components && item.components.length > 0) {
+                componentsHtml = '<h6 class="mt-3">Components:</h6><ul class="list-group list-group-flush">';
+                item.components.forEach(function(comp) {
+                    componentsHtml += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>${comp.item_name} <small class="text-muted">(${comp.item_code})</small></span>
+                            <span class="badge badge-primary">${comp.quantity_required} ${comp.unit_of_measure}</span>
+                        </li>
+                    `;
+                });
+                componentsHtml += '</ul>';
+            }
+            
+            // Build credit items info
+            let creditHtml = '';
+            if (item.credit_items && item.credit_items.length > 0) {
+                creditHtml = '<h6 class="mt-3">Credit Items:</h6><ul class="list-group list-group-flush">';
+                item.credit_items.forEach(function(credit) {
+                    creditHtml += `
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <span><strong>${credit.supplier_name}</strong></span>
+                                <span class="badge badge-${credit.status === 'active' ? 'warning' : 'success'}">${credit.status}</span>
+                            </div>
+                            <small>Received: ${credit.quantity_received} | Remaining: ${credit.quantity_remaining}</small>
+                        </li>
+                    `;
+                });
+                creditHtml += '</ul>';
+            }
+            
+            const detailsHtml = `
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr><th>Item Code:</th><td><code>${item.item_code}</code></td></tr>
+                                <tr><th>Item Name:</th><td><strong>${item.item_name}</strong></td></tr>
+                                <tr><th>Type:</th><td><span class="badge badge-info">${item.item_type}</span></td></tr>
+                                <tr><th>Category:</th><td>${item.category || '-'}</td></tr>
+                                <tr><th>Unit:</th><td>${item.unit_of_measure}</td></tr>
+                                <tr><th>Dimensions:</th><td>${dimensionsHtml}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr><th>Current Stock:</th><td><strong class="text-primary">${item.quantity_in_stock} ${item.unit_of_measure}</strong></td></tr>
+                                <tr><th>Min Level:</th><td>${item.minimum_stock_level}</td></tr>
+                                <tr><th>Reorder Level:</th><td>${item.reorder_level}</td></tr>
+                                <tr><th>Avg Cost:</th><td>EGP ${formatNumber(item.average_cost)}</td></tr>
+                                <tr><th>Last Cost:</th><td>EGP ${formatNumber(item.last_purchase_cost || 0)}</td></tr>
+                                <tr><th>Supplier:</th><td>${item.supplier_name || '-'}</td></tr>
+                                <tr><th>Status:</th><td><span class="badge badge-${item.status === 'active' ? 'success' : 'secondary'}">${item.status}</span></td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    ${componentsHtml}
+                    ${creditHtml}
+                    ${item.specifications ? `<div class="mt-3"><h6>Specifications:</h6><p>${item.specifications}</p></div>` : ''}
+                </div>
+            `;
+            
+            $('#itemDetailsContent').html(detailsHtml);
+            $('#itemDetailsModal').modal('show');
+        }
+    });
+}
+
+// ===================================================================
+// CREATE FROM SALES FUNCTIONS (For Approved Items Tab)
+// ===================================================================
+
+// Create inventory item from approved sales request item
+function createItemFromSales(button) {
+    const salesItemId = button.data('sales-item-id');
+    const itemName = button.data('item-name');
+    const cost = button.data('cost');
+    const sell = button.data('sell');
+    
+    console.log('createItemFromSales called:', {salesItemId, itemName, cost, sell});
+    
+    // Set form values
+    $('#modalSalesItemId').val(salesItemId);
+    $('#modalItemName').text(itemName);
+    
+    // Load suppliers into dropdown
+    $.get('/api/suppliers/simple', function(response) {
+        const suppliers = Array.isArray(response) ? response : (response.suppliers || []);
+        const select = $('#modalSupplier');
+        select.empty().append('<option value="">Select Supplier...</option>');
+        suppliers.forEach(function(supplier) {
+            let displayText = supplier.display_name || supplier.name || supplier.supplier_name;
+            if (supplier.company && !displayText.includes(supplier.company)) {
+                displayText = `${displayText} (${supplier.company})`;
+            }
+            select.append(`<option value="${supplier.id}">${displayText}</option>`);
+        });
+    });
+    
+    // Show modal
+    $('#inventoryCreationModal').css('display', 'flex');
+    console.log('Inventory creation modal displayed');
+}
+
+// Close inventory creation modal
+function closeInventoryModal() {
+    $('#inventoryCreationModal').css('display', 'none');
+    $('#createFromSalesForm')[0].reset();
+}
+
+// Handle create from sales form submission
+$('#createFromSalesForm').submit(function(e) {
+    e.preventDefault();
+    
+    const salesItemId = $('#modalSalesItemId').val();
+    
+    console.log('Submitting create from sales:', salesItemId);
+    
+    $.ajax({
+        url: '/api/inventory/items/create-from-sales',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            sales_item_id: salesItemId
+        }),
+        success: function(response) {
+            console.log('Create response:', response);
+            if (response.success) {
+                closeInventoryModal();
+                alert('✓ Item added to inventory successfully!\nItem ID: ' + response.item_id);
+                loadApprovedItems(); // Refresh approved items list
+                loadInventoryItems(); // Refresh inventory table
+                loadDashboardStatistics(); // Refresh stats
+            } else {
+                alert('Error: ' + (response.error || 'Unknown error'));
+            }
+        },
+        error: function(xhr) {
+            console.error('Create error:', xhr);
+            alert('Error creating item: ' + (xhr.responseJSON?.error || xhr.responseText || 'Unknown error'));
+        }
+    });
+});
+
+// Show credit from sales modal
+function showCreditFromSalesModal(button) {
+    const salesItemId = button.data('sales-item-id');
+    const itemName = button.data('item-name');
+    const cost = button.data('cost');
+    const sell = button.data('sell');
+    
+    console.log('showCreditFromSalesModal called:', {salesItemId, itemName, cost, sell});
+    
+    // Set form values
+    $('#creditModalSalesItemId').val(salesItemId);
+    $('#creditModalItemName').text(itemName);
+    $('#creditModalCost').text(formatNumber(cost));
+    $('#creditModalSell').text(formatNumber(sell));
+    
+    // Reset optional supplier dropdown
+    $('#creditModalSupplier').val('');
+    
+    // Load suppliers into dropdown (optional)
+    $.get('/api/suppliers/simple', function(response) {
+        const suppliers = Array.isArray(response) ? response : (response.suppliers || []);
+        const select = $('#creditModalSupplier');
+        select.empty().append('<option value="">No Supplier (Link to Sales Request Only)</option>');
+        suppliers.forEach(function(supplier) {
+            let displayText = supplier.display_name || supplier.name || supplier.supplier_name;
+            if (supplier.company && !displayText.includes(supplier.company)) {
+                displayText = `${displayText} (${supplier.company})`;
+            }
+            select.append(`<option value="${supplier.id}">${displayText}</option>`);
+        });
+    });
+    
+    // Show modal
+    $('#creditCreationModal').css('display', 'flex');
+    console.log('Credit creation modal displayed');
+}
+
+// Close credit creation modal
+function closeCreditModal() {
+    $('#creditCreationModal').css('display', 'none');
+    $('#createCreditFromSalesForm')[0].reset();
+}
+
+// Handle create credit from sales form submission
+$('#createCreditFromSalesForm').submit(function(e) {
+    e.preventDefault();
+    
+    const salesItemId = $('#creditModalSalesItemId').val();
+    const supplierId = $('#creditModalSupplier').val(); // Optional
+    const quantity = parseFloat($('#creditModalQuantity').val()) || 0;
+    
+    console.log('Submitting create credit from sales:', {salesItemId, supplierId, quantity});
+    
+    const requestData = {
+        sales_item_id: salesItemId,
+        inventory_type: 'credit'
+    };
+    
+    // Only include supplier_id if selected
+    if (supplierId) {
+        requestData.supplier_id = supplierId;
+    }
+    
+    // Include quantity if specified
+    if (quantity > 0) {
+        requestData.initial_quantity = quantity;
+    }
+    
+    $.ajax({
+        url: '/api/inventory/items/create-from-sales',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(requestData),
+        success: function(response) {
+            console.log('Create credit response:', response);
+            if (response.success) {
+                closeCreditModal();
+                alert('✓ Credit item linked to sales request successfully!\nItem ID: ' + response.item_id);
+                loadApprovedItems(); // Refresh approved items list
+                loadInventoryItems(); // Refresh inventory table
+                loadCreditItems(); // Refresh credit items
+                loadDashboardStatistics(); // Refresh stats
+            } else {
+                alert('Error: ' + (response.error || 'Unknown error'));
+            }
+        },
+        error: function(xhr) {
+            console.error('Create credit error:', xhr);
+            alert('Error creating credit item: ' + (xhr.responseJSON?.error || xhr.responseText || 'Unknown error'));
+        }
+    });
+});
+
+// ===================================================================
+// CUSTOM BOOTSTRAP MODALS (Replaces SweetAlert2 which wasn't showing)
+// ===================================================================
+
+// Show Add Stock Modal (Custom Bootstrap Modal)
+function showAddStockModal(itemId, itemName) {
+    console.log('showAddStockModal called with:', itemId, itemName);
+    
+    // Set item details
+    $('#stockItemId').val(itemId);
+    $('#stockItemName').val(itemName);
+    
+    // Reset form
+    $('#stockTransactionType').val('purchase');
+    $('#stockQuantity').val('');
+    $('#stockUnitCost').val('0');
+    $('#stockNotes').val('');
+    
+    // Load suppliers
+    $.get('/api/suppliers/simple', function(response) {
+        const suppliers = Array.isArray(response) ? response : (response.suppliers || []);
+        const select = $('#stockSupplierId');
+        select.empty().append('<option value="">Select Supplier...</option>');
+        suppliers.forEach(function(supplier) {
+            let displayText = supplier.display_name || supplier.name || supplier.supplier_name;
+            if (supplier.company && !displayText.includes(supplier.company)) {
+                displayText = `${displayText} (${supplier.company})`;
+            }
+            select.append(`<option value="${supplier.id}">${displayText}</option>`);
+        });
+    });
+    
+    // Show modal
+    $('#addStockModal').css('display', 'flex');
+    console.log('Add Stock modal displayed');
+}
+
+// Close Add Stock Modal
+function closeAddStockModal() {
+    $('#addStockModal').css('display', 'none');
+    $('#addStockForm')[0].reset();
+}
+
+// Handle Add Stock Form Submission
+$(document).ready(function() {
+    $('#addStockForm').submit(function(e) {
+        e.preventDefault();
+        
+        const itemId = $('#stockItemId').val();
+        const transactionType = $('#stockTransactionType').val();
+        const quantity = parseFloat($('#stockQuantity').val());
+        const unitCost = parseFloat($('#stockUnitCost').val()) || 0;
+        const supplierId = $('#stockSupplierId').val() || null;
+        const notes = $('#stockNotes').val();
+        
+        if (!quantity || quantity <= 0) {
+            alert('Please enter a valid quantity');
+            return;
+        }
+        
+        const data = {
+            item_id: itemId,
+            transaction_type: transactionType,
+            quantity: quantity,
+            unit_cost: unitCost,
+            total_cost: quantity * unitCost,
+            supplier_id: supplierId,
+            notes: notes
+        };
+        
+        console.log('Submitting stock transaction:', data);
+        
+        $.ajax({
+            url: '/api/inventory/transactions/add',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                console.log('Transaction response:', response);
+                if (response.success) {
+                    closeAddStockModal();
+                    alert('✓ Stock updated successfully!');
+                    loadInventoryItems();
+                    loadDashboardStatistics();
+                } else {
+                    alert('Error: ' + (response.error || 'Unknown error'));
+                }
+            },
+            error: function(xhr) {
+                console.error('Transaction error:', xhr);
+                alert('Error adding stock: ' + (xhr.responseJSON?.error || xhr.responseText || 'Unknown error'));
+            }
+        });
+    });
+});
+
+// Show Edit Item Modal (Custom Bootstrap Modal)
+function editInventoryItem(itemId) {
+    console.log('editInventoryItem called with:', itemId);
+    
+    // Fetch item details
+    $.get('/api/inventory/items', function(response) {
+        console.log('API response:', response);
+        if (response.success) {
+            const item = response.items.find(i => i.id === itemId);
+            console.log('Found item:', item);
+            
+            if (!item) {
+                alert('Item not found');
+                return;
+            }
+            
+            // Populate form
+            $('#editItemId').val(item.id);
+            $('#editItemName').val(item.item_name);
+            $('#editCategory').val(item.category || '');
+            $('#editDescription').val(item.description || '');
+            $('#editUnit').val(item.unit_of_measure || 'PCS');
+            $('#editStatus').val(item.status || 'active');
+            $('#editMinLevel').val(item.minimum_stock_level || 0);
+            $('#editReorderLevel').val(item.reorder_level || 0);
+            
+            // Load suppliers
+            $.get('/api/suppliers/simple', function(response) {
+                const suppliers = Array.isArray(response) ? response : (response.suppliers || []);
+                const select = $('#editSupplierId');
+                select.empty().append('<option value="">Select Supplier...</option>');
+                suppliers.forEach(function(supplier) {
+                    let displayText = supplier.display_name || supplier.name || supplier.supplier_name;
+                    if (supplier.company && !displayText.includes(supplier.company)) {
+                        displayText = `${displayText} (${supplier.company})`;
+                    }
+                    const selected = supplier.id == item.preferred_supplier_id ? 'selected' : '';
+                    select.append(`<option value="${supplier.id}" ${selected}>${displayText}</option>`);
+                });
+            });
+            
+            // Show modal
+            $('#editItemModal').css('display', 'flex');
+            console.log('Edit Item modal displayed');
+        } else {
+            alert('Error loading item details');
+        }
+    }).fail(function(xhr) {
+        console.error('Failed to load items:', xhr);
+        alert('Error: ' + (xhr.responseJSON?.error || 'Failed to load item details'));
+    });
+}
+
+// Close Edit Item Modal
+function closeEditItemModal() {
+    $('#editItemModal').css('display', 'none');
+    $('#editItemForm')[0].reset();
+}
+
+// Handle Edit Item Form Submission
+$(document).ready(function() {
+    $('#editItemForm').submit(function(e) {
+        e.preventDefault();
+        
+        const itemId = $('#editItemId').val();
+        const itemName = $('#editItemName').val().trim();
+        
+        if (!itemName) {
+            alert('Item name is required');
+            return;
+        }
+        
+        const data = {
+            item_name: itemName,
+            category: $('#editCategory').val(),
+            description: $('#editDescription').val(),
+            unit_of_measure: $('#editUnit').val(),
+            minimum_stock_level: parseInt($('#editMinLevel').val()) || 0,
+            reorder_level: parseInt($('#editReorderLevel').val()) || 0,
+            preferred_supplier_id: $('#editSupplierId').val() || null,
+            status: $('#editStatus').val()
+        };
+        
+        console.log('Updating item:', itemId, data);
+        
+        $.ajax({
+            url: `/api/inventory/items/${itemId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                console.log('Update response:', response);
+                if (response.success) {
+                    closeEditItemModal();
+                    alert('✓ Item updated successfully!');
+                    loadInventoryItems();
+                } else {
+                    alert('Error: ' + (response.error || 'Unknown error'));
+                }
+            },
+            error: function(xhr) {
+                console.error('Update error:', xhr);
+                alert('Update failed: ' + (xhr.responseJSON?.error || xhr.responseText || 'Unknown error'));
+            }
+        });
+    });
+});
+
+// ===================================================================
+// OLD SWEETALERT2 FUNCTIONS REMOVED - Using Custom Bootstrap Modals Now
+// ===================================================================
+
+</script>
+{% endblock %}

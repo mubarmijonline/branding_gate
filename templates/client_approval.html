@@ -1,0 +1,1825 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    /* =====================================================
+       CLIENT APPROVAL - PREMIUM UI v5.0
+       Modern, Clean, Professional Design
+       ===================================================== */
+    
+    /* Import Google Fonts for premium typography */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    
+    /* Premium Color System */
+    :root {
+        /* Primary Palette - Deep Blue */
+        --primary-50: #eff6ff;
+        --primary-100: #dbeafe;
+        --primary-500: #3b82f6;
+        --primary-600: #2563eb;
+        --primary-700: #1d4ed8;
+        
+        /* Success - Emerald */
+        --success-50: #ecfdf5;
+        --success-500: #10b981;
+        --success-600: #059669;
+        
+        /* Danger - Rose */
+        --danger-50: #fff1f2;
+        --danger-500: #f43f5e;
+        --danger-600: #e11d48;
+        
+        /* Warning - Amber */
+        --warning-50: #fffbeb;
+        --warning-500: #f59e0b;
+        --warning-600: #d97706;
+        
+        /* Info - Cyan */
+        --info-50: #ecfeff;
+        --info-500: #06b6d4;
+        --info-600: #0891b2;
+        
+        /* Purple */
+        --purple-500: #8b5cf6;
+        --purple-600: #7c3aed;
+        
+        /* Neutrals */
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-800: #1f2937;
+        --gray-900: #111827;
+        
+        /* Shadows */
+        --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        
+        /* Spacing */
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --radius-2xl: 20px;
+        --radius-full: 9999px;
+    }
+    
+    /* Base Styles - Minimal */
+    .container-fluid {
+        padding: 20px !important;
+    }
+    
+    /* =====================================================
+       PAGE HEADER - Simple Clean Style
+       ===================================================== */
+    .page-header-client {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        margin: 0 0 24px 0 !important;
+        padding: 24px !important;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        min-height: 70px;
+    }
+    
+    .page-header-client h1,
+    .page-header-client .h3,
+    .page-header-client h1.h3,
+    .page-header-client .text-gray-800 {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1.5rem !important;
+        margin: 0 !important;
+    }
+    
+    .page-header-client h1 i,
+    .page-header-client .h3 i {
+        color: #ffffff !important;
+    }
+    
+    .page-header-client .btn-secondary {
+        background: rgba(255,255,255,0.2) !important;
+        border: 1px solid rgba(255,255,255,0.3) !important;
+        color: white !important;
+        font-weight: 600;
+        padding: 10px 20px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .page-header-client .btn-secondary:hover {
+        background: rgba(255,255,255,0.3) !important;
+    }
+    
+    /* =====================================================
+       STATS CARDS - Premium Dashboard Style
+       ===================================================== */
+    .stats-card {
+        background: white !important;
+        border-radius: 16px !important;
+        border: 1px solid #e5e7eb !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .stats-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stats-card .card-body {
+        padding: 24px !important;
+    }
+    
+    .stats-label {
+        font-size: 0.75rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #6b7280 !important;
+        margin-bottom: 8px;
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    .stats-number {
+        font-size: 2.5rem !important;
+        font-weight: 800 !important;
+        line-height: 1;
+        margin: 0 !important;
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    .stats-card .col-auto i {
+        font-size: 2.5rem !important;
+        opacity: 0.2;
+    }
+    
+    /* Stats Card Colors - Override Bootstrap text- classes */
+    .border-left-warning::before { background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); }
+    .border-left-warning { border-left: none !important; }
+    .border-left-warning .stats-number,
+    .border-left-warning .stats-number.text-warning,
+    .border-left-warning .text-warning { color: #d97706 !important; }
+    .border-left-warning .col-auto i { color: #f59e0b !important; opacity: 0.3 !important; }
+    
+    .border-left-info::before { background: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%); }
+    .border-left-info { border-left: none !important; }
+    .border-left-info .stats-number,
+    .border-left-info .stats-number.text-info,
+    .border-left-info .text-info { color: #0891b2 !important; }
+    .border-left-info .col-auto i { color: #06b6d4 !important; opacity: 0.3 !important; }
+    
+    .border-left-success::before { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); }
+    .border-left-success { border-left: none !important; }
+    .border-left-success .stats-number,
+    .border-left-success .stats-number.text-success,
+    .border-left-success .text-success { color: #059669 !important; }
+    .border-left-success .col-auto i { color: #10b981 !important; opacity: 0.3 !important; }
+    
+    .border-left-danger::before { background: linear-gradient(135deg, #f43f5e 0%, #fb7185 100%); }
+    .border-left-danger { border-left: none !important; }
+    .border-left-danger .stats-number,
+    .border-left-danger .stats-number.text-danger,
+    .border-left-danger .text-danger { color: #e11d48 !important; }
+    .border-left-danger .col-auto i { color: #f43f5e !important; opacity: 0.3 !important; }
+    
+    .border-left-primary::before { background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); }
+    .border-left-primary { border-left: none !important; }
+    .border-left-primary .stats-number,
+    .border-left-primary .stats-number.text-primary,
+    .border-left-primary .text-primary { color: #2563eb !important; }
+    .border-left-primary .col-auto i { color: #3b82f6 !important; opacity: 0.3 !important; }
+    
+    /* =====================================================
+       FILTER SECTION - Clean Modern Design
+       ===================================================== */
+    .filter-section {
+        background: white;
+        border-radius: 16px;
+        padding: 24px 28px;
+        margin-bottom: 28px;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+    }
+    
+    .filter-section label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #4b5563;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .filter-section label i {
+        color: #3b82f6;
+        font-size: 0.85rem;
+    }
+    
+    .filter-section .form-control {
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #374151;
+        background: #f9fafb;
+        transition: all 0.2s ease;
+    }
+    
+    .filter-section .form-control:focus {
+        border-color: #3b82f6;
+        background: white;
+        box-shadow: 0 0 0 4px #eff6ff;
+        outline: none;
+    }
+    
+    #applyFilters {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 8px;
+        padding: 12px 28px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 4px 14px -3px rgba(59, 130, 246, 0.5);
+        transition: all 0.2s ease;
+    }
+    
+    #applyFilters:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 8px 20px -4px rgba(59, 130, 246, 0.6);
+    }
+    
+    /* =====================================================
+       REQUEST GROUP CARDS - Clean Table Design
+       ===================================================== */
+    .request-group-card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 28px !important;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+        transition: all 0.3s ease;
+    }
+    
+    .request-group-card:hover {
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .request-header {
+        background: #f9fafb !important;
+        padding: 20px 24px !important;
+        border-bottom: 2px solid #e5e7eb !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 16px !important;
+    }
+    
+    .request-header h5 {
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        color: var(--gray-800) !important;
+        margin: 0 !important;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .request-header h5 i {
+        color: var(--primary-500);
+    }
+    
+    .request-header .request-info {
+        display: flex !important;
+        gap: 10px !important;
+        flex-wrap: wrap !important;
+    }
+    
+    .request-badge {
+        padding: 8px 14px !important;
+        border-radius: var(--radius-full) !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+    }
+    
+    /* =====================================================
+       TABLE STYLING - Premium Data Table
+       ===================================================== */
+    .approval-table {
+        width: 100% !important;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    
+    .approval-table thead th {
+        background: var(--gray-50) !important;
+        padding: 14px 16px !important;
+        font-size: 0.7rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--gray-500) !important;
+        border-bottom: 2px solid var(--gray-200) !important;
+        border-top: none !important;
+    }
+    
+    .approval-table tbody tr {
+        transition: background 0.15s ease;
+    }
+    
+    .approval-table tbody tr:hover {
+        background: var(--primary-50) !important;
+    }
+    
+    .approval-table tbody td {
+        padding: 16px !important;
+        font-size: 0.875rem;
+        color: var(--gray-700);
+        border-bottom: 1px solid var(--gray-100) !important;
+        vertical-align: middle;
+    }
+    
+    .approval-table tbody td strong {
+        color: var(--gray-800);
+        font-weight: 600;
+    }
+    
+    /* Table Row Status Indicators */
+    .approval-table tbody tr.status-approved { 
+        background: linear-gradient(90deg, var(--success-50) 0%, transparent 30%) !important;
+    }
+    .approval-table tbody tr.status-rejected { 
+        background: linear-gradient(90deg, var(--danger-50) 0%, transparent 30%) !important;
+    }
+    .approval-table tbody tr.status-pending { 
+        background: linear-gradient(90deg, var(--warning-50) 0%, transparent 30%) !important;
+    }
+    .approval-table tbody tr.status-pending-negotiation { 
+        background: linear-gradient(90deg, #fff7ed 0%, transparent 30%) !important;
+    }
+    
+    /* Price Display */
+    .table-price {
+        font-weight: 700;
+        font-size: 0.9rem;
+        font-family: 'Inter', monospace;
+    }
+    
+    .table-price.cost { color: var(--danger-600); }
+    .table-price.sell { color: var(--success-600); }
+    .table-price.profit { 
+        color: var(--purple-600); 
+        font-size: 0.8rem;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    /* =====================================================
+       STATUS BADGES - Modern Pill Design
+       ===================================================== */
+    .status-badge {
+        padding: 6px 14px;
+        border-radius: var(--radius-full);
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        min-width: auto;
+        border: none;
+    }
+    
+    .status-approved {
+        background: var(--success-50) !important;
+        color: var(--success-600) !important;
+        box-shadow: none !important;
+    }
+    
+    .status-rejected {
+        background: var(--danger-50) !important;
+        color: var(--danger-600) !important;
+        box-shadow: none !important;
+    }
+    
+    .status-pending {
+        background: var(--warning-50) !important;
+        color: var(--warning-600) !important;
+        box-shadow: none !important;
+    }
+    
+    .status-pending-negotiation {
+        background: #fff7ed !important;
+        color: #ea580c !important;
+        box-shadow: none !important;
+    }
+    
+    .status-no-cost {
+        background: var(--gray-100) !important;
+        color: var(--gray-500) !important;
+        box-shadow: none !important;
+    }
+    
+    .status-no-selling {
+        background: var(--gray-800) !important;
+        color: white !important;
+        box-shadow: none !important;
+    }
+    
+    /* =====================================================
+       ACTION BUTTONS - Clean Icon Buttons
+       ===================================================== */
+    .table-action-btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: var(--radius-md);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        margin: 2px;
+        border: none;
+        transition: all 0.2s ease;
+    }
+    
+    .table-action-btn.btn-info {
+        background: var(--info-50);
+        color: var(--info-600);
+    }
+    .table-action-btn.btn-info:hover {
+        background: var(--info-500);
+        color: white;
+    }
+    
+    .table-action-btn.btn-success {
+        background: var(--success-50);
+        color: var(--success-600);
+    }
+    .table-action-btn.btn-success:hover {
+        background: var(--success-500);
+        color: white;
+    }
+    
+    .table-action-btn.btn-warning {
+        background: var(--warning-50);
+        color: var(--warning-600);
+    }
+    .table-action-btn.btn-warning:hover {
+        background: var(--warning-500);
+        color: white;
+    }
+    
+    .table-action-btn.btn-danger {
+        background: var(--danger-50);
+        color: var(--danger-600);
+    }
+    .table-action-btn.btn-danger:hover {
+        background: var(--danger-500);
+        color: white;
+    }
+    
+    /* =====================================================
+       METRICS FOOTER - Premium Dashboard Cards
+       ===================================================== */
+    .approval-metrics-footer-v3 {
+        background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-900) 100%) !important;
+        padding: 24px !important;
+        display: flex !important;
+        gap: 16px !important;
+        flex-wrap: wrap !important;
+        border-radius: 0 0 var(--radius-xl) var(--radius-xl) !important;
+    }
+    
+    .metric-box-v3 {
+        flex: 1 1 180px !important;
+        padding: 20px !important;
+        border-radius: var(--radius-lg) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 14px !important;
+        border: none !important;
+        box-shadow: var(--shadow-sm) !important;
+        transition: transform 0.2s ease !important;
+    }
+    
+    .metric-box-v3:hover {
+        transform: translateY(-3px) !important;
+    }
+    
+    .metric-icon-v3 {
+        width: 48px !important;
+        height: 48px !important;
+        border-radius: var(--radius-md) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 1.25rem !important;
+        background: rgba(255,255,255,0.2) !important;
+    }
+    
+    .metric-title-v3 {
+        font-size: 0.65rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        opacity: 0.85 !important;
+        margin-bottom: 4px !important;
+    }
+    
+    .metric-number-v3 {
+        font-size: 1.4rem !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+    }
+    
+    /* Metric Box Colors */
+    .metric-box-v3.box-items-count {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    }
+    .metric-box-v3.box-total-cost {
+        background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%) !important;
+    }
+    .metric-box-v3.box-total-selling {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    }
+    .metric-box-v3.box-total-profit {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+    }
+    .metric-box-v3.box-profit-margin {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    }
+    
+    .metric-box-v3 .metric-icon-v3,
+    .metric-box-v3 .metric-title-v3,
+    .metric-box-v3 .metric-number-v3 {
+        color: white !important;
+    }
+    
+    /* =====================================================
+       DATATABLES CUSTOMIZATION
+       ===================================================== */
+    .dataTables_wrapper {
+        padding: 16px 20px;
+    }
+    
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        border: 2px solid var(--gray-200);
+        border-radius: var(--radius-md);
+        padding: 8px 12px;
+        font-size: 0.875rem;
+        background: var(--gray-50);
+        transition: all 0.2s ease;
+    }
+    
+    .dataTables_wrapper .dataTables_filter input:focus {
+        border-color: var(--primary-500);
+        background: white;
+        box-shadow: 0 0 0 3px var(--primary-50);
+        outline: none;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        border-radius: var(--radius-md) !important;
+        padding: 8px 14px !important;
+        margin: 0 3px !important;
+        font-weight: 600 !important;
+        font-size: 0.8rem !important;
+        border: 1px solid var(--gray-200) !important;
+        background: white !important;
+        color: var(--gray-600) !important;
+        transition: all 0.15s ease !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+        background: var(--primary-500) !important;
+        color: white !important;
+        border-color: var(--primary-500) !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        background: var(--primary-600) !important;
+        color: white !important;
+        border-color: var(--primary-600) !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    
+    .dataTables_wrapper .dataTables_info {
+        font-size: 0.8rem;
+        color: var(--gray-500);
+        font-weight: 500;
+    }
+    
+    /* =====================================================
+       MODAL STYLING
+       ===================================================== */
+    .modal-content {
+        border-radius: var(--radius-xl);
+        border: none;
+        box-shadow: var(--shadow-xl);
+        overflow: hidden;
+    }
+    
+    .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    
+    .modal-header.bg-primary {
+        background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%) !important;
+        border-bottom: none;
+    }
+    
+    .modal-header.bg-info {
+        background: linear-gradient(135deg, var(--info-500) 0%, var(--info-600) 100%) !important;
+        border-bottom: none;
+    }
+    
+    .modal-body {
+        padding: 24px;
+        background: var(--gray-50);
+    }
+    
+    .modal-footer {
+        padding: 16px 24px;
+        background: white;
+        border-top: 1px solid var(--gray-200);
+    }
+    
+    .modal-footer .btn {
+        border-radius: var(--radius-md);
+        padding: 10px 20px;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    
+    /* =====================================================
+       EMPTY STATE
+       ===================================================== */
+    .empty-state {
+        text-align: center;
+        padding: 80px 24px;
+        background: white;
+        border-radius: var(--radius-xl);
+        border: 2px dashed var(--gray-300);
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        color: var(--gray-300);
+        margin-bottom: 20px;
+    }
+    
+    .empty-state h4 {
+        color: var(--gray-700);
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+    
+    .empty-state p {
+        color: var(--gray-500);
+        font-size: 0.9rem;
+    }
+    
+    /* =====================================================
+       RESPONSIVE ADJUSTMENTS
+       ===================================================== */
+    @media (max-width: 1200px) {
+        .metric-box-v3 {
+            flex: 1 1 calc(50% - 12px) !important;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .container-fluid {
+            padding: 16px !important;
+        }
+        
+        .page-header-client {
+            flex-direction: column;
+            gap: 16px;
+            text-align: center;
+        }
+        
+        .request-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+        }
+        
+        .metric-box-v3 {
+            flex: 1 1 100% !important;
+        }
+        
+        .approval-metrics-footer-v3 {
+            padding: 16px !important;
+        }
+    }
+
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'sales' in user_roles %}
+    
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4 page-header-client">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-check-circle text-primary"></i> 
+            Client Approval Management
+        </h1>
+        <a href="/sales_mainpage" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Statistics Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col">
+                            <div class="stats-label">Pending Pricing</div>
+                            <div class="stats-number text-warning" id="pendingPricingCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col">
+                            <div class="stats-label">Pending Approval</div>
+                            <div class="stats-number text-info" id="readyToSubmitCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col">
+                            <div class="stats-label">Approved</div>
+                            <div class="stats-number text-success" id="approvedCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card border-left-danger">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col">
+                            <div class="stats-label">Rejected</div>
+                            <div class="stats-number text-danger" id="rejectedCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col">
+                            <div class="stats-label">In Negotiation</div>
+                            <div class="stats-number text-primary" id="negotiationCount">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-handshake fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label><i class="fas fa-filter"></i> Filter by Status</label>
+                    <select class="form-control" id="statusFilter">
+                        <option value="">All Items</option>
+                        <option value="pending">Pending Pricing</option>
+                        <option value="priced">Pending Approval</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="pending_negotiation">In Negotiation</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label><i class="fas fa-building"></i> Filter by Client</label>
+                    <select class="form-control" id="clientFilter">
+                        <option value="">All Clients</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label><i class="fas fa-calendar"></i> Date Range</label>
+                    <select class="form-control" id="dateFilter">
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary btn-block" id="applyFilters">
+                        <i class="fas fa-search"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Items Table View -->
+    <div id="itemsContainer">
+        <!-- Items will be loaded here dynamically as grouped tables -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+        <i class="fas fa-inbox"></i>
+        <h4>No Items Found</h4>
+        <p>There are no items matching your current filters.</p>
+    </div>
+
+    <!-- Item Details Modal -->
+    <div class="modal fade" id="itemDetailsModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-info-circle"></i> Item Details
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="itemDetailsContent">
+                    <!-- Details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit for Approval Modal -->
+    <div class="modal fade" id="submitApprovalModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-paper-plane"></i> Submit for Client Approval
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to submit this item for client approval?</p>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        The client will be notified and can review the pricing details.
+                    </div>
+                    <div class="form-group">
+                        <label>Additional Notes (Optional)</label>
+                        <textarea class="form-control" id="submissionNotes" rows="3" 
+                                  placeholder="Add any notes for the client..."></textarea>
+                    </div>
+                    <input type="hidden" id="submitItemId">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info" id="confirmSubmit">
+                        <i class="fas fa-paper-plane"></i> Submit for Approval
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approval History Modal -->
+    <div class="modal fade" id="approvalHistoryModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-history"></i> Approval History
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="approvalHistoryContent" class="timeline">
+                        <!-- Timeline will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have permission to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<!-- DataTables JavaScript -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+console.log('%c🚀 CLIENT APPROVAL PAGE V3.0.0 LOADED', 'background: #e74c3c; color: white; padding: 10px; font-size: 16px; font-weight: bold;');
+console.log('%c📅 Loaded at:', 'color: #3498db; font-weight: bold;', new Date().toLocaleString());
+console.log('%c🎨 Template Version: 3.0.0 - Complete Reconstruction', 'color: #27ae60; font-weight: bold;');
+console.log('%c🔧 Metrics Footer: Using V3 naming convention', 'color: #9b59b6; font-weight: bold;');
+
+$(document).ready(function() {
+    console.log('Client Approval page loaded');
+    
+    // Load initial data
+    loadItems();
+    loadClients();
+    updateStatistics();
+    
+    // Filter handlers
+    $('#applyFilters').click(function() {
+        loadItems();
+    });
+    
+    $('#statusFilter, #clientFilter, #dateFilter').change(function() {
+        loadItems();
+    });
+    
+    // Submit for approval handler
+    $(document).on('click', '.btn-submit-approval', function() {
+        const itemId = $(this).data('item-id');
+        $('#submitItemId').val(itemId);
+        $('#submissionNotes').val('');
+        $('#submitApprovalModal').modal('show');
+    });
+    
+    $('#confirmSubmit').click(function() {
+        const itemId = $('#submitItemId').val();
+        const notes = $('#submissionNotes').val();
+        submitForApproval(itemId, notes);
+    });
+    
+    // Approve item handler
+    $(document).on('click', '.btn-approve-item', function() {
+        const itemId = $(this).data('item-id');
+        Swal.fire({
+            title: 'Approve Item?',
+            text: 'Are you sure you want to approve this item?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#27ae60',
+            cancelButtonColor: '#95a5a6',
+            confirmButtonText: '<i class="fas fa-check"></i> Yes, Approve',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                approveItem(itemId);
+            }
+        });
+    });
+    
+    // Reject item handler
+    $(document).on('click', '.btn-reject-item', function() {
+        const itemId = $(this).data('item-id');
+        Swal.fire({
+            title: 'Reject Item?',
+            text: 'Are you sure you want to reject this item?',
+            icon: 'warning',
+            input: 'textarea',
+            inputLabel: 'Rejection Reason (optional)',
+            inputPlaceholder: 'Enter reason for rejection...',
+            showCancelButton: true,
+            confirmButtonColor: '#e74c3c',
+            cancelButtonColor: '#95a5a6',
+            confirmButtonText: '<i class="fas fa-times"></i> Yes, Reject',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                rejectItem(itemId, result.value || '');
+            }
+        });
+    });
+    
+    // Negotiate price handler
+    $(document).on('click', '.btn-negotiate-item', function() {
+        const itemId = $(this).data('item-id');
+        const unitPrice = parseFloat($(this).data('unit-price')) || 0;
+        const totalPrice = parseFloat($(this).data('total-price')) || 0;
+        const quantity = parseFloat($(this).data('quantity')) || 1;
+        const itemName = $(this).data('item-name') || 'Unnamed Item';
+        const sellType = $(this).data('sell-type') || 'rent';
+        const rentalDays = parseInt($(this).data('rental-days')) || 1;
+        const includeDays = $(this).data('include-days') === 'true';
+        const includeQty = $(this).data('include-qty') === 'true';
+        const dimensionCalc = $(this).data('dimension-calc') || '';
+        
+        // Calculate effective values
+        const effectiveDays = (sellType === 'rent' && includeDays) ? rentalDays : 1;
+        const effectiveQty = includeQty ? quantity : 1;
+        
+        // Build formula display
+        let formulaHtml = '';
+        if (includeQty || effectiveDays > 1 || dimensionCalc) {
+            const formulaParts = [];
+            formulaParts.push(`<span style="color: #667eea;">Unit Price</span>`);
+            if (includeQty) {
+                formulaParts.push(`<span style="color: #764ba2;">Qty (${quantity})</span>`);
+            }
+            if (effectiveDays > 1) {
+                formulaParts.push(`<span style="color: #f59e0b;">Days (${rentalDays})</span>`);
+            }
+            if (dimensionCalc) {
+                formulaParts.push(`<span style="color: #10b981;">Dimensions (${dimensionCalc})</span>`);
+            }
+            
+            formulaHtml = `
+                <div style="background: #f0f9ff; border: 2px dashed #3b82f6; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; margin-bottom: 10px;">
+                        <i class="fas fa-calculator" style="color: #3b82f6; font-size: 1.2em;"></i>
+                        <strong style="color: #1e40af; margin-left: 8px;">Pricing Formula Applied</strong>
+                    </div>
+                    <div style="text-align: center; font-size: 1.1em; color: #1e3a8a;">
+                        ${formulaParts.join(' <span style="color: #94a3b8;">×</span> ')}
+                        <span style="color: #94a3b8; margin: 0 8px;">=</span>
+                        <strong style="color: #1e40af; font-size: 1.2em;">Total Price</strong>
+                    </div>
+                </div>
+            `;
+        }
+        
+        Swal.fire({
+            title: '<i class="fas fa-handshake mr-2" style="color: #f59e0b;"></i>Negotiate Price',
+            html: `
+                <div class="text-left" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <!-- Item Info Header -->
+                    <div class="alert" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);">
+                        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                            <i class="fas fa-cube" style="font-size: 2em; margin-right: 15px; opacity: 0.9;"></i>
+                            <div style="flex: 1;">
+                                <h6 style="margin: 0; font-size: 1.1em; font-weight: 600; opacity: 0.95;">Item Details</h6>
+                                <p style="margin: 5px 0 0 0; font-size: 1.2em; font-weight: 700;">${itemName}</p>
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; backdrop-filter: blur(10px);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="opacity: 0.95;"><i class="fas fa-tag mr-2"></i>Unit Selling Price:</span>
+                                <strong style="font-size: 1.2em;">EGP ${unitPrice.toFixed(2)}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="opacity: 0.95;"><i class="fas fa-boxes mr-2"></i>Quantity:</span>
+                                <strong style="font-size: 1.1em;">${quantity} pcs</strong>
+                            </div>
+                            <hr style="border-color: rgba(255,255,255,0.3); margin: 10px 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="opacity: 0.95; font-size: 1.05em;"><i class="fas fa-calculator mr-2"></i>Total Selling Price:</span>
+                                <strong style="font-size: 1.3em; color: #ffd700;">EGP ${totalPrice.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${formulaHtml}
+                    
+                    <!-- Expected Price Input -->
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="font-weight-bold" style="color: #333; font-size: 1.05em; margin-bottom: 8px; display: block;">
+                            <i class="fas fa-coins mr-2" style="color: #f59e0b;"></i>Client Expected Price per Unit (EGP) 
+                            <span class="text-danger">*</span>
+                        </label>
+                        <div style="position: relative; display: inline-block; width: 100%;">
+                            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #6b7280; font-weight: 600; font-size: 1em; z-index: 10; pointer-events: none;">EGP</span>
+                            <input type="number" id="expectedPrice" class="swal2-input" placeholder="0.00" step="0.01" min="0" 
+                                   style="width: 100%; margin: 0; padding: 12px 15px 12px 55px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1.1em; transition: all 0.3s; box-sizing: border-box;" 
+                                   onfocus="this.style.borderColor='#f59e0b'; this.style.boxShadow='0 0 0 3px rgba(245, 158, 11, 0.1)';" 
+                                   onblur="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none';">
+                        </div>
+                        <small class="text-muted" style="display: block; margin-top: 6px;">
+                            <i class="fas fa-lightbulb mr-1" style="color: #fbbf24;"></i>Enter the price per unit your client is willing to pay
+                        </small>
+                    </div>
+                    
+                    <!-- Negotiation Reason -->
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label class="font-weight-bold" style="color: #333; font-size: 1.05em; margin-bottom: 8px; display: block;">
+                            <i class="fas fa-comment-dots mr-2" style="color: #f59e0b;"></i>Negotiation Reason 
+                            <span class="text-danger">*</span>
+                        </label>
+                        <textarea id="negotiationReason" class="swal2-textarea" 
+                                  placeholder="E.g., 'Unit price too high', 'Competitor offers EGP X per unit', 'Client budget is EGP Y per item', etc." 
+                                  style="width: 100%; height: 110px; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1em; resize: vertical; transition: border-color 0.3s;" 
+                                  onfocus="this.style.borderColor='#f59e0b'; this.style.boxShadow='0 0 0 3px rgba(245, 158, 11, 0.1)';" 
+                                  onblur="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none';"></textarea>
+                        <small class="text-muted" style="display: block; margin-top: 6px;">
+                            <i class="fas fa-info-circle mr-1" style="color: #3b82f6;"></i>Provide clear justification for the price negotiation request
+                        </small>
+                    </div>
+                    
+                    <!-- Workflow Alert -->
+                    <div class="alert" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #fbbf24; border-radius: 10px; padding: 15px; margin-bottom: 0;">
+                        <div style="display: flex; align-items: start;">
+                            <i class="fas fa-route" style="color: #d97706; font-size: 1.5em; margin-right: 12px; margin-top: 2px;"></i>
+                            <div>
+                                <strong style="color: #92400e; display: block; margin-bottom: 5px;">Approval Workflow</strong>
+                                <small style="color: #78350f; line-height: 1.5;">
+                                    Your negotiation request will be sent to <strong>Sales Head</strong> for review. 
+                                    If approved, it will proceed to the pricing team for re-costing and re-pricing.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            icon: null,
+            width: '650px',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fas fa-paper-plane mr-2"></i>Submit to Sales Head',
+            cancelButtonText: '<i class="fas fa-times mr-2"></i>Cancel',
+            buttonsStyling: true,
+            customClass: {
+                confirmButton: 'btn btn-lg',
+                cancelButton: 'btn btn-lg',
+                popup: 'animate__animated animate__fadeIn'
+            },
+            preConfirm: () => {
+                const expectedPrice = document.getElementById('expectedPrice').value;
+                const reason = document.getElementById('negotiationReason').value;
+                
+                if (!expectedPrice || parseFloat(expectedPrice) <= 0) {
+                    Swal.showValidationMessage('<i class="fas fa-exclamation-circle mr-2"></i>Please enter a valid expected price');
+                    return false;
+                }
+                
+                if (!reason || reason.trim() === '') {
+                    Swal.showValidationMessage('<i class="fas fa-exclamation-circle mr-2"></i>Please provide a negotiation reason');
+                    return false;
+                }
+                
+                if (parseFloat(expectedPrice) >= unitPrice) {
+                    Swal.showValidationMessage('<i class="fas fa-exclamation-circle mr-2"></i>Expected price should be lower than current price');
+                    return false;
+                }
+                
+                return {
+                    expected_price: parseFloat(expectedPrice),
+                    reason: reason.trim()
+                };
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                negotiateItem(itemId, result.value.reason, result.value.expected_price);
+            }
+        });
+    });
+    
+    // View details handler
+    $(document).on('click', '.btn-view-details', function() {
+        const itemId = $(this).data('item-id');
+        loadItemDetails(itemId);
+    });
+    
+    // View history handler
+    $(document).on('click', '.btn-view-history', function() {
+        const itemId = $(this).data('item-id');
+        loadApprovalHistory(itemId);
+    });
+    
+    function loadItems() {
+        const status = $('#statusFilter').val();
+        const client = $('#clientFilter').val();
+        const dateRange = $('#dateFilter').val();
+        
+        $.ajax({
+            url: '/api/client-approval/items',
+            method: 'GET',
+            data: { status, client, date_range: dateRange },
+            success: function(response) {
+                if (response.success) {
+                    renderItems(response.items);
+                    updateStatistics();
+                } else {
+                    Swal.fire('Error', response.message, 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to load items', 'error');
+            }
+        });
+    }
+    
+    function renderItems(items) {
+        const container = $('#itemsContainer');
+        
+        // Destroy all existing DataTables before clearing
+        container.find('table.dataTable').each(function() {
+            if ($.fn.DataTable.isDataTable(this)) {
+                $(this).DataTable().destroy();
+            }
+        });
+        
+        container.empty();
+        
+        if (items.length === 0) {
+            $('#emptyState').show();
+            return;
+        }
+        
+        $('#emptyState').hide();
+        
+        // Group items by request_id
+        const groupedItems = {};
+        items.forEach(item => {
+            if (!groupedItems[item.request_id]) {
+                groupedItems[item.request_id] = {
+                    request_id: item.request_id,
+                    client_name: item.client_name,
+                    sales_added_date: item.sales_added_date,
+                    items: []
+                };
+            }
+            groupedItems[item.request_id].items.push(item);
+        });
+        
+        // Sort request groups by request_id DESC (newest first)
+        const sortedGroups = Object.values(groupedItems).sort((a, b) => b.request_id - a.request_id);
+        
+        // Render each request group as a table
+        sortedGroups.forEach(group => {
+            let totalCost = 0;
+            let totalSell = 0;
+            let totalItems = group.items.length;
+            
+            // Calculate totals - Use STORED values from database (pre-calculated with formula)
+            group.items.forEach(item => {
+                // Use the pre-calculated total_cost and total_sell from database
+                // These were calculated with the formula when operations/sales set them
+                if (item.total_cost) {
+                    totalCost += parseFloat(item.total_cost);
+                }
+                if (item.total_sell) {
+                    totalSell += parseFloat(item.total_sell);
+                }
+            });
+            
+            const totalProfit = totalSell - totalCost;
+            const profitMargin = totalCost > 0 ? ((totalProfit / totalCost) * 100).toFixed(1) : 0;
+            
+            const tableId = `approvalTable_${group.request_id}`;
+            
+            // Determine overall status for border color
+            let overallStatus = 'pending';
+            let hasApproved = group.items.some(item => item.approval_status === 'approved');
+            let hasRejected = group.items.some(item => item.approval_status === 'rejected');
+            let hasNegotiation = group.items.some(item => item.approval_status === 'pending_negotiation');
+            
+            if (hasApproved && !hasRejected) {
+                overallStatus = 'approved';
+            } else if (hasRejected) {
+                overallStatus = 'rejected';
+            } else if (hasNegotiation) {
+                overallStatus = 'pending_negotiation';
+            }
+            
+            // Border colors based on status (thinner, more professional)
+            const borderColors = {
+                'approved': 'border-left: 3px solid #27ae60 !important;',
+                'rejected': 'border-left: 3px solid #e74c3c !important;',
+                'pending_negotiation': 'border-left: 3px solid #e67e22 !important;',
+                'pending': 'border-left: 3px solid #95a5a6 !important;'
+            };
+            
+            const requestCard = `
+                <div class="request-group-card" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 24px; overflow: hidden; border: 1px solid #e5e7eb;">
+                    <!-- Request Header - Clean Design -->
+                    <div class="request-header" style="background: #fff !important; padding: 20px 24px !important; border-bottom: 1px solid #e5e7eb !important; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <h5 style="color: #1f2937 !important; margin: 0 !important; font-weight: 700 !important; font-size: 1.15rem !important;">
+                                <i class="fas fa-file-alt" style="color: #3b82f6 !important; margin-right: 8px;"></i>Request #${group.request_id}
+                            </h5>
+                            <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-building" style="margin-right: 6px;"></i>${group.client_name || 'N/A'}</span>
+                            <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-calendar" style="margin-right: 6px;"></i>${new Date(group.sales_added_date).toLocaleDateString()}</span>
+                            <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-cubes" style="margin-right: 6px;"></i>${totalItems} Item${totalItems > 1 ? 's' : ''}</span>
+                        </div>
+                        <div>
+                            <span class="badge" style="background: ${overallStatus === 'approved' ? '#dcfce7' : overallStatus === 'rejected' ? '#fee2e2' : overallStatus === 'pending_negotiation' ? '#ffedd5' : '#f3f4f6'}; color: ${overallStatus === 'approved' ? '#166534' : overallStatus === 'rejected' ? '#991b1b' : overallStatus === 'pending_negotiation' ? '#9a3412' : '#374151'}; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 0.8rem;">${overallStatus.replace('_', ' ').toUpperCase()}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Request Summary - ABOVE Table -->
+                    <div class="request-metrics" style="background: #f8fafc; padding: 16px 24px; display: flex; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #e5e7eb;">
+                        <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Items</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #3b82f6;">${totalItems}</div>
+                        </div>
+                        <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Cost</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #ef4444;">EGP ${totalCost.toFixed(2)}</div>
+                        </div>
+                        <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Selling</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #22c55e;">EGP ${totalSell.toFixed(2)}</div>
+                        </div>
+                        <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Profit</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #8b5cf6;">EGP ${totalProfit.toFixed(2)}</div>
+                        </div>
+                        <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Profit Margin</div>
+                            <div style="font-size: 1.4rem; font-weight: 700; color: #f59e0b;">${profitMargin}%</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Items Table - Clean Design -->
+                    <div class="table-responsive" style="background: #fff;">
+                        <table id="${tableId}" class="table approval-table mb-0" style="width:100%; background: #fff;">
+                            <thead style="background: #f9fafb;">
+                                <tr>
+                                    <th style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Item Name</th>
+                                    <th style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Description</th>
+                                    <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Dimensions</th>
+                                    <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Qty</th>
+                                    <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Cost/Item</th>
+                                    <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Sell/Item</th>
+                                    <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Total</th>
+                                    <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb; min-width: 100px;">Status</th>
+                                    <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb; min-width: 160px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${renderTableRows(group.items)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            container.append(requestCard);
+            
+            // Debug logging for this request
+            console.log('%c✅ METRICS FOOTER LOADED for Request #' + group.request_id, 'background: #2ecc71; color: white; padding: 5px; font-weight: bold;');
+            console.log('Total Items:', totalItems);
+            console.log('Total Cost:', totalCost.toFixed(2));
+            console.log('Total Selling:', totalSell.toFixed(2));
+            console.log('Profit:', totalProfit.toFixed(2));
+            console.log('Margin:', profitMargin + '%');
+            
+            // Initialize DataTable for this request table
+            setTimeout(() => {
+                $(`#${tableId}`).DataTable({
+                    "paging": true,
+                    "searching": true,
+                    "ordering": false, // Disable ordering - use backend order (DESC by ID)
+                    "info": true,
+                    "pageLength": 10,
+                    "columnDefs": [
+                        { "className": "text-center", "targets": [2, 3, 7, 8] },
+                        { "className": "text-right", "targets": [4, 5, 6] }
+                    ],
+                    "language": {
+                        "search": "Search items:",
+                        "lengthMenu": "Show _MENU_ items per page",
+                        "info": "Showing _START_ to _END_ of _TOTAL_ items",
+                        "paginate": {
+                            "first": "First",
+                            "last": "Last",
+                            "next": "Next",
+                            "previous": "Previous"
+                        }
+                    }
+                });
+            }, 100);
+        });
+    }
+    
+    function renderTableRows(items) {
+        return items.map(item => {
+            const hasCost = item.cost_per_item && parseFloat(item.cost_per_item) > 0;
+            const hasSelling = item.sell_per_item && parseFloat(item.sell_per_item) > 0;
+            const hasPricing = hasCost && hasSelling;
+            
+            // Use STORED total_sell from database (calculated with formula in backend)
+            const itemTotal = item.total_sell ? parseFloat(item.total_sell) : 0;
+            const itemProfit = hasPricing ? (parseFloat(item.sell_per_item) - parseFloat(item.cost_per_item)).toFixed(2) : '0.00';
+            
+            // Determine status and badge display
+            let statusClass = '';
+            let statusText = '';
+            let statusBadgeClass = '';
+            
+            if (item.approval_status === 'approved') {
+                statusClass = 'status-approved';
+                statusText = '✓ APPROVED';
+                statusBadgeClass = 'status-approved';
+            } else if (item.approval_status === 'rejected') {
+                statusClass = 'status-rejected';
+                statusText = '✗ REJECTED';
+                statusBadgeClass = 'status-rejected';
+            } else if (item.approval_status === 'pending_negotiation' || item.negotiation_status === 'pending_negotiation') {
+                statusClass = 'status-pending-negotiation';
+                statusText = `🤝 NEGOTIATION #${item.negotiation_count || 1}`;
+                statusBadgeClass = 'status-pending-negotiation';
+            } else if (!hasCost) {
+                statusClass = 'status-no-cost';
+                statusText = '⚠ NO COST';
+                statusBadgeClass = 'status-no-cost';
+            } else if (!hasSelling) {
+                statusClass = 'status-no-selling';
+                statusText = '⚠ NO SELLING';
+                statusBadgeClass = 'status-no-selling';
+            } else {
+                statusClass = 'status-pending';
+                statusText = '⏸ PENDING';
+                statusBadgeClass = 'status-pending';
+            }
+            
+            // Format dimensions if they exist
+            let dimensionsDisplay = '-';
+            if (item.width || item.height || item.depth) {
+                const dims = [];
+                if (item.width) dims.push(`W: ${item.width}`);
+                if (item.height) dims.push(`H: ${item.height}`);
+                if (item.depth) dims.push(`D: ${item.depth}`);
+                dimensionsDisplay = `<small class="text-info"><i class="fas fa-ruler-combined"></i> ${dims.join(' × ')}</small>`;
+            }
+            
+            return `
+                <tr class="${statusClass}">
+                    <td>
+                        <strong><i class="fas fa-box"></i> ${item.item_name || 'Unnamed Item'}</strong>
+                    </td>
+                    <td>
+                        <small class="text-muted">${item.description ? (item.description.length > 50 ? item.description.substring(0, 50) + '...' : item.description) : 'N/A'}</small>
+                    </td>
+                    <td class="text-center">
+                        ${dimensionsDisplay}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge badge-info">${item.qty || 0}</span>
+                    </td>
+                    <td class="text-right">
+                        <span class="table-price cost">
+                            ${hasCost ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : '-'}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <span class="table-price sell">
+                            ${hasSelling ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : '-'}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div>
+                            <span class="table-price sell">EGP ${itemTotal.toFixed(2)}</span>
+                        </div>
+                        ${hasPricing ? `
+                            <div>
+                                <small class="table-price profit">
+                                    <i class="fas fa-arrow-up"></i> ${itemProfit}
+                                </small>
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td class="text-center">
+                        <span class="status-badge ${statusBadgeClass}">${statusText}</span>
+                        ${item.submitted_for_approval_date ? `
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock"></i> ${new Date(item.submitted_for_approval_date).toLocaleDateString()}
+                                </small>
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-view-details" data-item-id="${item.id}" title="View Details" style="background: #f3f4f6; color: #374151; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        
+                        ${hasPricing && (statusBadgeClass === 'status-pending') ? `
+                            <button class="btn btn-sm btn-approve-item" data-item-id="${item.id}" title="Approve Item" style="background: #22c55e; color: white; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-negotiate-item" data-item-id="${item.id}" data-unit-price="${parseFloat(item.sell_per_item).toFixed(2)}" data-total-price="${itemTotal}" data-quantity="${item.qty}" data-item-name="${item.item_name || item.name || 'Item'}" data-sell-type="${item.sell_type || 'rent'}" data-rental-days="${item.rental_days || 1}" data-include-days="${item.include_days_in_calc !== false ? 'true' : 'false'}" data-include-qty="${item.include_qty_in_calc !== false ? 'true' : 'false'}" data-dimension-calc="${item.dimension_calc || ''}" title="Negotiate Price" style="background: #f59e0b; color: white; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
+                                <i class="fas fa-handshake"></i>
+                            </button>
+                            <button class="btn btn-sm btn-reject-item" data-item-id="${item.id}" title="Reject Item" style="background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        ` : ''}
+                        
+                        ${statusBadgeClass === 'status-approved' || statusBadgeClass === 'status-rejected' ? `
+                            <button class="btn btn-sm btn-view-history" data-item-id="${item.id}" title="View History" style="background: #e5e7eb; color: #6b7280; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
+                                <i class="fas fa-history"></i>
+                            </button>
+                        ` : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function updateStatistics() {
+        $.get('/api/client-approval/statistics', function(response) {
+            if (response.success) {
+                $('#pendingPricingCount').text(response.stats.pending_pricing || 0);
+                $('#readyToSubmitCount').text(response.stats.ready_to_submit || 0);
+                $('#approvedCount').text(response.stats.approved || 0);
+                $('#rejectedCount').text(response.stats.rejected || 0);
+                $('#negotiationCount').text(response.stats.in_negotiation || 0);
+            }
+        });
+    }
+    
+    function loadClients() {
+        $.get('/api/clients', function(response) {
+            if (response.success) {
+                const select = $('#clientFilter');
+                response.clients.forEach(client => {
+                    select.append(`<option value="${client.id}">${client.client_name}</option>`);
+                });
+            }
+        });
+    }
+    
+    function loadItemDetails(itemId) {
+        $.get(`/api/client-approval/items/${itemId}`, function(response) {
+            if (response.success) {
+                const item = response.item;
+                const content = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-primary"><i class="fas fa-info-circle"></i> Item Information</h6>
+                            <table class="table table-sm">
+                                <tr><th>Item Name:</th><td>${item.item_name}</td></tr>
+                                <tr><th>Request ID:</th><td>#${item.request_id}</td></tr>
+                                <tr><th>Client:</th><td>${item.client_name || 'N/A'}</td></tr>
+                                <tr><th>Quantity:</th><td>${item.qty}</td></tr>
+                                <tr><th>Description:</th><td>${item.description || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-success"><i class="fas fa-dollar-sign"></i> Pricing Information</h6>
+                            <table class="table table-sm">
+                                <tr><th>Cost per Item:</th><td class="text-danger">EGP ${item.cost_per_item || '0.00'}</td></tr>
+                                <tr><th>Sell per Item:</th><td class="text-success">EGP ${item.sell_per_item || '0.00'}</td></tr>
+                                <tr><th>Total Cost:</th><td class="text-danger">EGP ${item.total_cost ? parseFloat(item.total_cost).toFixed(2) : (item.cost_per_item * item.qty).toFixed(2)}</td></tr>
+                                <tr><th>Total Sell:</th><td class="text-success">EGP ${item.total_sell ? parseFloat(item.total_sell).toFixed(2) : (item.sell_per_item * item.qty).toFixed(2)}</td></tr>
+                                <tr><th>Status:</th><td><span class="badge status-${item.approval_status}">${(item.approval_status || 'pending').toUpperCase()}</span></td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    ${item.client_feedback ? `
+                        <div class="mt-3">
+                            <h6 class="text-info"><i class="fas fa-comment"></i> Client Feedback</h6>
+                            <div class="alert alert-info">${item.client_feedback}</div>
+                        </div>
+                    ` : ''}
+                `;
+                
+                $('#itemDetailsContent').html(content);
+                $('#itemDetailsModal').modal('show');
+            }
+        });
+    }
+    
+    function loadApprovalHistory(itemId) {
+        $.get(`/api/client-approval/items/${itemId}/history`, function(response) {
+            if (response.success) {
+                const container = $('#approvalHistoryContent');
+                container.empty();
+                
+                if (response.history.length === 0) {
+                    container.html('<p class="text-muted">No approval history available.</p>');
+                } else {
+                    response.history.forEach(entry => {
+                        const item = `
+                            <div class="timeline-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${entry.action_type.toUpperCase()}</strong>
+                                    <small class="text-muted">${new Date(entry.action_date).toLocaleString()}</small>
+                                </div>
+                                <div class="text-muted">By: ${entry.action_by_name || 'System'}</div>
+                                <div class="mt-2">
+                                    <span class="badge badge-secondary">${entry.previous_status || 'N/A'}</span>
+                                    <i class="fas fa-arrow-right mx-2"></i>
+                                    <span class="badge badge-primary">${entry.new_status}</span>
+                                </div>
+                                ${entry.notes ? `
+                                    <div class="mt-2 alert alert-light">${entry.notes}</div>
+                                ` : ''}
+                            </div>
+                        `;
+                        container.append(item);
+                    });
+                }
+                
+                $('#approvalHistoryModal').modal('show');
+            }
+        });
+    }
+    
+    function submitForApproval(itemId, notes) {
+        $.ajax({
+            url: `/api/client-approval/items/${itemId}/submit`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ notes }),
+            success: function(response) {
+                if (response.success) {
+                    $('#submitApprovalModal').modal('hide');
+                    Swal.fire('Success', 'Item submitted for client approval', 'success');
+                    loadItems();
+                } else {
+                    Swal.fire('Error', response.message, 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to submit item for approval', 'error');
+            }
+        });
+    }
+    
+    function approveItem(itemId) {
+        $.ajax({
+            url: `/api/client-approval/items/${itemId}/approve`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ approved: true }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Item Approved!',
+                        text: 'The item has been successfully approved.',
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                    loadItems();
+                } else {
+                    Swal.fire('Error', response.message, 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to approve item', 'error');
+            }
+        });
+    }
+    
+    function rejectItem(itemId, reason) {
+        $.ajax({
+            url: `/api/client-approval/items/${itemId}/reject`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ rejected: true, reason: reason }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Item Rejected',
+                        text: 'The item has been rejected.',
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                    loadItems();
+                } else {
+                    Swal.fire('Error', response.message, 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to reject item', 'error');
+            }
+        });
+    }
+    
+    function negotiateItem(itemId, reason, expectedPrice) {
+        $.ajax({
+            url: `/api/client-approval/items/${itemId}/negotiate`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ 
+                reason: reason,
+                expected_price: expectedPrice
+            }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Negotiation Submitted!',
+                        html: `
+                            <p><i class="fas fa-paper-plane text-success mr-2"></i>${response.message}</p>
+                            <p class="text-muted small">Negotiation round: #${response.negotiation_count || 1}</p>
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-route mr-2"></i>
+                                <strong>Next Steps:</strong><br>
+                                1. Sales Head Review<br>
+                                2. Pricing Team (if approved)<br>
+                                3. Return to you with new price
+                            </div>
+                        `,
+                        showConfirmButton: true,
+                        timer: 5000
+                    });
+                    loadItems();
+                    updateStatistics();
+                } else {
+                    Swal.fire('Error', response.error || response.message, 'error');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'Failed to request negotiation';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMsg = xhr.responseJSON.error;
+                }
+                Swal.fire('Error', errorMsg, 'error');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,656 @@
+{% extends "main.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endblock %}
+
+{% block body %}
+{% set user_roles = session.get('roles', []) %}
+<div class="container-fluid client-management-page">
+    {% if 'admin' in user_roles or 'client_management' in user_roles %}
+    <header class="client-page-header">
+        <div>
+            <h1>Client Directory</h1>
+        </div>
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addClientModal">
+            <i class="fas fa-user-plus mr-2" aria-hidden="true"></i>Add Client
+        </button>
+    </header>
+
+    <section class="client-summary-band" aria-label="Client summary">
+        <div class="client-summary-item">
+            <span class="client-summary-icon client-summary-icon--primary"><i class="fas fa-users" aria-hidden="true"></i></span>
+            <span><strong id="clientTotalCount">0</strong><small>Total Clients</small></span>
+        </div>
+        <div class="client-summary-item">
+            <span class="client-summary-icon client-summary-icon--accent"><i class="fas fa-building" aria-hidden="true"></i></span>
+            <span><strong id="clientCompanyCount">0</strong><small>Companies</small></span>
+        </div>
+        <div class="client-summary-item">
+            <span class="client-summary-icon client-summary-icon--info"><i class="fas fa-comments" aria-hidden="true"></i></span>
+            <span><strong id="clientChannelCount">0</strong><small>Contact Channels</small></span>
+        </div>
+        <div class="client-summary-item">
+            <span class="client-summary-icon client-summary-icon--warning"><i class="fas fa-copy" aria-hidden="true"></i></span>
+            <span><strong id="clientDuplicateCount">0</strong><small>Potential Duplicates</small></span>
+        </div>
+    </section>
+
+    <section class="client-workspace" aria-label="Clients">
+        <div class="client-toolbar">
+            <label class="client-search-field" for="clientSearch">
+                <span class="sr-only">Search clients</span>
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="search" id="clientSearch" class="form-control" placeholder="Search name, email, phone or company" autocomplete="off">
+            </label>
+            <label class="client-filter-field" for="clientCompanyFilter">
+                <span>Company</span>
+                <select id="clientCompanyFilter" class="form-control">
+                    <option value="">All Companies</option>
+                </select>
+            </label>
+            <label class="client-filter-field" for="clientChannelFilter">
+                <span>Contact Channel</span>
+                <select id="clientChannelFilter" class="form-control">
+                    <option value="">All Channels</option>
+                </select>
+            </label>
+            <button type="button" class="btn btn-outline-secondary client-refresh-btn" id="refreshClientsBtn" title="Refresh clients" aria-label="Refresh clients">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <div class="table-responsive client-table-viewport">
+            <table id="clients-table" class="table client-data-table" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Company</th>
+                        <th>Contact</th>
+                        <th>Preferred Channel</th>
+                        <th>Added</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="modal fade client-form-modal" id="addClientModal" tabindex="-1" role="dialog" aria-labelledby="addClientModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="addClientModalLabel"><i class="fas fa-user-plus mr-2" aria-hidden="true"></i>Add Client</h2>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addClientForm">
+                        <fieldset class="client-form-section">
+                            <legend>Client Details</legend>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group sales-party-field">
+                                        <label for="parentCompany">Parent Company <span class="text-danger">*</span></label>
+                                        <select class="form-control sales-party-select" id="parentCompany" name="parent_company_id" required>
+                                            <option value="">Select Parent Company...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="clientName">Client / Contact Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="clientName" name="client_name" autocomplete="name" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="jobTitle">Job Title / Role</label>
+                                        <input type="text" class="form-control" id="jobTitle" name="job_title" autocomplete="organization-title">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="contactChannel">Preferred Contact Channel</label>
+                                        <select class="form-control" id="contactChannel" name="preferred_contact_channel">
+                                            <option value="Phone">Phone</option>
+                                            <option value="Email">Email</option>
+                                            <option value="WhatsApp">WhatsApp</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="client-form-section">
+                            <legend>Contact Details</legend>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="mobileNumber">Primary Mobile <span class="text-danger">*</span></label>
+                                        <input type="tel" class="form-control" id="mobileNumber" name="mobile_number" autocomplete="tel" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="secondaryMobileNumber">Secondary Mobile</label>
+                                        <input type="tel" class="form-control" id="secondaryMobileNumber" name="secondary_mobile_number" autocomplete="tel">
+                                    </div>
+                                </div>
+                                <div class="col-md-12">
+                                    <div class="form-group">
+                                        <label for="emailAddress">Email Address <span class="text-danger">*</span></label>
+                                        <input type="email" class="form-control" id="emailAddress" name="email_address" autocomplete="email" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <div class="form-group mb-0">
+                            <label for="additionalNotes">Additional Notes</label>
+                            <textarea class="form-control" id="additionalNotes" name="additional_notes" rows="4"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveClientBtn" form="addClientForm">
+                        <i class="fas fa-save mr-2" aria-hidden="true"></i>Save Client
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade client-form-modal" id="editClientModal" tabindex="-1" role="dialog" aria-labelledby="editClientModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="editClientModalLabel"><i class="fas fa-user-edit mr-2" aria-hidden="true"></i>Edit Client</h2>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editClientForm">
+                        <input type="hidden" id="editClientId" name="client_id">
+                        <fieldset class="client-form-section">
+                            <legend>Client Details</legend>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group sales-party-field">
+                                        <label for="editParentCompany">Parent Company <span class="text-danger">*</span></label>
+                                        <select class="form-control sales-party-select" id="editParentCompany" name="parent_company_id" required>
+                                            <option value="">Select Parent Company...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="editClientName">Client / Contact Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="editClientName" name="client_name" autocomplete="name" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="editJobTitle">Job Title / Role</label>
+                                        <input type="text" class="form-control" id="editJobTitle" name="job_title" autocomplete="organization-title">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="editContactChannel">Preferred Contact Channel</label>
+                                        <select class="form-control" id="editContactChannel" name="preferred_contact_channel">
+                                            <option value="Phone">Phone</option>
+                                            <option value="Email">Email</option>
+                                            <option value="WhatsApp">WhatsApp</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="client-form-section">
+                            <legend>Contact Details</legend>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="editMobileNumber">Primary Mobile <span class="text-danger">*</span></label>
+                                        <input type="tel" class="form-control" id="editMobileNumber" name="mobile_number" autocomplete="tel" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="editSecondaryMobileNumber">Secondary Mobile</label>
+                                        <input type="tel" class="form-control" id="editSecondaryMobileNumber" name="secondary_mobile_number" autocomplete="tel">
+                                    </div>
+                                </div>
+                                <div class="col-md-12">
+                                    <div class="form-group">
+                                        <label for="editEmailAddress">Email Address <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="editEmailAddress" name="email_address" autocomplete="email" inputmode="email" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <div class="form-group mb-0">
+                            <label for="editAdditionalNotes">Additional Notes</label>
+                            <textarea class="form-control" id="editAdditionalNotes" name="additional_notes" rows="4"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="updateClientBtn" form="editClientForm">
+                        <i class="fas fa-save mr-2" aria-hidden="true"></i>Update Client
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>You do not have permission to access Client Management.
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+{% if 'admin' in user_roles or 'client_management' in user_roles %}
+<script>
+$(document).ready(function() {
+    var clientRecords = [];
+
+    function escapeClientText(value) {
+        return $('<div>').text(value === null || value === undefined ? '' : String(value)).html();
+    }
+
+    function clientDuplicateKey(client) {
+        return [
+            client.parent_company_id || '',
+            (client.client_name || '').trim().toLowerCase(),
+            (client.mobile_number || '').trim().toLowerCase(),
+            (client.email_address || '').trim().toLowerCase()
+        ].join('|');
+    }
+
+    function annotateClientDuplicates(clients) {
+        var counts = {};
+        clients.forEach(function(client) {
+            var key = clientDuplicateKey(client);
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        clients.forEach(function(client) {
+            client.is_potential_duplicate = counts[clientDuplicateKey(client)] > 1;
+        });
+        return Object.keys(counts).reduce(function(total, key) {
+            return total + Math.max(0, counts[key] - 1);
+        }, 0);
+    }
+
+    function clientInitials(name) {
+        var parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+        return parts.slice(0, 2).map(function(part) { return part.charAt(0).toUpperCase(); }).join('') || '?';
+    }
+
+    function formatClientDate(value) {
+        if (!value || value === 'N/A') return 'Not recorded';
+        var normalized = String(value).replace(' ', 'T');
+        var date = new Date(normalized);
+        if (isNaN(date.getTime())) return value;
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function contactChannelClass(channel) {
+        var normalized = String(channel || 'Other').toLowerCase();
+        if (normalized === 'phone') return 'client-channel--phone';
+        if (normalized === 'email') return 'client-channel--email';
+        if (normalized === 'whatsapp') return 'client-channel--whatsapp';
+        return 'client-channel--other';
+    }
+
+    function contactChannelIcon(channel) {
+        var normalized = String(channel || 'Other').toLowerCase();
+        if (normalized === 'phone') return 'fas fa-phone';
+        if (normalized === 'email') return 'fas fa-envelope';
+        if (normalized === 'whatsapp') return 'fab fa-whatsapp';
+        return 'fas fa-comment-dots';
+    }
+
+    function updateFilterOptions(clients) {
+        var selectedCompany = $('#clientCompanyFilter').val();
+        var selectedChannel = $('#clientChannelFilter').val();
+        var companies = {};
+        var channels = {};
+
+        clients.forEach(function(client) {
+            if (client.parent_company_name && client.parent_company_name !== 'N/A') companies[client.parent_company_name] = true;
+            if (client.preferred_contact_channel) channels[client.preferred_contact_channel] = true;
+        });
+
+        var $company = $('#clientCompanyFilter').empty().append(new Option('All Companies', ''));
+        Object.keys(companies).sort().forEach(function(name) { $company.append(new Option(name, name)); });
+        var $channel = $('#clientChannelFilter').empty().append(new Option('All Channels', ''));
+        Object.keys(channels).sort().forEach(function(name) { $channel.append(new Option(name, name)); });
+        $company.val(selectedCompany || '');
+        $channel.val(selectedChannel || '');
+    }
+
+    function updateClientSummary(clients, duplicateCount) {
+        var companies = {};
+        var channels = {};
+        clients.forEach(function(client) {
+            if (client.parent_company_id) companies[client.parent_company_id] = true;
+            if (client.preferred_contact_channel) channels[client.preferred_contact_channel] = true;
+        });
+        $('#clientTotalCount').text(clients.length);
+        $('#clientCompanyCount').text(Object.keys(companies).length);
+        $('#clientChannelCount').text(Object.keys(channels).length);
+        $('#clientDuplicateCount').text(duplicateCount);
+    }
+
+    function applyClientMobileLabels(row) {
+        $('#clients-table thead th').each(function(index) {
+            $('td', row).eq(index).attr('data-label', $(this).text().trim());
+        });
+        $(row).addClass('client-table-mobile-card');
+    }
+
+    var table = $('#clients-table').DataTable({
+        ajax: {
+            url: '/api/clients',
+            type: 'GET',
+            dataSrc: function(response) {
+                if (!response.success) return [];
+                clientRecords = response.clients || [];
+                var duplicateCount = annotateClientDuplicates(clientRecords);
+                updateClientSummary(clientRecords, duplicateCount);
+                updateFilterOptions(clientRecords);
+                return clientRecords;
+            }
+        },
+        columns: [
+            {
+                data: null,
+                width: '27%',
+                render: function(data, type, row) {
+                    if (type !== 'display') return [row.client_name, row.job_title, row.email_address, row.id].join(' ');
+                    var duplicateBadge = row.is_potential_duplicate
+                        ? '<span class="potential-duplicate-badge" title="Another record has the same company, name, phone and email">Duplicate</span>'
+                        : '';
+                    return '<div class="client-identity">' +
+                        '<span class="client-avatar" aria-hidden="true">' + escapeClientText(clientInitials(row.client_name)) + '</span>' +
+                        '<span class="client-identity-copy">' +
+                            '<strong>' + escapeClientText(row.client_name || 'Unnamed Client') + duplicateBadge + '</strong>' +
+                            '<small>' + escapeClientText(row.job_title || 'No job title') + ' <span class="client-record-id">#' + escapeClientText(row.id) + '</span></small>' +
+                            '<a href="mailto:' + escapeClientText(row.email_address || '') + '">' + escapeClientText(row.email_address || 'No email') + '</a>' +
+                        '</span>' +
+                    '</div>';
+                }
+            },
+            {
+                data: 'parent_company_name',
+                width: '17%',
+                render: function(data, type) {
+                    if (type !== 'display') return data || '';
+                    return '<span class="client-company-cell"><i class="fas fa-building" aria-hidden="true"></i>' + escapeClientText(data || 'Not assigned') + '</span>';
+                }
+            },
+            {
+                data: null,
+                width: '19%',
+                render: function(data, type, row) {
+                    if (type !== 'display') return [row.mobile_number, row.secondary_mobile_number].join(' ');
+                    var secondary = row.secondary_mobile_number
+                        ? '<a href="tel:' + escapeClientText(row.secondary_mobile_number) + '"><i class="fas fa-phone-alt" aria-hidden="true"></i>' + escapeClientText(row.secondary_mobile_number) + '</a>'
+                        : '<span class="client-contact-empty">No secondary number</span>';
+                    return '<div class="client-contact-cell">' +
+                        '<a href="tel:' + escapeClientText(row.mobile_number || '') + '"><i class="fas fa-mobile-alt" aria-hidden="true"></i>' + escapeClientText(row.mobile_number || 'No mobile') + '</a>' +
+                        secondary +
+                    '</div>';
+                }
+            },
+            {
+                data: 'preferred_contact_channel',
+                width: '14%',
+                render: function(data, type) {
+                    if (type !== 'display') return data || '';
+                    var channel = data || 'Other';
+                    return '<span class="client-channel-badge ' + contactChannelClass(channel) + '"><i class="' + contactChannelIcon(channel) + '" aria-hidden="true"></i>' + escapeClientText(channel) + '</span>';
+                }
+            },
+            {
+                data: null,
+                width: '14%',
+                render: function(data, type, row) {
+                    if (type !== 'display') return row.added_date || '';
+                    return '<div class="client-added-cell"><strong>' + escapeClientText(row.added_by_name || row.added_by || 'Unknown') + '</strong><small>' + escapeClientText(formatClientDate(row.added_date)) + '</small></div>';
+                }
+            },
+            {
+                data: null,
+                orderable: false,
+                searchable: false,
+                width: '9%',
+                className: 'client-actions-column',
+                render: function(data, type, row) {
+                    return '<div class="client-action-group">' +
+                        '<button type="button" class="btn btn-sm btn-primary edit-btn" data-id="' + escapeClientText(row.id) + '" title="Edit client" aria-label="Edit ' + escapeClientText(row.client_name) + '"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-id="' + escapeClientText(row.id) + '" title="Delete client" aria-label="Delete ' + escapeClientText(row.client_name) + '"><i class="fas fa-trash" aria-hidden="true"></i></button>' +
+                    '</div>';
+                }
+            }
+        ],
+        order: [],
+        pageLength: 25,
+        autoWidth: false,
+        deferRender: true,
+        dom: 'rt<"client-table-footer"lip>',
+        language: {
+            emptyTable: 'No clients found',
+            zeroRecords: 'No clients match the current filters',
+            info: 'Showing _START_ to _END_ of _TOTAL_ clients',
+            infoEmpty: 'No clients to show',
+            lengthMenu: 'Rows per page _MENU_',
+            loadingRecords: 'Loading clients...',
+            processing: 'Loading clients...'
+        },
+        rowCallback: function(row) {
+            applyClientMobileLabels(row);
+        }
+    });
+
+    $('#clientSearch').on('input', function() {
+        table.search(this.value).draw();
+    });
+
+    $('#clientCompanyFilter').on('change', function() {
+        var value = $.fn.dataTable.util.escapeRegex(this.value);
+        table.column(1).search(value ? '^' + value + '$' : '', true, false).draw();
+    });
+
+    $('#clientChannelFilter').on('change', function() {
+        var value = $.fn.dataTable.util.escapeRegex(this.value);
+        table.column(3).search(value ? '^' + value + '$' : '', true, false).draw();
+    });
+
+    $('#refreshClientsBtn').on('click', function() {
+        var $button = $(this).prop('disabled', true);
+        $button.find('i').addClass('fa-spin');
+        table.ajax.reload(function() {
+            $button.prop('disabled', false).find('i').removeClass('fa-spin');
+        }, false);
+    });
+
+    function initCompanySelect($select, $modal) {
+        if ($select.hasClass('select2-hidden-accessible')) $select.select2('destroy');
+        $select.select2({
+            placeholder: 'Search for a company...',
+            allowClear: false,
+            width: '100%',
+            dropdownParent: $modal,
+            dropdownCssClass: 'sales-party-select-dropdown',
+            selectionCssClass: 'sales-party-select-selection'
+        });
+    }
+
+    function loadCompanies() {
+        $.get('/api/companies', function(response) {
+            if (!response.success) return;
+            $('#parentCompany, #editParentCompany').each(function() {
+                var $select = $(this).empty().append(new Option('Select Parent Company...', ''));
+                (response.companies || []).forEach(function(company) {
+                    $select.append(new Option(company.company_name, company.id));
+                });
+            });
+            initCompanySelect($('#parentCompany'), $('#addClientModal'));
+            initCompanySelect($('#editParentCompany'), $('#editClientModal'));
+        }).fail(function() {
+            Swal.fire('Error', 'Companies could not be loaded.', 'error');
+        });
+    }
+
+    function setSubmitState($button, loading, label) {
+        $button.prop('disabled', loading);
+        $button.html(loading
+            ? '<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Saving...'
+            : '<i class="fas fa-save mr-2" aria-hidden="true"></i>' + label);
+    }
+
+    function clientFieldSelector(prefix, name) {
+        var fieldId = prefix ? prefix + name : name.charAt(0).toLowerCase() + name.slice(1);
+        return $('#' + fieldId);
+    }
+
+    function clientFormPayload(prefix) {
+        function field(name) {
+            return clientFieldSelector(prefix, name);
+        }
+        return {
+            parent_company_id: field('ParentCompany').val(),
+            client_name: field('ClientName').val().trim(),
+            mobile_number: field('MobileNumber').val().trim(),
+            secondary_mobile_number: field('SecondaryMobileNumber').val().trim(),
+            email_address: field('EmailAddress').val().trim(),
+            job_title: field('JobTitle').val().trim(),
+            preferred_contact_channel: field('ContactChannel').val(),
+            additional_notes: field('AdditionalNotes').val().trim()
+        };
+    }
+
+    $('#addClientForm').on('submit', function(e) {
+        e.preventDefault();
+        if (!this.checkValidity()) {
+            this.reportValidity();
+            return;
+        }
+        var $button = $('#saveClientBtn');
+        setSubmitState($button, true, 'Save Client');
+        $.ajax({
+            url: '/api/clients/add',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(clientFormPayload(''))
+        }).done(function(response) {
+            if (!response.success) {
+                Swal.fire('Error', response.error || 'Client could not be added.', 'error');
+                return;
+            }
+            $('#addClientModal').modal('hide');
+            table.ajax.reload(null, false);
+            Swal.fire('Client Added', 'The client record was saved successfully.', 'success');
+        }).fail(function(xhr) {
+            Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Client could not be added.', 'error');
+        }).always(function() {
+            setSubmitState($button, false, 'Save Client');
+        });
+    });
+
+    $(document).on('click', '.edit-btn', function() {
+        var rowData = table.row($(this).closest('tr')).data();
+        if (!rowData) return;
+        $('#editClientId').val(rowData.id);
+        $('#editClientName').val(rowData.client_name || '');
+        $('#editMobileNumber').val(rowData.mobile_number || '');
+        $('#editSecondaryMobileNumber').val(rowData.secondary_mobile_number || '');
+        $('#editEmailAddress').val(rowData.email_address || '');
+        $('#editJobTitle').val(rowData.job_title || '');
+        $('#editContactChannel').val(rowData.preferred_contact_channel || 'Phone');
+        $('#editAdditionalNotes').val(rowData.additional_notes || '');
+        $('#editParentCompany').val(rowData.parent_company_id || '').trigger('change');
+        $('#editClientModal').modal('show');
+    });
+
+    $('#editClientForm').on('submit', function(e) {
+        e.preventDefault();
+        if (!this.checkValidity()) {
+            this.reportValidity();
+            return;
+        }
+        var clientId = $('#editClientId').val();
+        var $button = $('#updateClientBtn');
+        setSubmitState($button, true, 'Update Client');
+        $.ajax({
+            url: '/api/clients/edit/' + clientId,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(clientFormPayload('edit'))
+        }).done(function(response) {
+            if (!response.success) {
+                Swal.fire('Error', response.error || 'Client could not be updated.', 'error');
+                return;
+            }
+            $('#editClientModal').modal('hide');
+            table.ajax.reload(null, false);
+            Swal.fire('Client Updated', 'The client record was updated successfully.', 'success');
+        }).fail(function(xhr) {
+            Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Client could not be updated.', 'error');
+        }).always(function() {
+            setSubmitState($button, false, 'Update Client');
+        });
+    });
+
+    $(document).on('click', '.delete-btn', function() {
+        var rowData = table.row($(this).closest('tr')).data();
+        if (!rowData) return;
+        Swal.fire({
+            title: 'Delete client?',
+            text: rowData.client_name + ' will be permanently removed.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#b42318',
+            confirmButtonText: 'Delete Client'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+            $.ajax({
+                url: '/api/clients/delete/' + rowData.id,
+                type: 'DELETE'
+            }).done(function(response) {
+                if (!response.success) {
+                    Swal.fire('Error', response.error || 'Client could not be deleted.', 'error');
+                    return;
+                }
+                table.ajax.reload(null, false);
+                Swal.fire('Client Deleted', 'The client record was removed.', 'success');
+            }).fail(function(xhr) {
+                Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Client could not be deleted.', 'error');
+            });
+        });
+    });
+
+    $('#addClientModal').on('hidden.bs.modal', function() {
+        $('#addClientForm')[0].reset();
+        $('#parentCompany').val('').trigger('change');
+    });
+
+    loadCompanies();
+});
+</script>
+{% endif %}
+{% endblock %}

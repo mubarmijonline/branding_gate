@@ -1,0 +1,220 @@
+{% extends "main.html" %}
+
+{% block body %}
+<style>
+  /* Grid View Styles */
+  .grid-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .grid-title {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: #2e59d9;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+
+  .grid-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .grid-item {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    overflow: hidden;
+  }
+
+  .grid-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 2rem 0 rgba(58, 59, 69, 0.2);
+  }
+
+  .grid-item-header {
+    padding: 1.25rem;
+    background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .grid-item-content {
+    padding: 1.25rem;
+  }
+
+  .grid-item-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: #4e73df;
+    text-decoration: none;
+    border-top: 1px solid #e3e6f0;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .grid-item-link:hover {
+    background-color: #f8f9fc;
+    color: #224abe;
+  }
+
+  .grid-item-link i {
+    margin-right: 0.5rem;
+  }
+
+  /* Approval card special styling */
+  .grid-item.approval-card {
+    border: 2px solid #f6c23e;
+  }
+
+  .grid-item.approval-card .grid-item-header {
+    background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);
+  }
+
+  .approval-badge {
+    background-color: #e74a3b;
+    color: white;
+    border-radius: 50%;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.85rem;
+    font-weight: bold;
+    margin-left: auto;
+    min-width: 30px;
+    text-align: center;
+  }
+
+  .approval-badge.zero {
+    background-color: #1cc88a;
+  }
+</style>
+
+<div class="grid-container">
+  <h2 class="grid-title">Management Dashboard</h2>
+  <div class="grid-row" id="management-portals-container">
+    <!-- Management portals will be rendered here by JS -->
+  </div>
+</div>
+
+<!-- Inject user_id as a JS variable for use in AJAX -->
+<script>
+window.sessionUserId = "{{ session['user_id'] }}";
+</script>
+
+<script>
+// Management-specific portals
+const managementPortals = {
+  'approvals': {
+    icon: 'fas fa-clipboard-check',
+    title: 'Pending Approvals',
+    desc: 'Review and approve urgent sales requests that require admin authorization.',
+    link: '/approvals',
+    requiresAdmin: true,
+    badge: true  // Will show pending count badge
+  },
+  'user_team_role': {
+    icon: 'fas fa-users-cog',
+    title: 'User, Team & Role Management',
+    desc: 'Comprehensive management of users, teams, roles, and access controls in one unified interface.',
+    link: '/users'
+  },
+  'parent_company': {
+    icon: 'fas fa-building',
+    title: 'Add Parent Company',
+    desc: 'Add and manage parent company information, structure, and organizational hierarchy.',
+    link: '/company'
+  },
+  'client_management': {
+    icon: 'fas fa-user-tie',
+    title: 'Client Management',
+    desc: 'Manage client contacts and contact persons linked to parent companies.',
+    link: '/client'
+  },
+  'supplier_management': {
+    icon: 'fas fa-truck',
+    title: 'Supplier Management',
+    desc: 'Manage supplier contacts and supplier information linked to parent companies.',
+    link: '/supplier'
+  },
+  'reports': {
+    icon: 'fas fa-chart-bar',
+    title: 'Reports & Analytics',
+    desc: 'Generate reports and view business analytics.',
+    link: '#'
+  },
+  'settings': {
+    icon: 'fas fa-cogs',
+    title: 'System Settings',
+    desc: 'Configure system settings and preferences.',
+    link: '#'
+  }
+};
+
+function renderManagementPortals() {
+  const container = document.getElementById('management-portals-container');
+  container.innerHTML = '';
+  
+  Object.entries(managementPortals).forEach(([key, portal]) => {
+    const isApprovalCard = key === 'approvals';
+    const cardClass = isApprovalCard ? 'grid-item approval-card' : 'grid-item';
+    const badgeHtml = isApprovalCard ? '<span class="approval-badge" id="approval-count-badge">...</span>' : '';
+    
+    container.innerHTML += `
+      <div class="${cardClass}">
+        <div class="grid-item-header">
+          <i class="${portal.icon}"></i>
+          ${portal.title}
+          ${badgeHtml}
+        </div>
+        <div class="grid-item-content">
+          <p>${portal.desc}</p>
+        </div>
+        <a href="${portal.link}" class="grid-item-link">
+          <i class="fas fa-arrow-right"></i>
+          Access Portal
+        </a>
+      </div>
+    `;
+  });
+  
+  // Fetch pending approvals count
+  fetchPendingApprovalsCount();
+}
+
+function fetchPendingApprovalsCount() {
+  fetch('/api/approvals/pending')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const count = data.count || 0;
+        const badge = document.getElementById('approval-count-badge');
+        if (badge) {
+          badge.textContent = count;
+          if (count === 0) {
+            badge.classList.add('zero');
+            badge.textContent = '✓';
+          }
+        }
+      }
+    })
+    .catch(error => {
+      console.log('Could not fetch approvals count:', error);
+      const badge = document.getElementById('approval-count-badge');
+      if (badge) {
+        badge.textContent = '!';
+        badge.style.backgroundColor = '#858796';
+      }
+    });
+}
+
+// Render management portals when document is ready
+document.addEventListener('DOMContentLoaded', renderManagementPortals);
+</script>
+{% endblock %}

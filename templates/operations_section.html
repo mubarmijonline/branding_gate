@@ -1,0 +1,370 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+    .section-hero {
+        background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);
+        color: #1a1a2e;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .section-hero h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .section-hero p { opacity: 0.8; margin-bottom: 0; font-size: 0.95rem; }
+
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        height: 100%;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.18); }
+    .stat-card .card-body { padding: 1.25rem; }
+    .stat-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; }
+
+    .feature-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 0.15rem 1.75rem rgba(58,59,69,.1);
+        transition: transform .2s, box-shadow .2s;
+        overflow: hidden;
+        height: 100%;
+    }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 .5rem 2rem rgba(58,59,69,.2); }
+    .feature-card .card-header { border: none; padding: 1.25rem; }
+    .feature-card .card-header .card-icon { font-size: 2rem; opacity: .85; }
+    .feature-card .card-header h5 { margin-bottom: 0; }
+    .feature-card .card-header small { opacity: .8; }
+    .feature-card .card-body { padding: 1.25rem; }
+    .feature-card .card-body p { color: #6c757d; font-size: .9rem; }
+
+    .mini-stat { border-right: 1px solid #e3e6f0; }
+    .mini-stat:last-child { border-right: none; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'operation' in user_roles or 'operations' in user_roles %}
+
+    <!-- Hero Header -->
+    <div class="section-hero">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <h1><i class="fas fa-cogs mr-2"></i>Operations Department</h1>
+                <p>Manage costing, approved items, workflow timelines, and inventory</p>
+            </div>
+            <div>
+                <a href="/home" class="btn btn-outline-dark btn-sm mr-2"><i class="fas fa-home mr-1"></i>Home</a>
+                <button class="btn btn-outline-dark btn-sm" id="refreshStatsBtn"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-warning">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-warning mb-1">Pending Costing</div>
+                            <div class="stat-value text-gray-800" id="pendingCostingCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-success">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-success mb-1">Completed</div>
+                            <div class="stat-value text-gray-800" id="completedCostingCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-check-circle fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-info">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-info mb-1">Total Items</div>
+                            <div class="stat-value text-gray-800" id="totalItemsCount">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-boxes fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card border-left-primary">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="stat-label text-primary mb-1">Total Cost Value</div>
+                            <div class="stat-value text-gray-800" id="totalCostValue">EGP 0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-calculator fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <h5 class="font-weight-bold text-gray-800 mb-3"><i class="fas fa-th-large mr-2"></i>Operations Modules</h5>
+    <div class="row mb-4">
+
+        <!-- Operations Requests -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header bg-warning text-dark">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-calculator card-icon mr-3"></i>
+                        <div>
+                            <h5>Operations Requests</h5>
+                            <small>Costing &amp; pricing</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Add costs to sales request items, manage pricing, and track costing completion status for all requests.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="pendingRequestsCount">0</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="completedRequestsCount">0</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold" id="noItemsRequestsCount">0</div>
+                            <small class="text-muted">No Items</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/operation_request" class="btn btn-warning btn-lg text-dark"><i class="fas fa-calculator mr-1"></i>Operations</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Approved Items -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle card-icon mr-3"></i>
+                        <div>
+                            <h5>Approved Items</h5>
+                            <small>Client approved items</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>View all items that have been approved by clients with complete sales request details and pricing information.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-6 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="approvedItemsCount">0</div>
+                            <small class="text-muted">Approved Items</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h6 mb-0 font-weight-bold" id="approvedTotalValue">EGP 0</div>
+                            <small class="text-muted">Total Value</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/approved-items" class="btn btn-success btn-lg"><i class="fas fa-check-circle mr-1"></i>Approved Items</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Timeline -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-stream card-icon mr-3"></i>
+                        <div>
+                            <h5>Workflow Timeline</h5>
+                            <small>Track progress &amp; milestones</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Visualize and manage the end-to-end workflow for each request. Track milestones, assign tasks, and monitor timelines.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/workflow_timeline" class="btn btn-primary btn-lg"><i class="fas fa-stream mr-1"></i>Timeline</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Item Management -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-warehouse card-icon mr-3"></i>
+                        <div>
+                            <h5>Item Management</h5>
+                            <small>Catalog &amp; inventory</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Manage item catalog, templates, and categories. Define items with specifications, dimensions, and templates.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/item_management" class="btn btn-info btn-lg"><i class="fas fa-warehouse mr-1"></i>Items</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Supplier Report -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-truck card-icon mr-3"></i>
+                        <div>
+                            <h5>Supplier Report</h5>
+                            <small>Track supplier assignments</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>View comprehensive supplier reports with all assigned items, sub-items, and delivery tracking.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="suppliersCount">0</div>
+                            <small class="text-muted">Suppliers</small>
+                        </div>
+                        <div class="col-4 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="pendingItemsCount">0</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 mb-0 font-weight-bold" id="receivedItemsCount">0</div>
+                            <small class="text-muted">Received</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <a href="/supplier-report" class="btn btn-lg text-white" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);"><i class="fas fa-truck mr-1"></i>Supplier Report</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Costing Progress -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #858796 0%, #60616f 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-chart-pie card-icon mr-3"></i>
+                        <div>
+                            <h5>Costing Progress</h5>
+                            <small>Track completion rates</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Monitor overall costing progress and completion rates across all requests and items.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col-6 mini-stat">
+                            <div class="h6 mb-0 font-weight-bold" id="completionRate">0%</div>
+                            <small class="text-muted">Completion Rate</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h6 mb-0 font-weight-bold" id="avgItemsPerRequest">0</div>
+                            <small class="text-muted">Avg Items/Request</small>
+                        </div>
+                    </div>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="progressBar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have operation permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    loadOpsSectionStats();
+
+    $('#refreshStatsBtn').click(function() {
+        const btn = $(this);
+        btn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Refreshing...');
+        loadOpsSectionStats();
+        setTimeout(() => btn.html('<i class="fas fa-sync-alt mr-1"></i>Refresh'), 1000);
+    });
+
+    function loadOpsSectionStats() {
+        $.get('/api/operations/requests', function(response) {
+            if (response.success) {
+                const requests = response.requests;
+                const completed = requests.filter(r => r.status === 'Completed').length;
+                const noItems = requests.filter(r => r.status === 'No Items').length;
+                const pending = requests.length - completed - noItems;
+
+                $('#pendingCostingCount').text(pending);
+                $('#completedCostingCount').text(completed);
+                $('#pendingRequestsCount').text(pending);
+                $('#completedRequestsCount').text(completed);
+                $('#noItemsRequestsCount').text(noItems);
+
+                let totalItems = 0, totalCostValue = 0;
+                requests.forEach(r => {
+                    totalItems += r.items_count || 0;
+                    totalCostValue += r.total_cost || 0;
+                });
+                $('#totalItemsCount').text(totalItems);
+                $('#totalCostValue').text('EGP ' + totalCostValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+                const total = requests.length;
+                const rate = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
+                $('#completionRate').text(rate + '%');
+                $('#progressBar').css('width', rate + '%');
+                const avg = total > 0 ? (totalItems / total).toFixed(1) : 0;
+                $('#avgItemsPerRequest').text(avg);
+            }
+        }).fail(function() { console.error('Failed to load operations requests'); });
+
+        $.get('/api/operations/approved-items', { date_range: 'all' }, function(r) {
+            if (r.success) {
+                $('#approvedItemsCount').text(r.stats.total_items || 0);
+                $('#approvedTotalValue').text('EGP ' + (r.stats.total_sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            }
+        }).fail(function() {});
+
+        $.get('/api/supplier-report', function(r) {
+            if (r.success) {
+                $('#suppliersCount').text(r.stats.total_suppliers || 0);
+                $('#pendingItemsCount').text(r.stats.pending || 0);
+                $('#receivedItemsCount').text(r.stats.received || 0);
+            }
+        }).fail(function() {});
+    }
+});
+</script>
+{% endblock %}

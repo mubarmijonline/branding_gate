@@ -1,0 +1,1184 @@
+{% extends "main.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<style>
+    :root {
+        --primary-color: #4e73df;
+        --success-color: #1cc88a;
+        --warning-color: #f6c23e;
+        --danger-color: #e74a3b;
+        --info-color: #36b9cc;
+        --secondary-color: #858796;
+        --dark-color: #5a5c69;
+    }
+    
+    .workflow-container {
+        padding: 20px;
+    }
+    
+    .request-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        margin-bottom: 15px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .request-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+    }
+    
+    .request-card.active {
+        border-left-color: var(--success-color);
+        background: #f8fff8;
+    }
+    
+    .request-header {
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .request-id {
+        font-weight: 700;
+        color: var(--primary-color);
+        font-size: 1.1rem;
+    }
+    
+    .request-title {
+        font-weight: 600;
+        color: var(--dark-color);
+        margin-left: 15px;
+    }
+    
+    .request-meta {
+        display: flex;
+        gap: 15px;
+        font-size: 0.85rem;
+        color: var(--secondary-color);
+    }
+    
+    .item-stats {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .stat-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    /* Timeline Styles */
+    .timeline-panel {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        height: calc(100vh - 150px);
+        overflow-y: auto;
+        position: sticky;
+        top: 20px;
+    }
+    
+    .timeline-header {
+        padding: 20px;
+        border-bottom: 2px solid #e3e6f0;
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        color: white;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .timeline-header h4 {
+        margin: 0;
+        font-weight: 700;
+    }
+    
+    .timeline-body {
+        padding: 20px;
+    }
+    
+    /* Date Group Styles */
+    .date-group {
+        margin-bottom: 25px;
+    }
+    
+    .date-header {
+        position: relative;
+        margin-bottom: 15px;
+    }
+    
+    .date-header .badge {
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+        margin-left: 10px;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e3e6f0;
+        border-radius: 2px;
+    }
+    
+    .timeline-section {
+        margin-bottom: 30px;
+    }
+    
+    .timeline-section-title {
+        font-weight: 700;
+        color: var(--dark-color);
+        font-size: 1rem;
+        margin-bottom: 15px;
+        padding: 8px 12px;
+        background: #f8f9fc;
+        border-radius: 8px;
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding: 15px;
+        background: #fff;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--info-color);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: all 0.3s ease;
+    }
+    
+    .timeline-item:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateX(3px);
+    }
+    
+    .timeline-dot {
+        position: absolute;
+        left: -26px;
+        top: 18px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        border: 2px solid white;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    .timeline-time {
+        font-size: 0.75rem;
+        color: var(--secondary-color);
+        margin-bottom: 8px;
+    }
+    
+    .event-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .timeline-actor {
+        font-size: 0.8rem;
+        color: var(--secondary-color);
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #eee;
+    }
+    
+    .items-added {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f8f9fc;
+        border-radius: 8px;
+    }
+    
+    .item-added-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        margin: 3px;
+        background: white;
+        border-radius: 5px;
+        font-size: 0.8rem;
+        border: 1px solid #e3e6f0;
+    }
+    
+    /* Legacy status classes for compatibility */
+    .timeline-item.status-approved::before { background: var(--success-color); }
+    .timeline-item.status-rejected::before { background: var(--danger-color); }
+    .timeline-item.status-pending::before { background: var(--warning-color); }
+    .timeline-item.status-negotiation::before { background: #fd7e14; }
+    .timeline-item.status-created::before { background: var(--primary-color); }
+    .timeline-item.status-costed::before { background: var(--info-color); }
+    .timeline-item.status-priced::before { background: #6f42c1; }
+    .timeline-item.status-inventory::before { background: #20c997; }
+    
+    .timeline-item.status-approved { border-left-color: var(--success-color); }
+    .timeline-item.status-rejected { border-left-color: var(--danger-color); }
+    .timeline-item.status-pending { border-left-color: var(--warning-color); }
+    .timeline-item.status-negotiation { border-left-color: #fd7e14; }
+    .timeline-item.status-created { border-left-color: var(--primary-color); }
+    .timeline-item.status-costed { border-left-color: var(--info-color); }
+    .timeline-item.status-priced { border-left-color: #6f42c1; }
+    .timeline-item.status-inventory { border-left-color: #20c997; }
+    
+    .timeline-time {
+        font-size: 0.75rem;
+        color: var(--secondary-color);
+        margin-bottom: 5px;
+    }
+    
+    .timeline-content {
+        font-size: 0.9rem;
+        color: var(--dark-color);
+    }
+    
+    .timeline-content strong {
+        color: var(--primary-color);
+    }
+    
+    .timeline-actor {
+        font-size: 0.8rem;
+        color: var(--secondary-color);
+        margin-top: 5px;
+    }
+    
+    /* Item timeline within request */
+    .item-timeline {
+        margin-top: 15px;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e3e6f0;
+    }
+    
+    .item-timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e3e6f0;
+        margin-bottom: 10px;
+        cursor: pointer;
+    }
+    
+    .item-timeline-header:hover {
+        background: #f8f9fc;
+        margin: -10px -10px 10px -10px;
+        padding: 10px;
+        border-radius: 8px 8px 0 0;
+    }
+    
+    .item-name {
+        font-weight: 600;
+        color: var(--dark-color);
+    }
+    
+    .item-status-badge {
+        padding: 3px 10px;
+        border-radius: 15px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .mini-timeline {
+        padding-left: 20px;
+        position: relative;
+    }
+    
+    .mini-timeline::before {
+        content: '';
+        position: absolute;
+        left: 5px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e3e6f0;
+    }
+    
+    .mini-timeline-item {
+        position: relative;
+        padding: 8px 0 8px 15px;
+        font-size: 0.8rem;
+    }
+    
+    .mini-timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -3px;
+        top: 12px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--secondary-color);
+    }
+    
+    .mini-timeline-item.active::before {
+        background: var(--success-color);
+    }
+    
+    .mini-timeline-item.current::before {
+        background: var(--warning-color);
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(246, 194, 62, 0.7); }
+        70% { box-shadow: 0 0 0 8px rgba(246, 194, 62, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(246, 194, 62, 0); }
+    }
+    
+    /* Item History Log Styles */
+    .item-history-log {
+        background: #f8f9fc;
+        border-radius: 8px;
+        padding: 12px;
+        border: 1px solid #e3e6f0;
+    }
+    
+    .history-log-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--dark-color);
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e3e6f0;
+    }
+    
+    .history-log-entries {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .history-log-entry {
+        padding: 10px;
+        background: white;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        border-left: 3px solid #e3e6f0;
+        font-size: 0.8rem;
+    }
+    
+    .history-log-entry:last-child {
+        margin-bottom: 0;
+    }
+    
+    .log-time {
+        font-size: 0.7rem;
+        color: var(--secondary-color);
+        margin-bottom: 4px;
+    }
+    
+    .log-content {
+        color: var(--dark-color);
+        line-height: 1.4;
+    }
+    
+    .log-action-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-right: 5px;
+    }
+    
+    .log-notes {
+        font-style: italic;
+        color: var(--secondary-color);
+        margin-top: 4px;
+        padding-left: 10px;
+        border-left: 2px solid #e3e6f0;
+    }
+    
+    .log-actor {
+        font-size: 0.7rem;
+        color: var(--secondary-color);
+        margin-top: 5px;
+    }
+    
+    /* Client Feedback Box */
+    .client-feedback-box {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 12px;
+    }
+    
+    .feedback-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #856404;
+        margin-bottom: 8px;
+    }
+    
+    .feedback-content {
+        font-size: 0.85rem;
+        color: #856404;
+        padding: 8px;
+        background: rgba(255,255,255,0.5);
+        border-radius: 4px;
+        margin-bottom: 5px;
+    }
+    
+    .feedback-reason {
+        font-size: 0.8rem;
+        color: #856404;
+    }
+    
+    /* Rejected status in mini-timeline */
+    .mini-timeline-item.rejected::before {
+        background: var(--danger-color);
+    }
+    
+    .no-selection {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--secondary-color);
+    }
+    
+    .no-selection i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.3;
+    }
+    
+    /* Search and filters */
+    .filter-section {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    .requests-list {
+        max-height: calc(100vh - 250px);
+        overflow-y: auto;
+    }
+    
+    /* Responsive */
+    @media (max-width: 992px) {
+        .timeline-panel {
+            position: relative;
+            height: auto;
+            margin-top: 20px;
+        }
+    }
+    
+    /* Loading state */
+    .loading-spinner {
+        text-align: center;
+        padding: 40px;
+    }
+    
+    .loading-spinner i {
+        font-size: 2rem;
+        color: var(--primary-color);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set user_roles = session.get('roles', []) %}
+<div class="container-fluid workflow-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-stream mr-2"></i>Workflow Timeline
+            </h1>
+            <p class="text-muted mb-0">Track the status flow of sales requests and their items</p>
+        </div>
+        <a href="/sales_request" class="btn btn-primary">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Sales Requests
+        </a>
+    </div>
+    
+    <div class="row">
+        <!-- Left Panel: Requests List -->
+        <div class="col-lg-5">
+            <div class="filter-section">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search requests...">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <select id="statusFilter" class="form-control">
+                            <option value="">All Statuses</option>
+                            <option value="draft">Draft</option>
+                            <option value="submitted">Submitted</option>
+                            <option value="approved">Approved</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="requestsList" class="requests-list">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p class="mt-2">Loading requests...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Panel: Timeline Detail -->
+        <div class="col-lg-7">
+            <div class="timeline-panel">
+                <div id="timelineContent">
+                    <div class="no-selection">
+                        <i class="fas fa-hand-pointer"></i>
+                        <h5>Select a Request</h5>
+                        <p>Click on a sales request from the list to view its detailed workflow timeline</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DataTables and other scripts -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    let allRequests = [];
+    let selectedRequestId = null;
+    
+    // Load all requests
+    function loadRequests() {
+        $.get('/api/workflow/requests', function(response) {
+            if (response.success) {
+                allRequests = response.requests;
+                renderRequestsList(allRequests);
+            } else {
+                $('#requestsList').html('<div class="alert alert-danger">Failed to load requests</div>');
+            }
+        }).fail(function() {
+            $('#requestsList').html('<div class="alert alert-danger">Error connecting to server</div>');
+        });
+    }
+    
+    // Render requests list
+    function renderRequestsList(requests) {
+        if (requests.length === 0) {
+            $('#requestsList').html('<div class="text-center text-muted py-4">No requests found</div>');
+            return;
+        }
+        
+        let html = '';
+        requests.forEach(function(req) {
+            const statusClass = getStatusClass(req.status);
+            const isActive = req.request_id === selectedRequestId;
+            
+            html += `
+                <div class="request-card ${isActive ? 'active' : ''}" data-id="${req.request_id}">
+                    <div class="request-header">
+                        <div>
+                            <span class="request-id">#${req.request_id}</span>
+                            <span class="request-title">${req.title || 'Untitled'}</span>
+                        </div>
+                        <span class="badge badge-${statusClass}">${formatStatus(req.status)}</span>
+                    </div>
+                    <div class="px-4 pb-3">
+                        <div class="request-meta mb-2">
+                            <span><i class="fas fa-user mr-1"></i>${req.client_name || 'No client'}</span>
+                            <span><i class="fas fa-calendar mr-1"></i>${formatDate(req.created_at)}</span>
+                        </div>
+                        <div class="item-stats">
+                            ${req.total_items > 0 ? `
+                                <span class="stat-badge bg-light text-dark"><i class="fas fa-cube mr-1"></i>${req.total_items} items</span>
+                                ${req.approved_items > 0 ? `<span class="stat-badge bg-success text-white">${req.approved_items} approved</span>` : ''}
+                                ${req.rejected_items > 0 ? `<span class="stat-badge bg-danger text-white">${req.rejected_items} rejected</span>` : ''}
+                                ${req.negotiation_items > 0 ? `<span class="stat-badge" style="background:#fd7e14;color:white">${req.negotiation_items} negotiation</span>` : ''}
+                                ${req.submitted_items > 0 ? `<span class="stat-badge bg-info text-white">${req.submitted_items} submitted</span>` : ''}
+                                ${req.pending_items > 0 ? `<span class="stat-badge bg-secondary text-white">${req.pending_items} pending</span>` : ''}
+                            ` : '<span class="text-muted">No items</span>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        $('#requestsList').html(html);
+    }
+    
+    // Load timeline for a request
+    function loadTimeline(requestId) {
+        selectedRequestId = requestId;
+        
+        // Update active state
+        $('.request-card').removeClass('active');
+        $(`.request-card[data-id="${requestId}"]`).addClass('active');
+        
+        $('#timelineContent').html(`
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p class="mt-2">Loading timeline...</p>
+            </div>
+        `);
+        
+        $.get(`/api/workflow/request/${requestId}/timeline`, function(response) {
+            if (response.success) {
+                renderTimeline(response);
+            } else {
+                $('#timelineContent').html('<div class="alert alert-danger m-4">Failed to load timeline</div>');
+            }
+        }).fail(function() {
+            $('#timelineContent').html('<div class="alert alert-danger m-4">Error connecting to server</div>');
+        });
+    }
+    
+    // Helper: Format quantity (remove .0 for whole numbers)
+    function formatQty(qty) {
+        if (qty === null || qty === undefined) return '1';
+        const num = parseFloat(qty);
+        return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+    }
+    
+    // Helper: Normalize numbers for comparison
+    function normalizeNumber(val) {
+        if (val === null || val === undefined) return null;
+        const num = parseFloat(val);
+        return Number.isInteger(num) ? num : num;
+    }
+    
+    // Helper: Get event category and color
+    function getEventCategory(actionType, eventType) {
+        const categories = {
+            'CREATE': { category: 'creation', color: '#4e73df', icon: 'fa-plus-circle', label: 'Creation' },
+            'ITEM_ADD': { category: 'creation', color: '#4e73df', icon: 'fa-cube', label: 'Creation' },
+            'COST_UPDATE': { category: 'costing', color: '#36b9cc', icon: 'fa-calculator', label: 'Costing' },
+            'SELLING_PRICE_UPDATE': { category: 'pricing', color: '#6f42c1', icon: 'fa-tag', label: 'Pricing' },
+            'approved': { category: 'approval', color: '#1cc88a', icon: 'fa-check-circle', label: 'Approval' },
+            'rejected': { category: 'rejection', color: '#e74a3b', icon: 'fa-times-circle', label: 'Rejection' },
+            'pending_negotiation': { category: 'negotiation', color: '#fd7e14', icon: 'fa-handshake', label: 'Negotiation' },
+            'STATUS_CHANGE': { category: 'status', color: '#858796', icon: 'fa-exchange-alt', label: 'Status' },
+            'inventory': { category: 'inventory', color: '#20c997', icon: 'fa-warehouse', label: 'Inventory' }
+        };
+        return categories[actionType] || categories[eventType] || { category: 'info', color: '#858796', icon: 'fa-info-circle', label: 'Info' };
+    }
+    
+    // Render timeline
+    function renderTimeline(data) {
+        const req = data.request;
+        const items = data.items || [];
+        const statusHistory = data.status_history || [];
+        const changeLog = data.change_log || [];
+        const itemApprovalLogs = data.item_approval_logs || [];
+        const priceHistory = data.price_history || [];
+        
+        let html = `
+            <div class="timeline-header">
+                <h4><i class="fas fa-stream mr-2"></i>Request #${req.request_id} Timeline</h4>
+                <p class="mb-0 mt-2 opacity-75">${req.title || 'Untitled'} - ${req.client_name || 'No client'}</p>
+                <div class="mt-2">
+                    <span class="badge badge-light mr-2"><i class="fas fa-cubes mr-1"></i>${items.length} Items</span>
+                    <span class="badge badge-success mr-2"><i class="fas fa-check mr-1"></i>${req.approval_stats_approved || 0} Approved</span>
+                    <span class="badge badge-warning mr-2"><i class="fas fa-clock mr-1"></i>${req.approval_stats_pending || 0} Pending</span>
+                </div>
+            </div>
+            <div class="timeline-body">
+        `;
+        
+        // Build unified timeline events from change_log (primary source)
+        let events = [];
+        
+        // Process change log - this is our main source of truth
+        changeLog.forEach(function(c) {
+            const cat = getEventCategory(c.action_type);
+            events.push({
+                date: c.action_date,
+                timestamp: new Date(c.action_date).getTime(),
+                actionType: c.action_type,
+                category: cat.category,
+                color: cat.color,
+                icon: cat.icon,
+                title: formatActionType(c.action_type),
+                content: c.change_description || `${c.field_name}: ${c.old_value} → ${c.new_value}`,
+                actor: c.action_by,
+                fieldName: c.field_name
+            });
+        });
+        
+        // Add inventory events for items that have been added to inventory
+        items.forEach(function(item) {
+            if (item.inventory_item_code) {
+                const cat = getEventCategory('inventory');
+                // Use a later timestamp to show it happened after approval
+                const invDate = item.client_approval_date || item.created_at;
+                events.push({
+                    date: invDate,
+                    timestamp: new Date(invDate).getTime() + 1000, // Add 1 second to show after approval
+                    actionType: 'INVENTORY_ADD',
+                    category: cat.category,
+                    color: cat.color,
+                    icon: cat.icon,
+                    title: 'Added to Inventory',
+                    content: `Item "<strong>${item.name}</strong>" added to inventory as <strong>${item.inventory_item_code}</strong>`,
+                    actor: null
+                });
+            }
+        });
+        
+        // Sort events by timestamp
+        events.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Group events by same timestamp (within 2 seconds = same action)
+        let groupedEvents = [];
+        let currentGroup = null;
+        
+        events.forEach(function(event) {
+            // Check if this event should be grouped with the previous one
+            // Same timestamp (within 2 seconds) means it's part of the same action
+            if (currentGroup && Math.abs(event.timestamp - currentGroup.timestamp) < 2000) {
+                // Merge into current group
+                // Skip CREATE if we already have ITEM_ADD (same action)
+                if (event.actionType === 'CREATE' && currentGroup.events.some(e => e.actionType === 'ITEM_ADD')) {
+                    // Merge CREATE info into the group title
+                    currentGroup.isCreation = true;
+                } else if (event.actionType === 'ITEM_ADD' && currentGroup.events.some(e => e.actionType === 'CREATE')) {
+                    // ITEM_ADD comes after CREATE - add it but mark as creation group
+                    currentGroup.isCreation = true;
+                    currentGroup.events.push(event);
+                } else {
+                    currentGroup.events.push(event);
+                }
+            } else {
+                // Start a new group
+                if (currentGroup) {
+                    groupedEvents.push(currentGroup);
+                }
+                currentGroup = {
+                    date: event.date,
+                    timestamp: event.timestamp,
+                    events: [event],
+                    isCreation: event.actionType === 'CREATE' || event.actionType === 'ITEM_ADD'
+                };
+            }
+        });
+        
+        // Don't forget the last group
+        if (currentGroup) {
+            groupedEvents.push(currentGroup);
+        }
+        
+        // Now group by date for the time frame display
+        let dateGroups = {};
+        groupedEvents.forEach(function(group) {
+            const dateKey = formatDate(group.date);
+            if (!dateGroups[dateKey]) {
+                dateGroups[dateKey] = [];
+            }
+            dateGroups[dateKey].push(group);
+        });
+        
+        // Render by date groups
+        if (Object.keys(dateGroups).length === 0) {
+            html += '<div class="text-muted text-center py-4">No timeline events found</div>';
+        } else {
+            Object.keys(dateGroups).forEach(function(dateKey) {
+                const dayGroups = dateGroups[dateKey];
+                
+                // Date header
+                html += `
+                    <div class="date-group mb-4">
+                        <div class="date-header mb-3">
+                            <span class="badge badge-dark px-3 py-2">
+                                <i class="fas fa-calendar-day mr-2"></i>${dateKey}
+                            </span>
+                        </div>
+                        <div class="timeline">
+                `;
+                
+                dayGroups.forEach(function(group) {
+                    // Determine the primary event for styling
+                    const primaryEvent = group.events[0];
+                    const cat = getEventCategory(primaryEvent.actionType);
+                    
+                    // Special handling for creation groups
+                    if (group.isCreation && group.events.length > 0) {
+                        // Find all items added
+                        const itemAddEvents = group.events.filter(e => e.actionType === 'ITEM_ADD');
+                        const createEvent = group.events.find(e => e.actionType === 'CREATE');
+                        
+                        html += `
+                            <div class="timeline-item" style="border-left-color: ${cat.color};">
+                                <div class="timeline-dot" style="background: ${cat.color};"></div>
+                                <div class="timeline-time">
+                                    <i class="fas fa-clock mr-1"></i>${formatTime(group.date)}
+                                </div>
+                                <div class="timeline-content">
+                                    <div class="event-badge mb-2" style="background: ${cat.color}15; color: ${cat.color}; border: 1px solid ${cat.color}30;">
+                                        <i class="fas ${cat.icon} mr-1"></i>Request Created
+                                    </div>
+                        `;
+                        
+                        // Show creation details
+                        if (createEvent) {
+                            html += `<div class="mb-2">${createEvent.content}</div>`;
+                        }
+                        
+                        // List all items added
+                        if (itemAddEvents.length > 0) {
+                            html += `<div class="items-added mt-2">`;
+                            itemAddEvents.forEach(function(itemEvent) {
+                                html += `
+                                    <div class="item-added-badge">
+                                        <i class="fas fa-cube mr-1"></i>${itemEvent.content}
+                                    </div>
+                                `;
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        html += `
+                                    ${primaryEvent.actor ? `<div class="timeline-actor"><i class="fas fa-user mr-1"></i>${primaryEvent.actor}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Regular event group (may have multiple events at same time)
+                        group.events.forEach(function(event) {
+                            const evtCat = getEventCategory(event.actionType);
+                            html += `
+                                <div class="timeline-item" style="border-left-color: ${evtCat.color};">
+                                    <div class="timeline-dot" style="background: ${evtCat.color};"></div>
+                                    <div class="timeline-time">
+                                        <i class="fas fa-clock mr-1"></i>${formatTime(event.date)}
+                                    </div>
+                                    <div class="timeline-content">
+                                        <div class="event-badge mb-2" style="background: ${evtCat.color}15; color: ${evtCat.color}; border: 1px solid ${evtCat.color}30;">
+                                            <i class="fas ${evtCat.icon} mr-1"></i>${event.title}
+                                        </div>
+                                        <div>${event.content}</div>
+                                        ${event.actor ? `<div class="timeline-actor"><i class="fas fa-user mr-1"></i>${event.actor}</div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Items Summary Section
+        html += `
+            <div class="timeline-section mt-4">
+                <div class="timeline-section-title">
+                    <i class="fas fa-cubes mr-2"></i>Items Summary (${items.length} items)
+                </div>
+        `;
+        
+        if (items.length === 0) {
+            html += '<div class="text-muted text-center py-3">No items in this request</div>';
+        } else {
+            items.forEach(function(item) {
+                const statusClass = getItemStatusClass(item.approval_status);
+                
+                // Get item-specific logs from change log
+                const itemLogs = changeLog.filter(c => 
+                    c.field_name === `item_${item.id}` || 
+                    (c.change_description && c.change_description.includes(item.name))
+                );
+                
+                // Get item-specific approval logs
+                const itemApprovalHistory = itemApprovalLogs.filter(l => l.item_id === item.id);
+                
+                // Get item-specific price history
+                const itemPriceHistory = priceHistory.filter(p => p.item_id === item.id);
+                
+                // Build a combined and sorted activity log
+                let allActivities = [];
+                
+                // Add change log items
+                itemLogs.forEach(log => {
+                    allActivities.push({
+                        date: log.action_date,
+                        timestamp: new Date(log.action_date).getTime(),
+                        type: 'change',
+                        actionType: log.action_type,
+                        content: log.change_description || '',
+                        actor: log.action_by,
+                        notes: null
+                    });
+                });
+                
+                // Add approval history
+                itemApprovalHistory.forEach(log => {
+                    allActivities.push({
+                        date: log.action_date,
+                        timestamp: new Date(log.action_date).getTime(),
+                        type: 'approval',
+                        actionType: log.action_type,
+                        content: `${log.previous_status ? formatStatus(log.previous_status) + ' → ' : ''}${formatStatus(log.new_status)}`,
+                        actor: log.action_by_name || 'System',
+                        notes: log.notes,
+                        cost: log.cost_per_item,
+                        sell: log.sell_per_item
+                    });
+                });
+                
+                // Add price history
+                itemPriceHistory.forEach(p => {
+                    allActivities.push({
+                        date: p.created_at,
+                        timestamp: new Date(p.created_at).getTime(),
+                        type: 'price',
+                        actionType: 'PRICE_' + (p.status || 'update').toUpperCase(),
+                        content: `Cost: EGP ${p.cost_per_item || 'N/A'} | Sell: EGP ${p.sell_per_item || 'N/A'} | Profit: EGP ${p.profit_amount || 'N/A'}`,
+                        actor: p.created_by || 'System',
+                        notes: p.negotiation_reason,
+                        version: p.version
+                    });
+                });
+                
+                // Sort by timestamp
+                allActivities.sort((a, b) => a.timestamp - b.timestamp);
+                
+                // Determine client decision status and color
+                let decisionClass = '';
+                let decisionIcon = 'fa-clock';
+                if (item.approval_status === 'approved') {
+                    decisionClass = 'active';
+                    decisionIcon = 'fa-check-circle text-success';
+                } else if (item.approval_status === 'rejected') {
+                    decisionClass = 'rejected';
+                    decisionIcon = 'fa-times-circle text-danger';
+                } else if (item.approval_status === 'pending_negotiation') {
+                    decisionClass = 'current';
+                    decisionIcon = 'fa-handshake text-warning';
+                }
+                
+                html += `
+                    <div class="item-timeline">
+                        <div class="item-timeline-header" data-toggle="collapse" data-target="#itemDetail_${item.id}">
+                            <div class="item-name">
+                                <i class="fas fa-cube mr-2"></i>${item.name || 'Unnamed Item'}
+                                <span class="text-muted ml-2">(Qty: ${formatQty(item.qty)})</span>
+                            </div>
+                            <span class="item-status-badge badge badge-${statusClass}">${formatStatus(item.approval_status)}</span>
+                        </div>
+                        <div id="itemDetail_${item.id}" class="collapse show">
+                            <div class="mini-timeline">
+                                <div class="mini-timeline-item ${item.created_at ? 'active' : ''}">
+                                    <strong>Created</strong> - ${formatDateTime(item.created_at)}
+                                </div>
+                                <div class="mini-timeline-item ${item.cost_per_item ? 'active' : ''}">
+                                    <strong>Costed</strong> - ${item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : 'Not costed'}
+                                </div>
+                                <div class="mini-timeline-item ${item.sell_per_item ? 'active' : ''}">
+                                    <strong>Priced</strong> - ${item.sell_per_item ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : 'Not priced'}
+                                </div>
+                                <div class="mini-timeline-item ${decisionClass}">
+                                    <i class="fas ${decisionIcon} mr-1"></i>
+                                    <strong>Client Decision</strong> - ${formatStatus(item.approval_status)}
+                                    ${item.client_approval_date ? ' on ' + formatDateTime(item.client_approval_date) : ''}
+                                </div>
+                                ${item.inventory_item_code ? `
+                                <div class="mini-timeline-item active">
+                                    <strong>In Inventory</strong> - ${item.inventory_item_code}
+                                </div>
+                                ` : ''}
+                            </div>
+                            
+                            <!-- Client Feedback Section -->
+                            ${(item.client_feedback || item.negotiation_reason) ? `
+                            <div class="client-feedback-box mt-3">
+                                <div class="feedback-title">
+                                    <i class="fas fa-comment-alt mr-1"></i> Client Feedback
+                                </div>
+                                ${item.client_feedback ? `<div class="feedback-content">${item.client_feedback}</div>` : ''}
+                                ${item.negotiation_reason ? `<div class="feedback-reason"><strong>Negotiation Reason:</strong> ${item.negotiation_reason}</div>` : ''}
+                            </div>
+                            ` : ''}
+                            
+                            <!-- Item History Log -->
+                            ${allActivities.length > 0 ? `
+                            <div class="item-history-log mt-3">
+                                <div class="history-log-title">
+                                    <i class="fas fa-history mr-1"></i> Activity Log (${allActivities.length} entries)
+                                </div>
+                                <div class="history-log-entries">
+                                    ${allActivities.map(activity => {
+                                        const color = getLogColor(activity.actionType);
+                                        return `
+                                        <div class="history-log-entry" style="border-left-color: ${color};">
+                                            <div class="log-time">${formatDateTime(activity.date)}</div>
+                                            <div class="log-content">
+                                                <span class="log-action-badge" style="background: ${color}15; color: ${color};">
+                                                    ${formatActionType(activity.actionType)}
+                                                </span>
+                                                <span>${activity.content}</span>
+                                                ${activity.notes ? `<div class="log-notes"><i class="fas fa-quote-left mr-1"></i>${activity.notes}</div>` : ''}
+                                                ${activity.version ? `<span class="badge badge-secondary ml-2">v${activity.version}</span>` : ''}
+                                            </div>
+                                            <div class="log-actor"><i class="fas fa-user mr-1"></i>${activity.actor}</div>
+                                        </div>
+                                    `;}).join('')}
+                                </div>
+                            </div>
+                            ` : '<div class="text-muted small mt-3"><i class="fas fa-info-circle mr-1"></i>No activity log entries for this item</div>'}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        $('#timelineContent').html(html);
+    }
+    
+    // Helper: Get color for log action type
+    function getLogColor(actionType) {
+        const colors = {
+            'CREATE': '#4e73df',
+            'ITEM_ADD': '#4e73df',
+            'COST_UPDATE': '#36b9cc',
+            'SELLING_PRICE_UPDATE': '#6f42c1',
+            'approved': '#1cc88a',
+            'rejected': '#e74a3b',
+            'pending_negotiation': '#fd7e14',
+            'negotiation_requested': '#fd7e14',
+            'negotiated': '#fd7e14',
+            'PRICE_NEGOTIATED': '#fd7e14',
+            'PRICE_CURRENT': '#6f42c1',
+            'PRICE_REJECTED': '#e74a3b',
+            'STATUS_CHANGE': '#858796',
+            'ITEM_UPDATE': '#17a2b8',
+            'submitted': '#17a2b8',
+            'resubmitted': '#17a2b8'
+        };
+        return colors[actionType] || '#858796';
+    }
+    
+    // Helper functions
+    function getStatusClass(status) {
+        const classes = {
+            'draft': 'secondary',
+            'submitted': 'info',
+            'approved': 'success',
+            'in_progress': 'primary',
+            'completed': 'success',
+            'cancelled': 'danger',
+            'pending': 'warning',
+            'rejected': 'danger',
+            'pending_negotiation': 'warning'
+        };
+        return classes[status] || 'secondary';
+    }
+    
+    function getItemStatusClass(status) {
+        const classes = {
+            'pending': 'secondary',
+            'submitted': 'info',
+            'approved': 'success',
+            'rejected': 'danger',
+            'pending_negotiation': 'warning'
+        };
+        return classes[status] || 'secondary';
+    }
+    
+    function getEventType(status) {
+        if (!status) return 'info';
+        if (status.includes('approved') || status === 'completed') return 'approved';
+        if (status.includes('rejected') || status === 'cancelled') return 'rejected';
+        if (status.includes('negotiation')) return 'negotiation';
+        if (status.includes('pending') || status.includes('submitted')) return 'pending';
+        return 'info';
+    }
+    
+    function formatStatus(status) {
+        if (!status) return 'N/A';
+        return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    function formatActionType(action) {
+        if (!action) return 'Action';
+        return action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    function formatDate(dateStr) {
+        if (!dateStr) return 'N/A';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-GB');
+    }
+    
+    function formatDateTime(dateStr) {
+        if (!dateStr) return 'N/A';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function formatTime(dateStr) {
+        if (!dateStr) return 'N/A';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // Event handlers
+    $(document).on('click', '.request-card', function() {
+        const requestId = $(this).data('id');
+        loadTimeline(requestId);
+    });
+    
+    // Search filter
+    $('#searchInput').on('input', function() {
+        const search = $(this).val().toLowerCase();
+        const statusFilter = $('#statusFilter').val();
+        
+        const filtered = allRequests.filter(function(req) {
+            const matchesSearch = !search || 
+                (req.title && req.title.toLowerCase().includes(search)) ||
+                (req.client_name && req.client_name.toLowerCase().includes(search)) ||
+                req.request_id.toString().includes(search);
+            
+            const matchesStatus = !statusFilter || req.status === statusFilter;
+            
+            return matchesSearch && matchesStatus;
+        });
+        
+        renderRequestsList(filtered);
+    });
+    
+    // Status filter
+    $('#statusFilter').on('change', function() {
+        $('#searchInput').trigger('input');
+    });
+    
+    // Initialize
+    loadRequests();
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,681 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    /* Sales Head Approval Page Styling */
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .stats-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        border-left: 4px solid #667eea;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .stats-card.pending {
+        border-left-color: #f39c12;
+    }
+    
+    .stats-card.approved {
+        border-left-color: #27ae60;
+    }
+    
+    .stats-card.declined {
+        border-left-color: #e74c3c;
+    }
+    
+    .stats-number {
+        font-size: 36px;
+        font-weight: 800;
+        color: #2c3e50;
+        margin-bottom: 5px;
+    }
+    
+    .stats-label {
+        font-size: 14px;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .negotiation-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        border-left: 5px solid #f39c12;
+        transition: all 0.3s ease;
+    }
+    
+    .negotiation-card:hover {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .negotiation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+    
+    .negotiation-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+    
+    .negotiation-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .badge-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .price-comparison {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+    }
+    
+    .price-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .price-row:last-child {
+        border-bottom: none;
+    }
+    
+    .price-label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    
+    .price-value {
+        font-size: 18px;
+        font-weight: 700;
+    }
+    
+    .price-value.current {
+        color: #e74c3c;
+    }
+    
+    .price-value.expected {
+        color: #3498db;
+    }
+    
+    .price-value.difference {
+        color: #f39c12;
+    }
+    
+    .client-reason {
+        background: #fff3cd;
+        border-left: 4px solid #f39c12;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 15px 0;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+    
+    .btn-approve {
+        background: linear-gradient(135deg, #27ae60, #2ecc71);
+        color: white;
+        border: none;
+        padding: 10px 30px;
+        border-radius: 5px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
+    }
+    
+    .btn-decline {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        color: white;
+        border: none;
+        padding: 10px 30px;
+        border-radius: 5px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-decline:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+    }
+    
+    .item-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+    }
+    
+    .detail-item {
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 5px;
+        border-left: 3px solid #667eea;
+    }
+    
+    .detail-label {
+        font-size: 12px;
+        color: #7f8c8d;
+        margin-bottom: 5px;
+    }
+    
+    .detail-value {
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #7f8c8d;
+    }
+    
+    .empty-state i {
+        font-size: 64px;
+        color: #bdc3c7;
+        margin-bottom: 20px;
+    }
+    
+    /* Destination Card Selection */
+    .destination-card {
+        transition: all 0.3s ease;
+    }
+    
+    .destination-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .destination-card.selected {
+        border-color: #28a745 !important;
+        background-color: #f0fff4;
+    }
+    
+    .destination-card.selected i {
+        color: #28a745 !important;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'sales_head' in user_roles %}
+    
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h2 mb-2">
+                    <i class="fas fa-handshake mr-3"></i>Sales Head - Negotiation Approvals
+                </h1>
+                <p class="mb-0 opacity-75">Review and approve/decline client negotiation requests</p>
+            </div>
+            <button class="btn btn-light" id="refreshBtn">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="stats-card pending">
+                <div class="stats-number" id="pendingCount">0</div>
+                <div class="stats-label"><i class="fas fa-clock mr-2"></i>Pending Review</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="stats-card approved">
+                <div class="stats-number" id="approvedCount">0</div>
+                <div class="stats-label"><i class="fas fa-check-circle mr-2"></i>Approved Today</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="stats-card declined">
+                <div class="stats-number" id="declinedCount">0</div>
+                <div class="stats-label"><i class="fas fa-times-circle mr-2"></i>Declined Today</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="stats-card">
+                <div class="stats-number" id="totalSavings">EGP 0</div>
+                <div class="stats-label"><i class="fas fa-coins mr-2"></i>Potential Savings</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Status</label>
+                    <select class="form-control" id="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="pending_sales_head" selected>Pending Review</option>
+                        <option value="pending_pricing">Re-Pricing Review</option>
+                        <option value="pending_costing">Re-Costing Requested by Pricing</option>
+                        <option value="pricing_completed">Re-Pricing Completed</option>
+                        <option value="pricing_declined">Declined by Pricing</option>
+                        <option value="sales_head_declined">Declined by Sales Head</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Client</label>
+                    <select class="form-control" id="clientFilter">
+                        <option value="">All Clients</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Date Range</label>
+                    <select class="form-control" id="dateFilter">
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Negotiations Container -->
+    <div id="negotiationsContainer">
+        <div class="text-center py-5">
+            <i class="fas fa-spinner fa-spin fa-3x text-primary"></i>
+            <p class="mt-3">Loading negotiations...</p>
+        </div>
+    </div>
+
+    <!-- Approve Modal -->
+    <div class="modal fade" id="approveModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-check-circle mr-2"></i>Approve Negotiation</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="approveNegotiationId">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Approval sends this negotiation to Re-Pricing. Pricing will decide whether to re-price directly or request re-costing first.
+                    </div>
+                    <div class="form-group">
+                        <label>Notes for Re-Pricing (Optional)</label>
+                        <textarea class="form-control" id="approveNotes" rows="3" placeholder="Any special instructions..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmApprove">
+                        <i class="fas fa-check mr-2"></i>Approve &amp; Send to Re-Pricing
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Decline Modal -->
+    <div class="modal fade" id="declineModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-times-circle mr-2"></i>Decline Negotiation</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="declineNegotiationId">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        This negotiation will return to "Pending Client Approval" status with the original price.
+                    </div>
+                    <div class="form-group">
+                        <label>Reason for Declining <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="declineReason" rows="3" placeholder="Explain why this negotiation cannot be approved..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDecline">
+                        <i class="fas fa-times mr-2"></i>Decline Negotiation
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        You don't have sales head permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('Sales Head Approval page loaded');
+    
+    // Load initial data
+    loadNegotiations();
+    loadClients();
+    updateStatistics();
+    
+    // Refresh button
+    $('#refreshBtn').click(function() {
+        loadNegotiations();
+        updateStatistics();
+    });
+    
+    // Filter handlers
+    $('#statusFilter, #clientFilter, #dateFilter').change(function() {
+        loadNegotiations();
+        updateStatistics();
+    });
+    
+    // Approve button handler
+    $(document).on('click', '.btn-approve-negotiation', function() {
+        var negotiationId = $(this).data('id');
+        $('#approveNegotiationId').val(negotiationId);
+        $('#approveNotes').val('');
+        $('#approveModal').modal('show');
+    });
+    
+    // Decline button handler
+    $(document).on('click', '.btn-decline-negotiation', function() {
+        var negotiationId = $(this).data('id');
+        $('#declineNegotiationId').val(negotiationId);
+        $('#declineModal').modal('show');
+    });
+    
+    // Confirm approve
+    $('#confirmApprove').click(function() {
+        var negotiationId = $('#approveNegotiationId').val();
+        var notes = $('#approveNotes').val();
+        approveNegotiation(negotiationId, notes);
+    });
+    
+    // Confirm decline
+    $('#confirmDecline').click(function() {
+        var negotiationId = $('#declineNegotiationId').val();
+        var reason = $('#declineReason').val().trim();
+        
+        if (!reason) {
+            Swal.fire('Error', 'Please provide a reason for declining', 'error');
+            return;
+        }
+        
+        declineNegotiation(negotiationId, reason);
+    });
+    
+    function loadNegotiations() {
+        var status = $('#statusFilter').val();
+        var client = $('#clientFilter').val();
+        var dateRange = $('#dateFilter').val();
+        
+        $('#negotiationsContainer').html('<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-3x text-primary"></i><p class="mt-3">Loading negotiations...</p></div>');
+        
+        $.get('/api/sales-head/negotiations', {
+            status: status,
+            client_id: client,
+            date_range: dateRange
+        }, function(response) {
+            if (response.success) {
+                renderNegotiations(response.negotiations);
+            } else {
+                $('#negotiationsContainer').html('<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-2"></i>' + response.error + '</div>');
+            }
+        }).fail(function() {
+            $('#negotiationsContainer').html('<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-2"></i>Failed to load negotiations</div>');
+        });
+    }
+    
+    function renderNegotiations(negotiations) {
+        if (negotiations.length === 0) {
+            $('#negotiationsContainer').html(`
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <h4>No Negotiations Found</h4>
+                    <p>There are no negotiations matching your filters</p>
+                </div>
+            `);
+            return;
+        }
+        
+        var html = '';
+        negotiations.forEach(function(neg) {
+            var statusBadge = '';
+            var actionButtons = '';
+            
+            if (neg.status === 'pending_sales_head') {
+                statusBadge = '<span class="negotiation-badge badge-pending">Pending Review</span>';
+                actionButtons = `
+                    <div class="action-buttons">
+                        <button class="btn btn-decline btn-decline-negotiation" data-id="${neg.id}">
+                            <i class="fas fa-times mr-2"></i>Decline
+                        </button>
+                        <button class="btn btn-approve btn-approve-negotiation" data-id="${neg.id}">
+                            <i class="fas fa-check mr-2"></i>Approve
+                        </button>
+                    </div>
+                `;
+            } else if (neg.status === 'pending_costing') {
+                statusBadge = '<span class="badge badge-warning"><i class="fas fa-calculator mr-1"></i>Re-Costing Requested by Pricing</span>';
+            } else if (neg.status === 'pending_pricing') {
+                statusBadge = '<span class="badge badge-info"><i class="fas fa-tags mr-1"></i>Re-Pricing Review</span>';
+            } else if (neg.status === 'pricing_completed') {
+                statusBadge = '<span class="badge badge-success"><i class="fas fa-check mr-1"></i>Re-Pricing Completed</span>';
+            } else if (neg.status === 'pricing_declined') {
+                statusBadge = '<span class="badge badge-danger"><i class="fas fa-times mr-1"></i>Declined by Pricing</span>';
+            } else if (neg.status === 'sales_head_approved') {
+                statusBadge = '<span class="badge badge-success"><i class="fas fa-check mr-1"></i>Approved</span>';
+            } else if (neg.status === 'sales_head_declined') {
+                statusBadge = '<span class="badge badge-danger"><i class="fas fa-times mr-1"></i>Declined</span>';
+            }
+            
+            var difference = (neg.current_selling_price || 0) - (neg.client_expected_price || 0);
+            var differencePercent = neg.current_selling_price ? ((difference / neg.current_selling_price) * 100).toFixed(1) : 0;
+            
+            html += `
+                <div class="negotiation-card">
+                    <div class="negotiation-header">
+                        <div>
+                            <div class="negotiation-title">
+                                <i class="fas fa-box mr-2"></i>${neg.item_name}
+                            </div>
+                            <small class="text-muted">
+                                Request #${neg.request_id} | Client: ${neg.client_name}
+                            </small>
+                        </div>
+                        ${statusBadge}
+                    </div>
+                    
+                    <div class="item-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Quantity</div>
+                            <div class="detail-value">${neg.quantity} ${neg.unit || 'pcs'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Request Date</div>
+                            <div class="detail-value">${new Date(neg.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Negotiation #</div>
+                            <div class="detail-value">#${neg.negotiation_count || 1}</div>
+                        </div>
+                    </div>
+                    
+                    ${neg.client_reason ? `
+                    <div class="client-reason">
+                        <strong><i class="fas fa-comment-dots mr-2"></i>Client's Reason:</strong>
+                        <p class="mb-0 mt-2">${neg.client_reason}</p>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="price-comparison">
+                        <h6 class="mb-3"><i class="fas fa-balance-scale mr-2"></i>Price Comparison</h6>
+                        <div class="price-row">
+                            <span class="price-label">Current Selling Price:</span>
+                            <span class="price-value current">EGP ${(neg.current_selling_price || 0).toFixed(2)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span class="price-label">Client Expected Price:</span>
+                            <span class="price-value expected">EGP ${(neg.client_expected_price || 0).toFixed(2)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span class="price-label">Difference:</span>
+                            <span class="price-value difference">
+                                EGP ${difference.toFixed(2)} (${differencePercent}%)
+                            </span>
+                        </div>
+                    </div>
+                    
+                    ${actionButtons}
+                </div>
+            `;
+        });
+        
+        $('#negotiationsContainer').html(html);
+    }
+    
+    function updateStatistics() {
+        $.get('/api/sales-head/negotiations/statistics', function(response) {
+            if (response.success) {
+                $('#pendingCount').text(response.stats.pending || 0);
+                $('#approvedCount').text(response.stats.approved_today || 0);
+                $('#declinedCount').text(response.stats.declined_today || 0);
+                $('#totalSavings').text('EGP ' + (response.stats.potential_savings || 0).toFixed(2));
+            }
+        });
+    }
+    
+    function loadClients() {
+        $.get('/api/clients', function(response) {
+            if (response.success) {
+                var options = '<option value="">All Clients</option>';
+                response.clients.forEach(function(client) {
+                    options += '<option value="' + client.id + '">' + client.client_name + '</option>';
+                });
+                $('#clientFilter').html(options);
+            }
+        });
+    }
+    
+    function approveNegotiation(negotiationId, notes) {
+        $.ajax({
+            url: '/api/sales-head/negotiations/' + negotiationId + '/approve',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                notes: notes
+            }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Approved!',
+                        text: 'Negotiation sent to Re-Pricing for review',
+                        timer: 2000
+                    });
+                    $('#approveModal').modal('hide');
+                    $('#approveNotes').val('');
+                    loadNegotiations();
+                    updateStatistics();
+                } else {
+                    Swal.fire('Error', response.error || 'Failed to approve negotiation', 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to approve negotiation', 'error');
+            }
+        });
+    }
+    
+    function declineNegotiation(negotiationId, reason) {
+        $.ajax({
+            url: '/api/sales-head/negotiations/' + negotiationId + '/decline',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                reason: reason
+            }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Declined',
+                        text: 'Negotiation returned to Pending Client Approval',
+                        timer: 2000
+                    });
+                    $('#declineModal').modal('hide');
+                    $('#declineReason').val('');
+                    loadNegotiations();
+                    updateStatistics();
+                } else {
+                    Swal.fire('Error', response.error || 'Failed to decline negotiation', 'error');
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Failed to decline negotiation', 'error');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

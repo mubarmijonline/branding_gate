@@ -1,0 +1,773 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Prevent chart scripts from loading -->
+<style>
+    .chart-container { display: none; }
+    /* Hide chart areas to prevent errors */
+    #myAreaChart, #myPieChart { display: none !important; }
+</style>
+<script>
+// Override chart demo scripts to prevent errors
+window.chartAreaDemo = function() {
+    console.log('Chart area demo disabled for supplier page');
+    return false;
+};
+window.chartPieDemo = function() {
+    console.log('Chart pie demo disabled for supplier page');
+    return false;
+};
+
+// Override any chart initialization
+$(document).ready(function() {
+    // Disable any chart scripts that might be loaded from main.html
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.global.responsive = false;
+    }
+});
+</script>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'supplier_management' in user_roles %}
+    
+    <!-- Supplier Management Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Supplier Management</h1>
+    </div>
+
+    <!-- Supplier Information Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Supplier Information</h2>
+            <button class="btn btn-primary" data-toggle="modal" data-target="#addSupplierModal">
+                <i class="fas fa-plus"></i> Add Supplier
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="suppliers-table" class="display table table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Supplier Name</th>
+                            <th>Supplier Type</th>
+                            <th>Company Name</th>
+                            <th>Contact Person</th>
+                            <th>Primary Phone</th>
+                            <th>Email Address</th>
+                            <th>Status</th>
+                            <th>Added Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Supplier Modal -->
+    <div class="modal fade" id="addSupplierModal" tabindex="-1" role="dialog" aria-labelledby="addSupplierModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addSupplierModalLabel">Add New Supplier</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="addSupplierForm">
+                        <!-- Basic Supplier Information Section -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="m-0">Basic Supplier Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="supplierName">Supplier Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="supplierName" name="supplier_name" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="supplierType">Supplier Type <span class="text-danger">*</span></label>
+                                            <select class="form-control" id="supplierType" name="supplier_type" required>
+                                                <option value="">Select Supplier Type</option>
+                                                <option value="Raw Materials">Raw Materials</option>
+                                                <option value="Equipment">Equipment</option>
+                                                <option value="Services">Services</option>
+                                                <option value="Technology">Technology</option>
+                                                <option value="Logistics">Logistics</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row" id="otherSupplierTypeRow" style="display: none;">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="otherSupplierType">Please specify other supplier type <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="otherSupplierType" name="other_supplier_type">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="companyName">Company Name</label>
+                                            <input type="text" class="form-control" id="companyName" name="company_name">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="businessRegistration">Business Registration Number</label>
+                                            <input type="text" class="form-control" id="businessRegistration" name="business_registration_number">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="status">Status <span class="text-danger">*</span></label>
+                                            <select class="form-control" id="status" name="status" required>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
+                                                <option value="Preferred">Preferred</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="dateAdded">Date Added <span class="text-danger">*</span></label>
+                                            <input type="date" class="form-control" id="dateAdded" name="date_added" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="address">Address</label>
+                                            <textarea class="form-control" id="address" name="address" rows="2"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contact Information Section -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="m-0">Contact Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="contactPersonName">Contact Person Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="contactPersonName" name="contact_person_name" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="jobTitle">Job Title / Position</label>
+                                            <input type="text" class="form-control" id="jobTitle" name="job_title">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="primaryPhone">Primary Phone Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="primaryPhone" name="primary_phone" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="secondaryPhone">Secondary Phone Number</label>
+                                            <input type="text" class="form-control" id="secondaryPhone" name="secondary_phone">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="emailAddress">Email Address <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control" id="emailAddress" name="email_address" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="whatsappNumber">WhatsApp Number</label>
+                                            <input type="text" class="form-control" id="whatsappNumber" name="whatsapp_number">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="preferredContactMethod">Preferred Contact Method</label>
+                                            <select class="form-control" id="preferredContactMethod" name="preferred_contact_method">
+                                                <option value="">Select Contact Method</option>
+                                                <option value="Phone">Phone</option>
+                                                <option value="Email">Email</option>
+                                                <option value="WhatsApp">WhatsApp</option>
+                                                <option value="In-Person">In-Person</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="website">Website</label>
+                                            <input type="url" class="form-control" id="website" name="website" placeholder="https://">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="notes">Additional Notes</label>
+                                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Any additional information about the supplier"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveSupplierBtn">Save Supplier</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Supplier Modal -->
+    <div class="modal fade" id="editSupplierModal" tabindex="-1" role="dialog" aria-labelledby="editSupplierModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editSupplierModalLabel">Edit Supplier</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="editSupplierForm">
+                        <input type="hidden" id="editSupplierId" name="supplier_id">
+                        
+                        <!-- Basic Supplier Information Section -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="m-0">Basic Supplier Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editSupplierName">Supplier Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="editSupplierName" name="supplier_name" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editSupplierType">Supplier Type <span class="text-danger">*</span></label>
+                                            <select class="form-control" id="editSupplierType" name="supplier_type" required>
+                                                <option value="">Select Supplier Type</option>
+                                                <option value="Raw Materials">Raw Materials</option>
+                                                <option value="Equipment">Equipment</option>
+                                                <option value="Services">Services</option>
+                                                <option value="Technology">Technology</option>
+                                                <option value="Logistics">Logistics</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row" id="editOtherSupplierTypeRow" style="display: none;">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="editOtherSupplierType">Please specify other supplier type <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="editOtherSupplierType" name="other_supplier_type">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editCompanyName">Company Name</label>
+                                            <input type="text" class="form-control" id="editCompanyName" name="company_name">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editBusinessRegistration">Business Registration Number</label>
+                                            <input type="text" class="form-control" id="editBusinessRegistration" name="business_registration_number">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editStatus">Status <span class="text-danger">*</span></label>
+                                            <select class="form-control" id="editStatus" name="status" required>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
+                                                <option value="Preferred">Preferred</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editDateAdded">Date Added <span class="text-danger">*</span></label>
+                                            <input type="date" class="form-control" id="editDateAdded" name="date_added" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="editAddress">Address</label>
+                                            <textarea class="form-control" id="editAddress" name="address" rows="2"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contact Information Section -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="m-0">Contact Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editContactPersonName">Contact Person Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="editContactPersonName" name="contact_person_name" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editJobTitle">Job Title / Position</label>
+                                            <input type="text" class="form-control" id="editJobTitle" name="job_title">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editPrimaryPhone">Primary Phone Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="editPrimaryPhone" name="primary_phone" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editSecondaryPhone">Secondary Phone Number</label>
+                                            <input type="text" class="form-control" id="editSecondaryPhone" name="secondary_phone">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editEmailAddress">Email Address <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control" id="editEmailAddress" name="email_address" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editWhatsappNumber">WhatsApp Number</label>
+                                            <input type="text" class="form-control" id="editWhatsappNumber" name="whatsapp_number">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editPreferredContactMethod">Preferred Contact Method</label>
+                                            <select class="form-control" id="editPreferredContactMethod" name="preferred_contact_method">
+                                                <option value="">Select Contact Method</option>
+                                                <option value="Phone">Phone</option>
+                                                <option value="Email">Email</option>
+                                                <option value="WhatsApp">WhatsApp</option>
+                                                <option value="In-Person">In-Person</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="editWebsite">Website</label>
+                                            <input type="url" class="form-control" id="editWebsite" name="website" placeholder="https://">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="form-group">
+                                            <label for="editNotes">Additional Notes</label>
+                                            <textarea class="form-control" id="editNotes" name="notes" rows="3" placeholder="Any additional information about the supplier"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateSupplierBtn">Update Supplier</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        You don't have admin permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Include DataTables JavaScript at the bottom -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('Supplier page loaded successfully');
+    
+    // Initialize DataTable
+    var table = $('#suppliers-table').DataTable({
+        "ajax": {
+            "url": "/api/suppliers",
+            "type": "GET",
+            "dataSrc": function(json) {
+                console.log('Received data:', json);
+                if (json.success) {
+                    return json.suppliers;
+                } else {
+                    console.error('Error loading suppliers:', json.error);
+                    return [];
+                }
+            },
+            "error": function(xhr, error, code) {
+                console.error('AJAX Error:', error, code);
+                console.error('Response:', xhr.responseText);
+            }
+        },
+        "columns": [
+            { "data": "id" },
+            { "data": "supplier_name" },
+            { "data": "supplier_type" },
+            { "data": "company_name" },
+            { "data": "contact_person_name" },
+            { "data": "primary_phone" },
+            { "data": "email_address" },
+            { "data": "status" },
+            { "data": "date_added" },
+            {
+                "data": null,
+                "orderable": false,
+                "render": function(data, type, row) {
+                    return '<button class="btn btn-sm btn-primary edit-btn" data-id="' + row.id + '">Edit</button> ' +
+                           '<button class="btn btn-sm btn-danger delete-btn" data-id="' + row.id + '">Delete</button>';
+                }
+            }
+        ],
+        "order": [[ 0, "desc" ]],
+        "pageLength": 25,
+        "responsive": true
+    });
+
+    // Handle supplier type "Other" option
+    $('#supplierType, #editSupplierType').change(function() {
+        var isOther = $(this).val() === 'Other';
+        var targetRow = $(this).attr('id') === 'supplierType' ? '#otherSupplierTypeRow' : '#editOtherSupplierTypeRow';
+        var targetInput = $(this).attr('id') === 'supplierType' ? '#otherSupplierType' : '#editOtherSupplierType';
+        
+        if (isOther) {
+            $(targetRow).show();
+            $(targetInput).attr('required', true);
+        } else {
+            $(targetRow).hide();
+            $(targetInput).attr('required', false).val('');
+        }
+    });
+
+    // Auto-set today's date for date added field
+    $('#dateAdded, #editDateAdded').val(new Date().toISOString().split('T')[0]);
+
+    // Function to reset form
+    function resetSupplierForm() {
+        $('#addSupplierForm')[0].reset();
+        $('#otherSupplierTypeRow').hide();
+        $('#dateAdded').val(new Date().toISOString().split('T')[0]);
+    }
+
+    // Save Supplier
+    $('#saveSupplierBtn').click(function() {
+        console.log('Save supplier button clicked');
+        
+        // Basic validation
+        var supplierName = $('#supplierName').val().trim();
+        var supplierType = $('#supplierType').val();
+        var contactPersonName = $('#contactPersonName').val().trim();
+        var primaryPhone = $('#primaryPhone').val().trim();
+        var emailAddress = $('#emailAddress').val().trim();
+        var status = $('#status').val();
+        var dateAdded = $('#dateAdded').val();
+        
+        if (!supplierName) {
+            Swal.fire('Error!', 'Please enter the supplier name.', 'error');
+            return;
+        }
+        
+        if (!supplierType) {
+            Swal.fire('Error!', 'Please select a supplier type.', 'error');
+            return;
+        }
+        
+        if (supplierType === 'Other' && !$('#otherSupplierType').val().trim()) {
+            Swal.fire('Error!', 'Please specify the other supplier type.', 'error');
+            return;
+        }
+        
+        if (!contactPersonName) {
+            Swal.fire('Error!', 'Please enter the contact person name.', 'error');
+            return;
+        }
+        
+        if (!primaryPhone) {
+            Swal.fire('Error!', 'Please enter the primary phone number.', 'error');
+            return;
+        }
+        
+        if (!emailAddress) {
+            Swal.fire('Error!', 'Please enter the email address.', 'error');
+            return;
+        }
+        
+        if (!status) {
+            Swal.fire('Error!', 'Please select a status.', 'error');
+            return;
+        }
+        
+        if (!dateAdded) {
+            Swal.fire('Error!', 'Please select the date added.', 'error');
+            return;
+        }
+        
+        var formData = {
+            supplier_name: supplierName,
+            supplier_type: supplierType,
+            other_supplier_type: $('#otherSupplierType').val(),
+            company_name: $('#companyName').val(),
+            business_registration_number: $('#businessRegistration').val(),
+            status: status,
+            date_added: dateAdded,
+            address: $('#address').val(),
+            contact_person_name: contactPersonName,
+            job_title: $('#jobTitle').val(),
+            primary_phone: primaryPhone,
+            secondary_phone: $('#secondaryPhone').val(),
+            email_address: emailAddress,
+            whatsapp_number: $('#whatsappNumber').val(),
+            preferred_contact_method: $('#preferredContactMethod').val(),
+            website: $('#website').val(),
+            notes: $('#notes').val()
+        };
+        
+        console.log('Sending data:', formData);
+        
+        $.ajax({
+            url: '/api/suppliers/add',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                console.log('Add response:', response);
+                if (response.success) {
+                    $('#addSupplierModal').modal('hide');
+                    resetSupplierForm();
+                    table.ajax.reload();
+                    Swal.fire('Success!', 'Supplier added successfully!', 'success');
+                } else {
+                    Swal.fire('Error!', response.error, 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Add error:', error);
+                console.error('Response:', xhr.responseText);
+                Swal.fire('Error!', 'Error adding supplier: ' + error, 'error');
+            }
+        });
+    });
+
+    // Edit Supplier
+    $(document).on('click', '.edit-btn', function() {
+        var supplierId = $(this).data('id');
+        console.log('Edit supplier:', supplierId);
+        
+        // Find the supplier data in the current table
+        var rowData = table.row($(this).parents('tr')).data();
+        console.log('Row data:', rowData);
+        
+        // Populate the edit form - Basic Information
+        $('#editSupplierId').val(rowData.id);
+        $('#editSupplierName').val(rowData.supplier_name);
+        $('#editSupplierType').val(rowData.supplier_type);
+        $('#editCompanyName').val(rowData.company_name);
+        $('#editBusinessRegistration').val(rowData.business_registration_number);
+        $('#editStatus').val(rowData.status);
+        $('#editDateAdded').val(rowData.date_added);
+        $('#editAddress').val(rowData.address);
+        
+        // Handle "Other" supplier type
+        if (rowData.supplier_type === 'Other') {
+            $('#editOtherSupplierTypeRow').show();
+            $('#editOtherSupplierType').val(rowData.other_supplier_type);
+        } else {
+            $('#editOtherSupplierTypeRow').hide();
+            $('#editOtherSupplierType').val('');
+        }
+        
+        // Populate the edit form - Contact Information
+        $('#editContactPersonName').val(rowData.contact_person_name);
+        $('#editJobTitle').val(rowData.job_title);
+        $('#editPrimaryPhone').val(rowData.primary_phone);
+        $('#editSecondaryPhone').val(rowData.secondary_phone);
+        $('#editEmailAddress').val(rowData.email_address);
+        $('#editWhatsappNumber').val(rowData.whatsapp_number);
+        $('#editPreferredContactMethod').val(rowData.preferred_contact_method);
+        $('#editWebsite').val(rowData.website);
+        $('#editNotes').val(rowData.additional_notes);
+        
+        $('#editSupplierModal').modal('show');
+    });
+
+    // Update Supplier
+    $('#updateSupplierBtn').click(function() {
+        console.log('Update supplier button clicked');
+        var supplierId = $('#editSupplierId').val();
+        
+        // Basic validation
+        var supplierName = $('#editSupplierName').val().trim();
+        var supplierType = $('#editSupplierType').val();
+        var contactPersonName = $('#editContactPersonName').val().trim();
+        var primaryPhone = $('#editPrimaryPhone').val().trim();
+        var emailAddress = $('#editEmailAddress').val().trim();
+        var status = $('#editStatus').val();
+        var dateAdded = $('#editDateAdded').val();
+        
+        if (!supplierName || !supplierType || !contactPersonName || !primaryPhone || !emailAddress || !status || !dateAdded) {
+            Swal.fire('Error!', 'Please fill in all required fields.', 'error');
+            return;
+        }
+        
+        if (supplierType === 'Other' && !$('#editOtherSupplierType').val().trim()) {
+            Swal.fire('Error!', 'Please specify the other supplier type.', 'error');
+            return;
+        }
+        
+        var formData = {
+            supplier_name: supplierName,
+            supplier_type: supplierType,
+            other_supplier_type: $('#editOtherSupplierType').val(),
+            company_name: $('#editCompanyName').val(),
+            business_registration_number: $('#editBusinessRegistration').val(),
+            status: status,
+            date_added: dateAdded,
+            address: $('#editAddress').val(),
+            contact_person_name: contactPersonName,
+            job_title: $('#editJobTitle').val(),
+            primary_phone: primaryPhone,
+            secondary_phone: $('#editSecondaryPhone').val(),
+            email_address: emailAddress,
+            whatsapp_number: $('#editWhatsappNumber').val(),
+            preferred_contact_method: $('#editPreferredContactMethod').val(),
+            website: $('#editWebsite').val(),
+            notes: $('#editNotes').val()
+        };
+        
+        console.log('Updating supplier:', supplierId, formData);
+        
+        $.ajax({
+            url: '/api/suppliers/edit/' + supplierId,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                console.log('Update response:', response);
+                if (response.success) {
+                    $('#editSupplierModal').modal('hide');
+                    table.ajax.reload();
+                    Swal.fire('Success!', 'Supplier updated successfully!', 'success');
+                } else {
+                    Swal.fire('Error!', response.error, 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Update error:', error);
+                console.error('Response:', xhr.responseText);
+                Swal.fire('Error!', 'Error updating supplier: ' + error, 'error');
+            }
+        });
+    });
+
+    // Delete Supplier
+    $(document).on('click', '.delete-btn', function() {
+        var supplierId = $(this).data('id');
+        var rowData = table.row($(this).parents('tr')).data();
+        
+        Swal.fire({
+            title: 'Are you sure?',
+            text: 'Do you want to delete supplier "' + rowData.supplier_name + '"?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                console.log('Deleting supplier:', supplierId);
+                
+                $.ajax({
+                    url: '/api/suppliers/delete/' + supplierId,
+                    type: 'DELETE',
+                    success: function(response) {
+                        console.log('Delete response:', response);
+                        if (response.success) {
+                            table.ajax.reload();
+                            Swal.fire('Deleted!', 'Supplier deleted successfully!', 'success');
+                        } else {
+                            Swal.fire('Error!', response.error, 'error');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Delete error:', error);
+                        console.error('Response:', xhr.responseText);
+                        Swal.fire('Error!', 'Error deleting supplier: ' + error, 'error');
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

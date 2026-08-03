@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template System Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .field-group { margin: 10px 0; }
+        label { display: inline-block; width: 150px; font-weight: bold; }
+        input, select, textarea { width: 200px; padding: 5px; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .response { background: #f8f9fa; padding: 10px; margin: 10px 0; border-left: 4px solid #007bff; }
+        .error { border-left-color: #dc3545; background: #f8d7da; }
+        .success { border-left-color: #28a745; background: #d4edda; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Template System Test Page</h1>
+        
+        <div class="section">
+            <h2>1. Test Templates API</h2>
+            <button onclick="testGetTemplates()">Get Templates</button>
+            <div id="templates-response" class="response"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. Test Template Fields API</h2>
+            <div class="field-group">
+                <label>Template ID:</label>
+                <select id="template-select" onchange="testGetTemplateFields()">
+                    <option value="">Select Template</option>
+                </select>
+            </div>
+            <div id="fields-response" class="response"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. Test Catalog Items API</h2>
+            <button onclick="testGetCatalogItems()">Get Catalog Items</button>
+            <div id="catalog-response" class="response"></div>
+        </div>
+        
+        <div class="section">
+            <h2>4. Test Item Types API</h2>
+            <button onclick="testGetItemTypes()">Get Item Types</button>
+            <div id="item-types-response" class="response"></div>
+        </div>
+        
+        <div class="section">
+            <h2>5. Test Create Request API</h2>
+            <div class="field-group">
+                <label>Client ID:</label>
+                <input type="number" id="client-id" value="1" />
+            </div>
+            <div class="field-group">
+                <label>Template ID:</label>
+                <select id="create-template-select">
+                    <option value="">Select Template</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Notes:</label>
+                <textarea id="notes" rows="3"></textarea>
+            </div>
+            <button onclick="testCreateRequest()">Create Request</button>
+            <div id="create-response" class="response"></div>
+        </div>
+    </div>
+
+    <script>
+        let templates = [];
+        let catalogItems = [];
+        
+        // Utility function for API calls
+        async function apiCall(url, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                const response = await fetch(url, options);
+                const result = await response.json();
+                
+                return { success: response.ok, data: result, status: response.status };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // Display response helper
+        function displayResponse(elementId, response, isError = false) {
+            const element = document.getElementById(elementId);
+            element.className = `response ${isError ? 'error' : 'success'}`;
+            element.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+        }
+        
+        // Test functions
+        async function testGetTemplates() {
+            const response = await apiCall('/api/sales-requests/templates');
+            displayResponse('templates-response', response, !response.success);
+            
+            if (response.success && response.data.templates) {
+                templates = response.data.templates;
+                updateTemplateSelects();
+            }
+        }
+        
+        function updateTemplateSelects() {
+            const selects = ['template-select', 'create-template-select'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Select Template</option>';
+                templates.forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template.template_id;
+                    option.textContent = `${template.template_id}: ${template.template_name}`;
+                    select.appendChild(option);
+                });
+            });
+        }
+        
+        async function testGetTemplateFields() {
+            const templateId = document.getElementById('template-select').value;
+            if (!templateId) {
+                displayResponse('fields-response', { error: 'Please select a template' }, true);
+                return;
+            }
+            
+            const response = await apiCall(`/api/sales-requests/templates/${templateId}/fields`);
+            displayResponse('fields-response', response, !response.success);
+        }
+        
+        async function testGetCatalogItems() {
+            const response = await apiCall('/api/sales-requests/catalog/items');
+            displayResponse('catalog-response', response, !response.success);
+            
+            if (response.success && response.data.items) {
+                catalogItems = response.data.items;
+            }
+        }
+        
+        async function testGetItemTypes() {
+            const response = await apiCall('/api/sales-requests/catalog/item-types');
+            displayResponse('item-types-response', response, !response.success);
+        }
+        
+        async function testCreateRequest() {
+            const clientId = document.getElementById('client-id').value;
+            const templateId = document.getElementById('create-template-select').value;
+            const notes = document.getElementById('notes').value;
+            
+            if (!clientId || !templateId) {
+                displayResponse('create-response', { error: 'Client ID and Template ID are required' }, true);
+                return;
+            }
+            
+            const requestData = {
+                client_id: parseInt(clientId),
+                template_id: parseInt(templateId),
+                notes: notes,
+                template_fields: {
+                    // Add some sample fields based on template
+                    event_name: 'Test Event',
+                    start_date: '2024-02-01',
+                    end_date: '2024-02-02'
+                },
+                items: [
+                    {
+                        item_code: 'TENT_001',
+                        quantity: 2,
+                        notes: 'Sample tent request'
+                    }
+                ]
+            };
+            
+            const response = await apiCall('/api/sales-requests/create-with-template', 'POST', requestData);
+            displayResponse('create-response', response, !response.success);
+        }
+        
+        // Auto-load templates on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            testGetTemplates();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,2084 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .stats-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        border-left: 4px solid #1e3a5f;
+        height: 100%;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .stats-number {
+        font-size: 32px;
+        font-weight: 800;
+        color: #2c3e50;
+        margin-bottom: 5px;
+    }
+    
+    .stats-label {
+        font-size: 13px;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .supplier-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        border-left: 5px solid #1e3a5f;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .supplier-card:hover {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+    }
+    
+    .supplier-card.active {
+        border-left-color: #2d5a87;
+        background: #f5f8fb;
+    }
+    
+    .supplier-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+    
+    .supplier-info {
+        color: #6c757d;
+        font-size: 13px;
+    }
+    
+    .supplier-stats {
+        display: flex;
+        gap: 15px;
+        margin-top: 10px;
+    }
+    
+    .supplier-stat {
+        text-align: center;
+        padding: 5px 10px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+    
+    .supplier-stat .value {
+        font-size: 18px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+    
+    .supplier-stat .label {
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #7f8c8d;
+    }
+    
+    .status-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 700; text-transform: capitalize;
+        border: 1px solid transparent; border-left-width: 4px;
+    }
+    .status-badge i { font-size: 10px; opacity: .9; }
+    .status-badge.pending     { background:#fff8e6; color:#7a5d00; border-left-color:#f59e0b; }
+    .status-badge.ordered     { background:#e6f4f8; color:#0c5460; border-left-color:#17a2b8; }
+    .status-badge.in_progress { background:#e6f0ff; color:#1e3a8a; border-left-color:#3b82f6; }
+    .status-badge.received    { background:#e6f8ec; color:#0f5132; border-left-color:#16a34a; }
+    .status-badge.cancelled   { background:#f1f3f5; color:#383d41; border-left-color:#6c757d; }
+    
+    .type-badge {
+        padding: 3px 8px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+    
+    .type-badge.direct { background: #eef3f7; color: #1e3a5f; }
+    .type-badge.component { background: #e8eff5; color: #2d5a87; }
+    
+    .items-table th {
+        background: #1e3a5f;
+        color: white;
+        font-weight: 600;
+    }
+    
+    .filter-section {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+
+    /* Supplier card progress bar */
+    .sup-progress {
+        margin-top: 10px;
+        background:#eef3f7; height:8px; border-radius:6px; overflow:hidden; position:relative;
+    }
+    .sup-progress .bar {
+        height:100%; background:linear-gradient(90deg,#16a34a,#22c55e);
+        border-radius:6px; transition: width .35s ease;
+    }
+    .sup-progress-label {
+        display:flex; justify-content:space-between;
+        font-size:10.5px; color:#6c757d; margin-top:4px; font-weight:600;
+    }
+    .sup-overdue-pill {
+        display:inline-flex; align-items:center; gap:4px;
+        padding:2px 8px; border-radius:10px;
+        background:#fff0f0; color:#b91c1c; border:1px solid #fecaca;
+        font-size:10.5px; font-weight:700; margin-left:6px;
+    }
+
+    /* Sticky items table header */
+    .items-table-wrap { max-height: 70vh; overflow:auto; }
+    .items-table-wrap thead th { position: sticky; top: 0; z-index: 5; }
+
+    /* Grouped items view (when no supplier selected) */
+    .sup-group-card {
+        background:#fff; border:1px solid #e6ecf2; border-radius:10px;
+        margin-bottom:14px; box-shadow:0 1px 6px rgba(0,0,0,.05); overflow:hidden;
+    }
+    .sup-group-head {
+        padding:12px 16px; cursor:pointer;
+        background:linear-gradient(135deg,#f6f9fc 0%,#eaf0f7 100%);
+        display:flex; justify-content:space-between; align-items:center; gap:12px;
+        border-bottom:1px solid #e6ecf2;
+    }
+    .sup-group-head:hover { background:linear-gradient(135deg,#eaf0f7 0%,#dde6f1 100%); }
+    .sup-group-head .name { font-weight:700; color:#1e3a5f; font-size:14px; }
+    .sup-group-head .chev { color:#6b7280; transition: transform .2s; }
+    .sup-group-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
+    .sup-group-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .sup-group-chip {
+        display:inline-flex; align-items:center; gap:4px;
+        padding:3px 9px; border-radius:11px; font-size:11px; font-weight:700;
+        background:#f1f5f9; color:#334155; border:1px solid #e2e8f0;
+    }
+    .sup-group-chip.ok   { background:#ecfdf5; border-color:#bbf7d0; color:#14532d; }
+    .sup-group-chip.warn { background:#fffbeb; border-color:#fde68a; color:#78350f; }
+    .sup-group-chip.dng  { background:#fef2f2; border-color:#fecaca; color:#7f1d1d; }
+    .sup-group-chip.info { background:#eff6ff; border-color:#bfdbfe; color:#1e3a8a; }
+    .sup-group-body { padding: 8px 12px 14px; }
+    .sup-group-body .item-row {
+        display:grid; grid-template-columns: 1.5fr 1fr 1fr 0.9fr 0.9fr 0.9fr;
+        gap:8px; padding:8px 6px; border-bottom:1px dashed #eef2f7;
+        font-size:12.5px; align-items:center;
+    }
+    .sup-group-body .item-row:last-child { border-bottom:none; }
+    .sup-group-body .ih { font-size:10.5px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; }
+    .sup-view-toggle { display:flex; gap:6px; }
+    
+    .overdue {
+        color: #dc3545;
+        font-weight: 600;
+    }
+    
+    .due-soon {
+        color: #fd7e14;
+        font-weight: 600;
+    }
+
+    /* Clickable stat cards */
+    .stats-card.clickable { cursor: pointer; }
+    .stats-card.clickable:hover { transform: translateY(-3px); box-shadow: 0 6px 22px rgba(0,0,0,0.18); }
+    .stats-card.active-filter {
+        background: linear-gradient(135deg,#eef5ff 0%,#dde8ff 100%);
+        border-left-width: 6px;
+        box-shadow: 0 4px 18px rgba(30,58,95,0.25);
+    }
+    .stats-card.active-filter .stats-number { color: #1e3a5f; }
+
+    /* Items table row */
+    #itemsTable tbody tr { cursor: pointer; }
+    #itemsTable tbody tr:hover { background: #f5f8fb !important; }
+
+    /* Request details modal */
+    #requestDetailsModal .modal-dialog { max-width: 1100px; }
+    .rd-section { background:#fff; border:1px solid #e6ecf2; border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+    .rd-section h6 { color:#1e3a5f; font-weight:700; margin-bottom:12px; border-bottom:2px solid #eef3f7; padding-bottom:6px; }
+    .rd-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 18px; font-size:13px; }
+    .rd-grid .lbl { color:#6c757d; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+    .rd-grid .val { color:#2c3e50; font-weight:600; }
+    .rd-item { border:1px solid #eef3f7; border-radius:8px; padding:12px; margin-bottom:10px; background:#fafbfd; }
+    .rd-item .rd-item-head { display:flex; gap:12px; align-items:flex-start; }
+    .rd-item img.rd-thumb { width:72px; height:72px; object-fit:cover; border-radius:6px; border:1px solid #e6ecf2; background:#fff; }
+    .rd-item .rd-item-title { font-weight:700; color:#1e3a5f; font-size:14px; }
+    .rd-item .rd-item-sub { color:#6c757d; font-size:12px; margin-top:2px; }
+    .rd-item .rd-facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px 16px; margin-top:10px; font-size:12.5px; }
+    .rd-item .rd-facts .lbl { color:#6c757d; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; }
+    .rd-item .rd-facts .val { color:#2c3e50; font-weight:600; }
+    .rd-extra-imgs { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .rd-extra-imgs img { width:44px; height:44px; object-fit:cover; border-radius:4px; border:1px solid #e6ecf2; }
+    .rd-tpl { border:1px solid #eef3f7; border-radius:8px; padding:12px; margin-bottom:10px; background:#fafbfd; }
+    .rd-tpl-head { font-weight:700; color:#1e3a5f; margin-bottom:8px; font-size:13px; }
+    .rd-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 18px; font-size:12.5px; }
+    .rd-fields .lbl { color:#6c757d; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; }
+    .rd-fields .val { color:#2c3e50; font-weight:600; word-break:break-word; }
+    .rd-fields .val.full { grid-column:1/-1; }
+    .rd-note { padding:8px 10px; border-left:3px solid #adb5bd; background:#f8f9fa; border-radius:4px; margin-top:8px; font-size:12.5px; color:#495057; }
+
+    /* ===== Collapsible Item Cards in Request Modal ===== */
+    .rdi-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
+    .rdi-toolbar .btn { font-size:11.5px; padding:3px 10px; }
+    .rdi-card {
+        border:1px solid #e6ecf2; border-left:4px solid #1e3a5f; border-radius:8px;
+        margin-bottom:8px; background:#fff; overflow:hidden; transition: box-shadow .15s;
+    }
+    .rdi-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.06); }
+    .rdi-card.received  { border-left-color:#16a34a; }
+    .rdi-card.pending   { border-left-color:#f59e0b; }
+    .rdi-card.in_progress { border-left-color:#3b82f6; }
+    .rdi-card.ordered   { border-left-color:#17a2b8; }
+    .rdi-head {
+        display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer;
+        background:linear-gradient(135deg,#fafbfd 0%,#f3f6fa 100%);
+        user-select:none;
+    }
+    .rdi-head:hover { background:linear-gradient(135deg,#eef3f7 0%,#e2eaf2 100%); }
+    .rdi-head .rdi-chev { color:#6b7280; transition: transform .2s; font-size:11px; width:12px; flex-shrink:0; }
+    .rdi-head[aria-expanded="true"] .rdi-chev { transform: rotate(90deg); }
+    .rdi-head .rdi-thumb-sm {
+        width:42px; height:42px; object-fit:cover; border-radius:5px; border:1px solid #e6ecf2; background:#fff; flex-shrink:0;
+    }
+    .rdi-head .rdi-thumb-sm.placeholder {
+        display:flex; align-items:center; justify-content:center; color:#cbd5e1; font-size:18px;
+    }
+    .rdi-summary { flex:1; min-width:0; }
+    .rdi-summary .rdi-name {
+        font-weight:700; color:#1e3a5f; font-size:13.5px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .rdi-summary .rdi-meta {
+        display:flex; gap:8px; flex-wrap:wrap; margin-top:3px;
+        font-size:11px; color:#6b7280;
+    }
+    .rdi-summary .rdi-meta strong { color:#374151; font-weight:600; }
+    .rdi-pills { display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0; }
+    .rdi-pill {
+        display:inline-flex; align-items:center; gap:3px;
+        padding:2px 8px; border-radius:10px; font-size:10.5px; font-weight:700;
+        background:#eef3f7; color:#1e3a5f; white-space:nowrap;
+    }
+    .rdi-pill.qty   { background:#e0f2fe; color:#075985; }
+    .rdi-pill.cost  { background:#fef9c3; color:#713f12; }
+    .rdi-pill.due   { background:#fff1f2; color:#9f1239; }
+    .rdi-pill.sup   { background:#ecfccb; color:#365314; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+    .rdi-pill.status.received { background:#dcfce7; color:#14532d; }
+    .rdi-pill.status.pending  { background:#fef3c7; color:#78350f; }
+    .rdi-pill.status.in_progress { background:#dbeafe; color:#1e3a8a; }
+    .rdi-pill.status.ordered  { background:#cffafe; color:#155e75; }
+    .rdi-body { padding:12px 14px 14px 38px; border-top:1px dashed #e6ecf2; background:#fafbfd; }
+
+    /* Suppliers pane search */
+    .sup-search-wrap { padding:10px 14px 0; }
+    .sup-search-wrap .form-control { font-size:13px; }
+    .sup-list-empty { text-align:center; padding:24px; color:#9ca3af; font-size:12px; }
+
+    /* Select2 Enhanced Styling for Bootstrap 4 */
+    .select2-container {
+        width: 100% !important;
+    }
+    
+    .select2-container--default .select2-selection--single {
+        height: 38px;
+        border: 1px solid #d1d3e2;
+        border-radius: 0.35rem;
+        background-color: #fff;
+        display: flex;
+        align-items: center;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        color: #5a5c69;
+        line-height: 38px;
+        padding-left: 12px;
+        padding-right: 30px;
+        font-size: 14px;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 36px;
+        width: 30px;
+        right: 3px;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__arrow b {
+        border-color: #5a5c69 transparent transparent transparent;
+        margin-top: -2px;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__placeholder {
+        color: #858796;
+        font-size: 14px;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__clear {
+        margin-right: 5px;
+        font-size: 18px;
+        color: #858796;
+        cursor: pointer;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+        color: #dc3545;
+    }
+    
+    .select2-container--default.select2-container--open .select2-selection--single {
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+    }
+    
+    .select2-dropdown {
+        border: 1px solid #d1d3e2;
+        border-radius: 0.35rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        margin-top: 2px;
+    }
+    
+    .select2-container--default .select2-search--dropdown {
+        padding: 8px;
+    }
+    
+    .select2-container--default .select2-search--dropdown .select2-search__field {
+        border: 1px solid #d1d3e2;
+        border-radius: 0.35rem;
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+        border-color: #4e73df;
+        outline: none;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+    }
+    
+    .select2-container--default .select2-results__option {
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+    
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #4e73df;
+        color: white;
+    }
+    
+    .select2-container--default .select2-results__option[aria-selected=true] {
+        background-color: #e8f0fe;
+        color: #4e73df;
+    }
+    
+    .select2-results__options {
+        max-height: 300px;
+    }
+
+    /* ===== Reports Row (Charts + Overdue Panel) ===== */
+    .report-card {
+        background:#fff; border-radius:10px; padding:16px 18px;
+        box-shadow:0 2px 10px rgba(0,0,0,0.08); height:340px;
+        display:flex; flex-direction:column;
+    }
+    .report-card h6 {
+        color:#1e3a5f; font-weight:700; margin:0 0 10px;
+        font-size:13px; text-transform:uppercase; letter-spacing:.6px;
+        border-bottom:2px solid #eef3f7; padding-bottom:8px;
+        display:flex; justify-content:space-between; align-items:center;
+    }
+    .report-card .chart-wrap { position:relative; flex:1; min-height:0; }
+    .overdue-list { overflow-y:auto; flex:1; min-height:0; }
+    .overdue-list .ov-row {
+        display:flex; justify-content:space-between; align-items:center; gap:8px;
+        padding:8px 4px; border-bottom:1px dashed #eef2f7; font-size:12.5px; cursor:pointer;
+    }
+    .overdue-list .ov-row:hover { background:#fff5f5; }
+    .overdue-list .ov-row:last-child { border-bottom:none; }
+    .overdue-list .ov-item { font-weight:600; color:#1e3a5f; min-width:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .overdue-list .ov-sup { color:#6b7280; font-size:11px; }
+    .overdue-list .ov-due { color:#dc2626; font-weight:700; font-size:11.5px; white-space:nowrap; }
+
+    /* ===== Scorecard Strip ===== */
+    .scorecard-strip {
+        background:#fff; border-radius:10px; padding:14px 16px;
+        box-shadow:0 2px 10px rgba(0,0,0,0.08); margin-bottom:20px;
+        overflow-x:auto; display:flex; gap:12px;
+    }
+    .scorecard-tile {
+        flex:0 0 220px; background:linear-gradient(135deg,#f8fafc 0%,#eef3f7 100%);
+        border:1px solid #e6ecf2; border-radius:10px; padding:12px 14px;
+        position:relative; transition: all .2s;
+    }
+    .scorecard-tile:hover { transform: translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,.1); }
+    .scorecard-tile .sc-name { font-weight:700; color:#1e3a5f; font-size:13px; margin-bottom:8px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .scorecard-tile .sc-row { display:flex; justify-content:space-between; font-size:11px; padding:2px 0; }
+    .scorecard-tile .sc-row .lbl { color:#6b7280; text-transform:uppercase; letter-spacing:.4px; font-weight:600; }
+    .scorecard-tile .sc-row .val { color:#0f172a; font-weight:700; }
+    .scorecard-tile .sc-row .val.green { color:#16a34a; }
+    .scorecard-tile .sc-row .val.amber { color:#d97706; }
+    .scorecard-tile .sc-row .val.red { color:#dc2626; }
+    .scorecard-tile .sc-actions { margin-top:8px; text-align:right; }
+    .scorecard-tile .sc-actions .btn { padding:2px 8px; font-size:10.5px; }
+
+    /* ===== Kanban / Pipeline ===== */
+    .kanban-board {
+        display:grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap:12px; align-items:start;
+    }
+    @media (max-width: 1200px) { .kanban-board { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 700px)  { .kanban-board { grid-template-columns: 1fr; } }
+    .kanban-col {
+        background:#f8fafc; border:1px solid #e6ecf2; border-radius:10px;
+        max-height:70vh; display:flex; flex-direction:column;
+    }
+    .kanban-col-head {
+        padding:10px 12px; border-bottom:2px solid #e6ecf2; font-weight:700;
+        font-size:12px; text-transform:uppercase; letter-spacing:.5px;
+        display:flex; justify-content:space-between; align-items:center;
+        position:sticky; top:0; background:#f8fafc; border-radius:10px 10px 0 0; z-index:2;
+    }
+    .kanban-col[data-status="pending"]     .kanban-col-head { color:#7a5d00; border-bottom-color:#f59e0b; }
+    .kanban-col[data-status="ordered"]     .kanban-col-head { color:#0c5460; border-bottom-color:#17a2b8; }
+    .kanban-col[data-status="in_progress"] .kanban-col-head { color:#1e3a8a; border-bottom-color:#3b82f6; }
+    .kanban-col[data-status="received"]    .kanban-col-head { color:#0f5132; border-bottom-color:#16a34a; }
+    .kanban-col-body { padding:10px; overflow-y:auto; flex:1; min-height:60px; }
+    .kanban-card {
+        background:#fff; border:1px solid #e6ecf2; border-left:4px solid #1e3a5f;
+        border-radius:8px; padding:10px 12px; margin-bottom:8px;
+        font-size:12.5px; cursor:pointer; transition: all .15s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .kanban-card:hover { transform: translateY(-1px); box-shadow:0 3px 10px rgba(0,0,0,.1); }
+    .kanban-card.overdue { border-left-color:#dc2626; background:#fff7f7; }
+    .kanban-card.due-soon { border-left-color:#f59e0b; background:#fffdf5; }
+    .kanban-card .kc-name { font-weight:700; color:#1e3a5f; margin-bottom:4px;
+        display:flex; justify-content:space-between; gap:6px; }
+    .kanban-card .kc-qty { font-size:10.5px; background:#eef3f7; color:#1e3a5f; padding:1px 6px; border-radius:8px; flex-shrink:0; }
+    .kanban-card .kc-meta { color:#6b7280; font-size:11px; line-height:1.5; }
+    .kanban-card .kc-meta .kc-sup { color:#374151; font-weight:600; }
+    .kanban-card .kc-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:6px; }
+    .kanban-card .kc-foot a { font-size:11px; }
+    .kanban-card .kc-due { font-size:11px; font-weight:700; }
+    .kanban-card .kc-due.overdue { color:#dc2626; }
+    .kanban-card .kc-due.due-soon { color:#d97706; }
+    .kanban-col-empty { color:#9ca3af; text-align:center; padding:18px; font-size:12px; font-style:italic; }
+
+    /* ===== Filter Chips & Pills ===== */
+    .filter-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .status-pill {
+        display:inline-flex; align-items:center; gap:5px; padding:5px 12px;
+        border-radius:18px; font-size:11.5px; font-weight:700; cursor:pointer;
+        border:1.5px solid #e6ecf2; background:#fff; color:#475569;
+        transition: all .15s; text-transform:capitalize;
+    }
+    .status-pill:hover { border-color:#94a3b8; }
+    .status-pill.active.pending     { background:#fff8e6; color:#7a5d00; border-color:#f59e0b; }
+    .status-pill.active.ordered     { background:#e6f4f8; color:#0c5460; border-color:#17a2b8; }
+    .status-pill.active.in_progress { background:#e6f0ff; color:#1e3a8a; border-color:#3b82f6; }
+    .status-pill.active.received    { background:#e6f8ec; color:#0f5132; border-color:#16a34a; }
+    .quick-chip {
+        display:inline-flex; align-items:center; gap:5px; padding:5px 11px;
+        border-radius:14px; font-size:11.5px; font-weight:700; cursor:pointer;
+        border:1.5px solid #e2e8f0; background:#fff; color:#475569; transition: all .15s;
+    }
+    .quick-chip:hover { border-color:#94a3b8; background:#f8fafc; }
+    .quick-chip.active.overdue { background:#fef2f2; color:#7f1d1d; border-color:#fca5a5; }
+    .quick-chip.active.due-soon { background:#fffbeb; color:#78350f; border-color:#fcd34d; }
+    .quick-chip.danger { color:#dc2626; }
+    .filter-bar-label {
+        font-size:11px; color:#6b7280; text-transform:uppercase; font-weight:700;
+        letter-spacing:.5px; margin-right:4px;
+    }
+    .preset-controls { display:inline-flex; gap:6px; align-items:center; }
+    .preset-controls select { font-size:12px; height:30px; padding:2px 8px; max-width:180px; }
+    .filter-section .form-control-sm-label { font-size:11.5px; font-weight:700; color:#374151; margin-bottom:4px; }
+
+    /* Print stylesheet for PDF-via-print */
+    @media print {
+        .page-header .btn, .filter-section, .scorecard-strip, .sup-view-toggle,
+        #refreshBtn, .dataTables_filter, .dataTables_length, .dt-buttons,
+        #leftSidebar, #topNavbar, nav, .nav, .navbar, .sidebar { display:none !important; }
+        body { background:#fff !important; }
+        .container-fluid { padding:0 !important; }
+        .kanban-col { max-height:none !important; }
+        .kanban-col-body { overflow:visible !important; }
+        .report-card { height:auto !important; box-shadow:none !important; page-break-inside: avoid; }
+        .items-table-wrap { max-height:none !important; overflow:visible !important; }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    {% set user_roles = session.get('roles', []) %}
+    {% if 'admin' in user_roles or 'operation' in user_roles or 'operations' in user_roles %}
+    
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h2 mb-2">
+                    <i class="fas fa-truck mr-3"></i>Supplier Report
+                </h1>
+                <p class="mb-0 opacity-75">Track all supplier assignments and deliveries</p>
+            </div>
+            <div>
+                <a href="/operation_mainpage" class="btn btn-light mr-2">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                </a>
+                <a href="/approved-items" class="btn btn-light mr-2">
+                    <i class="fas fa-check-circle mr-2"></i>Approved Items
+                </a>
+                <button class="btn btn-success mr-2" id="exportExcelBtn" title="Export current view (with filters) to Excel">
+                    <i class="fas fa-file-excel mr-2"></i>Excel
+                </button>
+                <button class="btn btn-danger mr-2" id="exportPdfBtn" title="Export as PDF (uses browser print)">
+                    <i class="fas fa-file-pdf mr-2"></i>PDF
+                </button>
+                <button class="btn btn-light" id="refreshBtn">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards (clickable to auto-filter) -->
+    <div class="row mb-4">
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="all" title="Show all items">
+                <div class="stats-number" id="totalSuppliersCount">0</div>
+                <div class="stats-label"><i class="fas fa-truck mr-2"></i>Suppliers</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="all" style="border-left-color: #2d5a87;" title="Show all items">
+                <div class="stats-number" id="totalItemsCount">0</div>
+                <div class="stats-label"><i class="fas fa-boxes mr-2"></i>Assigned Items</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="pending" style="border-left-color: #f59e0b;" title="Filter pending items">
+                <div class="stats-number" id="pendingCount">0</div>
+                <div class="stats-label"><i class="fas fa-hourglass-half mr-2"></i>Pending</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="in_progress" style="border-left-color: #3b82f6;" title="Filter in-progress items">
+                <div class="stats-number" id="inProgressCount">0</div>
+                <div class="stats-label"><i class="fas fa-cog mr-2"></i>In Progress</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="received" style="border-left-color: #16a34a;" title="Filter received items">
+                <div class="stats-number" id="receivedCount">0</div>
+                <div class="stats-label"><i class="fas fa-check-circle mr-2"></i>Received</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6 mb-3">
+            <div class="stats-card clickable" data-filter="overdue" style="border-left-color: #dc2626;" title="Filter overdue items">
+                <div class="stats-number text-danger" id="overdueCount">0</div>
+                <div class="stats-label"><i class="fas fa-exclamation-triangle mr-2 text-danger"></i>Overdue</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Cost KPI (computed client-side) -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="stats-card" style="border-left-color:#0ea5e9; padding:14px 20px;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap:12px;">
+                    <div>
+                        <div class="stats-label"><i class="fas fa-coins mr-2" style="color:#0ea5e9;"></i>Total Cost Value (Current View)</div>
+                        <div style="font-size:24px;font-weight:800;color:#0c4a6e;" id="totalCostValue">EGP 0</div>
+                    </div>
+                    <div class="text-muted" style="font-size:12px;">
+                        <span class="mr-3"><i class="fas fa-receipt mr-1"></i>Items with cost: <strong id="itemsWithCost">0</strong></span>
+                        <span><i class="fas fa-percent mr-1"></i>Avg/item: <strong id="avgItemCost">EGP 0</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports Row: Top Suppliers + Status Donut + Overdue Panel -->
+    <div class="row mb-3">
+        <div class="col-lg-5 col-md-12 mb-3">
+            <div class="report-card">
+                <h6><span><i class="fas fa-trophy mr-2 text-warning"></i>Top 5 Suppliers by Items</span>
+                    <small class="text-muted" style="font-size:10px;text-transform:none;letter-spacing:0;">click bar to filter</small>
+                </h6>
+                <div class="chart-wrap"><canvas id="topSuppliersChart"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="report-card">
+                <h6><span><i class="fas fa-chart-pie mr-2 text-info"></i>Status Distribution</span></h6>
+                <div class="chart-wrap"><canvas id="statusDonutChart"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="report-card">
+                <h6>
+                    <span><i class="fas fa-exclamation-triangle mr-2 text-danger"></i>Overdue Items</span>
+                    <span class="badge badge-danger" id="overdueBadgeCount">0</span>
+                </h6>
+                <div class="overdue-list" id="overduePanel">
+                    <div class="text-muted text-center py-3" style="font-size:12px;">No overdue items</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Scorecards Strip -->
+    <div class="scorecard-strip" id="scorecardStrip">
+        <div class="text-muted px-2" style="font-size:12px;"><i class="fas fa-spinner fa-spin mr-2"></i>Loading supplier scorecards...</div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-section">
+        <!-- Quick chips + status pills + presets -->
+        <div class="filter-toolbar mb-3 pb-3" style="border-bottom:1px dashed #e6ecf2;">
+            <span class="filter-bar-label">Status:</span>
+            <span class="status-pill" data-status="pending"><i class="fas fa-hourglass-half"></i>Pending</span>
+            <span class="status-pill" data-status="ordered"><i class="fas fa-shopping-cart"></i>Ordered</span>
+            <span class="status-pill" data-status="in_progress"><i class="fas fa-cog"></i>In Progress</span>
+            <span class="status-pill" data-status="received"><i class="fas fa-check-circle"></i>Received</span>
+            <span class="mx-2 text-muted" style="opacity:.4;">|</span>
+            <span class="filter-bar-label">Quick:</span>
+            <span class="quick-chip" data-quick="overdue"><i class="fas fa-exclamation-triangle"></i>Overdue</span>
+            <span class="quick-chip" data-quick="due-soon"><i class="fas fa-clock"></i>Due Soon (≤3d)</span>
+            <span class="quick-chip danger" id="clearAllChipsBtn"><i class="fas fa-times"></i>Clear All</span>
+            <span class="ml-auto preset-controls">
+                <select class="form-control form-control-sm" id="presetSelect" title="Load saved filter preset">
+                    <option value="">— Saved Presets —</option>
+                </select>
+                <button class="btn btn-sm btn-outline-primary" id="savePresetBtn" title="Save current filters as preset"><i class="fas fa-bookmark"></i></button>
+                <button class="btn btn-sm btn-outline-danger" id="deletePresetBtn" title="Delete selected preset"><i class="fas fa-trash"></i></button>
+            </span>
+        </div>
+
+        <div class="row align-items-end mb-3">
+            <div class="col-md-3">
+                <label>Supplier</label>
+                <select class="form-control" id="supplierFilter">
+                    <option value="">All Suppliers</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label>Client / Item / Request</label>
+                <input type="text" class="form-control" id="textSearchFilter" placeholder="Type to search items, clients, request #...">
+            </div>
+            <div class="col-md-2">
+                <label>Assignment Type</label>
+                <select class="form-control" id="assignmentTypeFilter">
+                    <option value="">All</option>
+                    <option value="direct">Direct</option>
+                    <option value="component">Sub-Item</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label>Due Date From</label>
+                <input type="date" class="form-control" id="dateFromFilter">
+            </div>
+            <div class="col-md-2">
+                <label>Due Date To</label>
+                <input type="date" class="form-control" id="dateToFilter">
+            </div>
+        </div>
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label><i class="fas fa-calendar-alt text-primary mr-1"></i>Request Start Date</label>
+                <div class="input-group">
+                    <input type="date" class="form-control" id="requestStartFromFilter" placeholder="From">
+                    <input type="date" class="form-control" id="requestStartToFilter" placeholder="To">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label><i class="fas fa-calendar-check text-success mr-1"></i>Request End Date</label>
+                <div class="input-group">
+                    <input type="date" class="form-control" id="requestEndFromFilter" placeholder="From">
+                    <input type="date" class="form-control" id="requestEndToFilter" placeholder="To">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label>Supplier Status</label>
+                <select class="form-control" id="statusFilter">
+                    <option value="">All</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+            <div class="col-md-4 text-right">
+                <button class="btn btn-outline-secondary" id="clearFiltersBtn">
+                    <i class="fas fa-times mr-1"></i>Clear All Filters
+                </button>
+                <input type="hidden" id="itemStatusFilter" value="">
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Suppliers List -->
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-list mr-2"></i>Suppliers
+                        </h6>
+                        <span class="badge badge-secondary" id="suppliersListCount">0</span>
+                    </div>
+                </div>
+                <div class="sup-search-wrap">
+                    <input type="text" class="form-control form-control-sm" id="suppliersListSearch" placeholder="🔍 Quick filter suppliers...">
+                </div>
+                <div class="card-body" style="max-height: 600px; overflow-y: auto;" id="suppliersListContainer">
+                    <div class="text-center py-3 text-muted">
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Items Table -->
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-clipboard-list mr-2"></i>Assigned Items
+                    </h6>
+                    <div class="d-flex align-items-center" style="gap:10px;">
+                        <div class="sup-view-toggle btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary" id="viewKanbanBtn" title="Pipeline / Kanban"><i class="fas fa-columns"></i></button>
+                            <button type="button" class="btn btn-outline-primary active" id="viewTableBtn" title="Table view"><i class="fas fa-table"></i></button>
+                            <button type="button" class="btn btn-outline-primary" id="viewGroupedBtn" title="Grouped by supplier"><i class="fas fa-layer-group"></i></button>
+                        </div>
+                        <span class="badge badge-primary" id="itemsCountBadge">0 items</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="itemsTableView">
+                        <div class="table-responsive items-table-wrap">
+                            <table class="table table-hover items-table" id="itemsTable" style="width: 100%">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Item Name</th>
+                                        <th>Request</th>
+                                        <th>Request Dates</th>
+                                        <th>Client</th>
+                                        <th>Supplier</th>
+                                        <th>Due Date</th>
+                                        <th>Received</th>
+                                        <th>Status</th>
+                                        <th style="display:none;">RID</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="itemsTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="itemsGroupedView" style="display:none;"></div>
+                    <div id="itemsKanbanView" style="display:none;">
+                        <div class="kanban-board">
+                            <div class="kanban-col" data-status="pending">
+                                <div class="kanban-col-head"><span><i class="fas fa-hourglass-half mr-1"></i>Pending</span><span class="badge badge-warning" id="kbCntPending">0</span></div>
+                                <div class="kanban-col-body" id="kbColPending"></div>
+                            </div>
+                            <div class="kanban-col" data-status="ordered">
+                                <div class="kanban-col-head"><span><i class="fas fa-shopping-cart mr-1"></i>Ordered</span><span class="badge badge-info" id="kbCntOrdered">0</span></div>
+                                <div class="kanban-col-body" id="kbColOrdered"></div>
+                            </div>
+                            <div class="kanban-col" data-status="in_progress">
+                                <div class="kanban-col-head"><span><i class="fas fa-cog mr-1"></i>In Progress</span><span class="badge badge-primary" id="kbCntInProgress">0</span></div>
+                                <div class="kanban-col-body" id="kbColInProgress"></div>
+                            </div>
+                            <div class="kanban-col" data-status="received">
+                                <div class="kanban-col-head"><span><i class="fas fa-check-circle mr-1"></i>Received</span><span class="badge badge-success" id="kbCntReceived">0</span></div>
+                                <div class="kanban-col-body" id="kbColReceived"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        You don't have permissions to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Request Details Modal (Operation view — no Sales / Margin info) -->
+<div class="modal fade" id="requestDetailsModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#1e3a5f 0%,#2d5a87 100%);color:#fff;">
+                <h5 class="modal-title"><i class="fas fa-clipboard-list mr-2"></i><span id="rdTitle">Request Details</span></h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body" id="rdBody">
+                <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Loading request...</div></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('Supplier Report page loaded');
+    
+    var allSuppliers = [];
+    var allItems = [];
+    var dataTable = null;
+    var selectedSupplierId = null;
+    var dashboardFilter = 'all'; // 'all' | 'pending' | 'received' | 'in_progress' | 'overdue'
+    var activeStatusPills = new Set();   // multi-select from filter bar
+    var activeQuickChips = new Set();    // 'overdue' | 'due-soon'
+    var topSuppliersChart = null;
+    var statusDonutChart = null;
+    var PRESET_KEY = 'supplierReportPresets_v1';
+
+    // Click on dashboard stat card → auto-filter items
+    $(document).on('click', '.stats-card.clickable', function() {
+        var f = $(this).data('filter') || 'all';
+        if (dashboardFilter === f && f !== 'all') {
+            dashboardFilter = 'all';
+        } else {
+            dashboardFilter = f;
+        }
+        $('.stats-card.clickable').removeClass('active-filter');
+        if (dashboardFilter !== 'all') {
+            $('.stats-card.clickable[data-filter="' + dashboardFilter + '"]').addClass('active-filter');
+        }
+        // Sync the item status dropdown for clarity
+        if (dashboardFilter === 'pending' || dashboardFilter === 'received') {
+            $('#itemStatusFilter').val(dashboardFilter);
+        } else {
+            $('#itemStatusFilter').val('');
+        }
+        filterAndRenderItems();
+    });
+
+    // Click on an item row → open Request Details modal
+    $(document).on('click', '#itemsTable tbody tr', function(e) {
+        if ($(e.target).is('a') || $(e.target).closest('a').length) return; // let inline links work
+        var requestId = $(this).data('request-id');
+        if (requestId) openRequestDetails(requestId);
+    });
+    
+    // Initialize Select2 for supplier filter
+    $('#supplierFilter').select2({
+        placeholder: 'Search or select supplier...',
+        allowClear: true,
+        width: '100%',
+        minimumResultsForSearch: 0,
+        language: {
+            noResults: function() {
+                return 'No suppliers found';
+            }
+        }
+    });
+    
+    // Handle Select2 change event - using 'change' event for better compatibility
+    $('#supplierFilter').on('change', function() {
+        console.log('Supplier filter changed to:', $(this).val());
+        loadSupplierReport();
+    });
+    
+    // Listen for dropdown refresh events from the global DropdownRefreshManager
+    document.addEventListener('dropdownRefreshed', function(e) {
+        if (e.detail && e.detail.type === 'supplier') {
+            console.log('Supplier dropdown refreshed, reloading report...');
+            // If a new item was added and selected, reload the report
+            if (e.detail.newItemId) {
+                // Small delay to ensure Select2 has updated
+                setTimeout(function() {
+                    loadSupplierReport();
+                }, 100);
+            }
+        }
+    });
+    
+    // Initialize
+    loadSupplierReport();
+    
+    // Refresh button
+    $('#refreshBtn').click(function() {
+        loadSupplierReport();
+    });
+    
+    // Filter handlers (Select2 uses its own change event handler above)
+    $('#statusFilter, #itemStatusFilter, #assignmentTypeFilter').on('change', function() {
+        loadSupplierReport();
+    });
+
+    // Free-text search (debounced)
+    var _txtT = null;
+    $('#textSearchFilter').on('input', function(){
+        clearTimeout(_txtT);
+        _txtT = setTimeout(function(){ filterAndRenderItems(); }, 250);
+    });
+
+    // Status pills (multi-select)
+    $(document).on('click', '.status-pill', function(){
+        var st = $(this).data('status');
+        if (activeStatusPills.has(st)) {
+            activeStatusPills.delete(st);
+            $(this).removeClass('active ' + st);
+        } else {
+            activeStatusPills.add(st);
+            $(this).addClass('active ' + st);
+        }
+        filterAndRenderItems();
+    });
+
+    // Quick chips (overdue / due-soon)
+    $(document).on('click', '.quick-chip[data-quick]', function(){
+        var q = $(this).data('quick');
+        if (activeQuickChips.has(q)) {
+            activeQuickChips.delete(q);
+            $(this).removeClass('active ' + q);
+        } else {
+            activeQuickChips.add(q);
+            $(this).addClass('active ' + q);
+        }
+        filterAndRenderItems();
+    });
+
+    // Clear chips button (only clears chips/pills, not date filters)
+    $('#clearAllChipsBtn').click(function(){
+        activeStatusPills.clear(); activeQuickChips.clear();
+        $('.status-pill').removeClass('active pending ordered in_progress received');
+        $('.quick-chip').removeClass('active overdue due-soon');
+        $('#textSearchFilter').val('');
+        filterAndRenderItems();
+    });
+    
+    $('#dateFromFilter, #dateToFilter, #requestStartFromFilter, #requestStartToFilter, #requestEndFromFilter, #requestEndToFilter').change(function() {
+        loadSupplierReport();
+    });
+    
+    // Clear filters
+    $('#clearFiltersBtn').click(function() {
+        $('#supplierFilter').val(null).trigger('change');
+        $('#statusFilter').val('');
+        $('#dateFromFilter').val('');
+        $('#dateToFilter').val('');
+        $('#itemStatusFilter').val('');
+        $('#assignmentTypeFilter').val('');
+        $('#textSearchFilter').val('');
+        $('#requestStartFromFilter').val('');
+        $('#requestStartToFilter').val('');
+        $('#requestEndFromFilter').val('');
+        $('#requestEndToFilter').val('');
+        activeStatusPills.clear(); activeQuickChips.clear();
+        $('.status-pill').removeClass('active pending ordered in_progress received');
+        $('.quick-chip').removeClass('active overdue due-soon');
+        $('.stats-card.clickable').removeClass('active-filter');
+        dashboardFilter = 'all';
+        selectedSupplierId = null;
+        loadSupplierReport();
+    });
+    
+    function loadSupplierReport() {
+        var supplierId = $('#supplierFilter').val() || selectedSupplierId;
+        var status = $('#statusFilter').val();
+        var dateFrom = $('#dateFromFilter').val();
+        var dateTo = $('#dateToFilter').val();
+        var requestStartFrom = $('#requestStartFromFilter').val();
+        var requestStartTo = $('#requestStartToFilter').val();
+        var requestEndFrom = $('#requestEndFromFilter').val();
+        var requestEndTo = $('#requestEndToFilter').val();
+        
+        $('#suppliersListContainer').html('<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin"></i> Loading...</div>');
+        
+        $.get('/api/supplier-report', {
+            supplier_id: supplierId,
+            status: status,
+            date_from: dateFrom,
+            date_to: dateTo,
+            request_start_from: requestStartFrom,
+            request_start_to: requestStartTo,
+            request_end_from: requestEndFrom,
+            request_end_to: requestEndTo
+        }, function(response) {
+            if (response.success) {
+                allSuppliers = response.suppliers;
+                allItems = response.items;
+                
+                updateStatistics(response.stats);
+                renderSuppliersList(allSuppliers);
+                filterAndRenderItems();
+                populateSupplierFilter(allSuppliers);
+                renderReports();
+                loadScorecards();
+            } else {
+                Swal.fire('Error', response.error || 'Failed to load report', 'error');
+            }
+        }).fail(function() {
+            Swal.fire('Error', 'Failed to load supplier report', 'error');
+        });
+    }
+    
+    function updateStatistics(stats) {
+        $('#totalSuppliersCount').text(stats.total_suppliers || 0);
+        $('#totalItemsCount').text(stats.total_items || 0);
+        $('#pendingCount').text(stats.pending || 0);
+        $('#receivedCount').text(stats.received || 0);
+
+        // Frontend-computed stats from allItems (in_progress + overdue)
+        var today = new Date(); today.setHours(0,0,0,0);
+        var inProg = 0, overdue = 0;
+        (allItems || []).forEach(function(it){
+            if (it.status === 'in_progress') inProg++;
+            if (it.due_date && it.status !== 'received') {
+                var d = new Date(it.due_date); d.setHours(0,0,0,0);
+                if (d < today) overdue++;
+            }
+        });
+        $('#inProgressCount').text(inProg);
+        $('#overdueCount').text(overdue);
+    }
+    
+    function populateSupplierFilter(suppliers) {
+        var $filter = $('#supplierFilter');
+        var currentVal = $filter.val();
+        
+        // Temporarily unbind change event to prevent duplicate API calls
+        $filter.off('change');
+        
+        // Clear existing options except the first "All Suppliers" option
+        $filter.find('option:not(:first)').remove();
+        
+        // Add all suppliers sorted alphabetically
+        suppliers.sort(function(a, b) {
+            return a.supplier_name.localeCompare(b.supplier_name);
+        }).forEach(function(s) {
+            $filter.append($('<option>', {
+                value: s.id,
+                text: s.supplier_name
+            }));
+        });
+        
+        // Restore previous selection if it still exists
+        if (currentVal) {
+            $filter.val(currentVal);
+        }
+        
+        // Trigger Select2 to update its display (without triggering change event)
+        $filter.trigger('change.select2');
+        
+        // Re-bind change event
+        $filter.on('change', function() {
+            console.log('Supplier filter changed to:', $(this).val());
+            loadSupplierReport();
+        });
+    }
+    
+    function renderSuppliersList(suppliers) {
+        $('#suppliersListCount').text(suppliers.length);
+        if (suppliers.length === 0) {
+            $('#suppliersListContainer').html('<div class="sup-list-empty"><i class="fas fa-inbox fa-2x mb-2"></i><div>No suppliers found</div></div>');
+            return;
+        }
+
+        // Compute overdue count per supplier from allItems
+        var today = new Date(); today.setHours(0,0,0,0);
+        var overdueBySup = {};
+        (allItems || []).forEach(function(it){
+            if (it.due_date && it.status !== 'received') {
+                var d = new Date(it.due_date); d.setHours(0,0,0,0);
+                if (d < today && it.supplier_id) {
+                    overdueBySup[it.supplier_id] = (overdueBySup[it.supplier_id] || 0) + 1;
+                }
+            }
+        });
+        
+        var html = '';
+        suppliers.forEach(function(s) {
+            var totalItems = (s.direct_items_count || 0) + (s.components_count || 0);
+            var received   = (s.received_count || 0);
+            var progressPct = totalItems > 0 ? Math.round((received / totalItems) * 100) : 0;
+            var overdue   = overdueBySup[s.id] || 0;
+            var isActive = selectedSupplierId === s.id;
+            
+            html += `
+                <div class="supplier-card ${isActive ? 'active' : ''}" onclick="selectSupplier(${s.id})">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div style="min-width:0;flex:1;">
+                            <div class="supplier-name">
+                                <i class="fas fa-building mr-2"></i>${s.supplier_name}
+                                ${overdue > 0 ? `<span class="sup-overdue-pill" title="${overdue} overdue"><i class="fas fa-exclamation-triangle"></i>${overdue}</span>` : ''}
+                            </div>
+                            <div class="supplier-info">
+                                ${s.company_name ? `<div>${s.company_name}</div>` : ''}
+                                ${s.primary_phone ? `<div><i class="fas fa-phone fa-sm mr-1"></i>${s.primary_phone}</div>` : ''}
+                            </div>
+                        </div>
+                        <span class="badge badge-${s.status === 'Active' ? 'success' : 'secondary'}">${s.status}</span>
+                    </div>
+                    <div class="supplier-stats">
+                        <div class="supplier-stat">
+                            <div class="value">${totalItems}</div>
+                            <div class="label">Total</div>
+                        </div>
+                        <div class="supplier-stat" style="background: #fff8e6;">
+                            <div class="value">${s.pending_count || 0}</div>
+                            <div class="label">Pending</div>
+                        </div>
+                        <div class="supplier-stat" style="background: #e6f0ff;">
+                            <div class="value">${s.in_progress_count || 0}</div>
+                            <div class="label">Progress</div>
+                        </div>
+                        <div class="supplier-stat" style="background: #e6f8ec;">
+                            <div class="value">${received}</div>
+                            <div class="label">Received</div>
+                        </div>
+                    </div>
+                    <div class="sup-progress" title="${received} of ${totalItems} received">
+                        <div class="bar" style="width:${progressPct}%;"></div>
+                    </div>
+                    <div class="sup-progress-label">
+                        <span>${received} / ${totalItems} received</span>
+                        <span>${progressPct}%</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        $('#suppliersListContainer').html(html);
+    }
+    
+    function filterAndRenderItems() {
+        var itemStatusFilter = $('#itemStatusFilter').val();
+        var assignmentType = $('#assignmentTypeFilter').val();
+        var txt = ($('#textSearchFilter').val() || '').trim().toLowerCase();
+
+        var filtered = allItems;
+
+        // Filter by selected supplier (card click)
+        if (selectedSupplierId) {
+            filtered = filtered.filter(function(item) {
+                return item.supplier_id === selectedSupplierId;
+            });
+        }
+
+        // Filter by item status (legacy hidden input)
+        if (itemStatusFilter) {
+            filtered = filtered.filter(function(item) {
+                return item.status === itemStatusFilter;
+            });
+        }
+
+        // Filter by assignment type
+        if (assignmentType) {
+            filtered = filtered.filter(function(item){ return item.assignment_type === assignmentType; });
+        }
+
+        // Multi-select status pills (any-of)
+        if (activeStatusPills.size > 0) {
+            filtered = filtered.filter(function(item){ return activeStatusPills.has(item.status); });
+        }
+
+        // Free-text search
+        if (txt) {
+            filtered = filtered.filter(function(it){
+                return ((it.item_name||'').toLowerCase().indexOf(txt) !== -1)
+                    || ((it.client_name||'').toLowerCase().indexOf(txt) !== -1)
+                    || ((it.supplier_name||'').toLowerCase().indexOf(txt) !== -1)
+                    || ((it.request_title||'').toLowerCase().indexOf(txt) !== -1)
+                    || (String(it.request_id||'').indexOf(txt) !== -1)
+                    || ((it.description||'').toLowerCase().indexOf(txt) !== -1);
+            });
+        }
+
+        // Quick chips
+        if (activeQuickChips.size > 0) {
+            var today = new Date(); today.setHours(0,0,0,0);
+            filtered = filtered.filter(function(it){
+                if (it.status === 'received') return false;
+                if (!it.due_date) return false;
+                var d = new Date(it.due_date); d.setHours(0,0,0,0);
+                var diff = Math.ceil((d - today) / (1000*60*60*24));
+                if (activeQuickChips.has('overdue') && diff < 0) return true;
+                if (activeQuickChips.has('due-soon') && diff >= 0 && diff <= 3) return true;
+                return false;
+            });
+        }
+
+        // Dashboard quick-filter (KPI card click)
+        if (dashboardFilter && dashboardFilter !== 'all') {
+            if (dashboardFilter === 'overdue') {
+                var t2 = new Date(); t2.setHours(0,0,0,0);
+                filtered = filtered.filter(function(item) {
+                    if (!item.due_date || item.status === 'received') return false;
+                    var d = new Date(item.due_date); d.setHours(0,0,0,0);
+                    return d < t2;
+                });
+            } else {
+                filtered = filtered.filter(function(item) {
+                    return item.status === dashboardFilter;
+                });
+            }
+        }
+
+        // Update total-cost KPI from filtered set
+        updateCostKPI(filtered);
+
+        if (currentItemsView === 'kanban') {
+            renderItemsKanban(filtered);
+        } else if (currentItemsView === 'grouped') {
+            renderItemsGrouped(filtered);
+        } else {
+            renderItemsTable(filtered);
+        }
+    }
+
+    function updateCostKPI(items){
+        var total = 0, withCost = 0;
+        items.forEach(function(it){
+            if (it.total_cost != null && !isNaN(parseFloat(it.total_cost))) {
+                total += parseFloat(it.total_cost); withCost++;
+            }
+        });
+        $('#totalCostValue').text('EGP ' + total.toLocaleString(undefined, {maximumFractionDigits:2}));
+        $('#itemsWithCost').text(withCost);
+        $('#avgItemCost').text('EGP ' + (withCost > 0 ? (total/withCost).toLocaleString(undefined, {maximumFractionDigits:2}) : '0'));
+    }
+
+    // Items view toggle
+    var currentItemsView = 'table';
+    $(document).on('click', '#viewTableBtn', function(){
+        currentItemsView = 'table';
+        $(this).addClass('active'); $('#viewGroupedBtn, #viewKanbanBtn').removeClass('active');
+        $('#itemsTableView').show(); $('#itemsGroupedView, #itemsKanbanView').hide();
+        filterAndRenderItems();
+    });
+    $(document).on('click', '#viewGroupedBtn', function(){
+        currentItemsView = 'grouped';
+        $(this).addClass('active'); $('#viewTableBtn, #viewKanbanBtn').removeClass('active');
+        $('#itemsTableView, #itemsKanbanView').hide(); $('#itemsGroupedView').show();
+        filterAndRenderItems();
+    });
+    $(document).on('click', '#viewKanbanBtn', function(){
+        currentItemsView = 'kanban';
+        $(this).addClass('active'); $('#viewTableBtn, #viewGroupedBtn').removeClass('active');
+        $('#itemsTableView, #itemsGroupedView').hide(); $('#itemsKanbanView').show();
+        filterAndRenderItems();
+    });
+
+    function renderItemsGrouped(items) {
+        $('#itemsCountBadge').text(items.length + ' items');
+        if (!items.length) {
+            $('#itemsGroupedView').html('<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><div>No items match the current filters.</div></div>');
+            return;
+        }
+        // Group by supplier_name (use 'Unassigned' if none)
+        var groups = {};
+        items.forEach(function(it){
+            var key = it.supplier_name || '⚠️ Unassigned';
+            if (!groups[key]) groups[key] = { name: key, items: [], pending:0, ordered:0, in_progress:0, received:0, overdue:0 };
+            groups[key].items.push(it);
+            if (it.status && groups[key][it.status] !== undefined) groups[key][it.status]++;
+        });
+        var today = new Date(); today.setHours(0,0,0,0);
+        Object.values(groups).forEach(function(g){
+            g.items.forEach(function(it){
+                if (it.due_date && it.status !== 'received') {
+                    var d = new Date(it.due_date); d.setHours(0,0,0,0);
+                    if (d < today) g.overdue++;
+                }
+            });
+        });
+        var sortedGroups = Object.values(groups).sort(function(a,b){ return b.items.length - a.items.length; });
+
+        var html = '';
+        sortedGroups.forEach(function(g, idx){
+            var gid = 'supg_' + idx;
+            var total = g.items.length;
+            var pct = total ? Math.round((g.received / total) * 100) : 0;
+            html += `
+              <div class="sup-group-card">
+                <div class="sup-group-head" data-toggle="collapse" data-target="#${gid}" aria-expanded="false">
+                  <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+                    <i class="fas fa-chevron-right chev"></i>
+                    <div class="name"><i class="fas fa-truck mr-2 text-secondary"></i>${g.name}</div>
+                  </div>
+                  <div class="sup-group-chips">
+                    <span class="sup-group-chip info"><i class="fas fa-cubes"></i> ${total}</span>
+                    ${g.pending     ? `<span class="sup-group-chip warn"><i class="fas fa-hourglass-half"></i> ${g.pending} Pending</span>` : ''}
+                    ${g.in_progress ? `<span class="sup-group-chip info"><i class="fas fa-cog"></i> ${g.in_progress} In Progress</span>` : ''}
+                    ${g.received    ? `<span class="sup-group-chip ok"><i class="fas fa-check"></i> ${g.received} Received</span>` : ''}
+                    ${g.overdue     ? `<span class="sup-group-chip dng"><i class="fas fa-exclamation-triangle"></i> ${g.overdue} Overdue</span>` : ''}
+                  </div>
+                </div>
+                <div class="collapse" id="${gid}">
+                  <div class="sup-group-body">
+                    <div class="item-row" style="border-bottom:2px solid #e6ecf2;">
+                      <div class="ih">Item</div><div class="ih">Request / Client</div>
+                      <div class="ih">Due</div><div class="ih">Received</div>
+                      <div class="ih">Type</div><div class="ih">Status</div>
+                    </div>`;
+            g.items.forEach(function(it){
+                var dueClass = getDueDateClass(it.due_date, it.status);
+                html += `
+                    <div class="item-row">
+                      <div><strong>${$('<div>').text(it.item_name||'-').html()}</strong></div>
+                      <div>
+                        <a href="#" class="rd-open-link" data-request-id="${it.request_id}">#${it.request_id}</a>
+                        <div class="text-muted" style="font-size:11px;">${$('<div>').text(it.client_name||'').html()}</div>
+                      </div>
+                      <div class="${dueClass}">${it.due_date ? formatDate(it.due_date) : '-'}</div>
+                      <div>${it.received_date ? formatDate(it.received_date) : '-'}</div>
+                      <div><span class="type-badge ${it.assignment_type}">${it.assignment_type === 'direct' ? 'Direct' : 'Sub-Item'}</span></div>
+                      <div><span class="status-badge ${it.status||'pending'}">${(it.status||'pending').replace('_',' ')}</span></div>
+                    </div>`;
+            });
+            html += `   <div class="sup-progress mt-2"><div class="bar" style="width:${pct}%;"></div></div>
+                        <div class="sup-progress-label"><span>${g.received} / ${total} received</span><span>${pct}%</span></div>
+                  </div>
+                </div>
+              </div>`;
+        });
+        $('#itemsGroupedView').html(html);
+
+        // Sync chevron rotation with Bootstrap collapse
+        $('#itemsGroupedView').off('show.bs.collapse hide.bs.collapse')
+            .on('show.bs.collapse', '.collapse', function(){
+                $('[data-target="#' + this.id + '"]').attr('aria-expanded','true');
+            })
+            .on('hide.bs.collapse', '.collapse', function(){
+                $('[data-target="#' + this.id + '"]').attr('aria-expanded','false');
+            });
+    }
+    
+    function renderItemsTable(items) {
+        $('#itemsCountBadge').text(items.length + ' items');
+        
+        if (dataTable) {
+            dataTable.destroy();
+        }
+        
+        var tableData = items.map(function(item) {
+            var dueClass = getDueDateClass(item.due_date, item.status);
+            
+            // Format request dates
+            var requestDates = '';
+            if (item.request_start_date || item.request_end_date) {
+                if (item.request_start_date) {
+                    requestDates += '<i class="fas fa-play text-primary fa-sm mr-1"></i>' + formatDate(item.request_start_date);
+                }
+                if (item.request_start_date && item.request_end_date) {
+                    requestDates += '<br>';
+                }
+                if (item.request_end_date) {
+                    requestDates += '<i class="fas fa-stop text-success fa-sm mr-1"></i>' + formatDate(item.request_end_date);
+                }
+            } else {
+                requestDates = '-';
+            }
+            
+            return [
+                `<span class="type-badge ${item.assignment_type}">${item.assignment_type === 'direct' ? 'Direct' : 'Sub-Item'}</span>`,
+                item.item_name,
+                `<a href="#" class="rd-open-link" data-request-id="${item.request_id}">#${item.request_id}</a>`,
+                requestDates,
+                item.client_name || '-',
+                item.supplier_name || '-',
+                item.due_date ? `<span class="${dueClass}">${formatDate(item.due_date)}</span>` : '-',
+                item.received_date ? `${formatDate(item.received_date)}${item.received_by_name ? '<br><small class="text-muted">' + item.received_by_name + '</small>' : ''}` : '-',
+                `<span class="status-badge ${item.status||'pending'}"><i class="fas ${ {pending:'fa-hourglass-half',ordered:'fa-shopping-cart',in_progress:'fa-cog',received:'fa-check-circle',cancelled:'fa-ban'}[item.status||'pending']||'fa-info-circle' }"></i>${(item.status||'pending').replace('_',' ')}</span>`,
+                item.request_id // hidden column carrying the id for click handling
+            ];
+        });
+
+        dataTable = $('#itemsTable').DataTable({
+            data: tableData,
+            destroy: true,
+            pageLength: 25,
+            order: [[6, 'asc']],
+            columnDefs: [ { targets: 9, visible: false, searchable: false } ],
+            createdRow: function(row, data) {
+                $(row).attr('data-request-id', data[9]);
+            },
+            dom: 'Bfrtip',
+            buttons: [
+                {
+                    extend: 'excel',
+                    text: '<i class="fas fa-file-excel mr-1"></i> Excel',
+                    className: 'btn btn-success btn-sm'
+                },
+                {
+                    extend: 'print',
+                    text: '<i class="fas fa-print mr-1"></i> Print',
+                    className: 'btn btn-secondary btn-sm'
+                }
+            ]
+        });
+    }
+    
+    function getDueDateClass(dueDate, status) {
+        if (!dueDate || status === 'received') return '';
+        
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var due = new Date(dueDate);
+        due.setHours(0, 0, 0, 0);
+        
+        var diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays < 0) return 'overdue';
+        if (diffDays <= 3) return 'due-soon';
+        return '';
+    }
+    
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        var date = new Date(dateString);
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    
+    // Click on the inline request-id link inside the table → open modal
+    $(document).on('click', '.rd-open-link', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var rid = $(this).data('request-id');
+        if (rid) openRequestDetails(rid);
+    });
+
+    // === Request Details Modal (no sales/margin) ===
+    function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+    function money(v) {
+        if (v === null || v === undefined || v === '' || isNaN(parseFloat(v))) return '-';
+        return 'EGP ' + parseFloat(v).toLocaleString(undefined, {maximumFractionDigits: 2});
+    }
+    function fmtKey(k) { return esc(String(k).replace(/_/g,' ').replace(/\b\w/g, function(c){return c.toUpperCase();})); }
+    function fmtVal(v) {
+        if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
+        if (Array.isArray(v)) return esc(v.join(', '));
+        if (typeof v === 'object') return '<code style="font-size:11px;">' + esc(JSON.stringify(v)) + '</code>';
+        var s = String(v);
+        if (/^https?:\/\//i.test(s)) return '<a href="' + esc(s) + '" target="_blank">' + esc(s) + '</a>';
+        return esc(s);
+    }
+
+    function openRequestDetails(requestId) {
+        if (!requestId || requestId === 'undefined' || requestId === 'null') {
+            console.warn('openRequestDetails called without a valid requestId:', requestId);
+            return;
+        }
+        $('#rdTitle').text('Request #' + requestId);
+        $('#rdBody').html('<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Loading request #' + requestId + '...</div></div>');
+        $('#requestDetailsModal').modal('show');
+
+        $.get('/api/sales/requests/' + requestId)
+            .done(function(resp) {
+                if (!resp || !resp.success || !resp.request) {
+                    $('#rdBody').html('<div class="alert alert-warning">Request not found or no access.</div>');
+                    return;
+                }
+                // Ensure id is always present for renderRequestDetails
+                if (resp.request.id == null) resp.request.id = requestId;
+                renderRequestDetails(resp.request);
+            })
+            .fail(function(xhr) {
+                if (xhr.status === 403) {
+                    $('#rdBody').html('<div class="alert alert-warning">You don\'t have permission to view this request.</div>');
+                } else {
+                    $('#rdBody').html('<div class="alert alert-danger">Failed to load request details.</div>');
+                }
+            });
+    }
+
+    function renderRequestDetails(sr) {
+        var rid = (sr && sr.id != null) ? sr.id : '?';
+        $('#rdTitle').text('Request #' + rid + (sr.title ? ' — ' + sr.title : ''));
+
+        // Header / meta — NO sales / margin / total_sell
+        var types = [];
+        if (sr.request_data && sr.request_data.request_types) types = sr.request_data.request_types;
+        else if (sr.request_type) types = [sr.request_type];
+
+        var html = '';
+        html += '<div class="rd-section">';
+        html += '  <h6><i class="fas fa-info-circle mr-2"></i>Request Information</h6>';
+        html += '  <div class="rd-grid">';
+        html += '    <div><div class="lbl">Request #</div><div class="val">' + esc(sr.id) + '</div></div>';
+        html += '    <div><div class="lbl">Title</div><div class="val">' + (sr.title ? esc(sr.title) : '—') + '</div></div>';
+        html += '    <div><div class="lbl">Status</div><div class="val">' + esc(sr.status || '-') + '</div></div>';
+        html += '    <div><div class="lbl">Priority</div><div class="val">' + esc(sr.priority || '-') + '</div></div>';
+        html += '    <div><div class="lbl">Client</div><div class="val">' + (sr.client_name ? esc(sr.client_name) : '—') + '</div></div>';
+        html += '    <div><div class="lbl">Company</div><div class="val">' + (sr.company_name ? esc(sr.company_name) : '—') + '</div></div>';
+        html += '    <div><div class="lbl">Request Type(s)</div><div class="val">' + (types.length ? esc(types.join(", ")) : '—') + '</div></div>';
+        html += '    <div><div class="lbl">Start Date</div><div class="val">' + (sr.start_date ? formatDate(sr.start_date) : '—') + '</div></div>';
+        html += '    <div><div class="lbl">End Date</div><div class="val">' + (sr.end_date ? formatDate(sr.end_date) : '—') + '</div></div>';
+        if (sr.duration_days != null) {
+            html += '    <div><div class="lbl">Duration</div><div class="val">' + esc(sr.duration_days) + ' day(s)</div></div>';
+        }
+        html += '    <div><div class="lbl">Created</div><div class="val">' + (sr.added_date ? formatDate(sr.added_date) : '—') + '</div></div>';
+        if (sr.added_by_name) html += '    <div><div class="lbl">Created By</div><div class="val">' + esc(sr.added_by_name) + '</div></div>';
+        html += '  </div>';
+        if (sr.description) {
+            html += '  <div class="rd-note" style="margin-top:12px;border-left-color:#1e3a5f;background:#eef5ff;"><strong>Description:</strong> ' + esc(sr.description) + '</div>';
+        }
+        html += '</div>';
+
+        // Items — collapsible cards, all collapsed by default, rich summary header
+        var items = sr.items || [];
+        html += '<div class="rd-section">';
+        html += '  <div class="rdi-toolbar">';
+        html += '    <h6 style="margin:0;"><i class="fas fa-boxes mr-2"></i>Items <span class="badge badge-secondary ml-2">' + items.length + '</span></h6>';
+        if (items.length) {
+            html += '    <div>';
+            html += '      <button type="button" class="btn btn-sm btn-outline-primary" id="rdiExpandAll"><i class="fas fa-plus-square mr-1"></i>Expand All</button> ';
+            html += '      <button type="button" class="btn btn-sm btn-outline-secondary" id="rdiCollapseAll"><i class="fas fa-minus-square mr-1"></i>Collapse All</button>';
+            html += '    </div>';
+        }
+        html += '  </div>';
+        if (!items.length) {
+            html += '<div class="text-muted">No items in this request.</div>';
+        } else {
+            items.forEach(function(it, idx) {
+                var attrs = it.attributes || {};
+                if (typeof attrs === 'string') { try { attrs = JSON.parse(attrs); } catch(e) { attrs = {}; } }
+                var dims = [attrs.width, attrs.height, attrs.depth].filter(function(x){return x;}).join(' × ');
+                var images = it.images || (it.image_url ? [it.image_url] : []);
+                var firstImg = images && images.length ? images[0] : '';
+                var attachments = it.attachments || [];
+                var status = (it.approval_status || it.status || '').toLowerCase();
+                var bodyId = 'rdi_' + (sr.id || rid) + '_' + idx;
+
+                // Card wrapper with status border
+                html += '<div class="rdi-card ' + esc(status) + '">';
+
+                // Collapsed header (summary)
+                html += '  <div class="rdi-head" data-toggle="collapse" data-target="#' + bodyId + '" aria-expanded="false" aria-controls="' + bodyId + '">';
+                html += '    <i class="fas fa-chevron-right rdi-chev"></i>';
+                if (firstImg) {
+                    html += '    <img class="rdi-thumb-sm" src="' + esc(firstImg) + '" onerror="this.classList.add(\'placeholder\');this.outerHTML=\'<div class=&quot;rdi-thumb-sm placeholder&quot;><i class=&quot;fas fa-image&quot;></i></div>\';">';
+                } else {
+                    html += '    <div class="rdi-thumb-sm placeholder"><i class="fas fa-image"></i></div>';
+                }
+                html += '    <div class="rdi-summary">';
+                html += '      <div class="rdi-name">#' + (idx+1) + ' · ' + esc(it.name || 'Item') + '</div>';
+                var metaParts = [];
+                if (it.request_type) metaParts.push('<strong>' + esc(it.request_type) + '</strong>');
+                if (dims) metaParts.push('<i class="fas fa-ruler-combined fa-sm"></i> ' + esc(dims));
+                if (it.rental_days) metaParts.push('<i class="fas fa-clock fa-sm"></i> ' + esc(it.rental_days) + 'd rental');
+                html += '      <div class="rdi-meta">' + (metaParts.length ? metaParts.join(' · ') : '<span class="text-muted">No extra details</span>') + '</div>';
+                html += '    </div>';
+                html += '    <div class="rdi-pills">';
+                html += '      <span class="rdi-pill qty"><i class="fas fa-cubes"></i> ' + esc((it.qty != null ? it.qty : '-')) + ' ' + esc(it.unit || '') + '</span>';
+                if (it.total_cost != null) html += '      <span class="rdi-pill cost"><i class="fas fa-coins"></i> ' + money(it.total_cost) + '</span>';
+                if (it.supplier_name) html += '      <span class="rdi-pill sup" title="' + esc(it.supplier_name) + '"><i class="fas fa-truck"></i> ' + esc(it.supplier_name) + '</span>';
+                if (it.supplier_due_date) html += '      <span class="rdi-pill due"><i class="far fa-calendar"></i> ' + formatDate(it.supplier_due_date) + '</span>';
+                if (status) html += '      <span class="rdi-pill status ' + esc(status) + '">' + esc(status.replace(/_/g," ")) + '</span>';
+                html += '    </div>';
+                html += '  </div>';
+
+                // Collapsible body (full details)
+                html += '  <div class="collapse rdi-collapse" id="' + bodyId + '">';
+                html += '    <div class="rdi-body">';
+                html += '      <div class="rd-facts">';
+                html += '        <div><div class="lbl">Qty</div><div class="val">' + esc((it.qty != null ? it.qty : '-')) + ' ' + esc(it.unit || '') + '</div></div>';
+                if (it.rental_days) html += '        <div><div class="lbl">Rental Days</div><div class="val">' + esc(it.rental_days) + '</div></div>';
+                html += '        <div><div class="lbl">Unit Cost</div><div class="val">' + money(it.cost_per_item) + '</div></div>';
+                html += '        <div><div class="lbl">Total Cost</div><div class="val">' + money(it.total_cost) + '</div></div>';
+                if (it.approval_status) html += '        <div><div class="lbl">Approval</div><div class="val">' + esc(it.approval_status) + '</div></div>';
+                if (it.supplier_name) html += '        <div><div class="lbl">Supplier</div><div class="val">' + esc(it.supplier_name) + '</div></div>';
+                if (it.supplier_due_date) html += '        <div><div class="lbl">Supplier Due</div><div class="val">' + formatDate(it.supplier_due_date) + '</div></div>';
+                if (it.supplier_received_date) html += '        <div><div class="lbl">Received On</div><div class="val">' + formatDate(it.supplier_received_date) + '</div></div>';
+                if (dims) html += '        <div><div class="lbl">Dimensions</div><div class="val">' + esc(dims) + '</div></div>';
+                html += '      </div>';
+                if (images && images.length > 1) {
+                    html += '      <div class="rd-extra-imgs">';
+                    images.slice(1).forEach(function(u){ html += '<a href="' + esc(u) + '" target="_blank"><img src="' + esc(u) + '" onerror="this.style.display=\'none\'"></a>'; });
+                    html += '      </div>';
+                }
+                if (attachments && attachments.length) {
+                    html += '      <div class="mt-2" style="font-size:12.5px;"><strong>Attachments:</strong> ';
+                    attachments.forEach(function(a){
+                        var url = (typeof a === 'string') ? a : (a.url || a.path || '');
+                        var name = (typeof a === 'string') ? a.split('/').pop() : (a.name || a.filename || (url ? url.split('/').pop() : 'file'));
+                        if (url) html += '<a class="mr-2" href="' + esc(url) + '" target="_blank"><i class="fas fa-paperclip mr-1"></i>' + esc(name) + '</a>';
+                    });
+                    html += '      </div>';
+                }
+                if (it.description) html += '      <div class="rd-note" style="border-left-color:#ffc107;background:#fff8e1;">' + esc(it.description) + '</div>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '</div>';
+            });
+        }
+        html += '</div>';
+
+        // Template Details
+        var tpls = sr.template_instances || [];
+        if (tpls.length) {
+            html += '<div class="rd-section">';
+            html += '  <h6><i class="fas fa-file-alt mr-2"></i>Template Details <span class="badge badge-secondary ml-2">' + tpls.length + '</span></h6>';
+            tpls.forEach(function(t) {
+                var fields = t.fields || {};
+                if (typeof fields === 'string') { try { fields = JSON.parse(fields); } catch(e) { fields = {}; } }
+                html += '<div class="rd-tpl">';
+                html += '  <div class="rd-tpl-head">' + esc(t.template_name || ('Template ' + t.template_id)) + (t.request_type ? ' · <span class="text-muted" style="font-weight:500;">' + esc(t.request_type) + '</span>' : '') + '</div>';
+                var keys = Object.keys(fields);
+                if (!keys.length) {
+                    html += '  <div class="text-muted" style="font-size:12px;">No fields captured.</div>';
+                } else {
+                    html += '  <div class="rd-fields">';
+                    keys.forEach(function(k) {
+                        var v = fields[k];
+                        var long = typeof v === 'string' && v.length > 60;
+                        html += '<div class="' + (long ? 'val full' : '') + '"><div class="lbl">' + fmtKey(k) + '</div><div class="val' + (long ? ' full' : '') + '">' + fmtVal(v) + '</div></div>';
+                    });
+                    html += '  </div>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        $('#rdBody').html(html);
+    }
+
+    // ===== Kanban / Pipeline View =====
+    function renderItemsKanban(items) {
+        $('#itemsCountBadge').text(items.length + ' items');
+        var cols = { pending: [], ordered: [], in_progress: [], received: [] };
+        items.forEach(function(it){
+            var s = it.status || 'pending';
+            if (!cols[s]) s = 'pending';
+            cols[s].push(it);
+        });
+        function buildCard(it){
+            var dueClass = getDueDateClass(it.due_date, it.status);
+            var cardClass = '';
+            if (dueClass === 'overdue') cardClass = ' overdue';
+            else if (dueClass === 'due-soon') cardClass = ' due-soon';
+            var nm = $('<div>').text(it.item_name || '-').html();
+            var sup = $('<div>').text(it.supplier_name || 'Unassigned').html();
+            var cli = $('<div>').text(it.client_name || '').html();
+            var typeLabel = it.assignment_type === 'direct' ? 'Direct' : 'Sub-Item';
+            var costHtml = '';
+            if (it.total_cost != null && !isNaN(parseFloat(it.total_cost))) {
+                costHtml = '<span class="text-muted" style="font-size:11px;"><i class="fas fa-coins mr-1"></i>EGP ' +
+                           parseFloat(it.total_cost).toLocaleString(undefined,{maximumFractionDigits:0}) + '</span>';
+            }
+            return ''
+                + '<div class="kanban-card' + cardClass + '" data-request-id="' + it.request_id + '">'
+                + '  <div class="kc-name"><span title="' + nm + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;">' + nm + '</span>'
+                + '    <span class="kc-qty">' + (it.qty||1) + ' ' + $('<div>').text(it.unit||'pcs').html() + '</span>'
+                + '  </div>'
+                + '  <div class="kc-meta">'
+                + '    <div class="kc-sup"><i class="fas fa-truck fa-sm mr-1"></i>' + sup + '</div>'
+                + (cli ? '    <div><i class="fas fa-user fa-sm mr-1"></i>' + cli + '</div>' : '')
+                + '    <div><span class="type-badge ' + it.assignment_type + '">' + typeLabel + '</span></div>'
+                + '  </div>'
+                + '  <div class="kc-foot">'
+                + '    <a href="#" class="rd-open-link" data-request-id="' + it.request_id + '">#' + it.request_id + '</a>'
+                + (it.due_date ? '<span class="kc-due ' + dueClass + '"><i class="far fa-calendar mr-1"></i>' + formatDate(it.due_date) + '</span>' : '<span class="text-muted" style="font-size:11px;">No due date</span>')
+                + '  </div>'
+                + (costHtml ? '  <div class="kc-foot" style="margin-top:2px;">' + costHtml + '</div>' : '')
+                + '</div>';
+        }
+        ['pending','ordered','in_progress','received'].forEach(function(st){
+            var lst = cols[st];
+            var idMap = { pending:'kbColPending', ordered:'kbColOrdered', in_progress:'kbColInProgress', received:'kbColReceived' };
+            var cntMap = { pending:'#kbCntPending', ordered:'#kbCntOrdered', in_progress:'#kbCntInProgress', received:'#kbCntReceived' };
+            $(cntMap[st]).text(lst.length);
+            if (!lst.length) {
+                $('#' + idMap[st]).html('<div class="kanban-col-empty">No items</div>');
+            } else {
+                // sort: overdue first within column, then by due date asc
+                lst.sort(function(a,b){
+                    var da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+                    var db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+                    return da - db;
+                });
+                $('#' + idMap[st]).html(lst.map(buildCard).join(''));
+            }
+        });
+    }
+
+    // Kanban card click → open request
+    $(document).on('click', '.kanban-card', function(e){
+        if ($(e.target).is('a') || $(e.target).closest('a').length) return;
+        var rid = $(this).data('request-id');
+        if (rid) openRequestDetails(rid);
+    });
+
+    // ===== Reports: Top-5 Suppliers + Status Donut + Overdue Panel =====
+    function renderReports() {
+        // Top suppliers from allItems (count items per supplier_name)
+        var counts = {};
+        (allItems || []).forEach(function(it){
+            var k = it.supplier_name || 'Unassigned';
+            counts[k] = (counts[k]||0) + 1;
+        });
+        var pairs = Object.keys(counts).map(function(k){return {name:k, n:counts[k]};});
+        pairs.sort(function(a,b){ return b.n - a.n; });
+        var top5 = pairs.slice(0, 5);
+
+        if (topSuppliersChart) topSuppliersChart.destroy();
+        var ctx1 = document.getElementById('topSuppliersChart');
+        if (ctx1 && window.Chart) {
+            topSuppliersChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: top5.map(function(p){return p.name.length > 22 ? p.name.slice(0,22)+'…' : p.name;}),
+                    datasets: [{
+                        label: 'Items',
+                        data: top5.map(function(p){return p.n;}),
+                        backgroundColor: ['#1e3a5f','#2d5a87','#3b82f6','#60a5fa','#93c5fd'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(items){ return top5[items[0].dataIndex].name; } } } },
+                    scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+                    onClick: function(evt, els){
+                        if (!els || !els.length) return;
+                        var name = top5[els[0].index].name;
+                        if (name === 'Unassigned') return;
+                        var sup = (allSuppliers || []).find(function(s){return s.supplier_name === name;});
+                        if (sup) { selectedSupplierId = sup.id; renderSuppliersList(allSuppliers); filterAndRenderItems(); }
+                    }
+                }
+            });
+        }
+
+        // Status donut
+        var dist = { pending:0, ordered:0, in_progress:0, received:0 };
+        (allItems || []).forEach(function(it){
+            var s = it.status || 'pending';
+            if (dist[s] !== undefined) dist[s]++;
+        });
+        if (statusDonutChart) statusDonutChart.destroy();
+        var ctx2 = document.getElementById('statusDonutChart');
+        if (ctx2 && window.Chart) {
+            statusDonutChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Pending','Ordered','In Progress','Received'],
+                    datasets: [{
+                        data: [dist.pending, dist.ordered, dist.in_progress, dist.received],
+                        backgroundColor: ['#f59e0b','#17a2b8','#3b82f6','#16a34a'],
+                        borderWidth: 2, borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '60%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } }
+                    }
+                }
+            });
+        }
+
+        // Overdue panel
+        var today = new Date(); today.setHours(0,0,0,0);
+        var overdue = (allItems || []).filter(function(it){
+            if (!it.due_date || it.status === 'received') return false;
+            var d = new Date(it.due_date); d.setHours(0,0,0,0);
+            return d < today;
+        }).sort(function(a,b){ return new Date(a.due_date) - new Date(b.due_date); });
+        $('#overdueBadgeCount').text(overdue.length);
+        if (!overdue.length) {
+            $('#overduePanel').html('<div class="text-muted text-center py-3" style="font-size:12px;"><i class="fas fa-check-circle mr-1 text-success"></i>No overdue items</div>');
+        } else {
+            var html = '';
+            overdue.slice(0, 50).forEach(function(it){
+                var nm = $('<div>').text(it.item_name||'-').html();
+                var sup = $('<div>').text(it.supplier_name||'Unassigned').html();
+                html += '<div class="ov-row" data-request-id="' + it.request_id + '">'
+                     +  '  <div style="min-width:0;flex:1;">'
+                     +  '    <div class="ov-item" title="' + nm + '">' + nm + '</div>'
+                     +  '    <div class="ov-sup"><i class="fas fa-truck fa-sm mr-1"></i>' + sup + ' · <a href="#" class="rd-open-link" data-request-id="' + it.request_id + '">#' + it.request_id + '</a></div>'
+                     +  '  </div>'
+                     +  '  <div class="ov-due"><i class="fas fa-calendar-times mr-1"></i>' + formatDate(it.due_date) + '</div>'
+                     +  '</div>';
+            });
+            $('#overduePanel').html(html);
+        }
+    }
+    $(document).on('click', '.ov-row', function(e){
+        if ($(e.target).is('a') || $(e.target).closest('a').length) return;
+        var rid = $(this).data('request-id');
+        if (rid) openRequestDetails(rid);
+    });
+
+    // ===== Supplier Scorecards =====
+    function loadScorecards() {
+        $.get('/api/supplier-report/scorecards')
+            .done(function(resp){
+                if (!resp || !resp.success) {
+                    $('#scorecardStrip').html('<div class="text-muted px-2" style="font-size:12px;">Failed to load scorecards.</div>');
+                    return;
+                }
+                renderScorecards(resp.scorecards || []);
+            })
+            .fail(function(){
+                $('#scorecardStrip').html('<div class="text-muted px-2" style="font-size:12px;">Failed to load scorecards.</div>');
+            });
+    }
+    function renderScorecards(list) {
+        if (!list.length) {
+            $('#scorecardStrip').html('<div class="text-muted px-2" style="font-size:12px;"><i class="fas fa-info-circle mr-1"></i>No supplier performance data yet.</div>');
+            return;
+        }
+        var html = '';
+        list.slice(0, 20).forEach(function(sc){
+            var ot = sc.on_time_pct;
+            var otClass = ot == null ? '' : (ot >= 90 ? 'green' : (ot >= 70 ? 'amber' : 'red'));
+            var otTxt = ot == null ? '—' : (ot + '%');
+            var lead = sc.avg_lead_time_days;
+            var leadTxt = lead == null ? '—' : (lead + 'd');
+            var nm = $('<div>').text(sc.supplier_name).html();
+            html += '<div class="scorecard-tile" data-supplier-id="' + sc.supplier_id + '">'
+                 +  '  <div class="sc-name" title="' + nm + '"><i class="fas fa-truck mr-1 text-secondary"></i>' + nm + '</div>'
+                 +  '  <div class="sc-row"><span class="lbl">On-Time</span><span class="val ' + otClass + '">' + otTxt + '</span></div>'
+                 +  '  <div class="sc-row"><span class="lbl">Received</span><span class="val">' + sc.total_received + '</span></div>'
+                 +  '  <div class="sc-row"><span class="lbl">Avg Lead</span><span class="val">' + leadTxt + '</span></div>'
+                 +  '  <div class="sc-actions">'
+                 +  '    <button class="btn btn-outline-primary btn-sm sc-filter-btn" title="Filter report by this supplier"><i class="fas fa-filter"></i></button>'
+                 +  '    <button class="btn btn-outline-success btn-sm sc-excel-btn" title="Export this supplier to Excel"><i class="fas fa-file-excel"></i></button>'
+                 +  '  </div>'
+                 +  '</div>';
+        });
+        $('#scorecardStrip').html(html);
+    }
+    $(document).on('click', '.sc-filter-btn', function(e){
+        e.stopPropagation();
+        var sid = $(this).closest('.scorecard-tile').data('supplier-id');
+        if (sid) {
+            $('#supplierFilter').val(sid).trigger('change');
+        }
+    });
+    $(document).on('click', '.sc-excel-btn', function(e){
+        e.stopPropagation();
+        var sid = $(this).closest('.scorecard-tile').data('supplier-id');
+        if (sid) window.location.href = '/api/supplier-report/export-excel?supplier_id=' + encodeURIComponent(sid);
+    });
+
+    // ===== Export buttons =====
+    function buildFilterQS() {
+        var p = {
+            supplier_id: $('#supplierFilter').val() || '',
+            status: $('#statusFilter').val() || '',
+            date_from: $('#dateFromFilter').val() || '',
+            date_to: $('#dateToFilter').val() || '',
+            request_start_from: $('#requestStartFromFilter').val() || '',
+            request_start_to: $('#requestStartToFilter').val() || '',
+            request_end_from: $('#requestEndFromFilter').val() || '',
+            request_end_to: $('#requestEndToFilter').val() || '',
+            item_type: $('#assignmentTypeFilter').val() || ''
+        };
+        return Object.keys(p).filter(function(k){return p[k];}).map(function(k){return k+'='+encodeURIComponent(p[k]);}).join('&');
+    }
+    $('#exportExcelBtn').click(function(){
+        var qs = buildFilterQS();
+        window.location.href = '/api/supplier-report/export-excel' + (qs ? '?'+qs : '');
+    });
+    $('#exportPdfBtn').click(function(){
+        Swal.fire({
+            title: 'Export to PDF',
+            html: 'A browser print dialog will open. Choose <strong>"Save as PDF"</strong> as the destination.<br><br><small class="text-muted">Tip: select Landscape orientation for the Pipeline view.</small>',
+            icon: 'info',
+            confirmButtonText: '<i class="fas fa-print mr-1"></i> Print / Save PDF',
+            showCancelButton: true
+        }).then(function(r){ if (r.isConfirmed) window.print(); });
+    });
+
+    // ===== Filter Presets (localStorage) =====
+    function readPresets() {
+        try { return JSON.parse(localStorage.getItem(PRESET_KEY) || '{}'); } catch(e) { return {}; }
+    }
+    function writePresets(obj) {
+        localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
+    }
+    function refreshPresetSelect() {
+        var presets = readPresets();
+        var $sel = $('#presetSelect'); var cur = $sel.val();
+        $sel.find('option:not(:first)').remove();
+        Object.keys(presets).sort().forEach(function(name){
+            $sel.append($('<option>', { value: name, text: name }));
+        });
+        if (cur) $sel.val(cur);
+    }
+    function snapshotFilters() {
+        return {
+            supplier: $('#supplierFilter').val() || '',
+            client_status: $('#statusFilter').val() || '',
+            date_from: $('#dateFromFilter').val() || '',
+            date_to: $('#dateToFilter').val() || '',
+            text: $('#textSearchFilter').val() || '',
+            assignment: $('#assignmentTypeFilter').val() || '',
+            req_start_from: $('#requestStartFromFilter').val() || '',
+            req_start_to: $('#requestStartToFilter').val() || '',
+            req_end_from: $('#requestEndFromFilter').val() || '',
+            req_end_to: $('#requestEndToFilter').val() || '',
+            status_pills: Array.from(activeStatusPills),
+            quick_chips: Array.from(activeQuickChips),
+            view: currentItemsView
+        };
+    }
+    function applyPreset(p) {
+        if (!p) return;
+        $('#supplierFilter').val(p.supplier || null).trigger('change.select2');
+        $('#statusFilter').val(p.client_status || '');
+        $('#dateFromFilter').val(p.date_from || '');
+        $('#dateToFilter').val(p.date_to || '');
+        $('#textSearchFilter').val(p.text || '');
+        $('#assignmentTypeFilter').val(p.assignment || '');
+        $('#requestStartFromFilter').val(p.req_start_from || '');
+        $('#requestStartToFilter').val(p.req_start_to || '');
+        $('#requestEndFromFilter').val(p.req_end_from || '');
+        $('#requestEndToFilter').val(p.req_end_to || '');
+        activeStatusPills = new Set(p.status_pills || []);
+        activeQuickChips = new Set(p.quick_chips || []);
+        $('.status-pill').removeClass('active pending ordered in_progress received');
+        activeStatusPills.forEach(function(s){ $('.status-pill[data-status="'+s+'"]').addClass('active ' + s); });
+        $('.quick-chip').removeClass('active overdue due-soon');
+        activeQuickChips.forEach(function(q){ $('.quick-chip[data-quick="'+q+'"]').addClass('active ' + q); });
+        if (p.view === 'kanban') $('#viewKanbanBtn').click();
+        else if (p.view === 'grouped') $('#viewGroupedBtn').click();
+        else $('#viewTableBtn').click();
+        // Reload from server because date/supplier are server-side filters
+        loadSupplierReport();
+    }
+    $('#savePresetBtn').click(function(){
+        Swal.fire({
+            title: 'Save Filter Preset',
+            input: 'text', inputLabel: 'Preset name',
+            inputPlaceholder: 'e.g. Overdue this week',
+            showCancelButton: true, confirmButtonText: 'Save',
+            inputValidator: function(v){ if (!v || !v.trim()) return 'Name is required'; }
+        }).then(function(r){
+            if (!r.isConfirmed) return;
+            var presets = readPresets();
+            presets[r.value.trim()] = snapshotFilters();
+            writePresets(presets);
+            refreshPresetSelect();
+            $('#presetSelect').val(r.value.trim());
+            Swal.fire({ icon:'success', title:'Saved', timer:1200, showConfirmButton:false });
+        });
+    });
+    $('#deletePresetBtn').click(function(){
+        var name = $('#presetSelect').val();
+        if (!name) { Swal.fire('Pick a preset', 'Select a preset to delete first.', 'info'); return; }
+        Swal.fire({ title:'Delete preset "'+name+'"?', icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#dc3545' }).then(function(r){
+            if (!r.isConfirmed) return;
+            var presets = readPresets(); delete presets[name]; writePresets(presets);
+            refreshPresetSelect();
+            Swal.fire({ icon:'success', title:'Deleted', timer:1000, showConfirmButton:false });
+        });
+    });
+    $('#presetSelect').on('change', function(){
+        var name = $(this).val(); if (!name) return;
+        var presets = readPresets();
+        if (presets[name]) applyPreset(presets[name]);
+    });
+    refreshPresetSelect();
+
+    // ===== Suppliers pane: quick filter =====
+    $('#suppliersListSearch').on('input', function(){
+        var q = ($(this).val() || '').toLowerCase().trim();
+        if (!q) {
+            renderSuppliersList(allSuppliers);
+            return;
+        }
+        var subset = (allSuppliers || []).filter(function(s){
+            return (s.supplier_name || '').toLowerCase().indexOf(q) !== -1
+                || (s.company_name || '').toLowerCase().indexOf(q) !== -1
+                || (s.primary_phone || '').toLowerCase().indexOf(q) !== -1
+                || (s.email_address || '').toLowerCase().indexOf(q) !== -1;
+        });
+        renderSuppliersList(subset);
+    });
+
+    // ===== Request Modal: Expand/Collapse All + chevron rotation =====
+    $(document).on('click', '#rdiExpandAll', function(){
+        $('#rdBody .rdi-collapse').collapse('show');
+    });
+    $(document).on('click', '#rdiCollapseAll', function(){
+        $('#rdBody .rdi-collapse').collapse('hide');
+    });
+    $(document).on('show.bs.collapse', '.rdi-collapse', function(){
+        $('[data-target="#' + this.id + '"]').attr('aria-expanded','true');
+    }).on('hide.bs.collapse', '.rdi-collapse', function(){
+        $('[data-target="#' + this.id + '"]').attr('aria-expanded','false');
+    });
+
+    // Reset modal title when closed to avoid stale text peek-through next time
+    $('#requestDetailsModal').on('hidden.bs.modal', function(){
+        $('#rdTitle').text('Request Details');
+        $('#rdBody').html('');
+    });
+
+    // Select supplier
+    window.selectSupplier = function(supplierId) {
+        if (selectedSupplierId === supplierId) {
+            selectedSupplierId = null; // Deselect
+        } else {
+            selectedSupplierId = supplierId;
+        }
+        renderSuppliersList(allSuppliers);
+        filterAndRenderItems();
+    };
+});
+</script>
+{% endblock %}

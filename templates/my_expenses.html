@@ -1,0 +1,1166 @@
+{% extends "main.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<style>
+:root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --primary: #6366f1;
+    --primary-soft: rgba(99,102,241,0.1);
+    --primary-hover: #4f46e5;
+    --success: #10b981;
+    --success-soft: rgba(16,185,129,0.1);
+    --warning: #f59e0b;
+    --warning-soft: rgba(245,158,11,0.1);
+    --danger: #ef4444;
+    --danger-soft: rgba(239,68,68,0.1);
+    --info: #3b82f6;
+    --info-soft: rgba(59,130,246,0.1);
+    --text: #0f172a;
+    --text-light: #475569;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --shadow: rgba(15,23,42,0.1);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.expense-shell {
+    min-height: calc(100vh - 64px);
+    padding: 24px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 50%, #fef3c7 100%);
+}
+
+.expense-card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.expense-header {
+    padding: 32px 36px 16px;
+    border-bottom: 2px solid var(--border);
+    background: linear-gradient(to right, rgba(99,102,241,0.03), transparent);
+}
+
+.expense-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.expense-header p {
+    margin: 10px 0 0;
+    color: var(--text-light);
+    font-size: 15px;
+}
+
+/* Balance Cards */
+.balance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    padding: 24px 36px;
+    background: rgba(248,250,252,0.6);
+}
+
+.balance-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    border: 2px solid var(--border);
+    transition: var(--transition);
+}
+
+.balance-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px var(--shadow);
+}
+
+.balance-card.current {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    border-color: #0ea5e9;
+}
+
+.balance-card.pending {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-color: #f59e0b;
+}
+
+.balance-card.future {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    border-color: #22c55e;
+}
+
+.balance-card.future.negative {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-color: #ef4444;
+}
+
+.balance-card .label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.balance-card .amount {
+    font-size: 32px;
+    font-weight: 800;
+}
+
+.balance-card.current .amount { color: #0369a1; }
+.balance-card.pending .amount { color: #b45309; }
+.balance-card.future .amount { color: #15803d; }
+.balance-card.future.negative .amount { color: #dc2626; }
+
+/* Content Area */
+.expense-content {
+    padding: 24px 36px;
+}
+
+/* Toolbar */
+.expense-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.expense-toolbar .filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.expense-toolbar select {
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    padding: 10px 14px;
+    min-width: 150px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Buttons */
+.btn-pill {
+    border-radius: 12px;
+    padding: 11px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    border: 2px solid transparent;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.btn-pill-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+}
+
+.btn-pill-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99,102,241,0.4);
+    color: #fff;
+}
+
+.btn-pill-success {
+    background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+}
+
+.btn-pill-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(16,185,129,0.4);
+    color: #fff;
+}
+
+.btn-pill-warning {
+    background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+}
+
+.btn-pill-outline {
+    background: white;
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.btn-pill-outline:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* Expense Table */
+.expense-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.expense-table thead th {
+    background: rgba(248,250,252,0.9);
+    padding: 14px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+}
+
+.expense-table tbody td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text);
+    vertical-align: middle;
+}
+
+.expense-table tbody tr {
+    transition: var(--transition);
+}
+
+.expense-table tbody tr:hover {
+    background: rgba(99,102,241,0.02);
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-badge.draft { background: #f1f5f9; color: #64748b; }
+.status-badge.submitted { background: var(--warning-soft); color: var(--warning); }
+.status-badge.approved { background: var(--success-soft); color: var(--success); }
+.status-badge.rejected { background: var(--danger-soft); color: var(--danger); }
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+}
+
+.empty-state i {
+    font-size: 64px;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+.empty-state h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.empty-state p {
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+/* Modals */
+.modal-content {
+    border-radius: 20px;
+    border: none;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+    color: white;
+}
+
+.modal-header .modal-title {
+    font-weight: 700;
+    font-size: 20px;
+}
+
+.modal-header .close {
+    color: white;
+    opacity: 0.8;
+}
+
+.modal-body {
+    padding: 28px;
+}
+
+.modal-footer {
+    padding: 20px 28px;
+    border-top: 1px solid var(--border);
+    background: rgba(248,250,252,0.5);
+}
+
+/* Form Styles */
+.form-group-modern {
+    margin-bottom: 20px;
+}
+
+.form-group-modern label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.form-group-modern .form-control,
+.form-group-modern select {
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    padding: 12px 16px;
+    font-size: 14px;
+    transition: var(--transition);
+    width: 100%;
+}
+
+.form-group-modern .form-control:focus,
+.form-group-modern select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+    outline: none;
+}
+
+/* Balance Preview */
+.balance-preview {
+    background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+    border: 1px solid #bae6fd;
+}
+
+.balance-preview .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed #cbd5e1;
+}
+
+.balance-preview .row:last-child {
+    border-bottom: none;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.balance-preview .row.negative span:last-child {
+    color: var(--danger);
+}
+
+.balance-preview .row.positive span:last-child {
+    color: var(--success);
+}
+
+/* Select2 Custom */
+.select2-container--default .select2-selection--single {
+    border-radius: 10px !important;
+    border: 2px solid var(--border) !important;
+    height: 46px !important;
+    padding: 8px 12px !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 28px !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 44px !important;
+}
+
+/* Internal Transfers Section */
+.transfers-section {
+    padding: 0 36px;
+    margin-bottom: 0;
+}
+
+.transfers-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 2px solid #c7d2fe;
+}
+
+.transfers-toggle:hover {
+    background: linear-gradient(135deg, #ddd6fe 0%, #c7d2fe 100%);
+    transform: translateY(-1px);
+}
+
+.transfers-toggle h6 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 15px;
+    color: #4338ca;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.transfers-toggle .toggle-icon {
+    transition: transform 0.3s ease;
+    color: #6366f1;
+    font-size: 14px;
+}
+
+.transfers-toggle.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.transfers-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 12px;
+}
+
+.transfers-table thead th {
+    background: #f5f3ff;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6366f1;
+    border-bottom: 2px solid #e0e7ff;
+}
+
+.transfers-table tbody td {
+    padding: 12px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.transfer-type-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.transfer-type-badge.income { background: var(--success-soft); color: #059669; }
+.transfer-type-badge.expense { background: var(--danger-soft); color: #dc2626; }
+.transfer-type-badge.adjustment { background: var(--info-soft); color: #2563eb; }
+.transfer-type-badge.opening { background: #f0fdf4; color: #15803d; }
+
+@media (max-width: 768px) {
+    .balance-grid { grid-template-columns: repeat(2, 1fr); }
+    .expense-toolbar { flex-direction: column; align-items: stretch; }
+    .expense-content { padding: 16px; }
+    .transfers-section { padding: 0 16px; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="expense-shell">
+    <div class="expense-card">
+        <!-- Header -->
+        <div class="expense-header">
+            <h1>
+                <span style="width: 44px; height: 44px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); font-size: 18px;">
+                    <i class="fas fa-receipt"></i>
+                </span>
+                My Expense Tracking
+            </h1>
+            <p>Track your expenses, view future balance, and submit for approval</p>
+        </div>
+        
+        <!-- Balance Cards -->
+        <div class="balance-grid">
+            <div class="balance-card current">
+                <div class="label"><i class="fas fa-wallet mr-1"></i> Current Balance</div>
+                <div class="amount" id="currentBalance">EGP 0.00</div>
+            </div>
+            <div class="balance-card pending">
+                <div class="label"><i class="fas fa-clock mr-1"></i> Pending Expenses</div>
+                <div class="amount" id="pendingTotal">EGP 0.00</div>
+            </div>
+            <div class="balance-card future" id="futureBalanceCard">
+                <div class="label"><i class="fas fa-chart-line mr-1"></i> Future Balance</div>
+                <div class="amount" id="futureBalance">EGP 0.00</div>
+            </div>
+        </div>
+        
+        <!-- Internal Transfers Section -->
+        <div class="transfers-section">
+            <div class="transfers-toggle collapsed" onclick="toggleTransfers()">
+                <h6>
+                    <i class="fas fa-exchange-alt"></i>
+                    Balance History | Internal Transfers
+                    <span class="badge badge-pill" style="background: #6366f1; color: white; font-size: 11px;" id="transfersCount">0</span>
+                </h6>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div id="transfersContent" style="display: none;">
+                <div class="table-responsive">
+                    <table class="transfers-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Amount</th>
+                                <th>Balance Before</th>
+                                <th>Balance After</th>
+                                <th>By</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transfersBody">
+                            <tr><td colspan="7" style="text-align:center; padding:20px; color: var(--muted);">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="expense-content">
+            <!-- Toolbar -->
+            <div class="expense-toolbar">
+                <div class="filters">
+                    <select id="filterStatus" onchange="loadExpenses()">
+                        <option value="">All Status</option>
+                        <option value="draft">Draft</option>
+                        <option value="submitted">Submitted</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div class="actions">
+                    <button class="btn-pill btn-pill-primary" onclick="openAddExpenseModal()">
+                        <i class="fas fa-plus"></i> Add Expense
+                    </button>
+                    <button class="btn-pill btn-pill-success" id="submitAllBtn" onclick="submitAllExpenses()" style="display: none;">
+                        <i class="fas fa-paper-plane"></i> Submit All for Approval
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Expenses Table -->
+            <div id="expensesContainer">
+                <table class="expense-table" id="expensesTable">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>SR</th>
+                            <th>Client</th>
+                            <th>Company</th>
+                            <th>Supplier</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Date</th>
+                            <th>Balance After</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expensesBody">
+                        <tr><td colspan="11" style="text-align: center; padding: 40px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Expense Modal -->
+<div class="modal fade" id="expenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-receipt mr-2"></i><span id="expenseModalTitle">Add Expense</span></h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="expenseForm">
+                    <input type="hidden" id="expenseId">
+                    
+                    <div class="form-group-modern">
+                        <label>Sales Request (SR) *</label>
+                        <select class="form-control select2" id="expenseSalesRequest" style="width: 100%;">
+                            <option value="">Select Sales Request</option>
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group-modern">
+                                <label>Client</label>
+                                <input type="text" class="form-control" id="expenseClientName" readonly placeholder="Auto-filled from SR" style="background: #f8f9fc;">
+                                <input type="hidden" id="expenseClientId">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group-modern">
+                                <label>Company</label>
+                                <input type="text" class="form-control" id="expenseCompanyName" readonly placeholder="Auto-filled from SR" style="background: #f8f9fc;">
+                                <input type="hidden" id="expenseCompanyId">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label>Supplier *</label>
+                        <select class="form-control select2" id="expenseSupplier" style="width: 100%;">
+                            <option value="">Select Supplier</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label>Or Enter Supplier Name</label>
+                        <input type="text" class="form-control" id="expenseSupplierName" placeholder="Enter supplier name if not in list">
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label>Amount (EGP) *</label>
+                        <input type="number" class="form-control" id="expenseAmount" step="0.01" min="0.01" required placeholder="0.00" oninput="updateBalancePreview()">
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label>Description *</label>
+                        <textarea class="form-control" id="expenseDescription" rows="3" required placeholder="What is this expense for?"></textarea>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label>Date *</label>
+                        <input type="date" class="form-control" id="expenseDate" required>
+                    </div>
+                    
+                    <div class="balance-preview" id="balancePreview">
+                        <div class="row">
+                            <span>Current Balance:</span>
+                            <span id="previewCurrentBalance">EGP 0.00</span>
+                        </div>
+                        <div class="row">
+                            <span>Existing Pending:</span>
+                            <span id="previewPendingTotal">- EGP 0.00</span>
+                        </div>
+                        <div class="row">
+                            <span>This Expense:</span>
+                            <span id="previewThisExpense">- EGP 0.00</span>
+                        </div>
+                        <div class="row" id="previewFutureRow">
+                            <span>Future Balance:</span>
+                            <span id="previewFutureBalance">EGP 0.00</span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn-pill btn-pill-primary" onclick="saveExpense()">
+                    <i class="fas fa-save"></i> Save Expense
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+var currentBalance = 0;
+var pendingTotal = 0;
+var futureBalance = 0;
+var suppliers = [];
+var salesRequests = [];
+
+$(document).ready(function() {
+    // Set default date
+    $('#expenseDate').val(new Date().toISOString().split('T')[0]);
+    
+    // Initialize Select2
+    $('#expenseSupplier').select2({
+        dropdownParent: $('#expenseModal'),
+        width: '100%',
+        placeholder: 'Select Supplier'
+    });
+    
+    $('#expenseSalesRequest').select2({
+        dropdownParent: $('#expenseModal'),
+        width: '100%',
+        placeholder: 'Select Sales Request'
+    });
+    
+    // SR change handler - auto-fill client and company
+    $('#expenseSalesRequest').on('change', function() {
+        var srId = $(this).val();
+        if (srId) {
+            var sr = salesRequests.find(s => s.id == srId);
+            if (sr) {
+                $('#expenseClientId').val(sr.client_id || '');
+                $('#expenseClientName').val(sr.client_name || '');
+                $('#expenseCompanyId').val(sr.company_id || '');
+                $('#expenseCompanyName').val(sr.company_name || '');
+            }
+        } else {
+            $('#expenseClientId').val('');
+            $('#expenseClientName').val('');
+            $('#expenseCompanyId').val('');
+            $('#expenseCompanyName').val('');
+        }
+    });
+    
+    // Load data
+    loadSuppliers();
+    loadSalesRequests();
+    loadExpenses();
+    loadBalanceHistory();
+});
+
+function formatCurrency(amount) {
+    return 'EGP ' + parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function loadSuppliers() {
+    fetch('/api/finance/suppliers')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                suppliers = data.suppliers;
+                var options = '<option value="">Select Supplier</option>';
+                suppliers.forEach(s => {
+                    options += '<option value="' + s.id + '">' + (s.company_name || s.supplier_name || 'Unknown') + '</option>';
+                });
+                $('#expenseSupplier').html(options);
+            }
+        });
+}
+
+function loadSalesRequests() {
+    fetch('/api/sales-requests-lookup')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.data) {
+                salesRequests = data.data;
+                var options = '<option value="">Select Sales Request</option>';
+                salesRequests.forEach(sr => {
+                    var label = 'SR-' + sr.id + ' | ' + (sr.client_name || 'No Client') + ' | ' + (sr.company_name || 'No Company') + (sr.title ? ' | ' + sr.title : '');
+                    options += '<option value="' + sr.id + '">' + label + '</option>';
+                });
+                $('#expenseSalesRequest').html(options);
+            }
+        })
+        .catch(err => console.error('Error loading sales requests:', err));
+}
+
+function toggleTransfers() {
+    var content = $('#transfersContent');
+    var toggle = $('.transfers-toggle');
+    if (content.is(':visible')) {
+        content.slideUp(250);
+        toggle.addClass('collapsed');
+    } else {
+        content.slideDown(250);
+        toggle.removeClass('collapsed');
+    }
+}
+
+function loadBalanceHistory() {
+    fetch('/api/finance/my-balance-history')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                renderBalanceHistory(data.history || []);
+                $('#transfersCount').text(data.history ? data.history.length : 0);
+            }
+        })
+        .catch(err => console.error('Error loading balance history:', err));
+}
+
+function renderBalanceHistory(history) {
+    var tbody = $('#transfersBody');
+    tbody.empty();
+
+    if (history.length === 0) {
+        tbody.html('<tr><td colspan="7" style="text-align:center; padding:30px; color: var(--muted);"><i class="fas fa-info-circle mr-2"></i>No balance history yet</td></tr>');
+        return;
+    }
+
+    history.forEach(function(h) {
+        var typeLabel = '';
+        var badgeClass = '';
+        var amount = parseFloat(h.change_amount);
+        var amountDisplay = '';
+
+        switch (h.change_type) {
+            case 'transfer_in':
+                typeLabel = 'Transfer In';
+                badgeClass = 'income';
+                amountDisplay = '<span style="color: #059669; font-weight: 700;">+ ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            case 'request_approved':
+                typeLabel = 'Request Approved';
+                badgeClass = 'income';
+                amountDisplay = '<span style="color: #059669; font-weight: 700;">+ ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            case 'opening':
+                typeLabel = 'Opening Balance';
+                badgeClass = 'opening';
+                amountDisplay = '<span style="color: #15803d; font-weight: 700;">+ ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            case 'expense':
+                typeLabel = 'Expense';
+                badgeClass = 'expense';
+                amountDisplay = '<span style="color: #dc2626; font-weight: 700;">- ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            case 'transfer_out':
+                typeLabel = 'Transfer Out';
+                badgeClass = 'expense';
+                amountDisplay = '<span style="color: #dc2626; font-weight: 700;">- ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            case 'adjustment':
+                typeLabel = 'Adjustment';
+                badgeClass = 'adjustment';
+                amountDisplay = amount >= 0
+                    ? '<span style="color: #059669; font-weight: 700;">+ ' + formatCurrency(amount) + '</span>'
+                    : '<span style="color: #dc2626; font-weight: 700;">- ' + formatCurrency(Math.abs(amount)) + '</span>';
+                break;
+            default:
+                typeLabel = h.change_type;
+                badgeClass = 'adjustment';
+                amountDisplay = formatCurrency(amount);
+        }
+
+        var dateStr = h.created_at ? new Date(h.created_at).toLocaleString() : '-';
+
+        tbody.append(
+            '<tr>' +
+            '<td><span class="transfer-type-badge ' + badgeClass + '">' + typeLabel + '</span></td>' +
+            '<td>' + (h.description || '-') + '</td>' +
+            '<td>' + amountDisplay + '</td>' +
+            '<td style="color: var(--muted);">' + formatCurrency(h.balance_before) + '</td>' +
+            '<td style="font-weight: 600;">' + formatCurrency(h.balance_after) + '</td>' +
+            '<td>' + (h.created_by_name || 'System') + '</td>' +
+            '<td><small>' + dateStr + '</small></td>' +
+            '</tr>'
+        );
+    });
+}
+
+function loadExpenses() {
+    var status = $('#filterStatus').val();
+    var url = '/api/my-expenses';
+    if (status) url += '?status=' + status;
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                currentBalance = data.current_balance;
+                pendingTotal = data.pending_total;
+                futureBalance = data.future_balance;
+                
+                // Update balance cards
+                $('#currentBalance').text(formatCurrency(currentBalance));
+                $('#pendingTotal').text(formatCurrency(pendingTotal));
+                $('#futureBalance').text(formatCurrency(futureBalance));
+                
+                // Update future balance card color
+                var futureCard = $('#futureBalanceCard');
+                if (futureBalance < 0) {
+                    futureCard.addClass('negative');
+                } else {
+                    futureCard.removeClass('negative');
+                }
+                
+                // Check if there are draft expenses
+                var hasDrafts = data.expenses.some(e => e.status === 'draft');
+                if (hasDrafts) {
+                    $('#submitAllBtn').show();
+                } else {
+                    $('#submitAllBtn').hide();
+                }
+                
+                renderExpenses(data.expenses);
+            }
+        })
+        .catch(err => {
+            console.error('Error loading expenses:', err);
+            $('#expensesBody').html('<tr><td colspan="8" class="text-center text-danger">Error loading expenses</td></tr>');
+        });
+}
+
+function renderExpenses(expenses) {
+    var tbody = $('#expensesBody');
+    tbody.empty();
+    
+    if (expenses.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="11">
+                    <div class="empty-state">
+                        <i class="fas fa-receipt"></i>
+                        <h3>No Expenses Yet</h3>
+                        <p>Start tracking your expenses by clicking the button below</p>
+                        <button class="btn-pill btn-pill-primary" onclick="openAddExpenseModal()">
+                            <i class="fas fa-plus"></i> Add Your First Expense
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    expenses.forEach(exp => {
+        var supplierName = exp.supplier_display || exp.supplier_name || '-';
+        var statusClass = exp.status;
+        var statusIcon = exp.status === 'draft' ? 'fa-edit' : 
+                        exp.status === 'submitted' ? 'fa-clock' :
+                        exp.status === 'approved' ? 'fa-check' : 'fa-times';
+        
+        var actions = '';
+        if (exp.status === 'draft') {
+            actions = `
+                <button class="btn btn-sm btn-outline-primary mr-1" onclick="editExpense(${exp.id})" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteExpense(${exp.id})" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+        } else if (exp.status === 'rejected') {
+            actions = `<span class="text-danger small" title="${exp.rejection_reason || 'No reason'}"><i class="fas fa-info-circle"></i> ${(exp.rejection_reason || '').substring(0, 30)}...</span>`;
+        } else {
+            actions = '-';
+        }
+        
+        tbody.append(`
+            <tr>
+                <td><code>${exp.tracking_code}</code></td>
+                <td>${exp.sales_request_id ? '<span class="badge badge-info">SR-' + exp.sales_request_id + '</span>' : '-'}</td>
+                <td>${exp.client_name || '-'}</td>
+                <td>${exp.company_name || '-'}</td>
+                <td>${supplierName}</td>
+                <td style="font-weight: 700; color: var(--danger);">- ${formatCurrency(exp.amount)}</td>
+                <td>${(exp.description || '').substring(0, 50)}${(exp.description || '').length > 50 ? '...' : ''}</td>
+                <td>${exp.expense_date || '-'}</td>
+                <td style="font-weight: 600; ${exp.balance_after < 0 ? 'color: var(--danger);' : ''}">${formatCurrency(exp.balance_after)}</td>
+                <td><span class="status-badge ${statusClass}"><i class="fas ${statusIcon}"></i> ${exp.status}</span></td>
+                <td>${actions}</td>
+            </tr>
+        `);
+    });
+}
+
+function openAddExpenseModal() {
+    $('#expenseId').val('');
+    $('#expenseModalTitle').text('Add Expense');
+    $('#expenseForm')[0].reset();
+    $('#expenseDate').val(new Date().toISOString().split('T')[0]);
+    $('#expenseSupplier').val('').trigger('change');
+    $('#expenseSalesRequest').val('').trigger('change');
+    $('#expenseClientId').val('');
+    $('#expenseClientName').val('');
+    $('#expenseCompanyId').val('');
+    $('#expenseCompanyName').val('');
+    updateBalancePreview();
+    $('#expenseModal').modal('show');
+}
+
+function editExpense(id) {
+    fetch('/api/my-expenses?status=draft')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                var expense = data.expenses.find(e => e.id === id);
+                if (expense) {
+                    $('#expenseId').val(expense.id);
+                    $('#expenseModalTitle').text('Edit Expense');
+                    $('#expenseSalesRequest').val(expense.sales_request_id || '').trigger('change');
+                    $('#expenseClientId').val(expense.client_id || '');
+                    $('#expenseClientName').val(expense.client_name || '');
+                    $('#expenseCompanyId').val(expense.company_id || '');
+                    $('#expenseCompanyName').val(expense.company_name || '');
+                    $('#expenseSupplier').val(expense.supplier_id).trigger('change');
+                    $('#expenseSupplierName').val(expense.supplier_name || '');
+                    $('#expenseAmount').val(expense.amount);
+                    $('#expenseDescription').val(expense.description);
+                    $('#expenseDate').val(expense.expense_date);
+                    updateBalancePreview();
+                    $('#expenseModal').modal('show');
+                }
+            }
+        });
+}
+
+function updateBalancePreview() {
+    var amount = parseFloat($('#expenseAmount').val()) || 0;
+    var editingId = $('#expenseId').val();
+    
+    // If editing, we need to exclude the current expense from pending
+    var adjustedPending = pendingTotal;
+    if (editingId) {
+        // This is a simplification - ideally we'd get the original amount
+        // For now, just show the calculation
+    }
+    
+    var future = currentBalance - adjustedPending - amount;
+    
+    $('#previewCurrentBalance').text(formatCurrency(currentBalance));
+    $('#previewPendingTotal').text('- ' + formatCurrency(adjustedPending));
+    $('#previewThisExpense').text('- ' + formatCurrency(amount));
+    $('#previewFutureBalance').text(formatCurrency(future));
+    
+    var futureRow = $('#previewFutureRow');
+    if (future < 0) {
+        futureRow.addClass('negative').removeClass('positive');
+    } else {
+        futureRow.addClass('positive').removeClass('negative');
+    }
+}
+
+function saveExpense() {
+    var id = $('#expenseId').val();
+    var supplierId = $('#expenseSupplier').val();
+    var supplierName = $('#expenseSupplierName').val();
+    var amount = $('#expenseAmount').val();
+    var description = $('#expenseDescription').val();
+    var expenseDate = $('#expenseDate').val();
+    var salesRequestId = $('#expenseSalesRequest').val();
+    var clientId = $('#expenseClientId').val();
+    var companyId = $('#expenseCompanyId').val();
+    
+    if (!salesRequestId) {
+        Swal.fire('Error', 'Please select a Sales Request', 'error');
+        return;
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+        Swal.fire('Error', 'Please enter a valid amount', 'error');
+        return;
+    }
+    if (!description) {
+        Swal.fire('Error', 'Please enter a description', 'error');
+        return;
+    }
+    if (!expenseDate) {
+        Swal.fire('Error', 'Please select a date', 'error');
+        return;
+    }
+    if (!supplierId && !supplierName) {
+        Swal.fire('Error', 'Please select a supplier or enter a supplier name', 'error');
+        return;
+    }
+    
+    var url = id ? '/api/my-expenses/' + id : '/api/my-expenses';
+    var method = id ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            supplier_id: supplierId || null,
+            supplier_name: supplierName,
+            amount: parseFloat(amount),
+            description: description,
+            expense_date: expenseDate,
+            sales_request_id: salesRequestId ? parseInt(salesRequestId) : null,
+            client_id: clientId ? parseInt(clientId) : null,
+            company_id: companyId ? parseInt(companyId) : null
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            Swal.fire('Success', id ? 'Expense updated!' : 'Expense added!', 'success');
+            $('#expenseModal').modal('hide');
+            loadExpenses();
+            // Also refresh navbar balance
+            if (typeof loadNavbarBalance === 'function') loadNavbarBalance();
+        } else {
+            Swal.fire('Error', data.error || 'Failed to save expense', 'error');
+        }
+    })
+    .catch(err => {
+        Swal.fire('Error', 'Server error', 'error');
+    });
+}
+
+function deleteExpense(id) {
+    Swal.fire({
+        title: 'Delete Expense?',
+        text: 'This action cannot be undone',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, delete it'
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch('/api/my-expenses/' + id, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('Deleted!', 'Expense has been deleted.', 'success');
+                        loadExpenses();
+                    } else {
+                        Swal.fire('Error', data.error || 'Failed to delete', 'error');
+                    }
+                });
+        }
+    });
+}
+
+function submitAllExpenses() {
+    Swal.fire({
+        title: 'Submit All Draft Expenses?',
+        text: 'All draft expenses will be submitted for approval. Once submitted, you cannot edit them.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, submit all'
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch('/api/my-expenses/submit', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('Submitted!', data.message, 'success');
+                        loadExpenses();
+                    } else {
+                        Swal.fire('Error', data.error || 'Failed to submit', 'error');
+                    }
+                });
+        }
+    });
+}
+</script>
+{% endblock %}

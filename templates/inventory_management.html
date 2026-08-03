@@ -1,0 +1,2473 @@
+{% extends "main.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<style>
+:root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --primary: #6366f1;
+    --primary-soft: rgba(99,102,241,0.1);
+    --primary-hover: #4f46e5;
+    --success: #10b981;
+    --success-soft: rgba(16,185,129,0.1);
+    --warning: #f59e0b;
+    --warning-soft: rgba(245,158,11,0.1);
+    --danger: #ef4444;
+    --danger-soft: rgba(239,68,68,0.1);
+    --info: #3b82f6;
+    --info-soft: rgba(59,130,246,0.1);
+    --text: #0f172a;
+    --text-light: #475569;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --shadow: rgba(15,23,42,0.1);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+body.inventory-surface {
+    background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+    min-height: 100vh;
+}
+.inventory-shell {
+    min-height: calc(100vh - 64px);
+    padding: 24px;
+    animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.inventory-card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: var(--transition);
+}
+.inventory-card:hover {
+    box-shadow: 0 20px 25px -5px var(--shadow), 0 10px 10px -5px var(--shadow);
+}
+.inventory-header {
+    padding: 32px 36px 16px;
+    border-bottom: 2px solid var(--border);
+    background: linear-gradient(to right, rgba(99,102,241,0.03), transparent);
+}
+.inventory-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    letter-spacing: -0.02em;
+}
+.inventory-header p {
+    margin: 10px 0 0;
+    color: var(--text-light);
+    font-size: 15px;
+    line-height: 1.6;
+}
+.badge-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 18px;
+    transition: var(--transition);
+}
+.badge-dot:hover {
+    transform: scale(1.1) rotate(5deg);
+}
+.inventory-toolbar {
+    padding: 24px 36px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+    background: rgba(248,250,252,0.6);
+    border-bottom: 1px solid var(--border);
+}
+.inventory-toolbar .filters {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+.inventory-toolbar .filters select,
+.inventory-toolbar .filters input {
+    border-radius: 12px;
+    border: 2px solid var(--border);
+    padding: 11px 16px;
+    min-width: 160px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: var(--transition);
+    background: white;
+}
+.inventory-toolbar .filters select:focus,
+.inventory-toolbar .filters input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.inventory-toolbar .filters input {
+    padding-left: 38px;
+    background: white url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%2364748b"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>') no-repeat 12px center;
+    background-size: 18px;
+}
+.inventory-toolbar .actions {
+    display: flex;
+    gap: 12px;
+}
+.btn-pill {
+    border-radius: 12px;
+    padding: 11px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    border: 2px solid transparent;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+.btn-pill-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+}
+.btn-pill-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99,102,241,0.4);
+}
+.btn-pill-outline {
+    background: white;
+    border-color: var(--border);
+    color: var(--text);
+}
+.btn-pill-outline:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+.inventory-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 0 32px 8px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+}
+.inventory-tab {
+    background: transparent;
+    border: none;
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: all 0.2s;
+}
+.inventory-tab i {
+    margin-right: 6px;
+}
+.inventory-tab.active {
+    background: rgba(109,93,252,0.12);
+    color: var(--primary);
+}
+.inventory-panel {
+    display: none;
+    padding: 32px 36px 40px;
+    animation: fadeInUp 0.4s ease-out;
+}
+.inventory-panel.active {
+    display: block;
+}
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.stat-grid {
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbff;
+}
+.stat-card {
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    padding: 18px;
+    background: #ffffff;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    box-shadow: 0 8px 16px rgba(15,23,42,0.05);
+}
+.stat-card strong {
+    font-size: 26px;
+    color: var(--text);
+}
+.stat-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 2px;
+}
+.table-card {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+}
+.table-card table {
+    margin-bottom: 0;
+    font-size: 14px;
+}
+.table thead th {
+    border-bottom: none;
+    background: #f9fafc;
+    color: var(--muted);
+    font-weight: 600;
+}
+.table tbody td {
+    vertical-align: middle;
+}
+.status-badge {
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.status-success { background: rgba(48,196,141,0.16); color: var(--success); }
+.status-warning { background: rgba(241,180,76,0.18); color: var(--warning); }
+.status-danger { background: rgba(240,101,72,0.18); color: var(--danger); }
+.status-neutral { background: rgba(109,93,252,0.15); color: var(--primary); }
+.dimensions-text { font-size: 12px; color: var(--muted); }
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+}
+.section-header h5 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.section-header h5::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    background: linear-gradient(180deg, var(--primary), var(--info));
+    border-radius: 2px;
+}
+.section-header .btn-group .btn {
+    border-radius: 10px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+.section-header .btn-group .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.approved-card {
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.06);
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+    transition: var(--transition);
+}
+.approved-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(15,23,42,0.12);
+}
+.alert-box {
+    border: 2px solid #fed7aa;
+    border-radius: 14px;
+    padding: 20px;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    transition: var(--transition);
+}
+.alert-box:hover {
+    box-shadow: 0 6px 16px rgba(245,158,11,0.2);
+    transform: translateX(4px);
+}
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+}
+.empty-state i {
+    font-size: 56px;
+    color: var(--border);
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+.empty-state p {
+    font-size: 16px;
+    font-weight: 500;
+}
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: var(--primary);
+}
+.loading-spinner i {
+    font-size: 48px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.modal .select2-container { width: 100% !important; }
+@media (max-width: 992px) {
+    .inventory-toolbar { flex-direction: column; align-items: flex-start; }
+    .inventory-toolbar .actions { width: 100%; justify-content: flex-start; }
+    .inventory-tabs { flex-wrap: wrap; }
+}
+</style>
+{% endblock %}
+{% block body %}
+<div class="inventory-shell">
+    <div class="inventory-card">
+        <div class="inventory-header">
+            {% if entity_info %}
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><span class="badge-dot"><i class="fas fa-boxes"></i></span>{{ entity_info.entity_name }} Inventory</h1>
+                    <p class="mb-0 mt-2" style="color: var(--text-light);">
+                        <span class="badge" style="background: rgba(99,102,241,0.2); color: var(--primary); font-size: 12px;">{{ entity_info.entity_code }}</span>
+                        <span class="ml-2">Managing inventory for this entity</span>
+                    </p>
+                </div>
+                <a href="/inventory-selection" class="btn-pill btn-pill-outline">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Selection
+                </a>
+            </div>
+            {% elif inventory_type == 'credit' %}
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><span class="badge-dot" style="background: rgba(220,53,69,0.15); color: #dc3545;"><i class="fas fa-hand-holding-usd"></i></span>Credit Inventory</h1>
+                    <p class="mb-0 mt-2" style="color: var(--text-light);">
+                        <span class="badge" style="background: rgba(220,53,69,0.2); color: #dc3545; font-size: 12px;">CONSIGNMENT</span>
+                        <span class="ml-2">Managing credit/consignment items from suppliers</span>
+                    </p>
+                </div>
+                <a href="/inventory-selection" class="btn-pill btn-pill-outline">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Selection
+                </a>
+            </div>
+            {% else %}
+            <h1><span class="badge-dot"><i class="fas fa-boxes"></i></span>Inventory Control</h1>
+            {% endif %}
+        </div>
+
+        <div class="inventory-toolbar">
+            <div class="filters">
+                <select id="timeRangeFilter">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">Last 12 months</option>
+                </select>
+                <select id="statusFilter">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="low">Low Stock</option>
+                    <option value="out">Out of Stock</option>
+                </select>
+                <input id="globalSearch" type="search" placeholder="Quick search…">
+            </div>
+            <div class="actions">
+                <button class="btn-pill btn-pill-outline" id="refreshAll"><i class="fas fa-sync mr-1"></i>Refresh</button>
+                {% if inventory_type != 'credit' %}
+                <button class="btn-pill btn-pill-primary" onclick="showAddItemModal()"><i class="fas fa-plus mr-1"></i>New Item</button>
+                {% else %}
+                <button class="btn-pill btn-pill-primary" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);" onclick="showAddCreditModal()"><i class="fas fa-plus mr-1"></i>Receive Credit</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="badge-dot"><i class="fas fa-box"></i></div>
+                <div><strong id="stat-regular">0</strong><span>{% if inventory_type == 'credit' %}Credit Items{% else %}Total Items{% endif %}</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="badge-dot" style="background: rgba(241,180,76,0.2); color: var(--warning);"><i class="fas fa-coins"></i></div>
+                <div><strong id="stat-value">EGP 0</strong><span>{% if inventory_type == 'credit' %}Amount Due{% else %}Inventory Value{% endif %}</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="badge-dot" style="background: rgba(240,101,72,0.18); color: var(--danger);"><i class="fas fa-{% if inventory_type == 'credit' %}exclamation-circle{% else %}radiation{% endif %}"></i></div>
+                <div><strong id="stat-low">0</strong><span>{% if inventory_type == 'credit' %}Pending Payments{% else %}Low / Out Alerts{% endif %}</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="badge-dot" style="background: rgba(48,196,141,0.18); color: var(--success);"><i class="fas fa-{% if inventory_type == 'credit' %}truck{% else %}cubes{% endif %}"></i></div>
+                <div><strong id="stat-extra">0</strong><span>{% if inventory_type == 'credit' %}Suppliers{% else %}Total Stock{% endif %}</span></div>
+            </div>
+        </div>
+
+        <div class="inventory-tabs">
+            {% if inventory_type == 'credit' %}
+            <!-- Credit Inventory Mode - Only Credit and Transaction tabs -->
+            <button type="button" class="inventory-tab active" data-target="credit-panel"><i class="fas fa-handshake"></i>Credit Items</button>
+            <button type="button" class="inventory-tab" data-target="transactions-panel"><i class="fas fa-arrow-right-arrow-left"></i>Credit Transactions</button>
+            <button type="button" class="inventory-tab" data-target="alerts-panel"><i class="fas fa-bell"></i>Alerts</button>
+            {% else %}
+            <!-- Entity Inventory Mode - Regular Inventory and Transactions only -->
+            <button type="button" class="inventory-tab active" data-target="regular-panel"><i class="fas fa-layer-group"></i>Inventory Items</button>
+            <button type="button" class="inventory-tab" data-target="transactions-panel"><i class="fas fa-arrow-right-arrow-left"></i>Transactions</button>
+            <button type="button" class="inventory-tab" data-target="alerts-panel"><i class="fas fa-bell"></i>Alerts</button>
+            {% endif %}
+        </div>
+
+        <div class="inventory-panel active" id="regular-panel">
+            <div class="section-header">
+                <h5>Regular Inventory Items</h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-light" onclick="loadRegularInventory()"><i class="fas fa-sync"></i></button>
+                    <button class="btn btn-primary" onclick="showAddItemModal()"><i class="fas fa-plus mr-1"></i>Add Item</button>
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="regularTable" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Item</th>
+                                <th>Type</th>
+                                <th>Unit</th>
+                                <th>Dimensions</th>
+                                <th>Stock</th>
+                                <th>Minimum</th>
+                                <th>Avg Cost</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="regularTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+                <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+                <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+                <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+
+        <div class="inventory-panel" id="credit-panel">
+            <div class="section-header">
+                <h5>Credit / Consignment Inventory</h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-light" onclick="loadCreditInventory()"><i class="fas fa-sync"></i></button>
+                    <button class="btn btn-success text-white" onclick="showAddCreditModal()"><i class="fas fa-plus mr-1"></i>Receive Credit</button>
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="creditTable" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Item</th>
+                                <th>Supplier</th>
+                                <th>Sales Req</th>
+                                <th>Received</th>
+                                <th>Sold</th>
+                                <th>Remaining</th>
+                                <th>Amount Due</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="creditTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="inventory-panel" id="transactions-panel">
+            <div class="section-header">
+                <h5>{% if inventory_type == 'credit' %}Credit Inventory{% else %}Entity{% endif %} Transaction Ledger</h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-info text-white" onclick="showAddTransactionModal()"><i class="fas fa-plus mr-1"></i>Add Transaction</button>
+                </div>
+            </div>
+            
+            <!-- Transaction Filters -->
+            <div class="card mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-end">
+                        <div class="col-md-2">
+                            <label class="small mb-1">Transaction Type</label>
+                            <select class="form-control form-control-sm" id="transFilterType" onchange="loadTransactions()">
+                                <option value="">All Types</option>
+                                {% if inventory_type == 'credit' %}
+                                <option value="credit_in">Credit In</option>
+                                <option value="credit_out">Credit Out</option>
+                                <option value="return">Return</option>
+                                {% else %}
+                                <option value="purchase">Purchase (In)</option>
+                                <option value="stock_out">Stock Out</option>
+                                <option value="adjustment">Adjustment</option>
+                                <option value="transfer">Transfer</option>
+                                <option value="return">Return (Out)</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="small mb-1">Item</label>
+                            <select class="form-control form-control-sm" id="transFilterItem" onchange="loadTransactions()">
+                                <option value="">All Items</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="small mb-1">From Date</label>
+                            <input type="date" class="form-control form-control-sm" id="transFilterFromDate" onchange="loadTransactions()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="small mb-1">To Date</label>
+                            <input type="date" class="form-control form-control-sm" id="transFilterToDate" onchange="loadTransactions()">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="clearTransactionFilters()">
+                                <i class="fas fa-times mr-1"></i>Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="transTable" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Item</th>
+                                <th>Quantity</th>
+                                <th>Unit Cost</th>
+                                <th>Total</th>
+                                <th>Running Balance</th>
+                                <th>Reference</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="inventory-panel" id="alerts-panel">
+            <div class="section-header">
+                <h5>Inventory Alerts</h5>
+                <button class="btn btn-light btn-sm" onclick="loadAlerts()"><i class="fas fa-sync"></i></button>
+            </div>
+            <div id="alertsContainer"></div>
+        </div>
+    </div>
+</div>
+<div class="modal sub-modal" id="addItemModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle mr-1"></i>Create Inventory Item</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="addItemForm">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label>Item Name</label>
+                            <input type="text" class="form-control" name="item_name" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>Item Code / SKU</label>
+                            <input type="text" class="form-control" name="item_code" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-12">
+                            <label>Preferred Supplier (Optional)</label>
+                            <select class="form-control" id="add_supplier" name="preferred_supplier_id">
+                                <option value="">Select supplier...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label>Unit Type</label>
+                            <select class="form-control" name="unit_type">
+                                <option value="PCS">PCS</option>
+                                <option value="BOX">BOX</option>
+                                <option value="KG">KG</option>
+                                <option value="M">M (Meter)</option>
+                                <option value="M2">M² (Square Meter)</option>
+                                <option value="M3">M³ (Cubic Meter)</option>
+                                <option value="L">L (Liter)</option>
+                                <option value="SET">SET</option>
+                                <option value="ROLL">ROLL</option>
+                                <option value="SHEET">SHEET</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Minimum Quantity</label>
+                            <input type="number" step="0.01" class="form-control" name="min_quantity" value="0">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Initial Stock</label>
+                            <input type="number" step="0.01" class="form-control" name="quantity_in_stock" value="0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label>Width (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="width">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Height (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="height">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Depth (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="depth">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label>Average Unit Cost</label>
+                            <input type="number" step="0.01" class="form-control" name="average_cost" value="0">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>Notes</label>
+                            <textarea class="form-control" name="notes" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitAddItem()">Save Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal sub-modal" id="editItemModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-edit mr-1"></i>Edit Inventory Item</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="editItemForm">
+                    <input type="hidden" name="item_id" id="edit_item_id">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label><i class="fas fa-tag mr-1 text-muted"></i>Item Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="item_name" id="edit_item_name" required>
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-barcode mr-1 text-muted"></i>Item Code</label>
+                            <input type="text" class="form-control" name="item_code" id="edit_item_code" readonly style="background:#f8f9fa;">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-toggle-on mr-1 text-muted"></i>Status</label>
+                            <select class="form-control" name="status" id="edit_status">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="discontinued">Discontinued</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-cubes mr-1 text-muted"></i>Category</label>
+                            <input type="text" class="form-control" name="category" id="edit_category" placeholder="e.g. Raw Materials">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-ruler mr-1 text-muted"></i>Unit of Measure</label>
+                            <input type="text" class="form-control" name="unit_of_measure" id="edit_unit_of_measure" placeholder="e.g. PCS, KG, M">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-truck mr-1 text-muted"></i>Preferred Supplier</label>
+                            <select class="form-control" name="preferred_supplier_id" id="edit_supplier"></select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-exclamation-triangle mr-1 text-warning"></i>Minimum Stock Level</label>
+                            <input type="number" step="0.01" class="form-control" name="minimum_stock_level" id="edit_min_stock">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-sync mr-1 text-info"></i>Reorder Level</label>
+                            <input type="number" step="0.01" class="form-control" name="reorder_level" id="edit_reorder_level">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-dollar-sign mr-1 text-success"></i>Average Unit Cost</label>
+                            <input type="number" step="0.01" class="form-control" name="average_cost" id="edit_unit_cost" readonly style="background:#f8f9fa;">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label>Width (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="width" id="edit_width">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Height (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="height" id="edit_height">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Depth (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="depth" id="edit_depth">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-align-left mr-1 text-muted"></i>Description</label>
+                        <textarea class="form-control" name="description" id="edit_description" rows="2" placeholder="Item description..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditItem()"><i class="fas fa-save mr-1"></i>Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal sub-modal" id="addCreditModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-handshake mr-1"></i>Add Credit/Consignment Item</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCreditForm">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Credit items are received from suppliers on consignment. Payment is made after items are sold.
+                    </div>
+                    
+                    <!-- Source Selection: Either Sales Request OR Manual Entry -->
+                    <div class="form-group">
+                        <label class="d-block"><i class="fas fa-source mr-1 text-muted"></i>Item Source</label>
+                        <div class="custom-control custom-radio custom-control-inline">
+                            <input type="radio" id="credit_source_manual" name="item_source" value="manual" class="custom-control-input" checked>
+                            <label class="custom-control-label" for="credit_source_manual">Manual Entry</label>
+                        </div>
+                        <div class="custom-control custom-radio custom-control-inline">
+                            <input type="radio" id="credit_source_sales" name="item_source" value="sales" class="custom-control-input">
+                            <label class="custom-control-label" for="credit_source_sales">From Sales Request</label>
+                        </div>
+                    </div>
+
+                    <!-- Sales Request Selection (shown when source=sales) -->
+                    <div class="form-row" id="credit_sales_request_group" style="display:none;">
+                        <div class="form-group col-md-12">
+                            <label><i class="fas fa-file-invoice mr-1 text-muted"></i>Sales Request</label>
+                            <select class="form-control" id="credit_sales_request">
+                                <option value="">Select sales request...</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-12">
+                            <label><i class="fas fa-list mr-1 text-muted"></i>Sales Item</label>
+                            <select class="form-control" name="sales_request_item_id" id="credit_sales_item" disabled>
+                                <option value="">Select sales request first...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Manual Entry Fields (shown when source=manual) -->
+                    <div id="credit_manual_entry_group">
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label><i class="fas fa-tag mr-1 text-muted"></i>Item Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="item_name" id="credit_item_name" required placeholder="Enter item name...">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label><i class="fas fa-barcode mr-1 text-muted"></i>Item Code / SKU</label>
+                                <input type="text" class="form-control" name="item_code" id="credit_item_code" placeholder="Auto-generated if empty">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label><i class="fas fa-truck mr-1 text-muted"></i>Supplier</label>
+                            <select class="form-control" name="supplier_id" id="credit_supplier">
+                                <option value="">Select supplier...</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label><i class="fas fa-ruler mr-1 text-muted"></i>Unit Type</label>
+                            <select class="form-control" name="unit_type" id="credit_unit_type">
+                                <option value="PCS">PCS</option>
+                                <option value="BOX">BOX</option>
+                                <option value="KG">KG</option>
+                                <option value="M">M (Meter)</option>
+                                <option value="M2">M² (Square Meter)</option>
+                                <option value="M3">M³ (Cubic Meter)</option>
+                                <option value="L">L (Liter)</option>
+                                <option value="SET">SET</option>
+                                <option value="ROLL">ROLL</option>
+                                <option value="SHEET">SHEET</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-arrows-alt-h mr-1 text-muted"></i>Width (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="width" id="credit_width">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-arrows-alt-v mr-1 text-muted"></i>Height (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="height" id="credit_height">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-cube mr-1 text-muted"></i>Depth (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="depth" id="credit_depth">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-sort-numeric-up mr-1 text-muted"></i>Quantity <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" name="quantity_received" id="credit_quantity" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-dollar-sign mr-1 text-muted"></i>Agreed Cost/Unit</label>
+                            <input type="number" step="0.01" class="form-control" name="agreed_cost_per_item" id="credit_unit_cost" placeholder="Optional">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-calculator mr-1 text-muted"></i>Total Value</label>
+                            <input type="number" step="0.01" class="form-control" name="total_value" id="credit_total_value" readonly style="background:#f8f9fa;">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-calendar-alt mr-1 text-muted"></i>Received Date</label>
+                            <input type="date" class="form-control" name="received_date" id="credit_received_date">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-calendar-check mr-1 text-muted"></i>Payment Due Date</label>
+                            <input type="date" class="form-control" name="payment_due_date" id="credit_due_date">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label><i class="fas fa-sticky-note mr-1 text-muted"></i>Notes</label>
+                        <textarea class="form-control" name="notes" rows="2" placeholder="Any additional notes..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="submitAddCredit()"><i class="fas fa-plus mr-1"></i>Add Credit Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal sub-modal" id="addTransactionModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-arrow-right-arrow-left mr-1"></i>Add Inventory Transaction</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTransactionForm">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-exchange-alt mr-1 text-muted"></i>Transaction Type <span class="text-danger">*</span></label>
+                            <select class="form-control" name="transaction_type" id="transaction_type" required>
+                                <option value="">-- Select Type --</option>
+                                <option value="purchase">📦 Purchase (Stock In)</option>
+                                <option value="stock_out">📤 Stock Out</option>
+                                <option value="credit_in">🤝 Credit In (Receive from Supplier)</option>
+                                <option value="credit_out">↩️ Credit Out (Return to Supplier)</option>
+                                <option value="adjustment">⚙️ Adjustment</option>
+                                <option value="transfer">🔄 Transfer</option>
+                                <option value="return">🔙 Return (Outgoing)</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-calendar-alt mr-1 text-muted"></i>Transaction Date <span class="text-danger">*</span></label>
+                            <input type="datetime-local" class="form-control" name="transaction_date" id="transaction_date" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label><i class="fas fa-box mr-1 text-muted"></i>Inventory Item <span class="text-danger">*</span></label>
+                            <select class="form-control" name="item_id" id="transaction_item" required></select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-sort-numeric-up mr-1 text-muted"></i>Quantity <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" name="quantity" id="transaction_quantity" step="0.01" required placeholder="0.00">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-dollar-sign mr-1 text-muted"></i>Unit Cost</label>
+                            <input type="number" class="form-control" name="unit_cost" id="transaction_unit_cost" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-calculator mr-1 text-muted"></i>Total Cost</label>
+                            <input type="number" class="form-control" name="total_cost" id="transaction_total_cost" step="0.01" readonly style="background:#f8f9fa;">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label><i class="fas fa-truck mr-1 text-muted"></i>Supplier</label>
+                            <select class="form-control" name="supplier_id" id="transaction_supplier"></select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-sticky-note mr-1 text-muted"></i>Reference / Notes</label>
+                        <input type="text" class="form-control" name="notes" placeholder="PO number, reason, adjustment notes, etc.">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-info text-white" onclick="submitAddTransaction()"><i class="fas fa-plus mr-1"></i>Add Transaction</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal sub-modal" id="convertSalesItemModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title"><i class="fas fa-check-double mr-1"></i>Create Inventory Item</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Convert this approved sales request item into inventory.</p>
+                <form id="convertSalesItemForm">
+                    <input type="hidden" name="sales_item_id" id="convert_sales_item_id">
+                    
+                    <!-- Inventory Type Selection -->
+                    <div class="form-group">
+                        <label class="d-block">Inventory Type</label>
+                        <div class="custom-control custom-radio custom-control-inline">
+                            <input type="radio" id="convert_type_regular" name="inventory_type" value="regular" class="custom-control-input" checked>
+                            <label class="custom-control-label" for="convert_type_regular">
+                                <i class="fas fa-warehouse mr-1"></i>Regular Inventory
+                            </label>
+                        </div>
+                        <div class="custom-control custom-radio custom-control-inline">
+                            <input type="radio" id="convert_type_credit" name="inventory_type" value="credit" class="custom-control-input">
+                            <label class="custom-control-label" for="convert_type_credit">
+                                <i class="fas fa-handshake mr-1"></i>Credit Item
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Supplier Selection (shown for REGULAR inventory items) -->
+                    <div class="form-group" id="convert_supplier_group">
+                        <label>Supplier (Optional)</label>
+                        <select class="form-control" id="convert_supplier_id" name="supplier_id">
+                            <option value="">Select Supplier...</option>
+                        </select>
+                        <small class="form-text text-muted">Select the supplier for this inventory item</small>
+                    </div>
+                    
+                    <!-- Credit Item Info (shown only for credit items) -->
+                    <div class="alert alert-info" id="convert_credit_info" style="display: none;">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <strong>Credit Item:</strong> This item will be linked directly to the sales request. No supplier required.
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label>Item Name</label>
+                            <input type="text" class="form-control" name="item_name" id="convert_item_name" required readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>Item Code</label>
+                            <input type="text" class="form-control" name="item_code" id="convert_item_code" readonly placeholder="Auto-generated">
+                            <small class="form-text text-muted">Item code will be auto-generated or linked to existing item</small>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label>Width (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="width" id="convert_width">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Height (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="height" id="convert_height">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Depth (cm)</label>
+                            <input type="number" step="0.01" class="form-control" name="depth" id="convert_depth">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label>Unit Cost</label>
+                            <input type="number" step="0.01" class="form-control" name="unit_cost" id="convert_unit_cost">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>Expected Profit</label>
+                            <input type="number" step="0.01" class="form-control" name="expected_profit_per_unit" id="convert_expected_profit">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitConvertSalesItem()">Create Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Entity and inventory type context from server
+const currentEntityId = JSON.parse('{{ entity_id|default("null")|tojson }}');
+const currentInventoryType = '{{ inventory_type|default("") }}';
+const isCredit = currentInventoryType === 'credit';
+
+const inventoryTables = { regular: null, credit: null, transactions: null };
+let approvedItems = [];
+let alerts = [];
+
+function initTabs() {
+    document.querySelectorAll('.inventory-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.inventory-tab').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.inventory-panel').forEach(panel => panel.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(tab.getAttribute('data-target')).classList.add('active');
+        });
+    });
+}
+
+function initSelects() {
+    // Load suppliers for dropdown
+    fetch('/api/suppliers/simple')
+        .then(response => response.json())
+        .then(data => {
+            const suppliers = data.suppliers || [];
+            
+            // Populate credit item modal supplier dropdown
+            const creditSelect = $('#credit_supplier');
+            creditSelect.empty().append('<option value="">Select supplier...</option>');
+            suppliers.forEach(supplier => {
+                const displayName = supplier.display_name || supplier.supplier_name;
+                creditSelect.append(`<option value="${supplier.id}">${displayName}</option>`);
+            });
+            creditSelect.select2({
+                dropdownParent: $('#addCreditModal'),
+                width: '100%',
+                placeholder: 'Select supplier'
+            });
+
+            // Populate convert modal supplier dropdown
+            const convertSelect = $('#convert_supplier_id');
+            convertSelect.empty().append('<option value="">Select supplier...</option>');
+            suppliers.forEach(supplier => {
+                const displayName = supplier.display_name || supplier.supplier_name;
+                convertSelect.append(`<option value="${supplier.id}">${displayName}</option>`);
+            });
+            convertSelect.select2({
+                dropdownParent: $('#convertSalesItemModal'),
+                width: '100%',
+                placeholder: 'Select supplier'
+            });
+
+            // Populate add item modal supplier dropdown
+            const addItemSelect = $('#add_supplier');
+            addItemSelect.empty().append('<option value="">Select supplier...</option>');
+            suppliers.forEach(supplier => {
+                const displayName = supplier.display_name || supplier.supplier_name;
+                addItemSelect.append(`<option value="${supplier.id}">${displayName}</option>`);
+            });
+            addItemSelect.select2({
+                dropdownParent: $('#addItemModal'),
+                width: '100%',
+                placeholder: 'Select supplier'
+            });
+            
+            // Populate edit item modal supplier dropdown
+            const editSupplierSelect = $('#edit_supplier');
+            editSupplierSelect.empty().append('<option value="">No supplier</option>');
+            suppliers.forEach(supplier => {
+                const displayName = supplier.display_name || supplier.supplier_name;
+                editSupplierSelect.append(`<option value="${supplier.id}">${displayName}</option>`);
+            });
+            editSupplierSelect.select2({
+                dropdownParent: $('#editItemModal'),
+                width: '100%',
+                placeholder: 'Select supplier'
+            });
+            
+            // Populate transaction modal supplier dropdown
+            const transSupplierSelect = $('#transaction_supplier');
+            transSupplierSelect.empty().append('<option value="">No supplier</option>');
+            suppliers.forEach(supplier => {
+                const displayName = supplier.display_name || supplier.supplier_name;
+                transSupplierSelect.append(`<option value="${supplier.id}">${displayName}</option>`);
+            });
+            transSupplierSelect.select2({
+                dropdownParent: $('#addTransactionModal'),
+                width: '100%',
+                placeholder: 'Select supplier (optional)'
+            });
+        });
+
+    // Load items for transaction dropdown - FILTERED BY ENTITY/CREDIT CONTEXT
+    loadTransactionItemsDropdown();
+}
+
+function loadTransactionItemsDropdown() {
+    // Build URL with entity/credit context
+    let url = '/api/inventory/items';
+    if (currentEntityId) {
+        url += `?entity_id=${currentEntityId}&type=regular`;
+    } else if (isCredit) {
+        url += '?type=credit';
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const items = data.items || [];
+            const select = $('#transaction_item');
+            select.empty().append('<option value="">Select inventory item...</option>');
+            items.forEach(item => {
+                select.append(`<option value="${item.id}">${item.item_name} (${item.item_code})</option>`);
+            });
+            
+            // Destroy existing select2 and reinitialize
+            if (select.data('select2')) {
+                select.select2('destroy');
+            }
+            select.select2({
+                dropdownParent: $('#addTransactionModal'),
+                width: '100%',
+                placeholder: 'Select inventory item'
+            });
+        });
+}
+
+function initTables() {
+    inventoryTables.regular = $('#regularTable').DataTable({
+        responsive: true,
+        order: [[0, 'asc']],
+        columns: [
+            { data: 'item_code' },
+            { data: 'item_name' },
+            { data: 'item_type' },
+            { data: 'unit_of_measure', defaultContent: '-' },
+            { data: 'dimensions' },
+            { data: 'quantity_in_stock', defaultContent: 0 },
+            { data: 'minimum_stock_level', defaultContent: 0 },
+            { data: 'average_cost', render: data => `EGP ${Number(data || 0).toFixed(2)}` },
+            { data: 'status_badge' },
+            { data: 'actions' }
+        ],
+        columnDefs: [
+            { targets: 8, orderable: false, searchable: false, render: data => data },
+            { targets: 9, orderable: false, searchable: false, render: data => data }
+        ]
+    });
+
+    inventoryTables.credit = $('#creditTable').DataTable({
+        responsive: true,
+        order: [[3, 'desc']],
+        columnDefs: [
+            { targets: -1, orderable: false, searchable: false, render: data => data }
+        ]
+    });
+
+    inventoryTables.transactions = $('#transTable').DataTable({
+        responsive: true,
+        order: [[0, 'desc']],
+        columnDefs: [
+            { targets: [1, 2, 3, 6], orderable: true, render: data => data }, // Type, Item, Quantity, Balance - render HTML
+            { targets: -1, orderable: false, searchable: false } // Reference
+        ]
+    });
+}
+
+function attachToolbarEvents() {
+    document.getElementById('refreshAll').addEventListener('click', () => {
+        loadRegularInventory();
+        loadCreditInventory();
+        loadTransactions();
+        loadAlerts();
+    });
+
+    document.getElementById('statusFilter').addEventListener('change', loadRegularInventory);
+    document.getElementById('timeRangeFilter').addEventListener('change', loadTransactions);
+    document.getElementById('globalSearch').addEventListener('input', event => {
+        const value = event.target.value;
+        Object.values(inventoryTables).forEach(table => table && table.search(value).draw());
+    });
+}
+function loadRegularInventory() {
+    const status = document.getElementById('statusFilter').value;
+    // Build URL with entity_id if available
+    let url = `/api/inventory/items?type=regular&status=${status}`;
+    if (currentEntityId) {
+        url += `&entity_id=${currentEntityId}`;
+    }
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (!inventoryTables.regular) return;
+            const items = data.items || [];
+            const rows = items.map(item => ({
+                ...item,
+                dimensions: formatDimensions(item),
+                status_badge: renderStatusBadge(item),
+                actions: renderItemActions(item)
+            }));
+            inventoryTables.regular.clear().rows.add(rows).draw();
+            
+            // Calculate statistics from actual data
+            const regularCount = items.length;
+            let totalValue = 0;
+            let totalStock = 0;
+            let lowStockCount = 0;
+            
+            items.forEach(item => {
+                const stock = Number(item.quantity_in_stock || 0);
+                const avgCost = Number(item.average_cost || 0);
+                const minLevel = Number(item.minimum_stock_level || 0);
+                
+                totalValue += stock * avgCost;
+                totalStock += stock;
+                
+                if (stock <= 0 || (minLevel > 0 && stock < minLevel)) {
+                    lowStockCount++;
+                }
+            });
+            
+            // Update stats for entity mode
+            document.getElementById('stat-regular').innerText = regularCount;
+            document.getElementById('stat-value').innerText = `EGP ${totalValue.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('stat-low').innerText = lowStockCount;
+            document.getElementById('stat-extra').innerText = totalStock;
+            
+            // Update the stats visually
+            updateStatAnimation('stat-regular', regularCount);
+            updateStatAnimation('stat-low', lowStockCount);
+            updateStatAnimation('stat-extra', totalStock);
+        })
+        .catch(error => console.error('Failed to load inventory', error));
+}
+
+function formatDimensions(item) {
+    let attributes = {};
+    if (item.attributes) {
+        try {
+            attributes = JSON.parse(item.attributes) || {};
+        } catch (error) {
+            attributes = {};
+        }
+    }
+    const width = item.width !== null && item.width !== undefined ? item.width : attributes.width;
+    const height = item.height !== null && item.height !== undefined ? item.height : attributes.height;
+    const depth = item.depth !== null && item.depth !== undefined ? item.depth : attributes.depth;
+    if (!width && !height && !depth) return '—';
+    return `<span class="dimensions-text">${Number(width || 0).toFixed(1)} × ${Number(height || 0).toFixed(1)} × ${Number(depth || 0).toFixed(1)} cm</span>`;
+}
+
+function renderStatusBadge(item) {
+    let label = 'Active';
+    let badgeClass = 'status-badge status-success';
+    const stock = item.quantity_in_stock || 0;
+    const minLevel = item.minimum_stock_level || 0;
+    
+    if (stock <= 0) {
+        label = 'Out of Stock';
+        badgeClass = 'status-badge status-danger';
+    } else if (stock < minLevel && minLevel > 0) {
+        label = 'Low Stock';
+        badgeClass = 'status-badge status-warning';
+    }
+    return `<span class="${badgeClass}">${label}</span>`;
+}
+
+function renderItemActions(item) {
+    return `
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-toggle="dropdown">Actions</button>
+            <div class="dropdown-menu dropdown-menu-right">
+                <a class="dropdown-item" href="#" onclick="openEditItem(${item.id})"><i class="fas fa-edit mr-1"></i>Edit</a>
+                <a class="dropdown-item" href="#" onclick="showAddTransactionModal(${item.id})"><i class="fas fa-arrow-right-arrow-left mr-1"></i>Transactions</a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item text-danger" href="#" onclick="confirmDeleteItem(${item.id})"><i class="fas fa-trash mr-1"></i>Delete</a>
+            </div>
+        </div>`;
+}
+
+function updateStatAnimation(elementId, targetValue) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const currentValue = parseInt(element.innerText.replace(/[^0-9]/g, '')) || 0;
+    const duration = 600;
+    const steps = 30;
+    const increment = (targetValue - currentValue) / steps;
+    let current = currentValue;
+    let step = 0;
+    
+    const timer = setInterval(() => {
+        step++;
+        current += increment;
+        
+        if (step >= steps) {
+            clearInterval(timer);
+            element.innerText = Math.round(targetValue);
+        } else {
+            element.innerText = Math.round(current);
+        }
+    }, duration / steps);
+}
+
+function loadCreditInventory() {
+    fetch('/api/inventory/credit-items')
+        .then(response => response.json())
+        .then(data => {
+            if (!inventoryTables.credit) return;
+            const items = data.credit_items || [];
+            const rows = items.map(item => {
+                // Show supplier OR client from sales request as source
+                let sourceDisplay;
+                if (item.supplier_name && item.supplier_name !== 'N/A') {
+                    sourceDisplay = `<span class="badge badge-secondary"><i class="fas fa-truck mr-1"></i>${item.supplier_name}</span>`;
+                } else if (item.client_name) {
+                    sourceDisplay = `<span class="badge badge-primary"><i class="fas fa-user mr-1"></i>${item.client_name}</span>`;
+                } else {
+                    sourceDisplay = '<span class="text-muted">-</span>';
+                }
+                
+                return [
+                    item.item_code,
+                    item.item_name,
+                    sourceDisplay,
+                    item.request_number ? `<a href="/operation_request/${item.request_id}" target="_blank" class="badge badge-info">${item.request_number}</a>` : '<span class="text-muted">-</span>',
+                    item.quantity_received,
+                    item.quantity_sold,
+                    item.quantity_remaining,
+                    `EGP ${Number(item.amount_due || 0).toLocaleString()}`,
+                    item.status,
+                    renderCreditActions(item)
+                ];
+            });
+            inventoryTables.credit.clear().rows.add(rows).draw();
+            
+            // Calculate credit statistics
+            const creditCount = items.length;
+            let totalAmountDue = 0;
+            let pendingPayments = 0;
+            let uniqueSuppliers = new Set();
+            
+            items.forEach(item => {
+                totalAmountDue += Number(item.amount_due || 0);
+                if (item.payment_status === 'pending' || item.payment_status === 'partial') {
+                    pendingPayments++;
+                }
+                if (item.supplier_id) {
+                    uniqueSuppliers.add(item.supplier_id);
+                }
+            });
+            
+            // Update stats for credit mode
+            document.getElementById('stat-regular').innerText = creditCount;
+            document.getElementById('stat-value').innerText = `EGP ${totalAmountDue.toLocaleString()}`;
+            document.getElementById('stat-low').innerText = pendingPayments;
+            document.getElementById('stat-extra').innerText = uniqueSuppliers.size;
+            
+            updateStatAnimation('stat-regular', creditCount);
+        })
+        .catch(error => console.error('Failed to load credit inventory', error));
+}
+
+function renderCreditActions(item) {
+    return `
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-toggle="dropdown">Actions</button>
+            <div class="dropdown-menu dropdown-menu-right">
+                <a class="dropdown-item" href="#" onclick="viewCreditItemDetails(${item.id})"><i class="fas fa-eye mr-1"></i>View Details</a>
+                <a class="dropdown-item" href="#" onclick="viewCreditItemTransactions(${item.item_id})"><i class="fas fa-list mr-1"></i>View Transactions</a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="#" onclick="showAddMoreQuantityModal(${item.id}, '${item.item_name}', ${item.agreed_cost_per_item || 0})"><i class="fas fa-plus mr-1"></i>Add More Qty</a>
+                <a class="dropdown-item" href="#" onclick="showAddTransactionModal(null, ${item.id})"><i class="fas fa-arrow-right-arrow-left mr-1"></i>Add Transaction</a>
+            </div>
+        </div>`;
+}
+
+function showAddMoreQuantityModal(creditId, itemName, currentCost) {
+    Swal.fire({
+        title: `Add More Quantity`,
+        html: `
+            <div class="text-left">
+                <p class="mb-3"><strong>Item:</strong> ${itemName}</p>
+                <div class="form-group">
+                    <label>Quantity to Add <span class="text-danger">*</span></label>
+                    <input type="number" id="addMoreQty" class="form-control" min="1" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Cost per Item (optional)</label>
+                    <input type="number" id="addMoreCost" class="form-control" min="0" step="0.01" value="${currentCost}" placeholder="Leave empty to use existing cost">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="addMoreNotes" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
+                </div>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Add Quantity',
+        cancelButtonText: 'Cancel',
+        preConfirm: () => {
+            const qty = parseFloat(document.getElementById('addMoreQty').value);
+            if (!qty || qty <= 0) {
+                Swal.showValidationMessage('Please enter a valid quantity');
+                return false;
+            }
+            return {
+                quantity: qty,
+                cost_per_item: parseFloat(document.getElementById('addMoreCost').value) || 0,
+                notes: document.getElementById('addMoreNotes').value
+            };
+        }
+    }).then((result) => {
+        if (result.isConfirmed && result.value) {
+            fetch(`/api/inventory/credit-items/${creditId}/add-quantity`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(result.value)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Success', data.message, 'success');
+                    loadCreditInventory();
+                    loadTransactions();
+                } else {
+                    Swal.fire('Error', data.error || 'Failed to add quantity', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Error', 'Failed to add quantity', 'error');
+            });
+        }
+    });
+}
+
+function viewCreditItemDetails(creditId) {
+    fetch(`/api/inventory/credit-items/${creditId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                Swal.fire('Error', data.error || 'Failed to load credit item details', 'error');
+                return;
+            }
+            const item = data.item;
+            let transactionsHtml = '';
+            if (item.transactions && item.transactions.length > 0) {
+                transactionsHtml = `
+                    <h6 class="mt-4"><i class="fas fa-history mr-1"></i>Recent Transactions</h6>
+                    <table class="table table-sm table-striped">
+                        <thead><tr><th>Date</th><th>Type</th><th>Qty</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            ${item.transactions.slice(0, 10).map(t => `
+                                <tr>
+                                    <td>${t.transaction_date}</td>
+                                    <td>${getTransactionTypeBadge(t.transaction_type)}</td>
+                                    <td>${formatTransactionQuantity(t.transaction_type, t.quantity)}</td>
+                                    <td><strong>${t.balance_after}</strong></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>`;
+            }
+            
+            Swal.fire({
+                title: `<i class="fas fa-hand-holding-usd mr-2"></i>${item.item_name}`,
+                html: `
+                    <div class="text-left">
+                        <div class="row">
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Item Code:</strong> ${item.item_code}</p>
+                                <p class="mb-1"><strong>Supplier:</strong> ${item.supplier_name}</p>
+                                ${item.request_number ? `<p class="mb-1"><strong>Sales Request:</strong> ${item.request_number}</p>` : ''}
+                                ${item.client_name ? `<p class="mb-1"><strong>Client:</strong> ${item.client_name}</p>` : ''}
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Received:</strong> ${item.quantity_received}</p>
+                                <p class="mb-1"><strong>Sold:</strong> ${item.quantity_sold}</p>
+                                <p class="mb-1"><strong>Remaining:</strong> <span class="badge badge-info">${item.quantity_remaining}</span></p>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row">
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Unit Cost:</strong> EGP ${Number(item.agreed_cost_per_item || 0).toFixed(2)}</p>
+                                <p class="mb-1"><strong>Total Value:</strong> EGP ${Number(item.total_value || 0).toFixed(2)}</p>
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Amount Paid:</strong> EGP ${Number(item.amount_paid || 0).toFixed(2)}</p>
+                                <p class="mb-1"><strong>Amount Due:</strong> <span class="badge badge-warning">EGP ${Number(item.amount_due || 0).toFixed(2)}</span></p>
+                            </div>
+                        </div>
+                        ${item.width || item.height || item.depth ? `
+                        <hr>
+                        <p class="mb-1"><strong>Dimensions:</strong> ${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} cm</p>
+                        ` : ''}
+                        ${transactionsHtml}
+                    </div>
+                `,
+                width: 700,
+                showConfirmButton: true,
+                confirmButtonText: 'Close',
+                showCancelButton: true,
+                cancelButtonText: 'View All Transactions',
+                confirmButtonColor: '#3085d6'
+            }).then((result) => {
+                if (result.dismiss === Swal.DismissReason.cancel) {
+                    viewCreditItemTransactions(item.item_id);
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading credit item details:', error);
+            Swal.fire('Error', 'Failed to load credit item details', 'error');
+        });
+}
+
+function viewCreditItemTransactions(itemId) {
+    // Switch to transactions tab and filter by this item
+    const transTab = document.querySelector('[data-target="transactions-panel"]');
+    if (transTab) {
+        transTab.click();
+    } else {
+        // Fallback: show the panel directly
+        document.querySelectorAll('.inventory-panel').forEach(p => p.style.display = 'none');
+        const panel = document.getElementById('transactions-panel');
+        if (panel) panel.style.display = 'block';
+    }
+    document.getElementById('transFilterItem').value = itemId;
+    loadTransactions();
+}
+
+// Transaction type badge styling
+function getTransactionTypeBadge(type) {
+    const badges = {
+        'purchase': '<span class="badge badge-success"><i class="fas fa-arrow-down mr-1"></i>Purchase</span>',
+        'sale': '<span class="badge badge-primary"><i class="fas fa-arrow-up mr-1"></i>Sale</span>',
+        'stock_out': '<span class="badge badge-danger"><i class="fas fa-arrow-up mr-1"></i>Stock Out</span>',
+        'adjustment': '<span class="badge badge-warning"><i class="fas fa-edit mr-1"></i>Adjustment</span>',
+        'credit_in': '<span class="badge badge-info"><i class="fas fa-arrow-down mr-1"></i>Credit In</span>',
+        'credit_out': '<span class="badge badge-secondary"><i class="fas fa-arrow-up mr-1"></i>Credit Out</span>',
+        'transfer': '<span class="badge badge-dark"><i class="fas fa-exchange-alt mr-1"></i>Transfer</span>',
+        'return': '<span class="badge badge-danger"><i class="fas fa-arrow-up mr-1"></i>Return</span>'
+    };
+    return badges[type] || `<span class="badge badge-light">${type}</span>`;
+}
+
+// Types that should show as negative (outgoing stock)
+const outgoingTransactionTypes = ['sale', 'stock_out', 'credit_out', 'return'];
+
+function formatTransactionQuantity(type, quantity) {
+    const isOutgoing = outgoingTransactionTypes.includes(type);
+    const displayQty = isOutgoing ? -Math.abs(quantity) : Math.abs(quantity);
+    const colorClass = isOutgoing ? 'text-danger' : 'text-success';
+    const prefix = isOutgoing ? '' : '+';
+    return `<span class="${colorClass}">${prefix}${displayQty}</span>`;
+}
+
+function clearTransactionFilters() {
+    document.getElementById('transFilterType').value = '';
+    document.getElementById('transFilterItem').value = '';
+    document.getElementById('transFilterFromDate').value = '';
+    document.getElementById('transFilterToDate').value = '';
+    loadTransactions();
+}
+
+function populateTransactionItemsFilter() {
+    // Load items based on current context (entity or credit)
+    let url = '/api/inventory/items';
+    if (currentEntityId) {
+        url += `?entity_id=${currentEntityId}`;
+    } else if (isCredit) {
+        url += '?type=credit';
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('transFilterItem');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">All Items</option>';
+            (data.items || []).forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.item_code} - ${item.item_name}`;
+                select.appendChild(opt);
+            });
+            if (currentValue) select.value = currentValue;
+        })
+        .catch(error => console.error('Error loading items for filter:', error));
+}
+
+function loadTransactions() {
+    const days = document.getElementById('timeRangeFilter').value;
+    const transType = document.getElementById('transFilterType')?.value || '';
+    const itemId = document.getElementById('transFilterItem')?.value || '';
+    const fromDate = document.getElementById('transFilterFromDate')?.value || '';
+    const toDate = document.getElementById('transFilterToDate')?.value || '';
+    
+    let url = `/api/inventory/transactions?days=${days}`;
+    if (transType) url += `&transaction_type=${transType}`;
+    if (itemId) url += `&item_id=${itemId}`;
+    if (fromDate) url += `&from_date=${fromDate}`;
+    if (toDate) url += `&to_date=${toDate}`;
+    
+    // Filter by entity or credit context
+    if (currentEntityId) {
+        url += `&entity_id=${currentEntityId}`;
+    } else if (isCredit) {
+        url += `&inventory_type=credit`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (!inventoryTables.transactions) return;
+            const transactions = data.transactions || [];
+            const rows = transactions.map(trx => {
+                return [
+                    trx.transaction_date,
+                    getTransactionTypeBadge(trx.transaction_type),
+                    `<strong>${trx.item_code || ''}</strong><br><small class="text-muted">${trx.item_name || ''}</small>`,
+                    formatTransactionQuantity(trx.transaction_type, trx.quantity),
+                    `EGP ${Number(trx.unit_cost || 0).toFixed(2)}`,
+                    `EGP ${Number(trx.total_cost || 0).toFixed(2)}`,
+                    `<strong>${trx.balance_after}</strong>`,
+                    trx.reference_info || trx.notes || '—'
+                ];
+            });
+            inventoryTables.transactions.clear().rows.add(rows).draw();
+        })
+        .catch(error => console.error('Failed to load transactions', error));
+}
+
+function loadAlerts() {
+    // Build URL with entity/credit context
+    let url = '/api/inventory/alerts';
+    if (currentEntityId) {
+        url += `?entity_id=${currentEntityId}`;
+    } else if (isCredit) {
+        url += '?inventory_type=credit';
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            alerts = data.alerts || [];
+            const container = document.getElementById('alertsContainer');
+            container.innerHTML = '';
+            if (!alerts.length) {
+                container.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle mr-2"></i>All clear. No current inventory alerts.</div>';
+                return;
+            }
+            alerts.forEach(alert => {
+                const severity = alert.severity || 'medium';
+                let badgeClass = 'badge-warning';
+                let iconClass = 'fas fa-exclamation-triangle';
+                if (severity === 'critical') {
+                    badgeClass = 'badge-danger';
+                    iconClass = 'fas fa-times-circle';
+                } else if (severity === 'high') {
+                    badgeClass = 'badge-danger';
+                    iconClass = 'fas fa-exclamation-circle';
+                } else if (severity === 'low') {
+                    badgeClass = 'badge-info';
+                    iconClass = 'fas fa-info-circle';
+                }
+                const card = document.createElement('div');
+                card.className = 'alert alert-light border mb-2';
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1"><i class="${iconClass} mr-1"></i>${alert.item_name || 'Unknown Item'}</h6>
+                            <small class="text-muted">SKU: ${alert.item_code || 'N/A'} | Stock: ${alert.quantity_in_stock || 0}</small>
+                            <p class="mb-0 text-muted mt-1">${alert.alert_message || 'No message'}</p>
+                        </div>
+                        <span class="badge ${badgeClass}">${severity.toUpperCase()}</span>
+                    </div>`;
+                container.appendChild(card);
+            });
+        })
+        .catch(error => console.error('Failed to load alerts', error));
+}
+function showAddItemModal() {
+    document.getElementById('addItemForm').reset();
+    $('#addItemModal').modal('show');
+}
+
+function submitAddItem() {
+    const form = document.getElementById('addItemForm');
+    const data = Object.fromEntries(new FormData(form).entries());
+    
+    // Include entity_id from current context
+    if (currentEntityId) {
+        data.entity_id = currentEntityId;
+    }
+    
+    fetch('/api/inventory/items/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                $('#addItemModal').modal('hide');
+                loadRegularInventory();
+                loadTransactions();
+                loadAlerts();
+                // Reload transaction items dropdown
+                reloadTransactionItemsDropdown();
+                
+                if (result.already_exists) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Item Already Exists',
+                        html: `This item already exists in inventory:<br><strong>${result.item_code}</strong><br>ID: ${result.item_id}`,
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    Swal.fire('Created', 'Inventory item added successfully.', 'success');
+                }
+            } else {
+                Swal.fire('Error', result.message || result.error || 'Failed to add item', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Error', 'Failed to add item', 'error'));
+}
+
+function reloadTransactionItemsDropdown() {
+    // Build URL with entity/credit context
+    let url = '/api/inventory/items';
+    if (currentEntityId) {
+        url += `?entity_id=${currentEntityId}&type=regular`;
+    } else if (isCredit) {
+        url += '?type=credit';
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const items = data.items || [];
+            const select = $('#transaction_item');
+            const currentVal = select.val();
+            
+            select.empty().append('<option value="">Select inventory item...</option>');
+            items.forEach(item => {
+                select.append(`<option value="${item.id}">${item.item_name} (${item.item_code})</option>`);
+            });
+            
+            // Restore previous selection if still valid
+            if (currentVal) {
+                select.val(currentVal).trigger('change');
+            }
+        })
+        .catch(error => console.error('Failed to reload items dropdown', error));
+}
+
+function openEditItem(itemId) {
+    fetch(`/api/inventory/items/${itemId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.item) {
+                Swal.fire('Error', 'Item not found', 'error');
+                return;
+            }
+            const item = data.item;
+            document.getElementById('edit_item_id').value = item.id;
+            document.getElementById('edit_item_name').value = item.item_name || '';
+            document.getElementById('edit_item_code').value = item.item_code || '';
+            document.getElementById('edit_status').value = item.status || 'active';
+            document.getElementById('edit_category').value = item.category || '';
+            document.getElementById('edit_unit_of_measure').value = item.unit_of_measure || '';
+            document.getElementById('edit_min_stock').value = item.minimum_stock_level || 0;
+            document.getElementById('edit_reorder_level').value = item.reorder_level || 0;
+            document.getElementById('edit_unit_cost').value = item.average_cost || 0;
+            document.getElementById('edit_width').value = item.width || '';
+            document.getElementById('edit_height').value = item.height || '';
+            document.getElementById('edit_depth').value = item.depth || '';
+            document.getElementById('edit_description').value = item.description || '';
+            
+            // Set supplier if available
+            if (item.preferred_supplier_id) {
+                $('#edit_supplier').val(item.preferred_supplier_id).trigger('change');
+            } else {
+                $('#edit_supplier').val('').trigger('change');
+            }
+            
+            $('#editItemModal').modal('show');
+        })
+        .catch(() => Swal.fire('Error', 'Failed to load item details', 'error'));
+}
+
+function submitEditItem() {
+    const form = document.getElementById('editItemForm');
+    const data = Object.fromEntries(new FormData(form).entries());
+    const itemId = data.item_id;
+    fetch(`/api/inventory/items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                $('#editItemModal').modal('hide');
+                loadRegularInventory();
+                loadTransactions();
+                loadAlerts();
+                Swal.fire('Updated', 'Item updated successfully.', 'success');
+            } else {
+                Swal.fire('Error', result.message || 'Failed to update item', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Error', 'Failed to update item', 'error'));
+}
+
+function confirmDeleteItem(itemId) {
+    Swal.fire({
+        title: 'Delete item?',
+        text: 'This will remove the inventory item permanently.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d9534f',
+        confirmButtonText: 'Delete'
+    }).then(result => {
+        if (!result.isConfirmed) return;
+        fetch(`/api/inventory/items/${itemId}`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(res => {
+                if (res.success) {
+                    loadRegularInventory();
+                    loadTransactions();
+                    loadAlerts();
+                    Swal.fire('Deleted', 'Item removed successfully.', 'success');
+                } else {
+                    Swal.fire('Error', res.message || 'Failed to delete item', 'error');
+                }
+            })
+            .catch(() => Swal.fire('Error', 'Failed to delete item', 'error'));
+    });
+}
+
+// Sales requests cache for credit items
+let salesRequestsCache = [];
+
+function showAddCreditModal(existingId = null) {
+    document.getElementById('addCreditForm').reset();
+    
+    // Set default dates
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('credit_received_date').value = today;
+    
+    // Reset form fields
+    $('#credit_item_name').val('');
+    $('#credit_item_code').val('');
+    $('#credit_unit_type').val('PCS');
+    $('#credit_width').val('');
+    $('#credit_height').val('');
+    $('#credit_depth').val('');
+    $('#credit_quantity').val('');
+    $('#credit_unit_cost').val('');
+    $('#credit_total_value').val('');
+    
+    // Default to manual entry
+    $('#credit_source_manual').prop('checked', true);
+    $('#credit_manual_entry_group').show();
+    $('#credit_sales_request_group').hide();
+    $('#credit_sales_item').prop('disabled', true).html('<option value="">Select sales request first...</option>');
+    
+    // Load sales requests if not cached
+    if ($('#credit_sales_request option').length <= 1) {
+        loadSalesRequestsForCredit();
+    }
+    
+    // Load suppliers if not already initialized
+    if (!$('#credit_supplier').data('select2')) {
+        $('#credit_supplier').select2({
+            dropdownParent: $('#addCreditModal'),
+            width: '100%',
+            placeholder: 'Select supplier'
+        });
+    }
+    
+    if (existingId) {
+        // If adding more to existing credit item, pre-fill ALL data from existing item
+        fetch(`/api/inventory/credit-items/${existingId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !data.item) {
+                    console.error('Failed to load credit item:', data.error);
+                    Swal.fire('Error', 'Failed to load credit item data', 'error');
+                    return;
+                }
+                const item = data.item;
+                
+                // Detect if this was created from a sales request
+                const isFromSalesRequest = item.sales_request_item_id && item.request_id;
+                
+                // Pre-fill supplier
+                if (item.supplier_id) {
+                    $('#credit_supplier').val(item.supplier_id).trigger('change');
+                }
+                
+                // Disable source selection - must match existing
+                $('input[name="item_source"]').prop('disabled', true);
+                
+                if (isFromSalesRequest) {
+                    // Show sales request source as selected
+                    $('#credit_source_sales').prop('checked', true);
+                    $('#credit_manual_entry_group').hide();
+                    $('#credit_sales_request_group').show();
+                    
+                    // Load sales requests and pre-select the correct one
+                    loadSalesRequestsForCredit().then(() => {
+                        $('#credit_sales_request').val(item.request_id).trigger('change');
+                        
+                        // After a short delay, select the sales item
+                        setTimeout(() => {
+                            $('#credit_sales_item').val(item.sales_request_item_id).trigger('change');
+                        }, 500);
+                    });
+                    
+                    // Show info about the source
+                    console.log(`Credit item from Sales Request: ${item.request_number}, Item ID: ${item.sales_request_item_id}`);
+                } else {
+                    // Manual entry source
+                    $('#credit_source_manual').prop('checked', true);
+                    $('#credit_manual_entry_group').show();
+                    $('#credit_sales_request_group').hide();
+                    
+                    // Pre-fill item details for manual entry
+                    $('#credit_item_name').val(item.item_name || '');
+                    $('#credit_item_code').val(item.item_code || '');
+                }
+                
+                // Pre-fill unit type and lock it
+                if (item.unit_of_measure) {
+                    $('#credit_unit_type').val(item.unit_of_measure);
+                }
+                $('#credit_unit_type').prop('disabled', true);
+                
+                // Pre-fill dimensions and lock them
+                if (item.width) {
+                    $('#credit_width').val(item.width).prop('readonly', true).css('background', '#e9ecef');
+                }
+                if (item.height) {
+                    $('#credit_height').val(item.height).prop('readonly', true).css('background', '#e9ecef');
+                }
+                if (item.depth) {
+                    $('#credit_depth').val(item.depth).prop('readonly', true).css('background', '#e9ecef');
+                }
+                
+                // Pre-fill cost
+                if (item.agreed_cost_per_item) {
+                    $('#credit_unit_cost').val(item.agreed_cost_per_item);
+                }
+                
+                // Show the modal after data is loaded
+                $('#addCreditModal').modal('show');
+            })
+            .catch(error => {
+                console.error('Error loading credit item:', error);
+                Swal.fire('Error', 'Failed to load credit item data', 'error');
+            });
+    } else {
+        // New credit item - enable source selection
+        $('input[name="item_source"]').prop('disabled', false);
+        $('#credit_unit_type').prop('disabled', false);
+        $('#credit_width, #credit_height, #credit_depth').prop('readonly', false).css('background', '');
+        $('#addCreditModal').modal('show');
+    }
+}
+
+// Toggle between manual entry and sales request
+$(document).on('change', 'input[name="item_source"]', function() {
+    const source = $(this).val();
+    if (source === 'manual') {
+        $('#credit_manual_entry_group').show();
+        $('#credit_sales_request_group').hide();
+        $('#credit_item_name').prop('required', true);
+        // Unlock dimension fields for manual entry
+        $('#credit_width, #credit_height, #credit_depth').val('').prop('readonly', false).css('background', '');
+        $('#credit_unit_type').prop('disabled', false);
+        $('#credit_quantity').val('');
+        $('#credit_unit_cost').val('');
+        $('#credit_total_value').val('');
+    } else {
+        $('#credit_manual_entry_group').hide();
+        $('#credit_sales_request_group').show();
+        $('#credit_item_name').prop('required', false);
+    }
+});
+
+function loadSalesRequestsForCredit() {
+    return fetch('/api/sales/requests?status=In_Progress,Approved')
+        .then(response => response.json())
+        .then(data => {
+            const requests = data.requests || [];
+            const select = $('#credit_sales_request');
+            select.empty().append('<option value="">Select sales request...</option>');
+            
+            requests.forEach(req => {
+                const displayName = `SR-${req.request_id}: ${req.title || 'No Title'}`;
+                select.append(`<option value="${req.request_id}">${displayName}</option>`);
+            });
+            
+            // Destroy existing select2 if any
+            if (select.data('select2')) {
+                select.select2('destroy');
+            }
+            
+            select.select2({
+                dropdownParent: $('#addCreditModal'),
+                width: '100%',
+                placeholder: 'Select sales request'
+            });
+            
+            return requests;
+        })
+        .catch(error => {
+            console.error('Failed to load sales requests', error);
+            return [];
+        });
+}
+
+// When sales request is selected, load its items
+$(document).on('change', '#credit_sales_request', function() {
+    const requestId = $(this).val();
+    const itemSelect = $('#credit_sales_item');
+    
+    if (!requestId) {
+        itemSelect.prop('disabled', true).html('<option value="">Select sales request first...</option>');
+        return;
+    }
+    
+    fetch(`/api/sales/requests/${requestId}/items`)
+        .then(response => response.json())
+        .then(data => {
+            const items = data.items || [];
+            itemSelect.empty().append('<option value="">Select item...</option>');
+            
+            items.forEach(item => {
+                const displayName = `${item.item_name} (Qty: ${item.quantity || 1})`;
+                itemSelect.append(`<option value="${item.id}" 
+                    data-name="${item.item_name}" 
+                    data-cost="${item.cost_per_item || 0}"
+                    data-width="${item.width || ''}"
+                    data-height="${item.height || ''}"
+                    data-depth="${item.depth || ''}"
+                    data-unit="${item.unit || 'PCS'}"
+                    data-qty="${item.quantity || 1}">${displayName}</option>`);
+            });
+            
+            itemSelect.prop('disabled', false);
+            
+            if (itemSelect.data('select2')) {
+                itemSelect.select2('destroy');
+            }
+            itemSelect.select2({
+                dropdownParent: $('#addCreditModal'),
+                width: '100%',
+                placeholder: 'Select item'
+            });
+        })
+        .catch(error => {
+            console.error('Failed to load request items', error);
+            itemSelect.prop('disabled', true).html('<option value="">Failed to load items</option>');
+        });
+});
+
+// When sales item is selected, auto-fill all fields including dimensions
+$(document).on('change', '#credit_sales_item', function() {
+    const selectedOption = $(this).find('option:selected');
+    const itemId = $(this).val();
+    
+    if (!itemId) {
+        // Reset and unlock fields
+        $('#credit_width, #credit_height, #credit_depth').val('').prop('readonly', false).css('background', '');
+        $('#credit_unit_type').prop('disabled', false);
+        $('#credit_quantity').val('');
+        $('#credit_unit_cost').val('');
+        return;
+    }
+    
+    // Get data from selected option
+    const itemCost = selectedOption.data('cost') || 0;
+    const width = selectedOption.data('width');
+    const height = selectedOption.data('height');
+    const depth = selectedOption.data('depth');
+    const unit = selectedOption.data('unit') || 'PCS';
+    const qty = selectedOption.data('qty') || 1;
+    
+    // Auto-fill dimensions and lock them
+    if (width) {
+        $('#credit_width').val(width).prop('readonly', true).css('background', '#e9ecef');
+    }
+    if (height) {
+        $('#credit_height').val(height).prop('readonly', true).css('background', '#e9ecef');
+    }
+    if (depth) {
+        $('#credit_depth').val(depth).prop('readonly', true).css('background', '#e9ecef');
+    }
+    
+    // Set unit type and disable it
+    $('#credit_unit_type').val(unit).prop('disabled', true);
+    
+    // Set quantity from sales item
+    $('#credit_quantity').val(qty);
+    
+    // Set cost if available
+    if (itemCost > 0) {
+        $('#credit_unit_cost').val(itemCost);
+    }
+    
+    // Recalculate total
+    const cost = parseFloat($('#credit_unit_cost').val()) || 0;
+    $('#credit_total_value').val((qty * cost).toFixed(2));
+});
+
+// Calculate total value when quantity or cost changes
+$(document).on('input', '#credit_quantity, #credit_unit_cost', function() {
+    const qty = parseFloat($('#credit_quantity').val()) || 0;
+    const cost = parseFloat($('#credit_unit_cost').val()) || 0;
+    const total = qty * cost;
+    $('#credit_total_value').val(total.toFixed(2));
+});
+
+function submitAddCredit() {
+    const form = document.getElementById('addCreditForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    const source = $('input[name="item_source"]:checked').val();
+    
+    // Validate based on source
+    if (source === 'sales') {
+        if (!data.sales_request_item_id || data.sales_request_item_id === '') {
+            Swal.fire('Error', 'Please select a sales request item', 'error');
+            return;
+        }
+        data.sales_request_item_id = parseInt(data.sales_request_item_id);
+    } else {
+        if (!data.item_name || data.item_name.trim() === '') {
+            Swal.fire('Error', 'Please enter an item name', 'error');
+            return;
+        }
+    }
+    
+    if (!data.quantity_received || parseFloat(data.quantity_received) <= 0) {
+        Swal.fire('Error', 'Please enter a valid quantity', 'error');
+        return;
+    }
+    
+    // Cost is optional - default to 0 if not provided
+    
+    // Convert types
+    data.quantity_received = parseFloat(data.quantity_received);
+    data.agreed_cost_per_item = parseFloat(data.agreed_cost_per_item);
+    if (data.supplier_id && data.supplier_id !== '') {
+        data.supplier_id = parseInt(data.supplier_id);
+    } else {
+        delete data.supplier_id;
+    }
+    
+    // Add dimensions if provided
+    if (data.width) data.width = parseFloat(data.width);
+    if (data.height) data.height = parseFloat(data.height);
+    if (data.depth) data.depth = parseFloat(data.depth);
+    
+    fetch('/api/inventory/credit-items/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                $('#addCreditModal').modal('hide');
+                loadCreditInventory();
+                loadRegularInventory();
+                loadTransactions();
+                loadAlerts();
+                Swal.fire('Saved', 'Credit item recorded successfully.', 'success');
+            } else {
+                Swal.fire('Error', result.error || result.message || 'Failed to add credit item', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Error', 'Failed to add credit item', 'error'));
+}
+function showAddTransactionModal(itemId = null, creditId = null) {
+    document.getElementById('addTransactionForm').reset();
+    
+    // Set current datetime
+    const now = new Date();
+    const localDateTime = now.toISOString().slice(0, 16);
+    document.getElementById('transaction_date').value = localDateTime;
+    
+    // Reload items dropdown - FILTERED BY ENTITY/CREDIT CONTEXT
+    let url = '/api/inventory/items';
+    if (currentEntityId) {
+        url += `?entity_id=${currentEntityId}&type=regular`;
+    } else if (isCredit) {
+        url += '?type=credit';
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const items = data.items || [];
+            const select = $('#transaction_item');
+            select.empty().append('<option value="">Select inventory item...</option>');
+            items.forEach(item => {
+                select.append(`<option value="${item.id}">${item.item_name} (${item.item_code})</option>`);
+            });
+            
+            // Destroy and reinitialize select2
+            if (select.data('select2')) {
+                select.select2('destroy');
+            }
+            select.select2({
+                dropdownParent: $('#addTransactionModal'),
+                width: '100%',
+                placeholder: 'Select inventory item'
+            });
+            
+            // Pre-select item if provided
+            if (itemId) {
+                select.val(itemId).trigger('change');
+            }
+        })
+        .catch(error => console.error('Failed to reload items', error));
+    
+    $('#addTransactionModal').modal('show');
+}
+
+// Calculate total cost when quantity or unit cost changes
+$(document).on('input', '#transaction_quantity, #transaction_unit_cost', function() {
+    const qty = parseFloat($('#transaction_quantity').val()) || 0;
+    const unitCost = parseFloat($('#transaction_unit_cost').val()) || 0;
+    $('#transaction_total_cost').val((qty * unitCost).toFixed(2));
+});
+
+function submitAddTransaction() {
+    const form = document.getElementById('addTransactionForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Validate required fields
+    if (!data.item_id || data.item_id === '') {
+        Swal.fire('Error', 'Please select an inventory item', 'error');
+        return;
+    }
+    if (!data.transaction_type || data.transaction_type === '') {
+        Swal.fire('Error', 'Please select a transaction type', 'error');
+        return;
+    }
+    if (!data.quantity || parseFloat(data.quantity) <= 0) {
+        Swal.fire('Error', 'Please enter a valid quantity', 'error');
+        return;
+    }
+    
+    // Convert to proper types
+    data.item_id = parseInt(data.item_id);
+    data.quantity = parseFloat(data.quantity);
+    data.unit_cost = parseFloat(data.unit_cost) || 0;
+    data.total_cost = parseFloat(data.total_cost) || (data.quantity * data.unit_cost);
+    if (data.supplier_id === '') delete data.supplier_id;
+    
+    fetch('/api/inventory/transactions/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                $('#addTransactionModal').modal('hide');
+                loadTransactions();
+                loadRegularInventory();
+                loadCreditInventory();
+                loadAlerts();
+                Swal.fire('Recorded', 'Transaction added successfully.', 'success');
+            } else {
+                Swal.fire('Error', result.error || result.message || 'Failed to add transaction', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Error', 'Failed to add transaction', 'error'));
+}
+
+function openConvertSalesItem(salesItemId) {
+    const item = approvedItems.find(row => row.sales_item_id === salesItemId);
+    if (!item) return;
+    document.getElementById('convert_sales_item_id').value = item.sales_item_id;
+    document.getElementById('convert_item_name').value = item.item_name;
+    // Item code is auto-generated - show existing code if item exists, otherwise placeholder
+    document.getElementById('convert_item_code').value = item.item_code || 'Will be auto-generated';
+    document.getElementById('convert_width').value = item.width || '';
+    document.getElementById('convert_height').value = item.height || '';
+    document.getElementById('convert_depth').value = item.depth || '';
+    document.getElementById('convert_unit_cost').value = item.cost_per_item || 0;
+    document.getElementById('convert_expected_profit').value = item.expected_profit_per_unit || 0;
+    
+    // Reset to regular inventory type and show supplier dropdown
+    $('#convert_type_regular').prop('checked', true);
+    $('#convert_supplier_group').show();
+    $('#convert_credit_info').hide();
+    $('#convert_supplier_id').val('').trigger('change');
+    
+    $('#convertSalesItemModal').modal('show');
+}
+
+function submitConvertSalesItem() {
+    const salesItemId = document.getElementById('convert_sales_item_id').value;
+    if (!salesItemId) {
+        Swal.fire('Error', 'Missing sales item ID', 'error');
+        return;
+    }
+    const inventoryType = document.querySelector('input[name="inventory_type"]:checked').value;
+    const data = { 
+        sales_item_id: salesItemId, 
+        sales_request_item_id: salesItemId,  // Link to sales request
+        inventory_type: inventoryType 
+    };
+    
+    // For REGULAR inventory, include supplier if selected
+    if (inventoryType === 'regular') {
+        const supplierId = document.getElementById('convert_supplier_id').value;
+        if (supplierId) {
+            data.supplier_id = supplierId;
+        }
+    }
+    // Credit items don't need supplier - they link directly to sales request
+    
+    fetch('/api/inventory/items/create-from-sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                $('#convertSalesItemModal').modal('hide');
+                
+                // Reload based on inventory type
+                if (inventoryType === 'credit') {
+                    loadCreditInventory();
+                } else {
+                    loadRegularInventory();
+                }
+                
+                loadApprovedItems();
+                loadTransactions();
+                loadAlerts();
+                
+                Swal.fire('Created', 'Inventory item created from sales request.', 'success');
+            } else {
+                Swal.fire('Error', result.error || result.message || 'Failed to convert item', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Error', 'Failed to convert item', 'error'));
+}
+
+// Toggle supplier field based on inventory type selection
+// Regular inventory: show supplier dropdown (optional)
+// Credit items: hide supplier, show info that it links to sales request
+$(document).on('change', 'input[name="inventory_type"]', function() {
+    const isCreditItem = $(this).val() === 'credit';
+    // Show supplier for REGULAR inventory, hide for credit
+    $('#convert_supplier_group').toggle(!isCreditItem);
+    // Show credit info for credit items
+    $('#convert_credit_info').toggle(isCreditItem);
+    // Supplier is never required - it's optional for regular, not used for credit
+    $('#convert_supplier_id').prop('required', false);
+});
+
+$(document).ready(() => {
+    document.body.classList.add('inventory-surface');
+    initTabs();
+    initSelects();
+    initTables();
+    attachToolbarEvents();
+    
+    // Handle different inventory views based on context
+    if (isCredit) {
+        // Credit inventory mode - show only credit tab
+        document.querySelectorAll('.inventory-tab').forEach(tab => {
+            if (tab.getAttribute('data-target') !== 'credit-panel' && 
+                tab.getAttribute('data-target') !== 'transactions-panel' &&
+                tab.getAttribute('data-target') !== 'alerts-panel') {
+                tab.style.display = 'none';
+            }
+        });
+        // Activate credit panel
+        document.querySelectorAll('.inventory-tab').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.inventory-panel').forEach(panel => panel.classList.remove('active'));
+        document.querySelector('[data-target="credit-panel"]').classList.add('active');
+        document.getElementById('credit-panel').classList.add('active');
+        loadCreditInventory();
+    } else {
+        // Regular entity inventory mode
+        loadRegularInventory();
+    }
+    
+    loadTransactions();
+    loadAlerts();
+    populateTransactionItemsFilter();
+});
+
+window.addEventListener('beforeunload', () => {
+    document.body.classList.remove('inventory-surface');
+});
+</script>
+{% endblock %}

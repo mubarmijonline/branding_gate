@@ -1,0 +1,338 @@
+{% extends "main.html" %}
+
+{% block head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .approval-card {
+        border-left: 4px solid #ffc107;
+        transition: all 0.3s;
+    }
+    
+    .approval-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .approval-badge {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    .approval-details {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .urgent-label {
+        background-color: #dc3545;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set user_roles = session.get('roles', []) %}
+<div class="container-fluid">
+    {% if 'admin' in user_roles %}
+    
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-clipboard-check mr-2"></i>Pending Approvals
+        </h1>
+        <div>
+            <button class="btn btn-primary btn-sm" onclick="refreshApprovals()">
+                <i class="fas fa-sync-alt mr-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Approvals List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-list mr-2"></i>Pending Requests
+                    </h6>
+                    <span id="approvalCount" class="badge badge-warning">Loading...</span>
+                </div>
+                <div class="card-body">
+                    <div id="approvalsContainer">
+                        <div class="text-center py-5">
+                            <i class="fas fa-spinner fa-spin fa-3x text-primary mb-3"></i>
+                            <p class="text-muted">Loading approvals...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        You don't have permission to access this page.
+    </div>
+    {% endif %}
+</div>
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    loadPendingApprovals();
+});
+
+function loadPendingApprovals() {
+    $.ajax({
+        url: '/api/approvals/pending',
+        type: 'GET',
+        success: function(response) {
+            if (response.success) {
+                displayApprovals(response.approvals);
+                $('#approvalCount').text(response.count + ' Pending');
+            } else {
+                Swal.fire('Error', response.error || 'Failed to load approvals', 'error');
+            }
+        },
+        error: function(xhr) {
+            console.error('Error loading approvals:', xhr);
+            $('#approvalsContainer').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    Failed to load approvals. Please refresh the page.
+                </div>
+            `);
+        }
+    });
+}
+
+function displayApprovals(approvals) {
+    const container = $('#approvalsContainer');
+    
+    if (approvals.length === 0) {
+        container.html(`
+            <div class="text-center py-5">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h5 class="text-muted">No pending approvals</h5>
+                <p class="text-muted">All requests have been processed</p>
+            </div>
+        `);
+        return;
+    }
+    
+    let html = '';
+    
+    approvals.forEach(function(approval) {
+        const requestData = approval.request_data || {};
+        const startDate = requestData.start_date || 'N/A';
+        const endDate = requestData.end_date || 'N/A';
+        const title = requestData.title || 'Untitled Request';
+        const requestTypes = (requestData.request_types || []).join(', ') || 'General';
+        
+        // Calculate days until start
+        const daysUntilStart = calculateDaysUntil(startDate);
+        const urgencyClass = daysUntilStart <= 2 ? 'urgent-label' : 'badge badge-warning';
+        
+        html += `
+            <div class="approval-card card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="card-title mb-2">
+                                ${title}
+                                <span class="${urgencyClass} ml-2">
+                                    <i class="fas fa-clock mr-1"></i>${approval.approval_reason}
+                                </span>
+                            </h5>
+                            <p class="card-text mb-2">
+                                <strong>Request Types:</strong> ${requestTypes}<br>
+                                <strong>Start Date:</strong> ${startDate} | <strong>End Date:</strong> ${endDate}<br>
+                                <strong>Requested By:</strong> ${approval.requested_by_name || approval.requested_by}<br>
+                                <strong>Requested At:</strong> ${approval.requested_at}
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            <button class="btn btn-success btn-sm mb-2" onclick="approveRequest(${approval.id}, '${title}')">
+                                <i class="fas fa-check mr-1"></i> Approve
+                            </button>
+                            <button class="btn btn-danger btn-sm mb-2" onclick="rejectRequest(${approval.id}, '${title}')">
+                                <i class="fas fa-times mr-1"></i> Reject
+                            </button>
+                            <button class="btn btn-info btn-sm mb-2" onclick="viewDetails(${approval.id})">
+                                <i class="fas fa-eye mr-1"></i> View Details
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Collapsible Details -->
+                    <div id="details-${approval.id}" class="approval-details" style="display: none;">
+                        <h6 class="font-weight-bold mb-3">Request Details</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Priority:</strong> <span class="badge badge-${getPriorityClass(requestData.priority)}">${requestData.priority || 'normal'}</span></p>
+                                <p><strong>Duration:</strong> ${requestData.duration_days || 0} days</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Description:</strong><br>${requestData.description || 'No description'}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Items if any -->
+                        ${displayItems(requestData.template_fields)}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.html(html);
+}
+
+function displayItems(templateFields) {
+    if (!templateFields || !templateFields.instances || templateFields.instances.length === 0) {
+        return '';
+    }
+    
+    let html = '<div class="mt-3"><h6 class="font-weight-bold">Items:</h6><ul class="list-group">';
+    
+    templateFields.instances.forEach(function(instance) {
+        const items = instance.items || [];
+        const requestType = instance.request_type || 'General';
+        
+        if (items.length > 0) {
+            html += `<li class="list-group-item"><strong>${requestType}:</strong><ul class="mt-2">`;
+            items.forEach(function(item) {
+                html += `<li>${item.name} - Qty: ${item.quantity} ${item.unit || 'pcs'}`;
+                if (item.width || item.height || item.depth) {
+                    html += ` (${item.width || 0} x ${item.height || 0} x ${item.depth || 0})`;
+                }
+                html += `</li>`;
+            });
+            html += '</ul></li>';
+        }
+    });
+    
+    html += '</ul></div>';
+    return html;
+}
+
+function viewDetails(approvalId) {
+    const detailsDiv = $(`#details-${approvalId}`);
+    detailsDiv.slideToggle();
+}
+
+function calculateDaysUntil(dateStr) {
+    if (!dateStr) return 999;
+    const targetDate = new Date(dateStr);
+    const today = new Date();
+    const diffTime = targetDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}
+
+function getPriorityClass(priority) {
+    switch(priority) {
+        case 'high': return 'danger';
+        case 'medium': return 'warning';
+        case 'low': return 'info';
+        default: return 'secondary';
+    }
+}
+
+function approveRequest(approvalId, title) {
+    Swal.fire({
+        title: 'Approve Request?',
+        text: `Approve "${title}"?`,
+        icon: 'question',
+        input: 'textarea',
+        inputLabel: 'Admin Notes (optional)',
+        inputPlaceholder: 'Add any notes or comments...',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        confirmButtonText: 'Yes, Approve',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/approvals/${approvalId}/approve`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    notes: result.value || ''
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Approved!', 'Request has been approved and created.', 'success');
+                        refreshApprovals();
+                    } else {
+                        Swal.fire('Error', response.error || 'Failed to approve request', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', 'Failed to approve request', 'error');
+                }
+            });
+        }
+    });
+}
+
+function rejectRequest(approvalId, title) {
+    Swal.fire({
+        title: 'Reject Request?',
+        text: `Reject "${title}"?`,
+        icon: 'warning',
+        input: 'textarea',
+        inputLabel: 'Rejection Reason (required)',
+        inputPlaceholder: 'Please explain why this request is being rejected...',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'Please provide a reason for rejection';
+            }
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        confirmButtonText: 'Yes, Reject',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: `/api/approvals/${approvalId}/reject`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    reason: result.value
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Rejected', 'Request has been rejected.', 'success');
+                        refreshApprovals();
+                    } else {
+                        Swal.fire('Error', response.error || 'Failed to reject request', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    Swal.fire('Error', 'Failed to reject request', 'error');
+                }
+            });
+        }
+    });
+}
+
+function refreshApprovals() {
+    loadPendingApprovals();
+}
+</script>
+{% endblock %}
