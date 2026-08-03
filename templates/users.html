@@ -1,1132 +1,642 @@
 {% extends "main.html" %}
 
 {% block body %}
-<div class="container-fluid">
-    {% set _p = session.get('perms', {}) %}
-    {% if 'user.view' in _p %}
+{% set _p = session.get('perms', {}) %}
+{% if 'user.view' in _p %}
+{% set can_edit_people = 'user.create' in _p %}
 
-    <!-- Departments -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h2 class="m-0 font-weight-bold text-primary">Departments</h2>
-            <button class="btn btn-success" data-toggle="modal" data-target="#addDepartmentModal">
-                <i class="fas fa-sitemap"></i> Add Department
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="departments-table" class="table table-bordered mb-0" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>Teams</th>
-                            <th>People</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+<style>
+  .people-page { --hair:#e3e6f0; --ink:#2e3650; --muted:#8891a8; --accent:#3a4fa0;
+                 --accent-soft:#eef1fa; }
+  .people-page .page-head { display:flex; flex-wrap:wrap; align-items:flex-end;
+                 justify-content:space-between; gap:1rem; margin-bottom:1.25rem; }
+  .people-page h1 { font-size:1.6rem; font-weight:700; color:var(--ink); margin:0; }
+  .people-page .sub { color:var(--muted); margin:.2rem 0 0; font-size:.9rem; }
 
-    <!-- Roles and their permissions (read-only: the matrix lives in rbac.py) -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h2 class="m-0 font-weight-bold text-primary">Roles &amp; Permissions</h2>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-5">
-                    <label for="role_inspector">Role</label>
-                    <select class="form-control" id="role_inspector"></select>
-                    <small class="form-text text-muted">
-                        Read-only. What a role may do is defined in <code>rbac.py</code> and applied by
-                        <code>seed_rbac.py</code>, so the matrix is reviewed in code, not edited here.
-                    </small>
-                </div>
-                <div class="col-md-7">
-                    <div id="role_permissions" class="mt-3 mt-md-0"
-                         style="max-height:320px; overflow-y:auto;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
+  .stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+              gap:1px; background:var(--hair); border:1px solid var(--hair);
+              border-radius:6px; overflow:hidden; margin-bottom:1.25rem; }
+  .stat-row div { background:#fff; padding:.8rem 1rem; }
+  .stat-row dt { font-size:.68rem; letter-spacing:.09em; text-transform:uppercase;
+                 color:var(--muted); margin:0; font-weight:600; }
+  .stat-row dd { margin:.15rem 0 0; font-size:1.5rem; font-weight:700; color:var(--ink);
+                 line-height:1.1; }
 
-    <!-- Teams Table and Add Team Button -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h2 class="m-0 font-weight-bold text-primary">Teams</h2>
-            <button class="btn btn-success" data-toggle="modal" data-target="#addTeamModal">
-                <i class="fas fa-users"></i> Add Team
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="teams-table" class="display table table-bordered" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Team Name</th>
-                            <th>Department Name</th>
-                            <th>Roles</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Data will be inserted here by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+  .tabs { display:flex; gap:.25rem; border-bottom:2px solid var(--hair); margin-bottom:1.25rem;
+          flex-wrap:wrap; }
+  .tabs button { border:0; background:none; padding:.6rem 1rem; font-weight:600;
+                 color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-2px;
+                 cursor:pointer; font-size:.92rem; }
+  .tabs button:hover { color:var(--ink); }
+  .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
+  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .panel { display:none; } .panel.on { display:block; }
 
-    <!-- Users Table -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h2 class="m-0 font-weight-bold text-primary">Users</h2>
-            <button class="btn btn-primary" data-toggle="modal" data-target="#addUserModal">
-                <i class="fas fa-plus"></i> Add User
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="users-table" class="display table table-bordered" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Mobile</th>
-                            <th>Email</th>
-                            <th>Department</th>
-                            <th>Role</th>
-                            <th>Pricing</th>
-                            <th>Reports To</th>
-                            <th>Team ID</th>
-                            <th>Team Name</th>
-                            <th>Team Department</th>
-                            <th>Username</th>
-                            <th>Title</th>
-                            <th>Added By</th>
-                            <th>Date</th>
-                            <th>Modified Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Data will be inserted here by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+  .toolbar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin-bottom:1rem; }
+  .toolbar input[type=search], .toolbar select { border:1px solid var(--hair); border-radius:5px;
+                 padding:.45rem .7rem; font-size:.9rem; min-width:170px; }
+  .toolbar input[type=search] { flex:1 1 240px; }
+  .count-note { color:var(--muted); font-size:.85rem; margin-left:auto; }
+
+  table.people { width:100%; border-collapse:collapse; font-size:.9rem; }
+  table.people th { text-align:left; font-size:.7rem; letter-spacing:.07em; text-transform:uppercase;
+                 color:var(--muted); border-bottom:2px solid var(--hair); padding:.5rem .6rem;
+                 white-space:nowrap; }
+  table.people td { padding:.6rem; border-bottom:1px solid var(--hair); vertical-align:middle; }
+  table.people tr:hover td { background:var(--accent-soft); }
+  .who { display:flex; align-items:center; gap:.6rem; }
+  .avatar { width:34px; height:34px; border-radius:50%; background:var(--accent-soft);
+            color:var(--accent); display:flex; align-items:center; justify-content:center;
+            font-weight:700; font-size:.8rem; flex:0 0 auto; }
+  .who .nm { font-weight:600; color:var(--ink); }
+  .who .un { color:var(--muted); font-size:.78rem; }
+  .pill { display:inline-block; padding:.15rem .5rem; border-radius:20px; font-size:.72rem;
+          font-weight:600; white-space:nowrap; }
+  .pill-l0 { background:#2e3650; color:#fff; }
+  .pill-l1 { background:#dbe2fb; color:#2a3a86; }
+  .pill-l2 { background:#e6e9f2; color:#4a5372; }
+  .pill-l3 { background:#f1f3f7; color:#6b7490; }
+  .pill-dept { background:#e4f1ea; color:#1b6e4d; }
+  .pill-price { background:#fdf0d9; color:#8a6410; }
+  .muted { color:var(--muted); }
+  .row-actions button { border:1px solid var(--hair); background:#fff; border-radius:5px;
+            padding:.28rem .55rem; font-size:.78rem; cursor:pointer; color:var(--ink); }
+  .row-actions button:hover { border-color:var(--accent); color:var(--accent); }
+  .row-actions button.danger:hover { border-color:#c0392b; color:#c0392b; }
+
+  .tree { list-style:none; padding-left:0; margin:0; }
+  .tree ul { list-style:none; margin:0; padding-left:1.6rem; border-left:1px solid var(--hair); }
+  .tree li { margin:.4rem 0; position:relative; }
+  .tree ul li::before { content:""; position:absolute; left:-1.6rem; top:1.15rem; width:1.2rem;
+            height:1px; background:var(--hair); }
+  .node { display:inline-flex; align-items:center; gap:.6rem; border:1px solid var(--hair);
+            border-radius:6px; padding:.5rem .8rem; background:#fff; }
+  .node .nm { font-weight:600; color:var(--ink); }
+  .node small { color:var(--muted); }
+
+  .dept-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:.8rem; }
+  .dept { border:1px solid var(--hair); border-radius:6px; padding:.85rem 1rem; background:#fff; }
+  .dept h4 { font-size:1rem; font-weight:700; color:var(--ink); margin:0 0 .15rem; }
+  .dept code { font-size:.72rem; color:var(--muted); }
+  .dept .n { margin-top:.5rem; font-size:.82rem; color:var(--muted); }
+
+  .role-list { max-height:520px; overflow-y:auto; }
+  .role-item { width:100%; text-align:left; border:1px solid var(--hair); background:#fff;
+            border-radius:6px; padding:.55rem .8rem; margin-bottom:.4rem; cursor:pointer; }
+  .role-item:hover { border-color:var(--accent); }
+  .role-item.on { border-color:var(--accent); background:var(--accent-soft); }
+  .role-item .rn { font-weight:600; color:var(--ink); font-size:.9rem; }
+  .role-item .rd { color:var(--muted); font-size:.76rem; }
+  table.perms { width:100%; border-collapse:collapse; font-size:.85rem; }
+  table.perms td { padding:.4rem .5rem; border-bottom:1px solid var(--hair); }
+  table.perms code { font-size:.78rem; color:var(--ink); }
+  .scope { font-size:.7rem; font-weight:600; padding:.12rem .45rem; border-radius:3px;
+            background:#eef1fa; color:#2a3a86; white-space:nowrap; }
+  .empty { text-align:center; color:var(--muted); padding:2rem 1rem; }
+</style>
+
+<div class="container-fluid people-page">
+
+  <div class="page-head">
+    <div>
+      <h1>People &amp; Access</h1>
+      <p class="sub">Every person has a department, a role, and someone they report to.
+         The role decides what they can do; the reporting line decides whose records they see.</p>
     </div>
-    {% else %}
-    <div class="alert alert-danger mt-5">You do not have permission to view this page.</div>
+    {% if can_edit_people %}
+    <button class="btn btn-primary" id="btnAddPerson">
+      <i class="fas fa-user-plus mr-1"></i> Add person
+    </button>
     {% endif %}
+  </div>
+
+  <dl class="stat-row">
+    <div><dt>People</dt><dd id="statPeople">-</dd></div>
+    <div><dt>Departments</dt><dd id="statDepts">-</dd></div>
+    <div><dt>Roles in use</dt><dd id="statRoles">-</dd></div>
+    <div><dt>Pricing</dt><dd id="statPricing">-</dd></div>
+    <div><dt>Unassigned</dt><dd id="statUnassigned">-</dd></div>
+  </dl>
+
+  <div class="tabs" role="tablist">
+    <button class="on" data-panel="people" role="tab">People</button>
+    <button data-panel="chart" role="tab">Org chart</button>
+    <button data-panel="depts" role="tab">Departments</button>
+    <button data-panel="roles" role="tab">Roles &amp; permissions</button>
+  </div>
+
+  <!-- People -->
+  <section class="panel on" id="panel-people">
+    <div class="toolbar">
+      <input type="search" id="qPeople" placeholder="Search name, username, mobile or email">
+      <select id="fDept"><option value="">All departments</option></select>
+      <select id="fRole"><option value="">All roles</option></select>
+      <select id="fPricing">
+        <option value="">Pricing: any</option>
+        <option value="1">Pricing only</option>
+        <option value="0">Not pricing</option>
+      </select>
+      <span class="count-note" id="peopleCount"></span>
+    </div>
+    <div class="table-responsive">
+      <table class="people">
+        <thead><tr>
+          <th>Person</th><th>Department</th><th>Role</th><th>Reports to</th>
+          <th>Pricing</th><th>Contact</th><th></th>
+        </tr></thead>
+        <tbody id="peopleBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Org chart -->
+  <section class="panel" id="panel-chart">
+    <p class="sub mb-3">Built from who reports to whom. A manager sees the records of everyone
+       beneath them, so this tree is also the visibility map.</p>
+    <ul class="tree" id="orgTree"></ul>
+  </section>
+
+  <!-- Departments -->
+  <section class="panel" id="panel-depts">
+    <div class="toolbar">
+      <span class="sub">Departments group people and scope what a Head can see.</span>
+      {% if 'department.edit' in _p %}
+      <button class="btn btn-sm btn-success ml-auto" id="btnAddDept">
+        <i class="fas fa-plus mr-1"></i> Add department
+      </button>
+      {% endif %}
+    </div>
+    <div class="dept-grid" id="deptGrid"></div>
+  </section>
+
+  <!-- Roles -->
+  <section class="panel" id="panel-roles">
+    <div class="row">
+      <div class="col-md-4">
+        <p class="sub">Pick a role to see exactly what it allows. Defined in
+           <code>rbac.py</code>, so it is reviewed in code rather than edited here.</p>
+        <div class="role-list" id="roleList"></div>
+      </div>
+      <div class="col-md-8">
+        <div id="rolePerms"><p class="empty">Select a role.</p></div>
+      </div>
+    </div>
+  </section>
 </div>
 
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css"/>
-<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css"/>
+<!-- Person modal, used for both add and edit -->
+<div class="modal fade" id="personModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <form id="personForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="personModalTitle">Add person</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="p_id">
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label for="p_name">Full name</label>
+              <input type="text" class="form-control" id="p_name" required>
+            </div>
+            <div class="form-group col-md-6">
+              <label for="p_title">Job title</label>
+              <input type="text" class="form-control" id="p_title" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-md-4">
+              <label for="p_mobile">Mobile <small class="text-muted">(used to sign in)</small></label>
+              <input type="tel" class="form-control" id="p_mobile" required>
+            </div>
+            <div class="form-group col-md-4">
+              <label for="p_email">Email</label>
+              <input type="email" class="form-control" id="p_email" required>
+            </div>
+            <div class="form-group col-md-4">
+              <label for="p_username">Username</label>
+              <input type="text" class="form-control" id="p_username" required>
+            </div>
+          </div>
+          <div class="form-row" id="passwordRow">
+            <div class="form-group col-md-6">
+              <label for="p_password">Password</label>
+              <input type="password" class="form-control" id="p_password" autocomplete="new-password">
+              <small class="form-text text-muted" id="passwordHint">
+                Leave blank to keep the current password.
+              </small>
+            </div>
+            <div class="form-group col-md-6 d-flex align-items-end">
+              <button type="button" class="btn btn-outline-secondary btn-block" id="btnGenPassword">
+                Generate a password
+              </button>
+            </div>
+          </div>
 
-<!-- Required Scripts -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" />
+          <div class="border rounded p-3 bg-light">
+            <label class="font-weight-bold d-block mb-2">
+              <i class="fas fa-sitemap text-primary mr-1"></i>Position in the organisation
+            </label>
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="p_department_id">Department</label>
+                <select class="form-control" id="p_department_id"></select>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="p_rbac_role_id">Role</label>
+                <select class="form-control" id="p_rbac_role_id"></select>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="p_manager_id">Reports to</label>
+                <select class="form-control" id="p_manager_id"></select>
+              </div>
+            </div>
+            <div class="custom-control custom-switch mt-1">
+              <input type="checkbox" class="custom-control-input" id="p_is_pricing">
+              <label class="custom-control-label" for="p_is_pricing">
+                <i class="fas fa-tags text-warning mr-1"></i><strong>Pricing</strong>
+              </label>
+            </div>
+            <small class="form-text text-muted">
+              Lets this person set selling prices and decide re-pricing, whatever their role.
+              Everyone else never sees the pricing controls.
+            </small>
+            <div id="rolePreview" class="mt-3"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSavePerson">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <script>
+(function () {
+  'use strict';
 
-// ---------------------------------------------------------------------------
-// RBAC hierarchy: departments, roles and the reporting line.
-// The grant matrix itself lives in rbac.py and is applied by seed_rbac.py, so
-// this page assigns roles but never edits what a role can do.
-// ---------------------------------------------------------------------------
-let DEPARTMENTS = [];
-let RBAC_ROLES = [];
+  var PEOPLE = [], DEPARTMENTS = [], ROLES = [];
+  var LEVEL = { 0: 'Executive', 1: 'Head / Manager', 2: 'Team Leader', 3: 'Member' };
+  var CAN_EDIT = {{ 'true' if can_edit_people else 'false' }};
 
-const LEVEL_LABELS = { 0: 'Executive', 1: 'Head / Manager', 2: 'Team Leader', 3: 'Member' };
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function initials(name) {
+    var parts = String(name || '?').trim().split(/\s+/);
+    return ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  }
 
-function loadHierarchyRefData() {
+  // ---- loading ------------------------------------------------------------
+  function loadAll() {
     return $.when(
-        $.getJSON('/api/departments', function(r) { if (r.success) DEPARTMENTS = r.departments; }),
-        $.getJSON('/api/rbac/roles',  function(r) { if (r.success) RBAC_ROLES  = r.roles; })
-    );
-}
-
-function fillDepartmentSelect($select, selectedId) {
-    $select.empty().append('<option value="">- No department -</option>');
-    DEPARTMENTS.forEach(function(d) {
-        $select.append($('<option>').val(d.id).text(d.name));
+      $.getJSON('/api/users', function (r) { if (r.success) PEOPLE = r.users; }),
+      $.getJSON('/api/departments', function (r) { if (r.success) DEPARTMENTS = r.departments; }),
+      $.getJSON('/api/rbac/roles', function (r) { if (r.success) ROLES = r.roles; })
+    ).then(function () {
+      renderStats(); renderFilters(); renderPeople(); renderTree();
+      renderDepartments(); renderRoles();
     });
-    $select.val(selectedId || '');
-}
+  }
 
-// Roles are filtered to the chosen department, plus the company-wide ones.
-function fillRoleSelect($select, departmentId, selectedId) {
-    $select.empty().append('<option value="">- No role -</option>');
-    const deptId = departmentId ? String(departmentId) : '';
-    RBAC_ROLES.filter(function(r) {
-        if (!deptId) return true;
-        return String(r.department_id) === deptId || r.department_code === 'executive';
-    }).forEach(function(r) {
-        $select.append(
-            $('<option>').val(r.id).text(r.name + '  (' + (LEVEL_LABELS[r.level] || r.level) + ')')
-        );
+  function renderStats() {
+    $('#statPeople').text(PEOPLE.length);
+    $('#statDepts').text(DEPARTMENTS.length);
+    var used = {};
+    PEOPLE.forEach(function (p) { if (p.role_code) used[p.role_code] = 1; });
+    $('#statRoles').text(Object.keys(used).length + ' / ' + ROLES.length);
+    $('#statPricing').text(PEOPLE.filter(function (p) { return p.is_pricing; }).length);
+    $('#statUnassigned').text(PEOPLE.filter(function (p) { return !p.rbac_role_id; }).length);
+  }
+
+  // ---- people table -------------------------------------------------------
+  function renderFilters() {
+    var $d = $('#fDept').empty().append('<option value="">All departments</option>');
+    DEPARTMENTS.forEach(function (d) { $d.append($('<option>').val(d.id).text(d.name)); });
+    var $r = $('#fRole').empty().append('<option value="">All roles</option>');
+    ROLES.forEach(function (r) { $r.append($('<option>').val(r.id).text(r.name)); });
+  }
+
+  function visiblePeople() {
+    var q = ($('#qPeople').val() || '').toLowerCase().trim();
+    var dept = $('#fDept').val(), role = $('#fRole').val(), pricing = $('#fPricing').val();
+    return PEOPLE.filter(function (p) {
+      if (dept && String(p.department_id) !== dept) return false;
+      if (role && String(p.rbac_role_id) !== role) return false;
+      if (pricing !== '' && String(p.is_pricing ? 1 : 0) !== pricing) return false;
+      if (!q) return true;
+      return [p.name, p.username, p.mobile, p.email, p.role_name]
+        .some(function (v) { return String(v || '').toLowerCase().indexOf(q) !== -1; });
     });
-    $select.val(selectedId || '');
-}
+  }
 
-// Only people more senior than the selected role may be its manager.
-function fillManagerSelect($select, roleId, selectedId, excludeUserId) {
-    $select.empty().append('<option value="">- Reports to nobody -</option>');
-    if (!roleId) { $select.val(''); return $.Deferred().resolve(); }
-    const params = { role_id: roleId };
-    if (excludeUserId) params.exclude_user_id = excludeUserId;
-    return $.getJSON('/api/rbac/managers', params, function(r) {
-        if (!r.success) return;
-        r.managers.forEach(function(m) {
-            $select.append($('<option>').val(m.id).text(m.name + '  -  ' + m.role_name));
-        });
-        $select.val(selectedId || '');
-    });
-}
-
-// Wire a Department -> Role -> Manager cascade for one modal.
-function bindHierarchyCascade(prefix, excludeUserId) {
-    const $dept = $('#' + prefix + '_department_id');
-    const $role = $('#' + prefix + '_rbac_role_id');
-    const $manager = $('#' + prefix + '_manager_id');
-
-    $dept.off('change.hierarchy').on('change.hierarchy', function() {
-        fillRoleSelect($role, $dept.val(), null);
-        fillManagerSelect($manager, null, null, excludeUserId);
-    });
-    $role.off('change.hierarchy').on('change.hierarchy', function() {
-        fillManagerSelect($manager, $role.val(), null, excludeUserId);
-    });
-}
-
-function hierarchyPayload(prefix) {
-    const val = id => { const v = $('#' + prefix + '_' + id).val(); return v === '' ? null : v; };
-    return {
-        department_id: val('department_id'),
-        rbac_role_id:  val('rbac_role_id'),
-        manager_id:    val('manager_id'),
-        is_pricing:    $('#' + prefix + '_is_pricing').is(':checked')
-    };
-}
-
-const USER_TABLE_COLUMNS = [
-    'ID', 'Name', 'Mobile', 'Email', 'Department', 'Role', 'Pricing', 'Reports To',
-    'Team ID', 'Team Name', 'Team Department', 'Username', 'Title',
-    'Added By', 'Date', 'Modified Date'
-];
-
-function badge(text, cls) {
-    if (!text) return '<span class="text-muted">-</span>';
-    return '<span class="badge badge-' + cls + '">' + text + '</span>';
-}
-
-// Keyed by id so the edit modal reads real values instead of scraping cell
-// text, which silently breaks whenever a column is added.
-const USERS_BY_ID = {};
-
-// Single source of truth for a users-table row, minus the actions cell.
-function userRowCells(user) {
-    USERS_BY_ID[user.id] = user;
-    return [
-        user.id,
-        user.name,
-        user.mobile,
-        user.email,
-        badge(user.rbac_department_name, 'info'),
-        badge(user.role_name, user.role_level === 0 ? 'dark'
-                            : user.role_level === 1 ? 'primary'
-                            : user.role_level === 2 ? 'secondary' : 'light'),
-        user.is_pricing ? '<span class="badge badge-warning">Pricing</span>'
-                        : '<span class="text-muted">-</span>',
-        user.manager_name || '<span class="text-muted">-</span>',
-        user.team_id,
-        user.team_name,
-        user.department_name,
-        user.username,
-        user.title,
-        user.added_by,
-        user.date,
-        user.modified_date
-    ];
-}
-
-// Render the toggle-switch checkboxes inside a container element
-
-// Read the values of all checked switches inside container
-
-// Pre-check switches based on a roles array (e.g., when opening the edit modal)
-
-function populateTeamDropdown() {
-    $.getJSON('/api/teams', function(response) {
-        if (response.success && response.teams) {
-            const $teamSelect = $('#team_id');
-            const currentVal = $teamSelect.val();
-            $teamSelect.empty();
-            $teamSelect.append('<option value="">Select a team</option>');
-            response.teams.forEach(function(team) {
-                $teamSelect.append(`<option value="${team.team_id}">${team.team_name}</option>`);
-            });
-            // Try to restore previous selection if possible
-            if (currentVal) $teamSelect.val(currentVal);
-        }
-    });
-}
-
-function loadTeamsTable() {
-    $.getJSON('/api/teams', function(response) {
-        if (response.success) {
-            const teams = response.teams.map(team => [
-                team.team_id,
-                team.team_name,
-                team.department_name || '',
-                team.roles,
-                `<button class="btn btn-info btn-sm edit-team" data-id="${team.team_id}" data-name="${team.team_name}" data-department="${team.department_name || ''}"><i class="fas fa-edit"></i> Edit</button>`
-            ]);
-            if ($.fn.DataTable.isDataTable('#teams-table')) {
-                $('#teams-table').DataTable().clear().rows.add(teams).draw();
-            } else {
-                $('#teams-table').DataTable({
-                    data: teams,
-                    columns: [
-                        { title: "ID" },
-                        { title: "Team Name" },
-                        { title: "Department Name" },
-
-                        { title: "Roles" },
-                        { title: "Actions", orderable: false, searchable: false }
-                    ],
-                    dom: 'Bfrtip',
-                    buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
-                    pageLength: 10,
-                    order: [[0, 'desc']],
-                    responsive: true
-                });
-            }
-        }
-    });
-}
-
-// Add this function to handle table loading/reloading
-function loadUsersTable() {
-    $.getJSON('/api/users', function(response) {
-        if (response.success) {
-            const users = response.users.map(user => [
-                ...userRowCells(user),
-                `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
-                    <i class="fas fa-edit"></i> Edit
-                </button>
-                <button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
-                    <i class="fas fa-trash"></i> Delete
-                </button>`
-            ]);
-
-            if ($.fn.DataTable.isDataTable('#users-table')) {
-                $('#users-table').DataTable().clear().rows.add(users).draw();
-            } else {
-                $('#users-table').DataTable({
-                    data: users,
-                    columns: [
-                        ...USER_TABLE_COLUMNS.map(t => ({ title: t })),
-                        { title: "Actions", orderable: false, searchable: false }
-                    ],
-                    dom: 'Bfrtip',
-                    buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
-                    pageLength: 10,
-                    order: [[0, 'desc']],
-                    responsive: true
-                });
-            }
-        }
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Departments card
-// ---------------------------------------------------------------------------
-function renderDepartments() {
-    const $body = $('#departments-table tbody').empty();
-    if (!DEPARTMENTS.length) {
-        $body.append('<tr><td colspan="5" class="text-muted text-center">No departments yet.</td></tr>');
-        return;
+  function renderPeople() {
+    var rows = visiblePeople();
+    $('#peopleCount').text(rows.length + ' of ' + PEOPLE.length + ' shown');
+    var $b = $('#peopleBody').empty();
+    if (!rows.length) {
+      $b.append('<tr><td colspan="7" class="empty">Nobody matches those filters.</td></tr>');
+      return;
     }
-    DEPARTMENTS.forEach(function(d) {
-        $body.append(
-            '<tr>' +
-            '<td><code>' + d.code + '</code></td>' +
-            '<td>' + d.name + '</td>' +
-            '<td>' + d.team_count + '</td>' +
-            '<td>' + d.user_count + '</td>' +
-            '<td><button class="btn btn-sm btn-info rename-department" ' +
-                'data-id="' + d.id + '" data-name="' + d.name + '">' +
-                '<i class="fas fa-edit"></i> Rename</button></td>' +
-            '</tr>'
-        );
+    rows.forEach(function (p) {
+      var lvl = p.role_level === null || p.role_level === undefined ? 3 : p.role_level;
+      $b.append(
+        '<tr>' +
+        '<td><div class="who"><div class="avatar">' + esc(initials(p.name)) + '</div>' +
+          '<div><div class="nm">' + esc(p.name) + '</div>' +
+          '<div class="un">@' + esc(p.username) + '</div></div></div></td>' +
+        '<td>' + (p.rbac_department_name
+            ? '<span class="pill pill-dept">' + esc(p.rbac_department_name) + '</span>'
+            : '<span class="muted">-</span>') + '</td>' +
+        '<td>' + (p.role_name
+            ? '<span class="pill pill-l' + lvl + '">' + esc(p.role_name) + '</span>'
+            : '<span class="muted">No role</span>') + '</td>' +
+        '<td>' + (p.manager_name ? esc(p.manager_name) : '<span class="muted">-</span>') + '</td>' +
+        '<td>' + (p.is_pricing ? '<span class="pill pill-price">Pricing</span>'
+                               : '<span class="muted">-</span>') + '</td>' +
+        '<td><div>' + esc(p.mobile) + '</div>' +
+          '<div class="un muted">' + esc(p.email) + '</div></td>' +
+        '<td class="row-actions text-right">' + (CAN_EDIT
+            ? '<button class="edit-person" data-id="' + p.id + '">Edit</button> ' +
+              (p.id === 1 ? '' : '<button class="danger del-person" data-id="' + p.id + '">Delete</button>')
+            : '') + '</td>' +
+        '</tr>');
     });
-}
+  }
 
-$(document).on('click', '.rename-department', function() {
-    const id = $(this).data('id');
-    Swal.fire({
-        title: 'Rename department',
-        input: 'text',
-        inputValue: $(this).data('name'),
-        showCancelButton: true
-    }).then(function(result) {
-        if (!result.isConfirmed || !result.value) return;
-        $.ajax({
-            url: '/api/departments/' + id,
-            method: 'PUT',
-            contentType: 'application/json',
-            data: JSON.stringify({ name: result.value }),
-            success: function(r) {
-                if (r.success) {
-                    loadHierarchyRefData().done(renderDepartments);
-                } else {
-                    Swal.fire('Error', r.error || 'Rename failed', 'error');
-                }
-            }
-        });
+  $(document).on('input change', '#qPeople, #fDept, #fRole, #fPricing', renderPeople);
+
+  // ---- org chart ----------------------------------------------------------
+  function renderTree() {
+    var byManager = {};
+    PEOPLE.forEach(function (p) {
+      var key = p.manager_id === null || p.manager_id === undefined ? 'root' : p.manager_id;
+      (byManager[key] = byManager[key] || []).push(p);
     });
-});
+    function node(p) {
+      var lvl = p.role_level === null || p.role_level === undefined ? 3 : p.role_level;
+      var kids = byManager[p.id] || [];
+      return '<li><span class="node"><span class="avatar">' + esc(initials(p.name)) + '</span>' +
+        '<span><span class="nm">' + esc(p.name) + '</span> ' +
+        '<span class="pill pill-l' + lvl + '">' + esc(p.role_name || 'No role') + '</span>' +
+        (p.is_pricing ? ' <span class="pill pill-price">Pricing</span>' : '') +
+        '<br><small>' + esc(p.rbac_department_name || 'No department') + '</small></span></span>' +
+        (kids.length ? '<ul>' + kids.map(node).join('') + '</ul>' : '') + '</li>';
+    }
+    var roots = byManager['root'] || [];
+    $('#orgTree').html(roots.length ? roots.map(node).join('')
+      : '<p class="empty">Nobody has been placed yet.</p>');
+  }
 
-$(document).on('submit', '#addDepartmentForm', function(e) {
+  // ---- departments --------------------------------------------------------
+  function renderDepartments() {
+    var $g = $('#deptGrid').empty();
+    if (!DEPARTMENTS.length) { $g.append('<p class="empty">No departments yet.</p>'); return; }
+    DEPARTMENTS.forEach(function (d) {
+      var people = PEOPLE.filter(function (p) { return p.department_id === d.id; }).length;
+      $g.append(
+        '<div class="dept"><h4>' + esc(d.name) + '</h4><code>' + esc(d.code) + '</code>' +
+        '<div class="n">' + people + ' ' + (people === 1 ? 'person' : 'people') + '</div>' +
+        {% if 'department.edit' in _p %}
+        '<button class="mt-2 rename-dept" data-id="' + d.id + '" data-name="' + esc(d.name) + '"' +
+        ' style="border:1px solid #e3e6f0;background:#fff;border-radius:5px;padding:.25rem .6rem;' +
+        'font-size:.78rem;cursor:pointer">Rename</button>' +
+        {% endif %}
+        '</div>');
+    });
+  }
+
+  // ---- roles --------------------------------------------------------------
+  var SCOPE_TEXT = { own: 'their own records', team: "their team's records",
+                     department: "the whole department's records", all: 'everything' };
+
+  function renderRoles() {
+    var $l = $('#roleList').empty();
+    ROLES.forEach(function (r) {
+      var n = PEOPLE.filter(function (p) { return p.rbac_role_id === r.id; }).length;
+      $l.append('<button type="button" class="role-item" data-id="' + r.id + '">' +
+        '<div class="rn">' + esc(r.name) + '</div>' +
+        '<div class="rd">' + esc(r.department_name || 'Company-wide') + ' &middot; ' +
+        esc(LEVEL[r.level]) + ' &middot; ' + r.permission_count + ' permissions &middot; ' +
+        n + ' ' + (n === 1 ? 'person' : 'people') + '</div></button>');
+    });
+  }
+
+  $(document).on('click', '.role-item', function () {
+    $('.role-item').removeClass('on'); $(this).addClass('on');
+    showRolePermissions($(this).data('id'), '#rolePerms');
+  });
+
+  function showRolePermissions(roleId, target) {
+    var $out = $(target);
+    if (!roleId) { $out.html('<p class="empty">Select a role.</p>'); return; }
+    $.getJSON('/api/rbac/roles/' + roleId + '/permissions', function (r) {
+      if (!r.success) { $out.html('<p class="empty">' + esc(r.error || 'Failed') + '</p>'); return; }
+      if (!r.permissions.length) { $out.html('<p class="empty">This role holds no permissions.</p>'); return; }
+      var html = '<h5 class="mb-2">' + esc(r.role.name) + '</h5><table class="perms"><tbody>';
+      r.permissions.forEach(function (p) {
+        html += '<tr><td><code>' + esc(p.permission_code) + '</code><br>' +
+          '<small class="muted">' + esc(p.description) + '</small></td>' +
+          '<td class="text-right"><span class="scope">' + esc(p.scope) + '</span><br>' +
+          '<small class="muted">' + esc(SCOPE_TEXT[p.scope] || '') + '</small></td></tr>';
+      });
+      $out.html(html + '</tbody></table>');
+    });
+  }
+
+  // ---- tabs ---------------------------------------------------------------
+  $(document).on('click', '.tabs button', function () {
+    $('.tabs button').removeClass('on'); $(this).addClass('on');
+    $('.panel').removeClass('on');
+    $('#panel-' + $(this).data('panel')).addClass('on');
+  });
+
+  // ---- the person modal ---------------------------------------------------
+  function fillDepartments(selected) {
+    var $s = $('#p_department_id').empty().append('<option value="">- No department -</option>');
+    DEPARTMENTS.forEach(function (d) { $s.append($('<option>').val(d.id).text(d.name)); });
+    $s.val(selected || '');
+  }
+  function fillRoles(departmentId, selected) {
+    var $s = $('#p_rbac_role_id').empty().append('<option value="">- No role -</option>');
+    var dept = departmentId ? String(departmentId) : '';
+    ROLES.filter(function (r) {
+      return !dept || String(r.department_id) === dept || r.department_code === 'executive';
+    }).forEach(function (r) {
+      $s.append($('<option>').val(r.id).text(r.name + '  (' + LEVEL[r.level] + ')'));
+    });
+    $s.val(selected || '');
+  }
+  function fillManagers(roleId, selected, excludeUserId) {
+    var $s = $('#p_manager_id').empty().append('<option value="">- Reports to nobody -</option>');
+    if (!roleId) { return $.Deferred().resolve(); }
+    var params = { role_id: roleId };
+    if (excludeUserId) { params.exclude_user_id = excludeUserId; }
+    return $.getJSON('/api/rbac/managers', params, function (r) {
+      if (!r.success) { return; }
+      r.managers.forEach(function (m) {
+        $s.append($('<option>').val(m.id).text(m.name + '  -  ' + m.role_name));
+      });
+      $s.val(selected || '');
+    });
+  }
+
+  $(document).on('change', '#p_department_id', function () {
+    fillRoles($(this).val(), null); fillManagers(null, null); $('#rolePreview').empty();
+  });
+  $(document).on('change', '#p_rbac_role_id', function () {
+    fillManagers($(this).val(), null, $('#p_id').val() || null);
+    showRolePermissions($(this).val(), '#rolePreview');
+  });
+
+  function openPerson(person) {
+    var editing = !!person;
+    $('#personModalTitle').text(editing ? 'Edit ' + person.name : 'Add person');
+    $('#p_id').val(editing ? person.id : '');
+    $('#p_name').val(editing ? person.name : '');
+    $('#p_title').val(editing ? person.title : '');
+    $('#p_mobile').val(editing ? person.mobile : '');
+    $('#p_email').val(editing ? person.email : '');
+    $('#p_username').val(editing ? person.username : '');
+    $('#p_password').val('');
+    $('#p_password').prop('required', !editing);
+    $('#passwordHint').text(editing ? 'Leave blank to keep the current password.'
+                                    : 'Required. They sign in with their mobile number.');
+    $('#p_is_pricing').prop('checked', editing ? !!person.is_pricing : false);
+    fillDepartments(editing ? person.department_id : null);
+    fillRoles(editing ? person.department_id : null, editing ? person.rbac_role_id : null);
+    fillManagers(editing ? person.rbac_role_id : null,
+                 editing ? person.manager_id : null,
+                 editing ? person.id : null);
+    showRolePermissions(editing ? person.rbac_role_id : null, '#rolePreview');
+    $('#personModal').modal('show');
+  }
+
+  $(document).on('click', '#btnAddPerson', function () { openPerson(null); });
+  $(document).on('click', '.edit-person', function () {
+    var id = $(this).data('id');
+    var person = PEOPLE.filter(function (p) { return p.id === id; })[0];
+    if (person) { openPerson(person); }
+  });
+
+  $(document).on('click', '#btnGenPassword', function () {
+    var chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var out = '';
+    var buf = new Uint32Array(12);
+    window.crypto.getRandomValues(buf);
+    for (var i = 0; i < 12; i++) { out += chars[buf[i] % chars.length]; }
+    $('#p_password').attr('type', 'text').val(out);
+    Swal.fire({ icon: 'info', title: 'Password generated',
+                text: 'Copy it now - it is stored hashed and cannot be read back.' });
+  });
+
+  $(document).on('submit', '#personForm', function (e) {
     e.preventDefault();
-    $.ajax({
-        url: '/api/departments',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-            code: $('#department_code').val(),
-            name: $('#department_name_new').val()
-        }),
-        success: function(r) {
-            if (!r.success) { Swal.fire('Error', r.error || 'Create failed', 'error'); return; }
-            $('#addDepartmentModal').modal('hide');
-            $('#addDepartmentForm')[0].reset();
-            loadHierarchyRefData().done(renderDepartments);
-            Swal.fire('Success', 'Department created', 'success');
-        }
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Role inspector
-// ---------------------------------------------------------------------------
-const SCOPE_HELP = {
-    own: 'their own records',
-    team: "their team's records",
-    department: "the whole department's records",
-    all: 'everything'
-};
-
-function renderRoleInspector() {
-    const $select = $('#role_inspector').empty();
-    RBAC_ROLES.forEach(function(r) {
-        $select.append($('<option>').val(r.id).text(
-            (r.department_name ? r.department_name + ' - ' : '') + r.name +
-            '  (' + r.permission_count + ' permissions)'
-        ));
-    });
-    showRolePermissions($select.val());
-}
-
-function showRolePermissions(roleId) {
-    const $out = $('#role_permissions');
-    if (!roleId) { $out.empty(); return; }
-    $.getJSON('/api/rbac/roles/' + roleId + '/permissions', function(r) {
-        if (!r.success) { $out.html('<div class="text-danger">' + (r.error || 'Failed') + '</div>'); return; }
-        if (!r.permissions.length) {
-            $out.html('<div class="text-muted">This role holds no permissions.</div>');
-            return;
-        }
-        let html = '<table class="table table-sm table-striped mb-0"><thead><tr>' +
-                   '<th>Permission</th><th>Applies to</th></tr></thead><tbody>';
-        r.permissions.forEach(function(p) {
-            html += '<tr><td><code>' + p.permission_code + '</code><br>' +
-                    '<small class="text-muted">' + p.description + '</small></td>' +
-                    '<td><span class="badge badge-secondary">' + p.scope + '</span><br>' +
-                    '<small class="text-muted">' + (SCOPE_HELP[p.scope] || '') + '</small></td></tr>';
-        });
-        $out.html(html + '</tbody></table>');
-    });
-}
-
-$(document).on('change', '#role_inspector', function() {
-    showRolePermissions($(this).val());
-});
-
-$(document).ready(function() {
-    // Reference data first: the modals and cards all depend on it.
-    loadHierarchyRefData().done(function() {
-        renderDepartments();
-        renderRoleInspector();
-        fillDepartmentSelect($('#add_department_id'), null);
-        fillRoleSelect($('#add_rbac_role_id'), null, null);
-        fillManagerSelect($('#add_manager_id'), null, null);
-        bindHierarchyCascade('add');
-        $('#add_is_pricing').prop('checked', false);
-    });
-
-    $.getJSON('/api/users', function(response) {
-        if (response.success) {
-            const users = response.users.map(user => [
-                ...userRowCells(user),
-                `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
-                    <i class="fas fa-edit"></i> Edit
-                </button>
-                <button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
-                    <i class="fas fa-trash"></i> Delete
-                </button>`
-            ]);
-            if ($.fn.DataTable.isDataTable('#users-table')) {
-                $('#users-table').DataTable().clear().rows.add(users).draw();
-            } else {
-                $('#users-table').DataTable({
-                    data: users,
-                    columns: [
-                        ...USER_TABLE_COLUMNS.map(t => ({ title: t })),
-                        { title: "Actions", orderable: false, searchable: false }
-                    ],
-                    dom: 'Bfrtip',
-                    buttons: [
-                        'copy', 'csv', 'excel', 'pdf', 'print'
-                    ],
-                    pageLength: 25,
-                    order: [[0, 'desc']], // Sort by ID in descending order
-                    responsive: true,
-                    language: {
-                        search: "Search users:",
-                        lengthMenu: "Show _MENU_ users per page",
-                        info: "Showing _START_ to _END_ of _TOTAL_ users"
-                    }
-                });
-            }
-        } else {
-            alert('Failed to load users: ' + (response.error || 'Unknown error'));
-        }
-    }).fail(function(jqXHR, textStatus, errorThrown) {
-        console.error('Error fetching users:', textStatus, errorThrown);
-        alert('Failed to load users. Please try again later.');
-    });
-
-    // Load teams table on page load
-    loadTeamsTable();
-
-    // Initialize Select2 for edit_roles_select ONCE on page load
-    $('#edit_roles_select').select2({
-        placeholder: 'Select roles',
-        width: '100%'
-    });
-
-    // Always repopulate and set selected roles in the edit modal
-    function populateEditRolesSelect(selectedRoles) {
-        const $editRoles = $('#edit_roles_select');
-        $editRoles.empty();
-        // Ensure all selectedRoles are strings and trimmed
-        const cleanSelected = (selectedRoles || []).map(r => String(r).trim());
-        $editRoles.val(cleanSelected).trigger('change');
+    var id = $('#p_id').val();
+    var payload = {
+      name: $('#p_name').val(), title: $('#p_title').val(),
+      mobile: $('#p_mobile').val(), email: $('#p_email').val(),
+      username: $('#p_username').val(),
+      department_id: $('#p_department_id').val() || null,
+      rbac_role_id: $('#p_rbac_role_id').val() || null,
+      manager_id: $('#p_manager_id').val() || null,
+      is_pricing: $('#p_is_pricing').is(':checked')
+    };
+    var password = $('#p_password').val();
+    if (password) { payload.password = password; }
+    if (!id && !password) {
+      Swal.fire('Password required', 'New accounts need a password.', 'error');
+      return;
     }
-
-    // Handle edit team button click
-    $(document).on('click', '.edit-team', function() {
-        const teamId = $(this).data('id');
-        const teamName = $(this).data('name');
-        const departmentName = $(this).data('department');
-        $('#edit_team_id').val(teamId);
-        $('#edit_team_name').val(teamName);
-        $('#edit_department_name').val(departmentName);
-        // Teams are now labels only; access comes from the user's role.
-        const $row = $(this).closest('tr');
-        const rolesStr = $row.find('td').eq(3).text();
-        populateEditRolesSelect(rolesStr.split(',').map(r => r.trim()).filter(r => r.length > 0));
-        $('#editTeamModal').modal('show');
+    $.ajax({
+      url: id ? '/api/users/edit/' + id : '/api/users/add',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function (r) {
+      if (!r.success) { Swal.fire('Could not save', r.error || 'Unknown error', 'error'); return; }
+      $('#personModal').modal('hide');
+      loadAll();
+      Swal.fire({ icon: 'success', title: id ? 'Saved' : 'Person added', timer: 1400,
+                  showConfirmButton: false });
+    }).fail(function (xhr) {
+      Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
     });
+  });
 
-    // Handle edit team form submission
-    $('#editTeamForm').on('submit', function(e) {
-        e.preventDefault();
-        const teamId = $('#edit_team_id').val();
-        const teamName = $('#edit_team_name').val();
-        const departmentName = $('#edit_department_name').val();
-        const roles = $('#edit_roles_select').val() || [];
-        $.ajax({
-            url: `/api/teams/edit/${teamId}`,
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ team_name: teamName, department_name: departmentName, roles: roles }),
-            success: function(response) {
-                if (response.success) {
-                    $('#editTeamModal').modal('hide');
-                    loadTeamsTable();
-                    populateTeamDropdown();
-                    Swal.fire('Updated!', 'Team has been updated.', 'success');
-                } else {
-                    Swal.fire('Error!', response.error || 'Failed to update team', 'error');
-                }
-            },
-            error: function(xhr, status, error) {
-                Swal.fire('Error!', 'Failed to update team', 'error');
-                console.error('Error:', error);
-            }
+  $(document).on('click', '.del-person', function () {
+    var id = $(this).data('id');
+    var person = PEOPLE.filter(function (p) { return p.id === id; })[0] || {};
+    var reports = PEOPLE.filter(function (p) { return p.manager_id === id; });
+    Swal.fire({
+      title: 'Delete ' + (person.name || 'this person') + '?',
+      html: reports.length
+        ? '<b>' + reports.length + '</b> ' + (reports.length === 1 ? 'person reports' : 'people report') +
+          ' to them. They will be left without a manager until you reassign them.'
+        : 'This cannot be undone.',
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#c0392b',
+      confirmButtonText: 'Delete'
+    }).then(function (result) {
+      if (!result.isConfirmed) { return; }
+      $.ajax({ url: '/api/users/delete/' + id, method: 'DELETE' }).done(function (r) {
+        if (!r.success) { Swal.fire('Could not delete', r.error || '', 'error'); return; }
+        loadAll();
+        Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false });
+      }).fail(function (xhr) {
+        Swal.fire('Could not delete', (xhr.responseJSON || {}).error || 'Request failed', 'error');
+      });
+    });
+  });
+
+  // ---- departments --------------------------------------------------------
+  $(document).on('click', '#btnAddDept', function () {
+    Swal.fire({
+      title: 'Add department', html:
+        '<input id="sw_name" class="swal2-input" placeholder="Name, e.g. Procurement">' +
+        '<input id="sw_code" class="swal2-input" placeholder="Code, e.g. procurement">',
+      showCancelButton: true, confirmButtonText: 'Create',
+      preConfirm: function () {
+        return { name: $('#sw_name').val(), code: $('#sw_code').val() };
+      }
+    }).then(function (result) {
+      if (!result.isConfirmed || !result.value.name || !result.value.code) { return; }
+      $.ajax({ url: '/api/departments', method: 'POST', contentType: 'application/json',
+               data: JSON.stringify(result.value) })
+        .done(function (r) {
+          if (!r.success) { Swal.fire('Could not create', r.error || '', 'error'); return; }
+          loadAll();
         });
     });
+  });
 
-    // Handle delete user
-    $(document).on('click', '.delete-user', function() {
-        const userId = $(this).data('id');
-        
-        Swal.fire({
-            title: 'Are you sure?',
-            text: "You won't be able to revert this!",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Yes, delete it!'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                $.ajax({
-                    url: `/api/users/delete/${userId}`,
-                    method: 'DELETE',
-                    success: function(response) {
-                        if (response.success) {
-                            // Refresh the table
-                            $.getJSON('/api/users', function(response) {
-                                if (response.success) {
-                                    const users = response.users.map(user => [
-                                        ...userRowCells(user),
-                                        `<button class=\"btn btn-danger btn-sm delete-user\" data-id=\"${user.id}\"><i class=\"fas fa-trash\"></i> Delete</button>`
-                                    ]);
-                                    const table = $('#users-table').DataTable();
-                                    table.clear().rows.add(users).draw();
-                                }
-                            });
-                            
-                            Swal.fire(
-                                'Deleted!',
-                                'User has been deleted.',
-                                'success'
-                            );
-                        } else {
-                            Swal.fire(
-                                'Error!',
-                                response.error || 'Failed to delete user',
-                                'error'
-                            );
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        Swal.fire(
-                            'Error!',
-                            'Failed to delete user',
-                            'error'
-                        );
-                        console.error('Error:', error);
-                    }
-                });
-            }
-        });
-    });
+  $(document).on('click', '.rename-dept', function () {
+    var id = $(this).data('id');
+    Swal.fire({ title: 'Rename department', input: 'text', inputValue: $(this).data('name'),
+                showCancelButton: true })
+      .then(function (result) {
+        if (!result.isConfirmed || !result.value) { return; }
+        $.ajax({ url: '/api/departments/' + id, method: 'PUT', contentType: 'application/json',
+                 data: JSON.stringify({ name: result.value }) })
+          .done(function (r) {
+            if (!r.success) { Swal.fire('Could not rename', r.error || '', 'error'); return; }
+            loadAll();
+          });
+      });
+  });
 
-    $('#addUserForm').on('submit', function(e) {
-        e.preventDefault();
-        
-        // Validate password match
-        if ($('#password').val() !== $('#confirmPassword').val()) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Validation Error',
-                text: 'Passwords do not match!'
-            });
-            return;
-        }
-
-        const rawTeamId = $('#team_id').val();
-        const userData = {
-            name: $('#name').val(),
-            username: $('#username').val(),
-            title: $('#title').val(),
-            team_id: rawTeamId && rawTeamId !== '' ? rawTeamId : null,
-            mobile: $('#mobile').val(),
-            email: $('#email').val(),
-            password: $('#password').val(),
-            ...hierarchyPayload('add')
-        };
-
-        $.ajax({
-            url: '/api/users/add',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(userData),
-            success: function(response) {
-                if (response.success) {
-                    // Close modal, reset form and clean up modal artifacts
-                    $('#addUserModal').modal('hide');
-                    $('#addUserForm')[0].reset();
-                    $('body').removeClass('modal-open');
-                    $('.modal-backdrop').remove();
-                    
-                    // Refresh the table by fetching data again
-                    $.getJSON('/api/users', function(response) {
-                        if (response.success) {
-                            const users = response.users.map(user => [
-                                ...userRowCells(user),
-                                `<button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
-                                    <i class="fas fa-trash"></i> Delete
-                                </button>`
-                            ]);
-                            const table = $('#users-table').DataTable();
-                            table.clear().rows.add(users).draw();
-                        }
-                    });
-                    
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success',
-                        text: 'User added successfully!'
-                    });
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: response.error || 'Failed to add user'
-                    });
-                }
-            },
-            error: function(xhr, status, error) {
-                let errorMessage = 'Failed to add user';
-                
-                // Try to get detailed error from response
-                if (xhr.responseJSON && xhr.responseJSON.error) {
-                    errorMessage = xhr.responseJSON.error;
-                }
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: errorMessage
-                });
-                console.error('Error:', error);
-            }
-        });
-    });
-
-    // Populate roles select2
-    $('#roles_select').select2({
-        placeholder: 'Select roles',
-        width: '100%'
-    });
-
-    // Render the module-access toggle switches in all 4 modals (one-time)
-
-
-    // Handle add team form submission (AJAX to backend)
-    $('#addTeamForm').on('submit', function(e) {
-        e.preventDefault();
-        const teamData = {
-            team_name: $('#team_name').val(),
-            department_name: $('#department_name').val(),
-            roles: $('#roles_select').val() || []
-        };
-        $.ajax({
-            url: '/create_team',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(teamData),
-            success: function(response) {
-                if (response.status === 'success') {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Team Created',
-                        text: response.message
-                    });
-                    $('#addTeamModal').modal('hide');
-                    setTimeout(function() {
-                        $('body').removeClass('modal-open');
-                        $('.modal-backdrop').remove();
-                        populateTeamDropdown(); // Refresh team dropdown after adding a team
-                    }, 400);
-                    $('#addTeamForm')[0].reset();
-                    $('#roles_select').val(null).trigger('change');
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: response.message || 'Failed to create team.'
-                    });
-                }
-            },
-            error: function(xhr) {
-                let msg = 'Failed to create team.';
-                if (xhr.responseJSON && xhr.responseJSON.message) {
-                    msg = xhr.responseJSON.message;
-                }
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: msg
-                });
-            }
-        });
-    });
-
-    // Populate team dropdown on page load
-    populateTeamDropdown();
-
-    // When Add User modal is shown, refresh the team dropdown
-    $('#addUserModal').on('show.bs.modal', function() {
-        populateTeamDropdown();
-    });
-
-    // Handle edit user button click (ensure listener works after DataTable redraws)
-    $('#users-table').on('click', '.edit-user', function() {
-        const userId = $(this).data('id');
-        const userData = USERS_BY_ID[userId];
-        if (!userData) { Swal.fire('Error', 'User data not loaded', 'error'); return; }
-
-        $('#edit_user_id').val(userData.id);
-        $('#edit_user_name').val(userData.name);
-        $('#edit_user_mobile').val(userData.mobile);
-        $('#edit_user_email').val(userData.email);
-        $('#edit_user_username').val(userData.username);
-        $('#edit_user_title').val(userData.title);
-        $('#edit_user_password').val('');
-
-        // Position in the organisation, cascading department -> role -> manager.
-        fillDepartmentSelect($('#edit_department_id'), userData.department_id);
-        fillRoleSelect($('#edit_rbac_role_id'), userData.department_id, userData.rbac_role_id);
-        fillManagerSelect($('#edit_manager_id'), userData.rbac_role_id, userData.manager_id, userId);
-        $('#edit_is_pricing').prop('checked', !!userData.is_pricing);
-        bindHierarchyCascade('edit', userId);
-
-        $('#editUserModal').modal('show');
-    });
-
-    // Handle edit user form submission
-    $('#editUserForm').on('submit', function(e) {
-        e.preventDefault();
-        const userId = $('#edit_user_id').val();
-        const userData = {
-            name: $('#edit_user_name').val(),
-            mobile: $('#edit_user_mobile').val(),
-            email: $('#edit_user_email').val(),
-            username: $('#edit_user_username').val(),
-            password: $('#edit_user_password').val(),
-            title: $('#edit_user_title').val(),
-            ...hierarchyPayload('edit')
-        };
-
-        $.ajax({
-            url: `/api/users/edit/${userId}`,
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(userData),
-            success: function(response) {
-                if (response.success) {
-                    $('#editUserModal').modal('hide');
-                    loadUsersTable();
-                    Swal.fire('Updated!', 'User has been updated.', 'success');
-                } else {
-                    Swal.fire('Error!', response.error || 'Failed to update user', 'error');
-                }
-            },
-            error: function(xhr, status, error) {
-                Swal.fire('Error!', 'Failed to update user', 'error');
-                console.error('Error:', error);
-            }
-        });
-    });
-});
+  $(document).ready(loadAll);
+})();
 </script>
 
-<!-- Add User Modal -->
-<div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <form id="addUserForm">
-                    <div class="form-group">
-                        <label for="name">Name</label>
-                        <input type="text" class="form-control" id="name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="username">Username</label>
-                        <input type="text" class="form-control" id="username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="title">Title</label>
-                        <input type="text" class="form-control" id="title" required>
-                    </div>
-                    <div class="border rounded p-3 mb-3 bg-light">
-                        <label class="font-weight-bold d-block mb-2">
-                            <i class="fas fa-sitemap text-primary mr-1"></i>Position in the organisation
-                        </label>
-                        <div class="form-group">
-                            <label for="add_department_id">Department</label>
-                            <select class="form-control" id="add_department_id"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="add_rbac_role_id">Role</label>
-                            <select class="form-control" id="add_rbac_role_id"></select>
-                            <small class="form-text text-muted">The role decides what this person can do. Pick the department first.</small>
-                        </div>
-                        <div class="form-group mb-0">
-                            <label for="add_manager_id">Reports to</label>
-                            <select class="form-control" id="add_manager_id"></select>
-                            <small class="form-text text-muted">Only people in a more senior role are listed.</small>
-                        </div>
-                        <div class="form-group mb-0 mt-3 pt-3" style="border-top:1px solid #e3e6f0">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="add_is_pricing">
-                                <label class="custom-control-label" for="add_is_pricing">
-                                    <i class="fas fa-tags text-warning mr-1"></i><strong>Pricing</strong>
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">
-                                Lets this person set selling prices and decide re-pricing, whatever their role.
-                                Everyone else never sees the pricing controls.
-                            </small>
-                        </div>
-
-                    </div>
-                    <div class="form-group">
-                        <label for="team_id">Team</label>
-                        <select class="form-control" id="team_id">
-                            <option value="">Select a team (optional)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="mobile">Mobile</label>
-                        <input type="tel" class="form-control" id="mobile" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="email">Email</label>
-                        <input type="email" class="form-control" id="email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" class="form-control" id="password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="confirmPassword">Confirm Password</label>
-                        <input type="password" class="form-control" id="confirmPassword" required>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Add User</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+{% else %}
+<div class="container-fluid">
+  <div class="alert alert-danger mt-5">You do not have permission to view this page.</div>
 </div>
-
-<!-- Add Team Modal -->
-<!-- Add Department Modal -->
-<div class="modal fade" id="addDepartmentModal" tabindex="-1" role="dialog" aria-labelledby="addDepartmentModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <form id="addDepartmentForm">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addDepartmentModalLabel">Add Department</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="department_name_new">Name</label>
-                        <input type="text" class="form-control" id="department_name_new" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="department_code">Code</label>
-                        <input type="text" class="form-control" id="department_code" required
-                               placeholder="e.g. procurement">
-                        <small class="form-text text-muted">
-                            Lowercase, no spaces. Permanent once created - roles are attached to it.
-                        </small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-success">Create</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="addTeamModal" tabindex="-1" role="dialog" aria-labelledby="addTeamModalLabel" aria-hidden="true">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="addTeamModalLabel">Add New Team</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <form id="addTeamForm">
-          <div class="form-group">
-            <label for="team_name">Team Name</label>
-            <input type="text" class="form-control" id="team_name" name="team_name" required>
-          </div>
-          <div class="form-group">
-            <label for="department_name">Department Name</label>
-            <input type="text" class="form-control" id="department_name" name="department_name" required>
-          </div>
-          <div class="form-group">
-            <label for="roles_select">Roles</label>
-            <select id="roles_select" name="roles" class="form-control" multiple="multiple" style="width:100%">
-              <!-- Options will be populated by JS -->
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Add Team</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Edit Team Modal -->
-<div class="modal fade" id="editTeamModal" tabindex="-1" role="dialog" aria-labelledby="editTeamModalLabel" aria-hidden="true">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="editTeamModalLabel">Edit Team</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <form id="editTeamForm">
-          <input type="hidden" id="edit_team_id">
-          <div class="form-group">
-            <label for="edit_team_name">Team Name</label>
-            <input type="text" class="form-control" id="edit_team_name" required>
-          </div>
-          <div class="form-group">
-            <label for="edit_department_name">Department Name</label>
-            <input type="text" class="form-control" id="edit_department_name" required>
-          </div>
-          <div class="form-group">
-            <label for="edit_roles_select">Roles</label>
-            <select id="edit_roles_select" class="form-control" multiple="multiple" style="width:100%"></select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Edit User Modal -->
-<div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-labelledby="editUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <form id="editUserForm">
-                <div class="modal-body">
-                    <input type="hidden" id="edit_user_id">
-                    <div class="form-group">
-                        <label for="edit_user_name">Name</label>
-                        <input type="text" class="form-control" id="edit_user_name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit_user_mobile">Mobile</label>
-                        <input type="text" class="form-control" id="edit_user_mobile" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit_user_email">Email</label>
-                        <input type="email" class="form-control" id="edit_user_email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit_user_username">Username</label>
-                        <input type="text" class="form-control" id="edit_user_username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit_user_password">Password</label>
-                        <input type="password" class="form-control" id="edit_user_password" autocomplete="new-password">
-                        <small class="form-text text-muted">Leave blank to keep the current password.</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit_user_title">Title</label>
-                        <input type="text" class="form-control" id="edit_user_title">
-                    </div>
-                    <div class="border rounded p-3 mb-3 bg-light">
-                        <label class="font-weight-bold d-block mb-2">
-                            <i class="fas fa-sitemap text-primary mr-1"></i>Position in the organisation
-                        </label>
-                        <div class="form-group">
-                            <label for="edit_department_id">Department</label>
-                            <select class="form-control" id="edit_department_id"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="edit_rbac_role_id">Role</label>
-                            <select class="form-control" id="edit_rbac_role_id"></select>
-                        </div>
-                        <div class="form-group mb-0">
-                            <label for="edit_manager_id">Reports to</label>
-                            <select class="form-control" id="edit_manager_id"></select>
-                        </div>
-                        <div class="form-group mb-0 mt-3 pt-3" style="border-top:1px solid #e3e6f0">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="edit_is_pricing">
-                                <label class="custom-control-label" for="edit_is_pricing">
-                                    <i class="fas fa-tags text-warning mr-1"></i><strong>Pricing</strong>
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">
-                                Lets this person set selling prices and decide re-pricing, whatever their role.
-                                Everyone else never sees the pricing controls.
-                            </small>
-                        </div>
-
-                    </div>
-
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+{% endif %}
 {% endblock %}

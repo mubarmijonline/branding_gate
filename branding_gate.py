@@ -1465,39 +1465,6 @@ def home():
     # Render your page
     return render_template("home.html")
 
-@app.route("/create_team", methods=["GET", "POST"])
-@perm('team.create')
-def create_team():
-    if request.method == "POST":
-        data = request.get_json() or {}
-        team_name = data.get('team_name')
-        department_name = data.get('department_name')
-        roles = data.get('roles', [])
-        if not team_name or not department_name or not roles:
-            return jsonify({"status": "error", "message": "Missing team_name, department_name, or roles"}), 400
-        try:
-            conn, cur = connection()
-            # Check if team_name already exists
-            cur.execute("SELECT team_id FROM team WHERE team_name = %s", (team_name,))
-            if cur.fetchone():
-                cur.close()
-                conn.close()
-                return jsonify({"status": "error", "message": "Team name already exists"}), 400
-            # Insert into team table
-            cur.execute("""
-                INSERT INTO team (team_name, department_name, added_date, modified_date)
-                VALUES (%s, %s, NOW(), NOW())
-            """, (team_name, department_name))
-            team_id = conn.insert_id()  # Get the last inserted team_id
-            # Teams are a grouping label only; access comes from the user's role.
-            conn.commit()
-            cur.close()
-            conn.close()
-            return jsonify({"status": "success", "message": "Team created successfully"})
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-    return jsonify({"status": "error", "message": "Invalid method"}), 405
-
 @app.route('/logout', methods=['GET','POST']) 
 def logout():
     session.clear()
@@ -1661,14 +1628,12 @@ def get_users():
 
         # Passwords are never returned to the client.
         cur.execute("""
-            SELECT u.id, u.mobile, u.email, u.date, u.name, u.team_id, u.modified_date, u.added_by, u.username, u.title,
-                   t.team_name, t.department_name,
+            SELECT u.id, u.mobile, u.email, u.date, u.name, u.modified_date, u.added_by, u.username, u.title,
                    u.department_id, u.rbac_role_id, u.manager_id, u.is_pricing,
                    d.name AS rbac_department_name, d.code AS rbac_department_code,
                    r.code AS role_code, r.name AS role_name, r.level AS role_level,
                    m.name AS manager_name
             FROM user u
-            LEFT JOIN team t ON u.team_id = t.team_id
             LEFT JOIN department d ON d.id = u.department_id
             LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
             LEFT JOIN user m ON m.id = u.manager_id
@@ -1683,14 +1648,11 @@ def get_users():
                 'mobile': user['mobile'],
                 'email': user['email'],
                 'name': user['name'],
-                'team_id': user['team_id'],
                 'date': user['date'].strftime('%Y-%m-%d %H:%M:%S') if user['date'] else 'N/A',
                 'modified_date': user['modified_date'].strftime('%Y-%m-%d %H:%M:%S') if user['modified_date'] else 'N/A',
                 'added_by': user['added_by'],
                 'username': user['username'],
                 'title': user['title'],
-                'team_name': user['team_name'],
-                'department_name': user['department_name'],
                 # RBAC hierarchy
                 'department_id': user['department_id'],
                 'rbac_department_name': user['rbac_department_name'],
@@ -1715,32 +1677,6 @@ def get_users():
             'success': False,
             'error': str(e)
         }), 500
-
-@app.route('/api/teams', methods=['GET'])
-@perm('team.view')
-def get_teams():
-    """API endpoint to fetch all teams for the teams table, including roles as a comma-separated string"""
-    if 'user_id' not in session:
-        return jsonify(success=False, error="Not authenticated"), 401
-    try:
-        conn, cur = connection()
-        cur.execute("""
-            SELECT t.team_id, t.team_name, t.department_name, '' as roles
-            FROM team t
-
-            GROUP BY t.team_id, t.team_name, t.department_name
-            ORDER BY t.team_id DESC
-        """)
-        teams_data = cur.fetchall()
-        teams_list = [
-            {'team_id': team['team_id'], 'team_name': team['team_name'], 'department_name': team['department_name'], 'roles': team['roles'] or ''} for team in teams_data
-        ]
-        cur.close()
-        conn.close()
-        return jsonify(success=True, teams=teams_list)
-    except Exception as e:
-        print(e)
-        return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/add', methods=['POST'])
 @perm('user.create')
@@ -1888,31 +1824,6 @@ def delete_user(user_id):
             'success': False,
             'error': str(e)
         }), 500
-
-@app.route('/api/teams/edit/<int:team_id>', methods=['POST'])
-@perm('team.edit')
-def edit_team(team_id):
-    """API endpoint to edit a team's name, department, and roles"""
-    if 'user_id' not in session:
-        return jsonify(success=False, error="Not authenticated"), 401
-    try:
-        data = request.get_json()
-        team_name = data.get('team_name')
-        department_name = data.get('department_name')
-        roles = data.get('roles', [])
-        if not team_name or not department_name:
-            return jsonify(success=False, error="Missing required fields"), 400
-        conn, cur = connection()
-        # Update team name and department
-        cur.execute("UPDATE team SET team_name = %s, department_name = %s WHERE team_id = %s", (team_name, department_name, team_id))
-        # Fetch current roles for this team
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify(success=True, message="Team updated successfully")
-    except Exception as e:
-        print(e)
-        return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/edit/<int:user_id>', methods=['POST'])
 @perm('user.edit')
