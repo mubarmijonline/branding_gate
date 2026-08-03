@@ -1,0 +1,253 @@
+<title>Branding Gate — Role Access Review</title>
+<style>
+:root{
+  --ink:#12141f; --ink-2:#3a4055; --slate:#5b6479; --hair:#dcdfe8;
+  --paper:#f6f7fa; --card:#ffffff; --accent:#3a4fa0; --accent-soft:#eaedf7;
+  --clear:#1b6e4d; --clear-bg:#e4f1ea; --blocked:#8a6410; --blocked-bg:#f6efdd;
+  --broken:#9e2b2b; --broken-bg:#f7e6e6;
+  --display:Georgia,"Iowan Old Style","Times New Roman",serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --ink:#eceef6; --ink-2:#b6bccf; --slate:#8e97ad; --hair:#2a2f40;
+  --paper:#0e1017; --card:#161a25; --accent:#8fa3f0; --accent-soft:#1d2440;
+  --clear:#63c79b; --clear-bg:#12291f; --blocked:#d3a851; --blocked-bg:#2a2314;
+  --broken:#e28585; --broken-bg:#2e1a1a;
+}}
+:root[data-theme="dark"]{
+  --ink:#eceef6; --ink-2:#b6bccf; --slate:#8e97ad; --hair:#2a2f40;
+  --paper:#0e1017; --card:#161a25; --accent:#8fa3f0; --accent-soft:#1d2440;
+  --clear:#63c79b; --clear-bg:#12291f; --blocked:#d3a851; --blocked-bg:#2a2314;
+  --broken:#e28585; --broken-bg:#2e1a1a;
+}
+:root[data-theme="light"]{
+  --ink:#12141f; --ink-2:#3a4055; --slate:#5b6479; --hair:#dcdfe8;
+  --paper:#f6f7fa; --card:#ffffff; --accent:#3a4fa0; --accent-soft:#eaedf7;
+  --clear:#1b6e4d; --clear-bg:#e4f1ea; --blocked:#8a6410; --blocked-bg:#f6efdd;
+  --broken:#9e2b2b; --broken-bg:#f7e6e6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:3rem 1.5rem 6rem;display:flex;flex-direction:column;gap:3.5rem}
+h1,h2,h3{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,4vw,2.9rem);line-height:1.15}
+h2{font-size:1.6rem;padding-bottom:.5rem;border-bottom:2px solid var(--hair)}
+h3{font-size:1.05rem}
+code{font-family:var(--mono);font-size:.85em}
+.eyebrow{font-family:var(--body);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 .75rem}
+.lede{color:var(--ink-2);max-width:64ch;margin:.9rem 0 0;font-size:1.06rem}
+section{display:flex;flex-direction:column;gap:1.25rem}
+
+.band{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--hair);border:1px solid var(--hair);border-radius:3px;overflow:hidden}
+.band div{background:var(--card);padding:1.1rem 1.2rem}
+.band dt{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin:0}
+.band dd{margin:.35rem 0 0;font-family:var(--display);font-size:1.9rem;line-height:1;
+  font-variant-numeric:tabular-nums}
+
+.finding{background:var(--card);border:1px solid var(--hair);border-left:3px solid var(--broken);
+  border-radius:3px;padding:1.1rem 1.3rem}
+.finding.fixed{border-left-color:var(--clear)}
+.finding.note{border-left-color:var(--blocked)}
+.finding h3{margin-bottom:.3rem}
+.finding p{margin:.4rem 0 0;color:var(--ink-2);font-size:.94rem}
+.tag{display:inline-block;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:600;padding:.15rem .5rem;border-radius:2px;vertical-align:2px;margin-left:.5rem}
+.tag.open{background:var(--broken-bg);color:var(--broken)}
+.tag.done{background:var(--clear-bg);color:var(--clear)}
+.tag.info{background:var(--blocked-bg);color:var(--blocked)}
+
+.scroller{overflow-x:auto;border:1px solid var(--hair);border-radius:3px;background:var(--card)}
+table{border-collapse:collapse;font-size:.82rem;width:100%}
+thead th{position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--hair);
+  padding:.5rem .3rem;vertical-align:bottom;z-index:2}
+thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);
+  white-space:nowrap;font-weight:600;font-size:.74rem;color:var(--ink-2);max-height:9.5rem}
+tbody th{text-align:left;font-weight:400;padding:.3rem .8rem .3rem .9rem;white-space:nowrap;
+  border-bottom:1px solid var(--hair);position:sticky;left:0;background:var(--card);z-index:1}
+tbody tr:nth-child(even) th,tbody tr:nth-child(even) td{background:var(--accent-soft)}
+td.c{text-align:center;border-bottom:1px solid var(--hair);padding:.3rem .1rem;
+  font-size:.9rem;line-height:1;min-width:1.9rem}
+.c-y{color:var(--clear)} .c-n{color:var(--hair)} .c-r{color:var(--blocked)} .c-b{color:var(--broken)}
+.legend{display:flex;flex-wrap:wrap;gap:1.2rem;font-size:.85rem;color:var(--slate);margin:0}
+.legend b{font-weight:400;color:var(--ink)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:3px;padding:1.1rem 1.2rem;
+  display:flex;flex-direction:column;gap:.8rem}
+.card .meta{margin:.25rem 0 0;font-size:.8rem;color:var(--slate)}
+.lvl{color:var(--accent);font-weight:600}
+.stats{display:flex;gap:1.4rem;margin:0;padding:.7rem 0;border-top:1px solid var(--hair);
+  border-bottom:1px solid var(--hair)}
+.stats div{margin:0}
+.stats dt{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--slate)}
+.stats dd{margin:.15rem 0 0;font-family:var(--display);font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stats .of{font-family:var(--body);font-size:.75rem;color:var(--slate)}
+.pages{margin:0;display:flex;flex-wrap:wrap;gap:.3rem}
+.pages code{background:var(--accent-soft);color:var(--ink-2);padding:.12rem .4rem;border-radius:2px;
+  font-size:.74rem}
+footer{color:var(--slate);font-size:.85rem;border-top:1px solid var(--hair);padding-top:1.5rem}
+@media (max-width:640px){thead th span{max-height:7rem}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Branding Gate · access verification</p>
+  <h1>What each role can actually reach</h1>
+  <p class="lede">Every role was given a real account wired into a reporting line, then used to
+  request every readable route in the application. An HTTP 200 was not taken as proof: pages that
+  return 200 while rendering their access-denied branch are counted as blocked, and JSON replies
+  carrying <code>success: false</code> are counted as broken.</p>
+</header>
+
+<section>
+  <dl class="band">
+    <div><dt>Roles</dt><dd>21</dd></div>
+    <div><dt>Pages</dt><dd>32</dd></div>
+    <div><dt>Read APIs</dt><dd>108</dd></div>
+    <div><dt>Write routes</dt><dd>101</dd></div>
+    <div><dt>Probes run</dt><dd>__NPROBES__</dd></div>
+  </dl>
+</section>
+
+<section>
+  <h2>What the sweep found</h2>
+
+  <div class="finding fixed">
+    <h3>The sales request page was rendering an empty shell<span class="tag done">fixed</span></h3>
+    <p>Its body gate still tested legacy role names — <code>'sales' in user_roles</code> — while the
+    role codes are now <code>sales_member</code> and <code>sales_head</code>. Every non-admin role
+    received the page with no header and no table, just the surrounding shell. This is the page Sales
+    works in all day. Eighteen further card-level gates across the admin, finance and sales sections
+    had the same fault and are converted too; no template tests a role name any more.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>Pricing controls were hidden from Pricing itself<span class="tag done">fixed</span></h3>
+    <p><code>CAN_CONTROL_PRICING</code> tested <code>'pricing' in user_roles</code> against the role
+    code <code>pricing_manager</code>, so the set-price modal and every pricing control were invisible
+    to everyone — Pricing Manager included. It now reads the permission directly.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>Supplier report Excel export returned a 500 for everyone<span class="tag done">fixed</span></h3>
+    <p>The handler rebuilds its data by calling the report endpoint inside a fresh request context,
+    then copied the session across <em>after</em> entering it — where <code>session</code> already
+    pointed at the new, empty one. The inner call saw an anonymous caller and refused. The snapshot is
+    taken first now, and the export returns a real workbook.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>Two catalog endpoints queried columns that do not exist<span class="tag done">fixed</span></h3>
+    <p><code>/api/sales-requests/catalog/items</code> and <code>/catalog/item-types</code> failed for
+    every role including Admin, reading <code>item_name</code> and <code>item_type_id</code> from a
+    table that has <code>item_label</code> and no type column. Both now match the shipped schema. They
+    return an empty list because those tables are empty — confirmed correct by inserting a type, an
+    item and two descriptions inside a rolled-back transaction and watching them come back grouped.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>Client detail failed on a missing table<span class="tag done">fixed</span></h3>
+    <p><code>/api/clients/&lt;id&gt;</code> joined a <code>parent_company</code> table that does not
+    exist. It joins <code>company</code> now, which the client list and the add/edit validation
+    already used.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>A missing file reported as a server error<span class="tag done">fixed</span></h3>
+    <p><code>/api/sales/requests/files/&lt;id&gt;/download</code> calls <code>abort(404)</code> when a
+    file is absent, but its own blanket <code>except Exception</code> caught that and re-raised it as a
+    500. It re-raises <code>HTTPException</code> first now. The same pattern was in
+    <code>subscribe()</code>; a scan confirmed no other handler swallows an abort this way.</p>
+  </div>
+
+  <div class="finding note">
+    <h3>The probe itself was passing a broken page<span class="tag info">method</span></h3>
+    <p>The first sweep marked the sales request page as working, because it only looked for
+    access-denied strings and short bodies — and a gated-out page still ships 766&nbsp;KB of scripts.
+    The classifier now checks whether the page rendered any content of its own: a card, table, heading
+    or form. That is what caught the empty shell, and the numbers on this page are from the corrected
+    run.</p>
+  </div>
+
+  <div class="finding note">
+    <h3>Four roles can open the admin landing page<span class="tag info">by design</span></h3>
+    <p>Assistant, Sales Head, Account Director and Account Team Leader reach
+    <code>/management_admin</code> because it admits anyone holding client, company, supplier or entity
+    editing rights, and they manage clients. The cards inside are gated separately, so they see only
+    what they can use.</p>
+  </div>
+
+  <div class="finding note">
+    <h3>Assistant can open the users page<span class="tag info">check this</span></h3>
+    <p>The Assistant holds <code>user.view</code> so it can read the directory, but not
+    <code>user.create</code>, <code>edit</code> or <code>delete</code> — those buttons all answer 403.
+    If the Assistant should not see staff records at all, drop <code>user.view</code> from the role in
+    <code>rbac.py</code>.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Pricing is a flag, not only a role</h2>
+  <p class="lede">Pricing does not follow the org chart, so any account can be marked as pricing from
+  the users page regardless of its role. The flag grants selling-price entry, the pricing dashboard and
+  the negotiation pricing decision — either the Pricing roles or the flag is enough. Its scope is
+  deliberately company-wide: someone who prices has to reach every request, not only the ones their own
+  role would show them. Nobody without it sees any pricing control.</p>
+  <div class="scroller">
+    <table>
+      <thead><tr>
+        <th scope="col">Account state</th><th scope="col">/pricing</th>
+        <th scope="col">Set price</th><th scope="col">Price modal</th><th scope="col">Navbar link</th>
+      </tr></thead>
+      <tbody>
+        <tr><th scope="row">Sales Member, no flag</th>
+          <td class="c c-n">403</td><td class="c c-n">403</td>
+          <td class="c c-n">hidden</td><td class="c c-n">absent</td></tr>
+        <tr><th scope="row">Sales Member, flagged</th>
+          <td class="c c-y">200</td><td class="c c-y">allowed</td>
+          <td class="c c-y">shown</td><td class="c c-y">present</td></tr>
+        <tr><th scope="row">Flag removed again</th>
+          <td class="c c-n">403</td><td class="c c-n">403</td>
+          <td class="c c-n">hidden</td><td class="c c-n">absent</td></tr>
+        <tr><th scope="row">Pricing Manager, no flag</th>
+          <td class="c c-y">200</td><td class="c c-y">allowed</td>
+          <td class="c c-y">shown</td><td class="c c-y">present</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Page access by role</h2>
+  <p class="legend">
+    <b class="c-y">●</b> opens normally &nbsp;
+    <b class="c-n">·</b> blocked &nbsp;
+    <b class="c-r">→</b> redirects elsewhere &nbsp;
+    <b class="c-b">!</b> server error
+  </p>
+  <div class="scroller">
+    <table>
+      <thead><tr><th scope="col">Page</th>__HEAD__</tr></thead>
+      <tbody>__ROWS__</tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Role by role</h2>
+  <div class="cards">__CARDS__</div>
+</section>
+
+<footer>
+  <p>Probed against the live database with one account per role. Write routes (POST, PUT, DELETE)
+  were not exercised, since doing so would alter production data; their gates are covered by the
+  route-coverage test instead. Sales Request Details reports as reachable wherever the role can view
+  sales requests — what it then shows is narrowed by scope, not by the page gate.</p>
+</footer>
+
+</div>
