@@ -757,6 +757,10 @@ def load_permissions(user_id):
     and is therefore denied everything.
     """
     conn, cur = connection()
+    cur.execute("SELECT is_pricing FROM user WHERE id = %s", (user_id,))
+    account = cur.fetchone()
+    is_pricing = bool(account and account['is_pricing'])
+
     cur.execute("""
         SELECT r.code AS role_code, rp.permission_code, rp.scope
         FROM user u
@@ -768,10 +772,14 @@ def load_permissions(user_id):
     cur.close()
     conn.close()
 
-    if not rows:
-        return {}, None
-    role_code = rows[0]['role_code']
+    role_code = rows[0]['role_code'] if rows else None
     perms = {row['permission_code']: row['scope'] for row in rows if row['permission_code']}
+
+    # The pricing flag grants pricing on top of the role, so an account with no
+    # role at all still gets pricing if it is flagged.
+    if is_pricing:
+        perms = rbac.apply_pricing_flag(perms)
+
     return perms, role_code
 
 
@@ -1655,7 +1663,7 @@ def get_users():
         cur.execute("""
             SELECT u.id, u.mobile, u.email, u.date, u.name, u.team_id, u.modified_date, u.added_by, u.username, u.title,
                    t.team_name, t.department_name,
-                   u.department_id, u.rbac_role_id, u.manager_id,
+                   u.department_id, u.rbac_role_id, u.manager_id, u.is_pricing,
                    d.name AS rbac_department_name, d.code AS rbac_department_code,
                    r.code AS role_code, r.name AS role_name, r.level AS role_level,
                    m.name AS manager_name
@@ -1692,7 +1700,8 @@ def get_users():
                 'role_name': user['role_name'],
                 'role_level': user['role_level'],
                 'manager_id': user['manager_id'],
-                'manager_name': user['manager_name']
+                'manager_name': user['manager_name'],
+                'is_pricing': bool(user['is_pricing'])
             })
         cur.close()
         conn.close()
@@ -2195,6 +2204,10 @@ def _hierarchy_fields(data):
     form that omits them leaves the stored values alone.
     """
     fields = {}
+    # Pricing is a flag rather than a role, so it rides along with the other
+    # position fields and follows the same only-if-sent rule.
+    if 'is_pricing' in data:
+        fields['is_pricing'] = 1 if data.get('is_pricing') in (True, 1, '1', 'true', 'on') else 0
     for key in ('department_id', 'rbac_role_id', 'manager_id'):
         if key not in data:
             continue

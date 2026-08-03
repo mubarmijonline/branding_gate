@@ -3288,8 +3288,8 @@ window.chartPieDemo = function() {
     {% set _p = session.get('perms', {}) %}
 <div class="container-fluid sales-request-page" 
      data-admin-privileges="{% if 'sales_item.cost' in _p or 'sales_item.price' in _p %}true{% else %}false{% endif %}"
-     data-is-admin-user="{% if 'admin' in user_roles %}true{% else %}false{% endif %}">
-    {% if 'admin' in user_roles or 'sales' in user_roles or pricing_mode %}
+     data-is-admin-user="{% if 'sales_item.cost' in _p %}true{% else %}false{% endif %}">
+    {% if 'sales_request.view' in _p or pricing_mode %}
     
     <!-- Sales Request Management Header -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
@@ -3417,7 +3417,7 @@ window.chartPieDemo = function() {
             </div>
             
             <div class="table-responsive sales-request-table-wrap">
-                <table id="requests-table" class="display table table-bordered sales-request-data-table {% if 'admin' in user_roles %}sales-request-table-admin{% else %}sales-request-table-standard{% endif %}">
+                <table id="requests-table" class="display table table-bordered sales-request-data-table {% if 'sales_item.cost' in _p %}sales-request-table-admin{% else %}sales-request-table-standard{% endif %}">
                     <colgroup>
                         <col class="srq-col-id">
                         <col class="srq-col-title">
@@ -3429,8 +3429,8 @@ window.chartPieDemo = function() {
                         <col class="srq-col-date">
                         <col class="srq-col-date">
                         <col class="srq-col-items">
-                        {% if 'admin' in user_roles %}<col class="srq-col-costed">{% endif %}
-                        {% if 'admin' in user_roles %}<col class="srq-col-money">{% endif %}
+                        {% if 'sales_item.cost' in _p %}<col class="srq-col-costed">{% endif %}
+                        {% if 'sales_item.cost' in _p %}<col class="srq-col-money">{% endif %}
                         <col class="srq-col-money">
                         <col class="srq-col-approval">
                         <col class="srq-col-created">
@@ -3448,8 +3448,8 @@ window.chartPieDemo = function() {
                             <th>Start Date</th>
                             <th>End Date</th>
                             <th>Items</th>
-                            {% if 'admin' in user_roles %}<th>Costed Items</th>{% endif %}
-                            {% if 'admin' in user_roles %}<th>Total Cost</th>{% endif %}
+                            {% if 'sales_item.cost' in _p %}<th>Costed Items</th>{% endif %}
+                            {% if 'sales_item.cost' in _p %}<th>Total Cost</th>{% endif %}
                             <th>Total Sell</th>
                             <th>Client Approval</th>
                             <th>Created By</th>
@@ -4046,7 +4046,7 @@ window.chartPieDemo = function() {
                                 <div class="col-md-4">
                                     <p><strong>Start Date:</strong> <span id="detailStartDate"></span></p>
                                     <p><strong>End Date:</strong> <span id="detailEndDate"></span></p>
-                                    {% if 'admin' in user_roles %}<p><strong>Total Cost:</strong> <span id="detailTotalCost"></span></p>{% endif %}
+                                    {% if 'sales_item.cost' in _p %}<p><strong>Total Cost:</strong> <span id="detailTotalCost"></span></p>{% endif %}
                                     <p><strong>Total Sell:</strong> <span id="detailTotalSell"></span></p>
                                 </div>
                             </div>
@@ -4396,7 +4396,10 @@ window.chartPieDemo = function() {
     window.hasAdminPrivileges = hasAdminPrivileges || isAdminUser;
     window.isAdminUser = isAdminUser;
     window.PRICING_MODE = ("{{ 'true' if pricing_mode else 'false' }}" === "true");
-    window.CAN_CONTROL_PRICING = ("{{ 'true' if 'admin' in user_roles or 'pricing' in user_roles or 'operation' in user_roles else 'false' }}" === "true");
+    // Pricing controls and the set-price modal are visible only to accounts
+    // that actually hold the pricing permission -- via the Pricing roles or the
+    // account's pricing flag. Everyone else never sees them.
+    window.CAN_CONTROL_PRICING = ("{{ 'true' if 'sales_item.price' in _p else 'false' }}" === "true");
     
     // Initialize DataTable with dynamic columns (must match header order exactly)
     var tableColumns = [

@@ -579,6 +579,27 @@ _SELF_SERVICE = _merge(
 
 SELF_SERVICE_PERMISSIONS = frozenset(_SELF_SERVICE)
 
+# Pricing is a responsibility, not necessarily a job. Any account can be
+# flagged as pricing, and the flag grants these on top of whatever the role
+# already gives -- so either the Pricing roles or the flag is enough.
+#
+# Scope is 'all' throughout on purpose: someone who prices has to reach every
+# request, not only the ones their own role would show them. The grant is
+# merged with widest(), so the flag can widen a role but never narrow it.
+PRICING_FLAG_PERMISSIONS = {
+    'sales_item.price': 'all',
+    'negotiation.view': 'all',
+    'negotiation.decide_pricing': 'all',
+    'sales_request.view': 'all',
+    'client_approval.view': 'all',
+    'catalog.view': 'all',
+}
+
+
+def apply_pricing_flag(perms):
+    """Return the permission set a pricing-flagged account holds."""
+    return _merge(perms or {}, PRICING_FLAG_PERMISSIONS)
+
 for _role_code in list(SEED_MATRIX):
     if _role_code == 'admin':
         continue

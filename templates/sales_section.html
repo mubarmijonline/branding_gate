@@ -196,7 +196,7 @@
         </div>
 
         <!-- Sales Head Approval -->
-        {% if 'admin' in user_roles or 'sales_head' in user_roles %}
+        {% if 'negotiation.decide_sales_head' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);">
@@ -219,7 +219,7 @@
         {% endif %}
 
         <!-- Client Management (Admin) -->
-        {% if 'admin' in user_roles %}
+        {% if 'sales_request.approve' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">

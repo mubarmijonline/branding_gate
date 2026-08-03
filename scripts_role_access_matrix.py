@@ -123,6 +123,14 @@ def classify(response):
             return 'DENIED', 'rendered access-denied branch'
     if len(body) < 400:
         return 'BROKEN', 'suspiciously short HTML (%d bytes)' % len(body)
+
+    # A page whose body gate failed still ships the shared shell -- navbar,
+    # scripts, styles -- so byte size proves nothing. What disappears is the
+    # page's own content. Every real page renders at least one card, table or
+    # heading of its own; a gated-out one renders none.
+    if not any(marker in body for marker in
+               ('card-body', '<table', '<h1 ', '<h2 ', '<form ')):
+        return 'DENIED', 'gate rendered no page content'
     return 'OK', ''
 
 

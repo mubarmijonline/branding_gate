@@ -175,7 +175,7 @@
         </div>
 
         <!-- Finance Approvals -->
-        {% if 'admin' in user_roles or 'finance' in user_roles %}
+        {% if 'finance_txn.approve' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
@@ -229,7 +229,7 @@
         </div>
 
         <!-- Expense Approval (Admin) -->
-        {% if 'admin' in user_roles %}
+        {% if 'expense_tracking.approve_manager' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #e74a3b 0%, #be2617 100%);">
@@ -252,7 +252,7 @@
         {% endif %}
 
         <!-- Finance Expense Approval -->
-        {% if 'admin' in user_roles or 'finance' in user_roles %}
+        {% if 'finance_txn.approve' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">

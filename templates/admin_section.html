@@ -137,7 +137,7 @@
     <div class="row mb-4">
 
         <!-- Pending Approvals -->
-        {% if 'admin' in user_roles %}
+        {% if 'user.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%);">
@@ -161,7 +161,7 @@
 
         <!-- User Management -->
         {% endif %}
-        {% if 'admin' in user_roles %}
+        {% if 'user.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
@@ -184,7 +184,7 @@
 
         <!-- Company -->
         {% endif %}
-        {% if 'admin' in user_roles or 'company_management' in user_roles %}
+        {% if 'company.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);">
@@ -207,7 +207,7 @@
 
         <!-- Client Management -->
         {% endif %}
-        {% if 'admin' in user_roles or 'client_management' in user_roles %}
+        {% if 'client.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
@@ -230,7 +230,7 @@
 
         <!-- Supplier Management -->
         {% endif %}
-        {% if 'admin' in user_roles or 'supplier_management' in user_roles %}
+        {% if 'supplier.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #858796 0%, #60616f 100%);">
@@ -253,7 +253,7 @@
 
         <!-- Reports & Analytics -->
         {% endif %}
-        {% if 'admin' in user_roles %}
+        {% if 'user.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">
                 <div class="card-header text-white" style="background: linear-gradient(135deg, #5a5c69 0%, #3a3b45 100%);">
