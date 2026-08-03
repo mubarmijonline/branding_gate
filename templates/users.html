@@ -791,16 +791,10 @@ $(document).ready(function() {
     // Populate team dropdown on page load
     populateTeamDropdown();
 
-    // Initialize Select2 for add user roles
-
     // When Add User modal is shown, refresh the team dropdown
+    $('#addUserModal').on('show.bs.modal', function() {
         populateTeamDropdown();
     });
-
-    // Helper to fetch user and team roles for edit modal
-
-
-    // Helper to repopulate roles in Edit User modal (like Edit Team modal)
 
     // Handle edit user button click (ensure listener works after DataTable redraws)
     $('#users-table').on('click', '.edit-user', function() {
