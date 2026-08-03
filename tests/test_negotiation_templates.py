@@ -3,13 +3,17 @@ import unittest
 from flask import render_template
 
 import branding_gate
+import rbac
 
 
 class NegotiationTemplateTest(unittest.TestCase):
     def _render(self, template_name, **context):
         with branding_gate.app.test_request_context("/"):
             branding_gate.session["user_id"] = 1
-            branding_gate.session["roles"] = ["admin", "sales_head", "pricing"]
+            branding_gate.session["role_code"] = "admin"
+            branding_gate.session["roles"] = ["admin"]
+            # Templates gate on the permission set, not on role names.
+            branding_gate.session["perms"] = rbac.SEED_MATRIX["admin"]
             return render_template(template_name, **context)
 
     def test_sales_head_approval_has_a_fixed_repricing_destination(self):

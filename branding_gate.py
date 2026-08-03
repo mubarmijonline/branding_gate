@@ -729,64 +729,21 @@ def initialize_firebase():
 
 def get_user_roles(user_id):
     """
-    Returns a list of distinct roles for a user, combining team roles (team_flag=1) and user roles (team_flag=0).
-    Looks up team_id from the user_id.
+    Return the user's role as a single-element list.
+
+    Kept as a list because templates and the refresh endpoint still read
+    session['roles']; authorization itself now runs off session['perms'].
     """
     conn, cur = connection()
-    # Get team_id for this user
-    cur.execute("SELECT team_id FROM user WHERE id = %s", (user_id,))
-    result = cur.fetchone()
-    team_id = result['team_id'] if result else None
-    # Get roles from team (team_flag=1)
-    team_roles = []
-    if team_id:
-        cur.execute("SELECT DISTINCT role_name FROM role WHERE user_id = %s AND team_flag = 1", (team_id,))
-        team_roles = [row['role_name'] for row in cur.fetchall()]
-    # Get roles directly assigned to user (team_flag=0)
-    cur.execute("SELECT DISTINCT role_name FROM role WHERE user_id = %s AND team_flag = 0", (user_id,))
-    user_roles = [row['role_name'] for row in cur.fetchall()]
-    # Combine and deduplicate
-    all_roles = list(set(team_roles + user_roles))
+    cur.execute("""
+        SELECT r.code FROM user u
+        JOIN rbac_role r ON r.id = u.rbac_role_id
+        WHERE u.id = %s
+    """, (user_id,))
+    row = cur.fetchone()
     cur.close()
     conn.close()
-    return all_roles
-
-def role_required(*role_names):
-    """
-    Decorator to restrict access to users with specific roles (from DB), always allowing admin.
-    Usage: @role_required('pricing') or @role_required('admin', 'finance', 'sales')
-
-    Defined here, above the first route, so every route in this module can use it.
-    """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = session.get('user_id')
-            if not user_id:
-                return redirect(url_for('login'))
-            conn, cur = connection()
-            # Get all roles for this user (user-only and team roles)
-            cur.execute("""
-                SELECT role_name FROM role WHERE user_id = %s AND team_flag = 0
-                UNION
-                SELECT role_name FROM role WHERE user_id = (
-                    SELECT team_id FROM user WHERE id = %s AND team_id IS NOT NULL
-                ) AND team_flag = 1
-            """, (user_id, user_id))
-            roles = [row['role_name'] for row in cur.fetchall()]
-            cur.close()
-            conn.close()
-            # Allow if user has admin role or any of the required roles
-            if 'admin' in roles or any(role in roles for role in role_names):
-                return f(*args, **kwargs)
-            if request.path.startswith('/api/'):
-                return jsonify(error='Forbidden'), 403
-            return abort(403)
-        # Marks the route as gated for the default-deny backstop, so the legacy
-        # and permission decorators can coexist while routes are migrated.
-        decorated_function._perms = tuple('legacy:%s' % r for r in role_names)
-        return decorated_function
-    return decorator
+    return [row['code']] if row else []
 
 
 # ---------------------------------------------------------------------------
@@ -888,7 +845,7 @@ def assert_scope(code, owner_user_id):
 def perm(*codes):
     """
     Decorator gating a route on one or more permissions, any of which suffices.
-    Replaces role_required; both set `_perms` so the backstop accepts either.
+    Sets `_perms` on the wrapper so the default-deny backstop can see the gate.
     """
     for code in codes:
         if code not in rbac.PERMISSIONS:
@@ -911,31 +868,43 @@ def perm(*codes):
     return decorator
 
 
+# Coarse notification audiences, expressed as the permission that defines them.
+NOTIFICATION_AUDIENCE = {
+    'admin': 'user.create',
+    'sales': 'sales_request.create',
+    'operation': 'sales_item.cost',
+    'pricing': 'sales_item.price',
+    'finance': 'finance_txn.approve',
+    'sales_head': 'negotiation.decide_sales_head',
+}
+
+
 def get_users_by_role(role_name):
     """
-    Returns a list of user IDs that have the specified role (either through team or direct assignment).
+    Return user ids to notify for a workflow role.
+
+    The legacy `role` table is gone; notification call sites still speak in
+    coarse terms ('admin', 'sales', 'operation'), so map those onto the
+    permission that actually defines the audience.
     """
+    permission = NOTIFICATION_AUDIENCE.get(role_name)
+    if not permission:
+        return []
+    role_codes = [code for code, grants in rbac.SEED_MATRIX.items() if permission in grants]
+    if not role_codes:
+        return []
     conn, cur = connection()
-    
-    # Get users with the role directly assigned (team_flag=0)
-    cur.execute("SELECT DISTINCT user_id FROM role WHERE role_name = %s AND team_flag = 0", (role_name,))
-    direct_users = [row['user_id'] for row in cur.fetchall()]
-    
-    # Get users with the role through team assignment (team_flag=1)
-    cur.execute("""
-        SELECT DISTINCT u.id 
-        FROM user u 
-        JOIN role r ON u.team_id = r.user_id 
-        WHERE r.role_name = %s AND r.team_flag = 1 AND u.team_id IS NOT NULL
-    """, (role_name,))
-    team_users = [row['id'] for row in cur.fetchall()]
-    
-    # Combine and deduplicate
-    all_users = list(set(direct_users + team_users))
-    
+    placeholders = ",".join(["%s"] * len(role_codes))
+    cur.execute(
+        "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+        "WHERE r.code IN (%s)" % placeholders,
+        role_codes,
+    )
+    user_ids = [row['id'] for row in cur.fetchall()]
     cur.close()
     conn.close()
-    return all_users
+    return user_ids
+
 
 def send_notification_to_role(role_name, title, content):
     """
@@ -1259,26 +1228,6 @@ def login():
 def firebase_messaging_sw():
     return send_from_directory('static', 'firebase-messaging-sw.js', mimetype='application/javascript')
 
-@app.route('/test-push')
-def test_push():
-    reg_token = session.get('fcm_token')
-    if not reg_token:
-        return "No token in session", 400
-
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title="Hello from Flask",
-            body="This is a test notification."
-        ),
-        token=reg_token
-    )
-    try:
-        msg_id = messaging.send(message)
-        return f"Sent message ID: {msg_id}"
-    except Exception as e:
-        app.logger.error("Error sending FCM message: %s", e)
-        return str(e), 500
-
 @app.route('/add_notification', methods=['POST'])
 def add_notification():
     if 'user_id' not in session:
@@ -1528,12 +1477,7 @@ def create_team():
                 VALUES (%s, %s, NOW(), NOW())
             """, (team_name, department_name))
             team_id = conn.insert_id()  # Get the last inserted team_id
-            # Insert roles into role table
-            for role_name in roles:
-                cur.execute("""
-                    INSERT INTO role (role_name, user_id, team_flag, added_date, modified_date)
-                    VALUES (%s, %s, 1, NOW(), NOW())
-                """, (role_name, team_id))
+            # Teams are a grouping label only; access comes from the user's role.
             conn.commit()
             cur.close()
             conn.close()
@@ -1684,40 +1628,6 @@ def send_notification(device_token,msg_title,msg_body):
     except Exception as e:
         print(f"Error sending notification: {e}")
 
-@app.route('/test-notification', methods=['GET'])
-def test_notification():
-    try:
-        # Get the FCM token from the session
-        fcm_token = session.get('fcm_token')
-        if not fcm_token:
-            app.logger.error("No FCM token found in session")
-            return jsonify(error="No FCM token found"), 400
-
-        app.logger.info("Sending test notification to token: %s", fcm_token)
-
-        # Create a test message
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title="Test Notification",
-                body="This is a test notification from the server"
-            ),
-            token=fcm_token,
-            data={
-                'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-                'title': 'Test Notification',
-                'body': 'This is a test notification from the server'
-            }
-        )
-
-        # Send the message
-        app.logger.info("Sending message: %s", message)
-        msg_id = messaging.send(message)
-        app.logger.info("Message sent successfully with ID: %s", msg_id)
-        
-        return jsonify(success=True, message_id=msg_id)
-    except Exception as e:
-        app.logger.error("Error sending test notification: %s", e)
-        return jsonify(error=str(e)), 500
 @app.route('/users', methods=['GET'])
 @perm('user.view')
 def users():
@@ -1802,9 +1712,9 @@ def get_teams():
     try:
         conn, cur = connection()
         cur.execute("""
-            SELECT t.team_id, t.team_name, t.department_name, GROUP_CONCAT(r.role_name ORDER BY r.role_name SEPARATOR ', ') as roles
+            SELECT t.team_id, t.team_name, t.department_name, '' as roles
             FROM team t
-            LEFT JOIN role r ON t.team_id = r.user_id AND r.team_flag = 1
+
             GROUP BY t.team_id, t.team_name, t.department_name
             ORDER BY t.team_id DESC
         """)
@@ -1910,17 +1820,6 @@ def add_user():
             )
             conn.commit()
 
-        # Insert user-specific roles if provided
-        user_roles = data.get('user_roles', [])
-        if user_roles and isinstance(user_roles, list):
-            for role_name in user_roles:
-                if role_name and role_name.strip():
-                    cur.execute(
-                        "INSERT INTO role (role_name, user_id, team_flag, added_by) VALUES (%s, %s, 0, %s)",
-                        (role_name.strip(), new_user_id, session.get('username', ''))
-                    )
-            conn.commit()
-        
         cur.close()
         conn.close()
         
@@ -1959,9 +1858,6 @@ def delete_user(user_id):
                 'error': 'This account cannot be deleted'
             }), 400
 
-        # Drop the user's direct role rows first, otherwise a future user that
-        # reuses this auto-increment id silently inherits them.
-        cur.execute("DELETE FROM role WHERE user_id = %s AND team_flag = 0", (user_id,))
         # Delete user
         cur.execute("DELETE FROM user WHERE id = %s", (user_id,))
         conn.commit()
@@ -1997,41 +1893,12 @@ def edit_team(team_id):
         # Update team name and department
         cur.execute("UPDATE team SET team_name = %s, department_name = %s WHERE team_id = %s", (team_name, department_name, team_id))
         # Fetch current roles for this team
-        cur.execute("SELECT role_name FROM role WHERE user_id = %s AND team_flag = 1", (team_id,))
-        current_roles = set(row['role_name'] for row in cur.fetchall())
-        new_roles = set(roles)
-        # Roles to add
-        roles_to_add = new_roles - current_roles
-        # Roles to remove
-        roles_to_remove = current_roles - new_roles
-        # Add new roles
-        for role_name in roles_to_add:
-            cur.execute("INSERT INTO role (role_name, user_id, team_flag) VALUES (%s, %s, 1)", (role_name, team_id))
-        # Remove roles not in new list
-        for role_name in roles_to_remove:
-            cur.execute("DELETE FROM role WHERE user_id = %s AND role_name = %s AND team_flag = 1", (team_id, role_name))
         conn.commit()
         cur.close()
         conn.close()
         return jsonify(success=True, message="Team updated successfully")
     except Exception as e:
         print(e)
-        return jsonify(success=False, error=str(e)), 500
-
-@app.route('/api/teams/<int:team_id>/roles', methods=['GET'])
-@perm('team.view')
-def get_team_roles(team_id):
-    """API endpoint to fetch current roles for a team (for edit modal)"""
-    if 'user_id' not in session:
-        return jsonify(success=False, error="Not authenticated"), 401
-    try:
-        conn, cur = connection()
-        cur.execute("SELECT role_name FROM role WHERE team_id = %s AND team_flag = 1", (team_id,))
-        roles = [row['role_name'] for row in cur.fetchall()]
-        cur.close()
-        conn.close()
-        return jsonify(success=True, roles=roles)
-    except Exception as e:
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/edit/<int:user_id>', methods=['POST'])
@@ -2130,22 +1997,6 @@ def edit_user(user_id):
                 (generate_password_hash(new_password), user_id)
             )
 
-        # --- USER-ONLY ROLES MANAGEMENT ---
-        new_user_roles = set(data.get('user_roles', []))
-        # Get current user-only roles
-        cur.execute("SELECT role_name FROM role WHERE user_id = %s AND team_flag = 0", (user_id,))
-        current_user_roles = set(row['role_name'] for row in cur.fetchall())
-        # Roles to add
-        roles_to_add = new_user_roles - current_user_roles
-        # Roles to remove
-        roles_to_remove = current_user_roles - new_user_roles
-        # Add new roles
-        for role_name in roles_to_add:
-            cur.execute("INSERT INTO role (role_name, user_id, team_flag) VALUES (%s, %s, 0)", (role_name, user_id))
-        # Remove roles not in new list
-        for role_name in roles_to_remove:
-            cur.execute("DELETE FROM role WHERE user_id = %s AND role_name = %s AND team_flag = 0", (user_id, role_name))
-
         conn.commit()
         cur.close()
         conn.close()
@@ -2159,36 +2010,6 @@ def edit_user(user_id):
             'success': False,
             'error': str(e)
         }), 500
-
-@app.route('/api/users/<int:user_id>/all_roles', methods=['GET'])
-@perm('user.view')
-def get_user_all_roles(user_id):
-    """Return both user-only roles and team roles for a user (for Edit User modal)"""
-    if 'user_id' not in session:
-        return jsonify(success=False, error="Not authenticated"), 401
-    try:
-        conn, cur = connection()
-        # Get team_id for this user
-        cur.execute("SELECT team_id FROM user WHERE id = %s", (user_id,))
-        result = cur.fetchone()
-        team_id = result['team_id'] if result else None
-
-        # Get team roles (team_flag=1)
-        team_roles = []
-        if team_id:
-            cur.execute("SELECT role_name FROM role WHERE user_id = %s AND team_flag = 1", (team_id,))
-            team_roles = [row['role_name'] for row in cur.fetchall()]
-
-        # Get user-only roles (team_flag=0)
-        cur.execute("SELECT role_name FROM role WHERE user_id = %s AND team_flag = 0", (user_id,))
-        user_roles = [row['role_name'] for row in cur.fetchall()]
-
-        cur.close()
-        conn.close()
-        return jsonify(success=True, user_roles=user_roles, team_roles=team_roles)
-    except Exception as e:
-        return jsonify(success=False, error=str(e)), 500
-
 
 # ---------------------------------------------------------------------------
 # Departments, roles and the reporting line
@@ -2438,10 +2259,6 @@ PUBLIC_ENDPOINTS = {
     'get_notifications', 'mark_notifications_read', 'all_notifications',
     'add_notification',
     'serve_item_attachment', 'sales_requests_lookup',
-    # Dead stubs and debug endpoints, removed in the phase 7 cleanup.
-    'test_push', 'test_notification', 'template_test',
-    'add_sales_request_old', 'add_operation_request_old',
-    'edit_sales_request_old', 'edit_operation_request_old',
 }
 
 
@@ -3596,7 +3413,7 @@ def export_supplier_report_excel():
             '/api/supplier-report?' + _req.query_string.decode('utf-8'),
             method='GET'
         ):
-            # Copy session so role_required passes inside the internal call
+            # Copy session so the permission gate passes inside the internal call
             from flask import session as _sess
             for k, v in session.items():
                 _sess[k] = v
@@ -5223,13 +5040,6 @@ def api_workflow_request_timeline(request_id):
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/template-test')
-def template_test():
-    """Test page for template system APIs"""
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return send_from_directory('.', 'template_system_test.html')
-
 @app.route('/operation_request', methods=['GET'])
 @perm('approved_item.view')
 def operation_request():
@@ -6340,8 +6150,8 @@ def add_sales_request():
             needs_approval = False
             approval_reason = None
             if start_date_obj < five_days_from_now and start_date_obj >= today:
-                user_roles = get_user_roles(session['user_id'])
-                if 'admin' not in user_roles:
+                # Anyone who can approve a request does not need approval.
+                if not has('sales_request.approve'):
                     needs_approval = True
                     days_until_start = (start_date_obj - today).days
                     approval_reason = f"Urgent date: Request starts in {days_until_start} day(s)"
@@ -7590,8 +7400,7 @@ def edit_sales_request(request_id):
             four_days_from_now = today + timedelta(days=4)
             
             if start_date_obj <= four_days_from_now and start_date_obj >= today:
-                user_roles = get_user_roles(session['user_id'])
-                if 'admin' not in user_roles:
+                if not has('sales_request.approve'):
                     return jsonify({
                         'success': False,
                         'error': 'Admin privileges required for urgent dates (within 4 days)'
@@ -9549,22 +9358,6 @@ def add_request_comment(request_id):
         }), 500
 
 # Keep the old routes for backward compatibility
-@app.route('/sales/add', methods=['POST'])
-def add_sales_request_old():
-    return add_sales_request()
-
-@app.route('/operation/add', methods=['POST'])
-def add_operation_request_old():
-    return add_operation_request()
-
-@app.route('/sales/edit/<int:request_id>', methods=['POST'])
-def edit_sales_request_old(request_id):
-    return edit_sales_request(request_id)
-
-@app.route('/operation/edit/<int:request_id>', methods=['POST'])
-def edit_operation_request_old(request_id):
-    return edit_operation_request(request_id)
-
 # Dashboard Statistics API endpoints
 @app.route('/api/dashboard/sales/statistics', methods=['GET'])
 @perm('dashboard.sales')
@@ -19689,13 +19482,13 @@ def get_user_balances():
                 u.id as user_id,
                 u.name as user_name,
                 u.email,
-                GROUP_CONCAT(DISTINCT r.role_name) as roles,
+                rr.name as roles,
                 COALESCE(ufb.balance, 0) as balance,
                 ufb.last_updated
             FROM user u
             LEFT JOIN user_finance_balances ufb ON u.id = ufb.user_id
-            LEFT JOIN role r ON u.id = r.user_id
-            GROUP BY u.id, u.name, u.email, ufb.balance, ufb.last_updated
+            LEFT JOIN rbac_role rr ON rr.id = u.rbac_role_id
+            GROUP BY u.id, u.name, u.email, rr.name, ufb.balance, ufb.last_updated
             ORDER BY u.name
         """)
         users = cur.fetchall()

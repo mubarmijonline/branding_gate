@@ -51,7 +51,8 @@
 {% block body %}
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
-    {% if 'admin' in user_roles or 'finance' in user_roles or 'sales' in user_roles %}
+    {% set _p = session.get('perms', {}) %}
+    {% if 'finance_txn.view' in _p %}
 
     <!-- Hero Header -->
     <div class="section-hero">

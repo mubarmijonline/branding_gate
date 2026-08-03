@@ -1185,6 +1185,7 @@ body.finance-surface {
 {% endblock %}
 
 {% block body %}
+{% set _p = session.get('perms', {}) %}
 <div class="finance-shell" style="background: linear-gradient(135deg, #f8fafc 0%, #dcfce7 50%, #e0e7ff 100%); min-height: 100vh;">
     <div class="finance-card">
         <!-- Header -->
@@ -2153,7 +2154,7 @@ body.finance-surface {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Cancel</button>
-                {% if session.get('roles') and ('admin' in session.get('roles') or 'finance' in session.get('roles')) %}
+                {% if 'finance_txn.approve' in _p %}
                 <button type="button" class="btn-pill btn-pill-success" onclick="submitTransaction()">
                     <i class="fas fa-plus"></i> Add Transaction
                 </button>

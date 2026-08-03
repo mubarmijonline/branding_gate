@@ -3285,8 +3285,9 @@ window.chartPieDemo = function() {
 
 {% block body %}
 {% set user_roles = session.get('roles', []) %}
+    {% set _p = session.get('perms', {}) %}
 <div class="container-fluid sales-request-page" 
-     data-admin-privileges="{% if session.get('roles') and 'admin' in session.get('roles') %}true{% else %}false{% endif %}"
+     data-admin-privileges="{% if 'sales_item.cost' in _p or 'sales_item.price' in _p %}true{% else %}false{% endif %}"
      data-is-admin-user="{% if 'admin' in user_roles %}true{% else %}false{% endif %}">
     {% if 'admin' in user_roles or 'sales' in user_roles or pricing_mode %}
     

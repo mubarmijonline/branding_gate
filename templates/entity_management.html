@@ -315,7 +315,8 @@
 {% block body %}
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
-    {% if 'admin' in user_roles or 'inventory' in user_roles %}
+    {% set _p = session.get('perms', {}) %}
+    {% if 'entity.view' in _p %}
     
     <!-- Entity Management Header -->
     <div class="entity-header">

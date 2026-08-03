@@ -36,7 +36,8 @@ $(document).ready(function() {
 {% block body %}
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
-    {% if 'admin' in user_roles or 'supplier_management' in user_roles %}
+    {% set _p = session.get('perms', {}) %}
+    {% if 'supplier.view' in _p %}
     
     <!-- Supplier Management Header -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">

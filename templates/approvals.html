@@ -41,8 +41,9 @@
 
 {% block body %}
 {% set user_roles = session.get('roles', []) %}
+    {% set _p = session.get('perms', {}) %}
 <div class="container-fluid">
-    {% if 'admin' in user_roles %}
+    {% if 'sales_request.approve' in _p %}
     
     <!-- Page Header -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">

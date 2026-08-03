@@ -8,8 +8,9 @@
 
 {% block body %}
 {% set user_roles = session.get('roles', []) %}
+    {% set _p = session.get('perms', {}) %}
 <div class="container-fluid client-management-page">
-    {% if 'admin' in user_roles or 'client_management' in user_roles %}
+    {% if 'client.view' in _p %}
     <header class="client-page-header">
         <div>
             <h1>Client Directory</h1>

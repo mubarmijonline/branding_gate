@@ -545,7 +545,8 @@
 {% block body %}
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
-    {% if 'admin' in user_roles or 'operation' in user_roles or 'operations' in user_roles %}
+    {% set _p = session.get('perms', {}) %}
+    {% if 'supplier_report.view' in _p %}
     
     <!-- Page Header -->
     <div class="page-header">

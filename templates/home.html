@@ -319,24 +319,32 @@ const rolePortals = {
   }
 };
 
-function renderRolePortals(roles) {
+// Which permission earns each portal card. Mirrors the server gate on the
+// portal's own landing page.
+const PORTAL_PERMISSION = {
+  'admin':         'user.view',
+  'sales':         'sales_request.view',
+  'operation':     'approved_item.view',
+  'pricing':       'sales_item.price',
+  'marketing':     'client.view',
+  'finance':       'finance_txn.view',
+  'account manager': 'client.edit',
+  '2D designer':   'catalog.edit',
+  '3D graphic':    'catalog.edit'
+};
+
+function renderRolePortals(perms) {
   const container = document.getElementById('role-portals-container');
   container.innerHTML = '';
-  
-  const uniqueRoles = Array.from(new Set(roles));
-  const isAdmin = uniqueRoles.includes('admin');
-  
-  if (isAdmin) {
-    Object.entries(rolePortals).forEach(([role, portal]) => {
-      if (role !== 'users') container.innerHTML += createPortalCard(portal);
-    });
-  } else {
-    uniqueRoles.forEach(role => {
-      if (role !== 'users' && rolePortals[role]) {
-        container.innerHTML += createPortalCard(rolePortals[role]);
-      }
-    });
-  }
+
+  const held = perms || {};
+  Object.entries(rolePortals).forEach(([key, portal]) => {
+    if (key === 'users') return;
+    const needed = PORTAL_PERMISSION[key];
+    if (needed && needed in held) {
+      container.innerHTML += createPortalCard(portal);
+    }
+  });
 
   // Bind custom dropdown toggles (NOT bootstrap dropdowns — avoids z-index issues)
   document.querySelectorAll('.portal-btn-quick').forEach(btn => {
@@ -399,15 +407,14 @@ function createPortalCard(portal) {
     </div>`;
 }
 
-// Fetch roles for the current user and render portals
+// Fetch the current permission set and render the portals it earns.
 function fetchAndRenderRoles() {
-  fetch('/api/users/' + window.sessionUserId + '/all_roles')
+  fetch('/api/refresh-roles', { method: 'POST' })
     .then(res => res.json())
     .then(data => {
       if (data.success) {
-        // Combine user_roles and team_roles
-        const allRoles = [...(data.user_roles || []), ...(data.team_roles || [])];
-        renderRolePortals(allRoles);
+        window.USER_PERMS = data.perms || {};
+        renderRolePortals(window.USER_PERMS);
       }
     });
 }

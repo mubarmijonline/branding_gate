@@ -58,7 +58,8 @@
 {% block body %}
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
-    {% set has_any_admin_perm = 'admin' in user_roles or 'client_management' in user_roles or 'company_management' in user_roles or 'entity_management' in user_roles or 'supplier_management' in user_roles %}
+    {% set _p = session.get('perms', {}) %}
+    {% set has_any_admin_perm = 'user.view' in _p or 'client.edit' in _p or 'company.edit' in _p or 'entity.edit' in _p or 'supplier.edit' in _p %}
     {% if has_any_admin_perm %}
 
     <!-- Hero Header -->
