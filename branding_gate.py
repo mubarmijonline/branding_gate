@@ -16,6 +16,7 @@ from datetime import timedelta, datetime
 import re
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+import rbac
 import zipfile
 import ssl
 import shutil
@@ -780,8 +781,134 @@ def role_required(*role_names):
             if request.path.startswith('/api/'):
                 return jsonify(error='Forbidden'), 403
             return abort(403)
+        # Marks the route as gated for the default-deny backstop, so the legacy
+        # and permission decorators can coexist while routes are migrated.
+        decorated_function._perms = tuple('legacy:%s' % r for r in role_names)
         return decorated_function
     return decorator
+
+
+# ---------------------------------------------------------------------------
+# RBAC: database and request-scoped wrappers around the pure policy in rbac.py
+# ---------------------------------------------------------------------------
+
+def load_permissions(user_id):
+    """
+    Return (permissions, role_code) for a user, where permissions maps a
+    permission code to the scope it is held at. An unassigned user gets ({}, None)
+    and is therefore denied everything.
+    """
+    conn, cur = connection()
+    cur.execute("""
+        SELECT r.code AS role_code, rp.permission_code, rp.scope
+        FROM user u
+        JOIN rbac_role r ON r.id = u.rbac_role_id
+        LEFT JOIN role_permission rp ON rp.role_id = r.id
+        WHERE u.id = %s
+    """, (user_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not rows:
+        return {}, None
+    role_code = rows[0]['role_code']
+    perms = {row['permission_code']: row['scope'] for row in rows if row['permission_code']}
+    return perms, role_code
+
+
+def has(code):
+    """True when the current session holds the permission at any scope."""
+    return rbac.resolve(session.get('perms') or {}, code) is not None
+
+
+def visible_user_ids(code):
+    """
+    Owner ids the caller may see for this permission.
+
+    Returns None when the scope is unrestricted, so callers can skip building a
+    predicate. Aborts 403 when the permission is not held at all.
+    """
+    scope = rbac.resolve(session.get('perms') or {}, code)
+    if scope is None:
+        abort(403)
+    if scope == 'all':
+        return None
+
+    me = session.get('user_id')
+    if scope == 'own':
+        return [me]
+
+    # Only team and department scope need a lookup.
+    conn, cur = connection()
+    if scope == 'team':
+        cur.execute("SELECT id FROM user WHERE manager_id = %s", (me,))
+        others = [row['id'] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return rbac.allowed_user_ids('team', me, direct_report_ids=others)
+
+    cur.execute("""
+        SELECT id FROM user
+        WHERE department_id IS NOT NULL
+          AND department_id = (SELECT department_id FROM user WHERE id = %s)
+    """, (me,))
+    others = [row['id'] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rbac.allowed_user_ids('department', me, department_member_ids=others)
+
+
+def scope_clause(code, column):
+    """
+    Build a SQL fragment restricting `column` to the owner ids the caller may
+    see. Returns ("", []) when the caller's scope is unrestricted.
+
+    Usage:  clause, params = scope_clause('sales_request.view', 'sr.owner_user_id')
+            cur.execute("SELECT ... WHERE 1=1 " + clause, [...] + params)
+    """
+    ids = visible_user_ids(code)
+    if ids is None:
+        return "", []
+    if not ids:
+        # Holds the permission but can see nobody; must not degrade to "all".
+        return " AND 1=0", []
+    placeholders = ",".join(["%s"] * len(ids))
+    return " AND %s IN (%s)" % (column, placeholders), list(ids)
+
+
+def assert_scope(code, owner_user_id):
+    """Abort 403 unless the caller's scope covers this record's owner."""
+    ids = visible_user_ids(code)
+    if ids is not None and owner_user_id not in ids:
+        abort(403)
+
+
+def perm(*codes):
+    """
+    Decorator gating a route on one or more permissions, any of which suffices.
+    Replaces role_required; both set `_perms` so the backstop accepts either.
+    """
+    for code in codes:
+        if code not in rbac.PERMISSIONS:
+            raise rbac.UnknownPermission(code)
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not session.get('user_id'):
+                if request.path.startswith('/api/'):
+                    return jsonify(error='Not authenticated'), 401
+                return redirect(url_for('login'))
+            if any(has(code) for code in codes):
+                return f(*args, **kwargs)
+            if request.path.startswith('/api/'):
+                return jsonify(error='Forbidden'), 403
+            return abort(403)
+        decorated_function._perms = codes
+        return decorated_function
+    return decorator
+
 
 def get_users_by_role(role_name):
     """
@@ -1090,6 +1217,8 @@ def login():
         session['title'] = user['title']
         # Use the new function to get roles
         session['roles'] = get_user_roles(user['id'])
+        # RBAC: permission set and role code, refreshed by /api/refresh-roles.
+        session['perms'], session['role_code'] = load_permissions(user['id'])
         # — 2) Ensure a Firebase Auth user exists for this phone number —
         fb_mobile = "+20" + str(mobile).lstrip('0')  # Ensure all leading zeros are stripped
         # Validate Egyptian phone number (E.164: +20XXXXXXXXXX)
@@ -1292,13 +1421,21 @@ def refresh_user_roles():
         
         # Get fresh roles from database
         fresh_roles = get_user_roles(user_id)
-        
+
         # Update session with fresh roles
         session['roles'] = fresh_roles
-        
+
+        # RBAC: refresh the permission set too, so a role change takes effect
+        # on the next poll rather than at the next login.
+        fresh_perms, role_code = load_permissions(user_id)
+        session['perms'] = fresh_perms
+        session['role_code'] = role_code
+
         return jsonify({
             'success': True,
             'roles': fresh_roles,
+            'perms': fresh_perms,
+            'role_code': role_code,
             'message': 'Roles refreshed successfully'
         })
         

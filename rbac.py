@@ -1,0 +1,643 @@
+"""
+Role-based access control policy for Branding Gate.
+
+Pure logic: no Flask, no MySQL, no imports beyond the standard library. The
+database wrappers live in branding_gate.py; everything decidable without a
+connection is decided here so it can be unit-tested the way
+negotiation_workflow.py is.
+
+Three things live in this module:
+
+* PERMISSIONS  - the vocabulary. `resource.action` strings.
+* SEED_MATRIX  - which role holds which permission, at which scope.
+* the resolver - resolve(), allowed_user_ids(), negotiation_actor().
+
+SEED_MATRIX is the single source of truth for the grants. The rows in
+`role_permission` are generated from it, never hand-edited, so a change is a
+reviewable diff rather than an UPDATE nobody sees.
+"""
+
+SCOPES = ('own', 'team', 'department', 'all')
+
+# Scope ordering, widest last. Used when a role would otherwise hold the same
+# permission twice; the wider grant wins.
+_SCOPE_RANK = {'own': 0, 'team': 1, 'department': 2, 'all': 3}
+
+
+class UnknownPermission(KeyError):
+    """Raised when code asks about a permission that is not in the vocabulary."""
+
+
+def widest(*scopes):
+    """Return the widest of the given scopes, ignoring None."""
+    present = [s for s in scopes if s in _SCOPE_RANK]
+    if not present:
+        return None
+    return max(present, key=lambda s: _SCOPE_RANK[s])
+
+
+# ---------------------------------------------------------------------------
+# Permission vocabulary
+# ---------------------------------------------------------------------------
+
+PERMISSIONS = {
+    # Sales requests
+    'sales_request.view':    'View sales requests',
+    'sales_request.create':  'Create a sales request',
+    'sales_request.edit':    'Edit a sales request',
+    'sales_request.delete':  'Delete a sales request',
+    'sales_request.approve': 'Approve urgent requests and change request status',
+    'sales_request.comment': 'Comment on a sales request',
+
+    # Item money. Cost is Operations, selling price is Pricing.
+    'sales_item.cost':  'Enter or change item cost',
+    'sales_item.price': 'Enter or change item selling price',
+
+    # Client approval
+    'client_approval.view':   'View items awaiting client approval',
+    'client_approval.submit': 'Submit items for client approval',
+    'client_approval.decide': 'Record the client approve, reject or negotiate decision',
+
+    # Negotiation
+    'negotiation.view':              'View negotiations',
+    'negotiation.decide_sales_head': 'Approve or decline a negotiation as Sales Head',
+    'negotiation.decide_pricing':    'Re-price, request re-costing, or decline as Pricing',
+    'negotiation.complete_costing':  'Complete negotiation re-costing as Operations',
+
+    # Operations
+    'approved_item.view':   'View client-approved items',
+    'approved_item.edit':   'Edit approved item components and suppliers',
+    'supplier_report.view': 'View the supplier report',
+
+    # Inventory
+    'inventory.view':     'View inventory',
+    'inventory.create':   'Create inventory items',
+    'inventory.edit':     'Edit inventory items',
+    'inventory.delete':   'Delete inventory items',
+    'inventory.transact': 'Record inventory transactions and credit items',
+
+    # Finance
+    'finance_master.view':  'View payment methods and finance categories',
+    'finance_master.edit':  'Manage payment methods and finance categories',
+    'finance_txn.view':     'View finance transactions',
+    'finance_txn.create':   'Create finance transactions',
+    'finance_txn.approve':  'Approve or reject finance transactions',
+    'finance_txn.delete':   'Delete finance transactions',
+    'finance_report.view':  'View income statement, balance sheet and analytics',
+    'user_balance.view':    'View user balances',
+    'user_balance.request': 'Request a balance top-up',
+    'user_balance.transfer': 'Transfer balance between users',
+    'user_balance.approve': 'Approve or reject balance requests',
+    'loan.view':            'View loans',
+    'loan.create':          'Create loans',
+
+    # Expenses
+    'expense.view':   'View personal expenses',
+    'expense.create': 'Create personal expenses',
+    'expense.edit':   'Edit personal expenses',
+    'expense.delete': 'Delete personal expenses',
+    'expense.submit': 'Submit personal expenses',
+    'expense_tracking.view':            'View expense tracking records',
+    'expense_tracking.create':          'Create expense tracking records',
+    'expense_tracking.approve_manager': 'Give the manager approval on an expense',
+    'expense_tracking.approve_finance': 'Give the finance approval on an expense',
+    'expense_tracking.edit_amount':     'Adjust an expense amount',
+    'expense_tracking.reject':          'Reject an expense',
+
+    # Master data
+    'client.view':   'View clients',
+    'client.create': 'Create clients',
+    'client.edit':   'Edit clients',
+    'client.delete': 'Delete clients',
+    'company.view':   'View companies',
+    'company.create': 'Create companies',
+    'company.edit':   'Edit companies',
+    'company.delete': 'Delete companies',
+    'supplier.view':   'View suppliers',
+    'supplier.create': 'Create suppliers',
+    'supplier.edit':   'Edit suppliers',
+    'supplier.delete': 'Delete suppliers',
+    'entity.view':   'View entities',
+    'entity.create': 'Create entities',
+    'entity.edit':   'Edit entities',
+    'entity.delete': 'Delete entities',
+    'catalog.view': 'View the item catalog',
+    'catalog.edit': 'Edit the item catalog',
+
+    # Administration
+    'user.view':   'View users',
+    'user.create': 'Create users',
+    'user.edit':   'Edit users',
+    'user.delete': 'Delete users',
+    'team.view':   'View teams',
+    'team.create': 'Create teams',
+    'team.edit':   'Edit teams',
+    'department.view': 'View departments',
+    'department.edit': 'Create and rename departments',
+    'role.view':   'View roles and their permissions',
+    'role.assign': 'Assign a role to a user',
+
+    # Dashboards
+    'dashboard.sales':      'View the sales dashboard',
+    'dashboard.operations': 'View the operations dashboard',
+    'dashboard.finance':    'View the finance dashboard',
+    'dashboard.supplier':   'View the supplier dashboard',
+}
+
+# Permissions with no row dimension. Their scope is stored as 'all' and ignored
+# by the scope predicates; listing them here keeps the tests honest about which
+# grants are genuinely scope-free.
+SCOPELESS_PERMISSIONS = frozenset({
+    'finance_master.view', 'finance_master.edit',
+    'catalog.view', 'catalog.edit',
+    'department.view', 'department.edit',
+    'role.view', 'role.assign',
+    'supplier_report.view',
+    'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
+})
+
+
+# ---------------------------------------------------------------------------
+# Departments and roles
+# ---------------------------------------------------------------------------
+
+DEPARTMENTS = {
+    'executive':  'Executive',
+    'sales':      'Sales',
+    'marketing':  'Marketing',
+    'finance':    'Finance',
+    'account':    'Account Management',
+    'design_2d':  '2D Design',
+    'design_3d':  '3D Design',
+    'operations': 'Operations',
+    'pricing':    'Pricing',
+}
+
+LEVEL_EXECUTIVE = 0
+LEVEL_HEAD = 1
+LEVEL_TEAM_LEADER = 2
+LEVEL_MEMBER = 3
+
+# role_code -> (display name, department code or None, level)
+ROLES = {
+    'admin':                  ('Admin / CEO',            'executive',  LEVEL_EXECUTIVE),
+    'assistant':              ('Assistant',              'executive',  LEVEL_HEAD),
+
+    'sales_head':             ('Sales Head',             'sales',      LEVEL_HEAD),
+    'sales_team_leader':      ('Sales Team Leader',      'sales',      LEVEL_TEAM_LEADER),
+    'sales_member':           ('Sales Member',           'sales',      LEVEL_MEMBER),
+
+    'marketing_manager':      ('Marketing Manager',      'marketing',  LEVEL_HEAD),
+    'marketing_member':       ('Marketing Member',       'marketing',  LEVEL_MEMBER),
+
+    'finance_manager':        ('Finance Manager',        'finance',    LEVEL_HEAD),
+    'finance_member':         ('Finance Member',         'finance',    LEVEL_MEMBER),
+
+    'account_director':       ('Account Director',       'account',    LEVEL_HEAD),
+    'account_team_leader':    ('Account Team Leader',    'account',    LEVEL_TEAM_LEADER),
+    'account_member':         ('Account Member',         'account',    LEVEL_MEMBER),
+
+    'design_2d_head':         ('2D Designer Head',       'design_2d',  LEVEL_HEAD),
+    'design_2d_member':       ('2D Designer',            'design_2d',  LEVEL_MEMBER),
+
+    'design_3d_head':         ('3D Head',                'design_3d',  LEVEL_HEAD),
+    'design_3d_member':       ('3D Designer',            'design_3d',  LEVEL_MEMBER),
+
+    'operations_manager':     ('Operations Manager',     'operations', LEVEL_HEAD),
+    'operations_team_leader': ('Operations Team Leader', 'operations', LEVEL_TEAM_LEADER),
+    'operations_member':      ('Operations Member',      'operations', LEVEL_MEMBER),
+
+    'pricing_manager':        ('Pricing Manager',        'pricing',    LEVEL_HEAD),
+    'pricing_specialist':     ('Pricing Specialist',     'pricing',    LEVEL_MEMBER),
+}
+
+
+# ---------------------------------------------------------------------------
+# Grant matrix
+# ---------------------------------------------------------------------------
+
+def _expand(scope, *codes):
+    """Grant every listed permission at one scope."""
+    return {code: scope for code in codes}
+
+
+def _merge(*grant_dicts):
+    """
+    Combine grant dictionaries. When the same permission appears twice the
+    wider scope wins, so a role never silently loses reach by the order its
+    building blocks happen to be listed in.
+    """
+    merged = {}
+    for grants in grant_dicts:
+        for code, scope in grants.items():
+            merged[code] = widest(merged.get(code), scope)
+    return merged
+
+
+# Personal expenses are always own-scope: nobody files another person's claim.
+_OWN_EXPENSES = _expand(
+    'own',
+    'expense.view', 'expense.create', 'expense.edit', 'expense.delete', 'expense.submit',
+)
+
+
+def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=False):
+    """
+    The Sales / Account ladder. Head, team leader and member differ only by
+    scope and by which decisions they may take, so express that once.
+    """
+    grants = {
+        'sales_request.view': scope,
+        'sales_request.create': 'own',
+        'sales_request.edit': scope,
+        'sales_request.comment': scope,
+        'client_approval.view': scope,
+        'client_approval.submit': scope,
+        'negotiation.view': scope,
+        'client.view': 'all',
+        'company.view': 'all',
+        'catalog.view': 'all',
+        'dashboard.sales': 'all',
+    }
+    if approve:
+        grants['sales_request.approve'] = scope
+    if decide_client:
+        grants['client_approval.decide'] = scope
+    if decide_negotiation:
+        grants['negotiation.decide_sales_head'] = scope
+    return grants
+
+
+def _manager_expense_approval(scope):
+    """Every head, manager and team leader signs off expenses within their scope."""
+    return {
+        'expense_tracking.view': scope,
+        'expense_tracking.create': 'own',
+        'expense_tracking.approve_manager': scope,
+    }
+
+
+SEED_MATRIX = {
+    # Admin is filled in below from the full vocabulary so a new permission is
+    # reachable by construction rather than by remembering to add it here.
+    'admin': {},
+
+    # Supports the CEO. Explicitly NOT a shadow admin: no approvals, no
+    # deletes, no finance transactions.
+    'assistant': _merge(
+        _OWN_EXPENSES,
+        {
+            'client.view': 'all',
+            'company.view': 'all',
+            'user.view': 'all',
+            'sales_request.view': 'all',
+            'catalog.view': 'all',
+            'dashboard.sales': 'all',
+            'dashboard.finance': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+
+    # --- Sales -------------------------------------------------------------
+    'sales_head': _merge(
+        _sales_line('department', approve=True, decide_client=True, decide_negotiation=True),
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {'client.create': 'department', 'client.edit': 'department'},
+    ),
+    'sales_team_leader': _merge(
+        _sales_line('team'),
+        _OWN_EXPENSES,
+        _manager_expense_approval('team'),
+        {'client.create': 'own', 'client.edit': 'team'},
+    ),
+    'sales_member': _merge(
+        _sales_line('own'),
+        _OWN_EXPENSES,
+        {
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+            'client.create': 'own',
+        },
+    ),
+
+    # --- Account management (client relationship line) ----------------------
+    'account_director': _merge(
+        _sales_line('department', decide_client=True),
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {'client.create': 'department', 'client.edit': 'department'},
+    ),
+    'account_team_leader': _merge(
+        _sales_line('team'),
+        _OWN_EXPENSES,
+        _manager_expense_approval('team'),
+        {'client.create': 'own', 'client.edit': 'team'},
+    ),
+    'account_member': _merge(
+        _sales_line('own'),
+        _OWN_EXPENSES,
+        {'expense_tracking.view': 'own', 'expense_tracking.create': 'own', 'client.create': 'own'},
+    ),
+
+    # --- Pricing, a separate function under the CEO -------------------------
+    'pricing_manager': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_item.price': 'all',
+            'sales_request.view': 'all',
+            'client_approval.view': 'all',
+            'negotiation.view': 'all',
+            'negotiation.decide_pricing': 'all',
+            'catalog.view': 'all',
+            'catalog.edit': 'all',
+            'client.view': 'all',
+            'dashboard.sales': 'all',
+        },
+    ),
+    # Prepares quotations and updates price data. The decision on a negotiation
+    # belongs to the manager.
+    'pricing_specialist': _merge(
+        _OWN_EXPENSES,
+        {
+            'sales_item.price': 'all',
+            'sales_request.view': 'all',
+            'client_approval.view': 'all',
+            'negotiation.view': 'all',
+            'catalog.view': 'all',
+            'client.view': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+
+    # --- Operations ---------------------------------------------------------
+    'operations_manager': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'all',
+            'sales_item.cost': 'all',
+            'negotiation.view': 'all',
+            'negotiation.complete_costing': 'all',
+            'approved_item.view': 'all',
+            'approved_item.edit': 'all',
+            'supplier_report.view': 'all',
+            'supplier.view': 'all',
+            'supplier.create': 'all',
+            'supplier.edit': 'all',
+            'inventory.view': 'all',
+            'inventory.create': 'all',
+            'inventory.edit': 'all',
+            'inventory.delete': 'all',
+            'inventory.transact': 'all',
+            'entity.view': 'all',
+            'client.view': 'all',
+            'company.view': 'all',
+            'catalog.view': 'all',
+            'dashboard.operations': 'all',
+            'dashboard.supplier': 'all',
+        },
+    ),
+    'operations_team_leader': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('team'),
+        {
+            'sales_request.view': 'all',
+            'sales_item.cost': 'all',
+            'negotiation.view': 'all',
+            'negotiation.complete_costing': 'all',
+            'approved_item.view': 'all',
+            'approved_item.edit': 'all',
+            'supplier_report.view': 'all',
+            'supplier.view': 'all',
+            'inventory.view': 'all',
+            'inventory.create': 'all',
+            'inventory.edit': 'all',
+            'inventory.transact': 'all',
+            'entity.view': 'all',
+            'client.view': 'all',
+            'catalog.view': 'all',
+            'dashboard.operations': 'all',
+        },
+    ),
+    'operations_member': _merge(
+        _OWN_EXPENSES,
+        {
+            'sales_request.view': 'all',
+            'sales_item.cost': 'all',
+            'approved_item.view': 'all',
+            'supplier.view': 'all',
+            'inventory.view': 'all',
+            'catalog.view': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+
+    # --- Finance ------------------------------------------------------------
+    'finance_manager': _merge(
+        _OWN_EXPENSES,
+        {
+            'finance_master.view': 'all',
+            'finance_master.edit': 'all',
+            'finance_txn.view': 'all',
+            'finance_txn.create': 'all',
+            'finance_txn.approve': 'all',
+            'finance_txn.delete': 'all',
+            'finance_report.view': 'all',
+            'user_balance.view': 'all',
+            'user_balance.request': 'own',
+            'user_balance.transfer': 'all',
+            'user_balance.approve': 'all',
+            'loan.view': 'all',
+            'loan.create': 'all',
+            'expense_tracking.view': 'all',
+            'expense_tracking.create': 'own',
+            'expense_tracking.approve_manager': 'department',
+            'expense_tracking.approve_finance': 'all',
+            'expense_tracking.edit_amount': 'all',
+            'expense_tracking.reject': 'all',
+            'sales_request.view': 'all',
+            'client.view': 'all',
+            'company.view': 'all',
+            'supplier.view': 'all',
+            'dashboard.finance': 'all',
+        },
+    ),
+    # Records and reports. Approves nothing.
+    'finance_member': _merge(
+        _OWN_EXPENSES,
+        {
+            'finance_master.view': 'all',
+            'finance_txn.view': 'all',
+            'finance_txn.create': 'all',
+            'finance_report.view': 'all',
+            'user_balance.view': 'all',
+            'user_balance.request': 'own',
+            'loan.view': 'all',
+            'expense_tracking.view': 'all',
+            'expense_tracking.create': 'own',
+            'sales_request.view': 'all',
+            'client.view': 'all',
+            'supplier.view': 'all',
+            'dashboard.finance': 'all',
+        },
+    ),
+
+    # --- Marketing ----------------------------------------------------------
+    'marketing_manager': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'department',
+            'client.view': 'all',
+            'company.view': 'all',
+            'catalog.view': 'all',
+            'dashboard.sales': 'all',
+        },
+    ),
+    'marketing_member': _merge(
+        _OWN_EXPENSES,
+        {
+            'client.view': 'all',
+            'catalog.view': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+
+    # --- Design -------------------------------------------------------------
+    'design_2d_head': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'catalog.edit': 'all',
+            'client.view': 'all',
+        },
+    ),
+    'design_2d_member': _merge(
+        _OWN_EXPENSES,
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+    'design_3d_head': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'catalog.edit': 'all',
+            'client.view': 'all',
+        },
+    ),
+    'design_3d_member': _merge(
+        _OWN_EXPENSES,
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'expense_tracking.view': 'own',
+            'expense_tracking.create': 'own',
+        },
+    ),
+}
+
+# Admin holds everything, generated rather than listed, so a permission added
+# to PERMISSIONS is never accidentally unreachable.
+SEED_MATRIX['admin'] = {code: 'all' for code in PERMISSIONS}
+
+
+# ---------------------------------------------------------------------------
+# Negotiation actors
+#
+# negotiation_workflow.transition() speaks three actor strings. Map role codes
+# onto them here rather than hardcoding role names in the route handlers, so
+# that module stays untouched.
+# ---------------------------------------------------------------------------
+
+_NEGOTIATION_ACTORS = {
+    'admin': 'sales_head',          # admin retains the global bypass
+    'sales_head': 'sales_head',
+    'pricing_manager': 'pricing',
+    'pricing_specialist': 'pricing',
+    'operations_manager': 'operation',
+    'operations_team_leader': 'operation',
+    'operations_member': 'operation',
+}
+
+
+def negotiation_actor(role_code):
+    """Return the negotiation_workflow actor string for a role, or None."""
+    return _NEGOTIATION_ACTORS.get(role_code)
+
+
+# ---------------------------------------------------------------------------
+# Resolver
+# ---------------------------------------------------------------------------
+
+def resolve(perms, code):
+    """
+    Return the scope a permission is held at, or None when it is not held.
+
+    `perms` is the {permission_code: scope} mapping carried in the session.
+    Deny by default: an unknown or absent code returns None.
+    """
+    if code not in PERMISSIONS:
+        raise UnknownPermission(code)
+    scope = perms.get(code) if perms else None
+    return scope if scope in SCOPES else None
+
+
+def allowed_user_ids(scope, me, direct_report_ids=(), department_member_ids=()):
+    """
+    Translate a scope into the set of owner ids a caller may see.
+
+    Returns None for 'all', meaning unrestricted, so callers can skip building
+    a predicate entirely. Otherwise returns a sorted list that always includes
+    the caller.
+    """
+    if scope == 'all':
+        return None
+    if scope == 'own':
+        return [me]
+    if scope == 'team':
+        return sorted({me, *direct_report_ids})
+    if scope == 'department':
+        return sorted({me, *department_member_ids})
+    # Unknown or absent scope grants nothing, not everything.
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Seed generation
+# ---------------------------------------------------------------------------
+
+def seed_rows():
+    """
+    Flatten SEED_MATRIX into (role_code, permission_code, scope) tuples for the
+    role_permission table. Raises on any permission code not in the vocabulary,
+    so a typo fails at seed time rather than silently granting nothing.
+    """
+    rows = []
+    for role_code, grants in SEED_MATRIX.items():
+        if role_code not in ROLES:
+            raise KeyError('SEED_MATRIX names an unknown role: %s' % role_code)
+        for code, scope in grants.items():
+            if code not in PERMISSIONS:
+                raise UnknownPermission('%s grants unknown permission %s' % (role_code, code))
+            if scope not in SCOPES:
+                raise ValueError('%s grants %s at invalid scope %r' % (role_code, code, scope))
+            rows.append((role_code, code, scope))
+    return rows
