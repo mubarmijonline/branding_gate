@@ -4,6 +4,56 @@
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
     {% if 'admin' in user_roles %}
+
+    <!-- Departments -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h2 class="m-0 font-weight-bold text-primary">Departments</h2>
+            <button class="btn btn-success" data-toggle="modal" data-target="#addDepartmentModal">
+                <i class="fas fa-sitemap"></i> Add Department
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="departments-table" class="table table-bordered mb-0" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Teams</th>
+                            <th>People</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roles and their permissions (read-only: the matrix lives in rbac.py) -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h2 class="m-0 font-weight-bold text-primary">Roles &amp; Permissions</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-5">
+                    <label for="role_inspector">Role</label>
+                    <select class="form-control" id="role_inspector"></select>
+                    <small class="form-text text-muted">
+                        Read-only. What a role may do is defined in <code>rbac.py</code> and applied by
+                        <code>seed_rbac.py</code>, so the matrix is reviewed in code, not edited here.
+                    </small>
+                </div>
+                <div class="col-md-7">
+                    <div id="role_permissions" class="mt-3 mt-md-0"
+                         style="max-height:320px; overflow-y:auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Teams Table and Add Team Button -->
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
@@ -49,9 +99,12 @@
                             <th>Name</th>
                             <th>Mobile</th>
                             <th>Email</th>
+                            <th>Department</th>
+                            <th>Role</th>
+                            <th>Reports To</th>
                             <th>Team ID</th>
                             <th>Team Name</th>
-                            <th>Department Name</th>
+                            <th>Team Department</th>
                             <th>Username</th>
                             <th>Title</th>
                             <th>Added By</th>
@@ -104,6 +157,124 @@ const MODULE_PERMISSIONS = [
     { key: 'supplier_management', label: 'Supplier Management',        icon: 'fa-truck',     desc: 'Create / edit / delete suppliers' }
 ];
 const PERM_KEYS = MODULE_PERMISSIONS.map(p => p.key);
+
+// ---------------------------------------------------------------------------
+// RBAC hierarchy: departments, roles and the reporting line.
+// The grant matrix itself lives in rbac.py and is applied by seed_rbac.py, so
+// this page assigns roles but never edits what a role can do.
+// ---------------------------------------------------------------------------
+let DEPARTMENTS = [];
+let RBAC_ROLES = [];
+
+const LEVEL_LABELS = { 0: 'Executive', 1: 'Head / Manager', 2: 'Team Leader', 3: 'Member' };
+
+function loadHierarchyRefData() {
+    return $.when(
+        $.getJSON('/api/departments', function(r) { if (r.success) DEPARTMENTS = r.departments; }),
+        $.getJSON('/api/rbac/roles',  function(r) { if (r.success) RBAC_ROLES  = r.roles; })
+    );
+}
+
+function fillDepartmentSelect($select, selectedId) {
+    $select.empty().append('<option value="">- No department -</option>');
+    DEPARTMENTS.forEach(function(d) {
+        $select.append($('<option>').val(d.id).text(d.name));
+    });
+    $select.val(selectedId || '');
+}
+
+// Roles are filtered to the chosen department, plus the company-wide ones.
+function fillRoleSelect($select, departmentId, selectedId) {
+    $select.empty().append('<option value="">- No role -</option>');
+    const deptId = departmentId ? String(departmentId) : '';
+    RBAC_ROLES.filter(function(r) {
+        if (!deptId) return true;
+        return String(r.department_id) === deptId || r.department_code === 'executive';
+    }).forEach(function(r) {
+        $select.append(
+            $('<option>').val(r.id).text(r.name + '  (' + (LEVEL_LABELS[r.level] || r.level) + ')')
+        );
+    });
+    $select.val(selectedId || '');
+}
+
+// Only people more senior than the selected role may be its manager.
+function fillManagerSelect($select, roleId, selectedId, excludeUserId) {
+    $select.empty().append('<option value="">- Reports to nobody -</option>');
+    if (!roleId) { $select.val(''); return $.Deferred().resolve(); }
+    const params = { role_id: roleId };
+    if (excludeUserId) params.exclude_user_id = excludeUserId;
+    return $.getJSON('/api/rbac/managers', params, function(r) {
+        if (!r.success) return;
+        r.managers.forEach(function(m) {
+            $select.append($('<option>').val(m.id).text(m.name + '  -  ' + m.role_name));
+        });
+        $select.val(selectedId || '');
+    });
+}
+
+// Wire a Department -> Role -> Manager cascade for one modal.
+function bindHierarchyCascade(prefix, excludeUserId) {
+    const $dept = $('#' + prefix + '_department_id');
+    const $role = $('#' + prefix + '_rbac_role_id');
+    const $manager = $('#' + prefix + '_manager_id');
+
+    $dept.off('change.hierarchy').on('change.hierarchy', function() {
+        fillRoleSelect($role, $dept.val(), null);
+        fillManagerSelect($manager, null, null, excludeUserId);
+    });
+    $role.off('change.hierarchy').on('change.hierarchy', function() {
+        fillManagerSelect($manager, $role.val(), null, excludeUserId);
+    });
+}
+
+function hierarchyPayload(prefix) {
+    const val = id => { const v = $('#' + prefix + '_' + id).val(); return v === '' ? null : v; };
+    return {
+        department_id: val('department_id'),
+        rbac_role_id:  val('rbac_role_id'),
+        manager_id:    val('manager_id')
+    };
+}
+
+const USER_TABLE_COLUMNS = [
+    'ID', 'Name', 'Mobile', 'Email', 'Department', 'Role', 'Reports To',
+    'Team ID', 'Team Name', 'Team Department', 'Username', 'Title',
+    'Added By', 'Date', 'Modified Date'
+];
+
+function badge(text, cls) {
+    if (!text) return '<span class="text-muted">-</span>';
+    return '<span class="badge badge-' + cls + '">' + text + '</span>';
+}
+
+// Keyed by id so the edit modal reads real values instead of scraping cell
+// text, which silently breaks whenever a column is added.
+const USERS_BY_ID = {};
+
+// Single source of truth for a users-table row, minus the actions cell.
+function userRowCells(user) {
+    USERS_BY_ID[user.id] = user;
+    return [
+        user.id,
+        user.name,
+        user.mobile,
+        user.email,
+        badge(user.rbac_department_name, 'info'),
+        badge(user.role_name, user.role_level === 0 ? 'dark'
+                            : user.role_level === 1 ? 'primary'
+                            : user.role_level === 2 ? 'secondary' : 'light'),
+        user.manager_name || '<span class="text-muted">-</span>',
+        user.team_id,
+        user.team_name,
+        user.department_name,
+        user.username,
+        user.title,
+        user.added_by,
+        user.date,
+        user.modified_date
+    ];
+}
 
 // Render the toggle-switch checkboxes inside a container element
 function renderPermSwitches(containerSelector, idPrefix) {
@@ -192,18 +363,7 @@ function loadUsersTable() {
     $.getJSON('/api/users', function(response) {
         if (response.success) {
             const users = response.users.map(user => [
-                user.id,
-                user.name,
-                user.mobile,
-                user.email,
-                user.team_id,
-                user.team_name,
-                user.department_name,
-                user.username,
-                user.title,
-                user.added_by,
-                user.date,
-                user.modified_date,
+                ...userRowCells(user),
                 `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
                     <i class="fas fa-edit"></i> Edit
                 </button>
@@ -218,18 +378,7 @@ function loadUsersTable() {
                 $('#users-table').DataTable({
                     data: users,
                     columns: [
-                        { title: "ID" },
-                        { title: "Name" },
-                        { title: "Mobile" },
-                        { title: "Email" },
-                        { title: "Team ID" },
-                        { title: "Team Name" },
-                        { title: "Department Name" },
-                        { title: "Username" },
-                        { title: "Title" },
-                        { title: "Added By" },
-                        { title: "Date" },
-                        { title: "Modified Date" },
+                        ...USER_TABLE_COLUMNS.map(t => ({ title: t })),
                         { title: "Actions", orderable: false, searchable: false }
                     ],
                     dom: 'Bfrtip',
@@ -243,22 +392,136 @@ function loadUsersTable() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Departments card
+// ---------------------------------------------------------------------------
+function renderDepartments() {
+    const $body = $('#departments-table tbody').empty();
+    if (!DEPARTMENTS.length) {
+        $body.append('<tr><td colspan="5" class="text-muted text-center">No departments yet.</td></tr>');
+        return;
+    }
+    DEPARTMENTS.forEach(function(d) {
+        $body.append(
+            '<tr>' +
+            '<td><code>' + d.code + '</code></td>' +
+            '<td>' + d.name + '</td>' +
+            '<td>' + d.team_count + '</td>' +
+            '<td>' + d.user_count + '</td>' +
+            '<td><button class="btn btn-sm btn-info rename-department" ' +
+                'data-id="' + d.id + '" data-name="' + d.name + '">' +
+                '<i class="fas fa-edit"></i> Rename</button></td>' +
+            '</tr>'
+        );
+    });
+}
+
+$(document).on('click', '.rename-department', function() {
+    const id = $(this).data('id');
+    Swal.fire({
+        title: 'Rename department',
+        input: 'text',
+        inputValue: $(this).data('name'),
+        showCancelButton: true
+    }).then(function(result) {
+        if (!result.isConfirmed || !result.value) return;
+        $.ajax({
+            url: '/api/departments/' + id,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ name: result.value }),
+            success: function(r) {
+                if (r.success) {
+                    loadHierarchyRefData().done(renderDepartments);
+                } else {
+                    Swal.fire('Error', r.error || 'Rename failed', 'error');
+                }
+            }
+        });
+    });
+});
+
+$(document).on('submit', '#addDepartmentForm', function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: '/api/departments',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            code: $('#department_code').val(),
+            name: $('#department_name_new').val()
+        }),
+        success: function(r) {
+            if (!r.success) { Swal.fire('Error', r.error || 'Create failed', 'error'); return; }
+            $('#addDepartmentModal').modal('hide');
+            $('#addDepartmentForm')[0].reset();
+            loadHierarchyRefData().done(renderDepartments);
+            Swal.fire('Success', 'Department created', 'success');
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Role inspector
+// ---------------------------------------------------------------------------
+const SCOPE_HELP = {
+    own: 'their own records',
+    team: "their team's records",
+    department: "the whole department's records",
+    all: 'everything'
+};
+
+function renderRoleInspector() {
+    const $select = $('#role_inspector').empty();
+    RBAC_ROLES.forEach(function(r) {
+        $select.append($('<option>').val(r.id).text(
+            (r.department_name ? r.department_name + ' - ' : '') + r.name +
+            '  (' + r.permission_count + ' permissions)'
+        ));
+    });
+    showRolePermissions($select.val());
+}
+
+function showRolePermissions(roleId) {
+    const $out = $('#role_permissions');
+    if (!roleId) { $out.empty(); return; }
+    $.getJSON('/api/rbac/roles/' + roleId + '/permissions', function(r) {
+        if (!r.success) { $out.html('<div class="text-danger">' + (r.error || 'Failed') + '</div>'); return; }
+        if (!r.permissions.length) {
+            $out.html('<div class="text-muted">This role holds no permissions.</div>');
+            return;
+        }
+        let html = '<table class="table table-sm table-striped mb-0"><thead><tr>' +
+                   '<th>Permission</th><th>Applies to</th></tr></thead><tbody>';
+        r.permissions.forEach(function(p) {
+            html += '<tr><td><code>' + p.permission_code + '</code><br>' +
+                    '<small class="text-muted">' + p.description + '</small></td>' +
+                    '<td><span class="badge badge-secondary">' + p.scope + '</span><br>' +
+                    '<small class="text-muted">' + (SCOPE_HELP[p.scope] || '') + '</small></td></tr>';
+        });
+        $out.html(html + '</tbody></table>');
+    });
+}
+
+$(document).on('change', '#role_inspector', function() {
+    showRolePermissions($(this).val());
+});
+
 $(document).ready(function() {
+    // Reference data first: the modals and cards all depend on it.
+    loadHierarchyRefData().done(function() {
+        renderDepartments();
+        renderRoleInspector();
+        fillDepartmentSelect($('#add_department_id'), null);
+        fillRoleSelect($('#add_rbac_role_id'), null, null);
+        fillManagerSelect($('#add_manager_id'), null, null);
+        bindHierarchyCascade('add');
+    });
+
     $.getJSON('/api/users', function(response) {
         if (response.success) {
             const users = response.users.map(user => [
-                user.id,
-                user.name,
-                user.mobile,
-                user.email,
-                user.team_id,
-                user.team_name,
-                user.department_name,
-                user.username,
-                user.title,
-                user.added_by,
-                user.date,
-                user.modified_date,
+                ...userRowCells(user),
                 `<button class="btn btn-info btn-sm edit-user" data-id="${user.id}">
                     <i class="fas fa-edit"></i> Edit
                 </button>
@@ -272,18 +535,7 @@ $(document).ready(function() {
                 $('#users-table').DataTable({
                     data: users,
                     columns: [
-                        { title: "ID" },
-                        { title: "Name" },
-                        { title: "Mobile" },
-                        { title: "Email" },
-                        { title: "Team ID" },
-                        { title: "Team Name" },
-                        { title: "Department Name" },
-                        { title: "Username" },
-                        { title: "Title" },
-                        { title: "Added By" },
-                        { title: "Date" },
-                        { title: "Modified Date" },
+                        ...USER_TABLE_COLUMNS.map(t => ({ title: t })),
                         { title: "Actions", orderable: false, searchable: false }
                     ],
                     dom: 'Bfrtip',
@@ -403,18 +655,7 @@ $(document).ready(function() {
                             $.getJSON('/api/users', function(response) {
                                 if (response.success) {
                                     const users = response.users.map(user => [
-                                        user.id,
-                                        user.name,
-                                        user.mobile,
-                                        user.email,
-                                        user.team_id,
-                                        user.team_name,
-                                        user.department_name,
-                                        user.username,
-                                        user.title,
-                                        user.added_by,
-                                        user.date,
-                                        user.modified_date,
+                                        ...userRowCells(user),
                                         `<button class=\"btn btn-danger btn-sm delete-user\" data-id=\"${user.id}\"><i class=\"fas fa-trash\"></i> Delete</button>`
                                     ]);
                                     const table = $('#users-table').DataTable();
@@ -472,7 +713,8 @@ $(document).ready(function() {
             mobile: $('#mobile').val(),
             email: $('#email').val(),
             password: $('#password').val(),
-            user_roles: Array.from(new Set([...baseRoles, ...perms]))
+            user_roles: Array.from(new Set([...baseRoles, ...perms])),
+            ...hierarchyPayload('add')
         };
 
         $.ajax({
@@ -493,18 +735,7 @@ $(document).ready(function() {
                     $.getJSON('/api/users', function(response) {
                         if (response.success) {
                             const users = response.users.map(user => [
-                                user.id,
-                                user.name,
-                                user.mobile,
-                                user.email,
-                                user.team_id,
-                                user.team_name,
-                                user.department_name,
-                                user.username,
-                                user.title,
-                                user.added_by,
-                                user.date,
-                                user.modified_date,
+                                ...userRowCells(user),
                                 `<button class="btn btn-danger btn-sm delete-user" data-id="${user.id}">
                                     <i class="fas fa-trash"></i> Delete
                                 </button>`
@@ -672,15 +903,8 @@ $(document).ready(function() {
     // Handle edit user button click (ensure listener works after DataTable redraws)
     $('#users-table').on('click', '.edit-user', function() {
         const userId = $(this).data('id');
-        const $row = $(this).closest('tr');
-        const userData = {
-            id: userId,
-            name: $row.find('td').eq(1).text(),
-            mobile: $row.find('td').eq(2).text(),
-            email: $row.find('td').eq(3).text(),
-            username: $row.find('td').eq(8).text(),
-            title: $row.find('td').eq(9).text()
-        };
+        const userData = USERS_BY_ID[userId];
+        if (!userData) { Swal.fire('Error', 'User data not loaded', 'error'); return; }
 
         $('#edit_user_id').val(userData.id);
         $('#edit_user_name').val(userData.name);
@@ -688,6 +912,13 @@ $(document).ready(function() {
         $('#edit_user_email').val(userData.email);
         $('#edit_user_username').val(userData.username);
         $('#edit_user_title').val(userData.title);
+        $('#edit_user_password').val('');
+
+        // Position in the organisation, cascading department -> role -> manager.
+        fillDepartmentSelect($('#edit_department_id'), userData.department_id);
+        fillRoleSelect($('#edit_rbac_role_id'), userData.department_id, userData.rbac_role_id);
+        fillManagerSelect($('#edit_manager_id'), userData.rbac_role_id, userData.manager_id, userId);
+        bindHierarchyCascade('edit', userId);
 
         // Fetch user and team roles, then populate select2 + module switches
         fetchUserRolesForEdit(userId, function(data) {
@@ -720,7 +951,8 @@ $(document).ready(function() {
             username: $('#edit_user_username').val(),
             password: $('#edit_user_password').val(),
             title: $('#edit_user_title').val(),
-            user_roles: Array.from(new Set([...baseRoles, ...perms]))
+            user_roles: Array.from(new Set([...baseRoles, ...perms])),
+            ...hierarchyPayload('edit')
         };
 
         $.ajax({
@@ -770,6 +1002,25 @@ $(document).ready(function() {
                         <label for="title">Title</label>
                         <input type="text" class="form-control" id="title" required>
                     </div>
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <label class="font-weight-bold d-block mb-2">
+                            <i class="fas fa-sitemap text-primary mr-1"></i>Position in the organisation
+                        </label>
+                        <div class="form-group">
+                            <label for="add_department_id">Department</label>
+                            <select class="form-control" id="add_department_id"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="add_rbac_role_id">Role</label>
+                            <select class="form-control" id="add_rbac_role_id"></select>
+                            <small class="form-text text-muted">The role decides what this person can do. Pick the department first.</small>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="add_manager_id">Reports to</label>
+                            <select class="form-control" id="add_manager_id"></select>
+                            <small class="form-text text-muted">Only people in a more senior role are listed.</small>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label for="team_id">Team</label>
                         <select class="form-control" id="team_id">
@@ -813,6 +1064,40 @@ $(document).ready(function() {
 </div>
 
 <!-- Add Team Modal -->
+<!-- Add Department Modal -->
+<div class="modal fade" id="addDepartmentModal" tabindex="-1" role="dialog" aria-labelledby="addDepartmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="addDepartmentForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addDepartmentModalLabel">Add Department</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="department_name_new">Name</label>
+                        <input type="text" class="form-control" id="department_name_new" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="department_code">Code</label>
+                        <input type="text" class="form-control" id="department_code" required
+                               placeholder="e.g. procurement">
+                        <small class="form-text text-muted">
+                            Lowercase, no spaces. Permanent once created - roles are attached to it.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="addTeamModal" tabindex="-1" role="dialog" aria-labelledby="addTeamModalLabel" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
@@ -930,6 +1215,23 @@ $(document).ready(function() {
                     <div class="form-group">
                         <label for="edit_user_title">Title</label>
                         <input type="text" class="form-control" id="edit_user_title">
+                    </div>
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <label class="font-weight-bold d-block mb-2">
+                            <i class="fas fa-sitemap text-primary mr-1"></i>Position in the organisation
+                        </label>
+                        <div class="form-group">
+                            <label for="edit_department_id">Department</label>
+                            <select class="form-control" id="edit_department_id"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit_rbac_role_id">Role</label>
+                            <select class="form-control" id="edit_rbac_role_id"></select>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="edit_manager_id">Reports to</label>
+                            <select class="form-control" id="edit_manager_id"></select>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="edit_user_roles">User Roles (not from team)</label>

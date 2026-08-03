@@ -1739,9 +1739,16 @@ def get_users():
         # Passwords are never returned to the client.
         cur.execute("""
             SELECT u.id, u.mobile, u.email, u.date, u.name, u.team_id, u.modified_date, u.added_by, u.username, u.title,
-                   t.team_name, t.department_name
+                   t.team_name, t.department_name,
+                   u.department_id, u.rbac_role_id, u.manager_id,
+                   d.name AS rbac_department_name, d.code AS rbac_department_code,
+                   r.code AS role_code, r.name AS role_name, r.level AS role_level,
+                   m.name AS manager_name
             FROM user u
             LEFT JOIN team t ON u.team_id = t.team_id
+            LEFT JOIN department d ON d.id = u.department_id
+            LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+            LEFT JOIN user m ON m.id = u.manager_id
             ORDER BY u.id DESC
         """)
         users_data = cur.fetchall()
@@ -1760,7 +1767,17 @@ def get_users():
                 'username': user['username'],
                 'title': user['title'],
                 'team_name': user['team_name'],
-                'department_name': user['department_name']
+                'department_name': user['department_name'],
+                # RBAC hierarchy
+                'department_id': user['department_id'],
+                'rbac_department_name': user['rbac_department_name'],
+                'rbac_department_code': user['rbac_department_code'],
+                'rbac_role_id': user['rbac_role_id'],
+                'role_code': user['role_code'],
+                'role_name': user['role_name'],
+                'role_level': user['role_level'],
+                'manager_id': user['manager_id'],
+                'manager_name': user['manager_name']
             })
         cur.close()
         conn.close()
@@ -1856,6 +1873,14 @@ def add_user():
             except Exception:
                 team_id = None
         
+        # RBAC hierarchy: department, role and reporting line.
+        hierarchy, hierarchy_error = _hierarchy_fields(data)
+        if hierarchy_error:
+            return jsonify({'success': False, 'error': hierarchy_error}), 400
+        validation_error = _validate_hierarchy(cur, hierarchy)
+        if validation_error:
+            return jsonify({'success': False, 'error': validation_error}), 400
+
         # Insert new user with username, title, and team_id
         cur.execute("""
             INSERT INTO user (name, mobile, email, password, username, title, team_id, date, added_by)
@@ -1875,7 +1900,15 @@ def add_user():
         
         # Get the new user's ID
         new_user_id = cur.lastrowid
-        
+
+        if hierarchy:
+            assignments = ", ".join("%s = %%s" % key for key in hierarchy)
+            cur.execute(
+                "UPDATE user SET %s WHERE id = %%s" % assignments,
+                list(hierarchy.values()) + [new_user_id]
+            )
+            conn.commit()
+
         # Insert user-specific roles if provided
         user_roles = data.get('user_roles', [])
         if user_roles and isinstance(user_roles, list):
@@ -2061,6 +2094,20 @@ def edit_user(user_id):
             user_id
         ))
 
+        # RBAC hierarchy, same rule: only keys the client actually sent are applied.
+        hierarchy, hierarchy_error = _hierarchy_fields(data)
+        if hierarchy_error:
+            return jsonify({'success': False, 'error': hierarchy_error}), 400
+        validation_error = _validate_hierarchy(cur, hierarchy, user_id=user_id)
+        if validation_error:
+            return jsonify({'success': False, 'error': validation_error}), 400
+        if hierarchy:
+            assignments = ", ".join("%s = %%s" % key for key in hierarchy)
+            cur.execute(
+                "UPDATE user SET %s WHERE id = %%s" % assignments,
+                list(hierarchy.values()) + [user_id]
+            )
+
         # team_id is only touched when the client actually sends the key, so an
         # edit form that omits it does not silently unassign the user's team.
         if 'team_id' in data:
@@ -2140,6 +2187,244 @@ def get_user_all_roles(user_id):
         return jsonify(success=True, user_roles=user_roles, team_roles=team_roles)
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+
+
+# ---------------------------------------------------------------------------
+# Departments, roles and the reporting line
+# ---------------------------------------------------------------------------
+
+@app.route('/api/departments', methods=['GET'])
+@role_required('admin')
+def get_departments():
+    """List departments with how many teams and users sit in each."""
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT d.id, d.code, d.name,
+                   (SELECT COUNT(*) FROM team t WHERE t.department_id = d.id) AS team_count,
+                   (SELECT COUNT(*) FROM user u WHERE u.department_id = d.id) AS user_count
+            FROM department d
+            ORDER BY d.name
+        """)
+        departments = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, departments=departments)
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/departments', methods=['POST'])
+@role_required('admin')
+def add_department():
+    """Create a department. `code` is the stable key, `name` is the label."""
+    try:
+        data = request.get_json() or {}
+        code = (data.get('code') or '').strip().lower().replace(' ', '_')
+        name = (data.get('name') or '').strip()
+        if not code or not name:
+            return jsonify(success=False, error='Both code and name are required'), 400
+
+        conn, cur = connection()
+        cur.execute("SELECT id FROM department WHERE code = %s", (code,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='A department with that code already exists'), 400
+
+        cur.execute("INSERT INTO department (code, name) VALUES (%s, %s)", (code, name))
+        conn.commit()
+        new_id = cur.lastrowid
+        cur.close()
+        conn.close()
+        return jsonify(success=True, id=new_id, message='Department created')
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/departments/<int:department_id>', methods=['PUT'])
+@role_required('admin')
+def edit_department(department_id):
+    """
+    Rename a department. The code is deliberately immutable: rbac.py and the
+    seed refer to departments by code, so changing it would orphan the roles.
+    """
+    try:
+        data = request.get_json() or {}
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify(success=False, error='Name is required'), 400
+
+        conn, cur = connection()
+        cur.execute("UPDATE department SET name = %s WHERE id = %s", (name, department_id))
+        conn.commit()
+        updated = cur.rowcount
+        cur.close()
+        conn.close()
+        if not updated:
+            return jsonify(success=False, error='Department not found'), 404
+        return jsonify(success=True, message='Department renamed')
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/rbac/roles', methods=['GET'])
+@role_required('admin')
+def get_rbac_roles():
+    """List roles with their department and how many permissions each holds."""
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT r.id, r.code, r.name, r.level, r.department_id,
+                   d.code AS department_code, d.name AS department_name,
+                   (SELECT COUNT(*) FROM role_permission rp WHERE rp.role_id = r.id) AS permission_count
+            FROM rbac_role r
+            LEFT JOIN department d ON d.id = r.department_id
+            ORDER BY d.name, r.level, r.name
+        """)
+        roles = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, roles=roles)
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/rbac/roles/<int:role_id>/permissions', methods=['GET'])
+@role_required('admin')
+def get_rbac_role_permissions(role_id):
+    """
+    Show what a role can do. Read-only: the grant matrix lives in rbac.py and
+    is applied by seed_rbac.py, so it is reviewed in code rather than edited here.
+    """
+    try:
+        conn, cur = connection()
+        cur.execute("SELECT id, code, name, level FROM rbac_role WHERE id = %s", (role_id,))
+        role = cur.fetchone()
+        if not role:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='Role not found'), 404
+
+        cur.execute("""
+            SELECT rp.permission_code, rp.scope, p.description
+            FROM role_permission rp
+            JOIN permission p ON p.code = rp.permission_code
+            WHERE rp.role_id = %s
+            ORDER BY rp.permission_code
+        """, (role_id,))
+        permissions = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, role=role, permissions=permissions)
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/rbac/managers', methods=['GET'])
+@role_required('admin')
+def get_manager_candidates():
+    """
+    Candidate managers for a role: anyone holding a role at a higher level
+    (numerically lower). Passing no role_id returns everyone with a role.
+    """
+    try:
+        role_id = request.args.get('role_id')
+        exclude_user_id = request.args.get('exclude_user_id')
+
+        conn, cur = connection()
+        sql = """
+            SELECT u.id, u.name, u.username, r.name AS role_name, r.level,
+                   d.name AS department_name
+            FROM user u
+            JOIN rbac_role r ON r.id = u.rbac_role_id
+            LEFT JOIN department d ON d.id = u.department_id
+            WHERE 1=1
+        """
+        params = []
+        if role_id:
+            cur.execute("SELECT level FROM rbac_role WHERE id = %s", (role_id,))
+            row = cur.fetchone()
+            if row:
+                sql += " AND r.level < %s"
+                params.append(row['level'])
+        if exclude_user_id:
+            sql += " AND u.id != %s"
+            params.append(exclude_user_id)
+        sql += " ORDER BY r.level, u.name"
+
+        cur.execute(sql, params)
+        managers = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, managers=managers)
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+def _hierarchy_fields(data):
+    """
+    Pull department_id / rbac_role_id / manager_id off a request payload.
+    Returns (fields, error). Only keys actually present are returned, so a
+    form that omits them leaves the stored values alone.
+    """
+    fields = {}
+    for key in ('department_id', 'rbac_role_id', 'manager_id'):
+        if key not in data:
+            continue
+        value = data.get(key)
+        if value in (None, '', 'undefined', 'null'):
+            fields[key] = None
+            continue
+        try:
+            fields[key] = int(value)
+        except (TypeError, ValueError):
+            return None, 'Invalid %s' % key
+    return fields, None
+
+
+def _validate_hierarchy(cur, fields, user_id=None):
+    """Reject a role/department mismatch, a missing manager, or a reporting cycle."""
+    role_id = fields.get('rbac_role_id')
+    manager_id = fields.get('manager_id')
+
+    if role_id:
+        cur.execute("SELECT id, level, department_id FROM rbac_role WHERE id = %s", (role_id,))
+        if not cur.fetchone():
+            return 'Unknown role'
+
+    if manager_id:
+        if manager_id == user_id:
+            return 'A user cannot report to themselves'
+        cur.execute("""
+            SELECT r.level FROM user u
+            LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+            WHERE u.id = %s
+        """, (manager_id,))
+        manager = cur.fetchone()
+        if not manager:
+            return 'Unknown manager'
+        if role_id and manager['level'] is not None:
+            cur.execute("SELECT level FROM rbac_role WHERE id = %s", (role_id,))
+            own_level = cur.fetchone()['level']
+            if manager['level'] >= own_level:
+                return 'A manager must hold a more senior role than their report'
+
+        # Walk the reporting line upward; a cycle would make team scope loop.
+        if user_id:
+            seen = {user_id}
+            cursor_id = manager_id
+            for _ in range(20):
+                if cursor_id in seen:
+                    return 'That manager would create a reporting cycle'
+                seen.add(cursor_id)
+                cur.execute("SELECT manager_id FROM user WHERE id = %s", (cursor_id,))
+                row = cur.fetchone()
+                cursor_id = row['manager_id'] if row else None
+                if not cursor_id:
+                    break
+    return None
+
 
 @app.before_request
 def require_login():
