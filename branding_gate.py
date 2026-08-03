@@ -1415,6 +1415,10 @@ def subscribe():
     # 4) Subscribe that registration token
     try:
         response = messaging.subscribe_to_topic([reg_token], topic)
+    # abort(404) raises an HTTPException; letting the blanket handler below
+    # catch it would report a missing file as a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         current_app.logger.error("FCM subscribe failed: %s", e)
         return jsonify(error="Subscribe failed"), 500
@@ -3409,14 +3413,16 @@ def export_supplier_report_excel():
         # Re-use the same fetch by calling the function logic isn't trivial; do a direct call
         # via internal Flask test client to keep behavior consistent.
         from flask import request as _req
+        # Snapshot the session before entering the inner context: inside the
+        # `with`, `session` already refers to the new, empty one, so copying
+        # there copies nothing and the inner call sees an anonymous caller.
+        _outer_session = dict(session)
         with app.test_request_context(
             '/api/supplier-report?' + _req.query_string.decode('utf-8'),
             method='GET'
         ):
-            # Copy session so the permission gate passes inside the internal call
             from flask import session as _sess
-            for k, v in session.items():
-                _sess[k] = v
+            _sess.update(_outer_session)
             resp = get_supplier_report()
         # resp is a tuple or Response
         if isinstance(resp, tuple):
@@ -4400,11 +4406,13 @@ def get_client(client_id):
     try:
         conn, cur = connection()
         
-        # Get client data
+        # parent_company_id resolves against `company`, the same table the
+        # client list and the add/edit validation use. There is no
+        # `parent_company` table and never was.
         cur.execute("""
-            SELECT c.*, pc.company_name as parent_company_name
+            SELECT c.*, comp.company_name as parent_company_name
             FROM client c
-            LEFT JOIN parent_company pc ON c.parent_company_id = pc.id
+            LEFT JOIN company comp ON c.parent_company_id = comp.id
             WHERE c.id = %s
         """, (client_id,))
         
@@ -6755,6 +6763,10 @@ def download_request_file(file_id):
                         as_attachment=True, 
                         download_name=file_data['file_name'])
         
+    # abort(404) raises an HTTPException; letting the blanket handler below
+    # catch it would report a missing file as a server error.
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Error in download_request_file: {e}")
         return abort(500)
@@ -9691,15 +9703,21 @@ def get_catalog_items():
     
     try:
         conn, cur = connection()
+        # Template catalog, keyed by template_code. Distinct from item_catalog,
+        # which holds the free-form items served by /api/item-catalog.
+        # Column names here match the shipped schema: catalog_item has
+        # item_label (not item_name) and no type id, and catalog_item_desc
+        # joins on the item's primary key rather than its code.
         cur.execute("""
-            SELECT ci.item_code, ci.item_name, ci.item_type_id,
-                   cit.type_name,
-                   GROUP_CONCAT(cid.description SEPARATOR '|||') as descriptions
+            SELECT ci.id, ci.item_code, ci.item_label AS item_name,
+                   ci.template_code,
+                   GROUP_CONCAT(cid.desc_label SEPARATOR '|||') AS descriptions
             FROM catalog_item ci
-            LEFT JOIN catalog_item_type cit ON ci.item_type_id = cit.item_type_id
-            LEFT JOIN catalog_item_desc cid ON ci.item_code = cid.item_code
-            GROUP BY ci.item_code, ci.item_name, ci.item_type_id, cit.type_name
-            ORDER BY cit.type_name, ci.item_name
+            LEFT JOIN catalog_item_desc cid
+                   ON cid.item_id = ci.id AND cid.active = 1
+            WHERE ci.active = 1
+            GROUP BY ci.id, ci.item_code, ci.item_label, ci.template_code
+            ORDER BY ci.template_code, ci.item_label
         """)
         items = cur.fetchall()
         
@@ -9734,10 +9752,12 @@ def get_catalog_item_types():
     
     try:
         conn, cur = connection()
+        # The shipped table has id / type_code / type_label and no description.
         cur.execute("""
-            SELECT item_type_id, type_name, description
+            SELECT id AS item_type_id, type_code, type_label AS type_name
             FROM catalog_item_type
-            ORDER BY type_name
+            WHERE active = 1
+            ORDER BY type_label
         """)
         types = cur.fetchall()
         
