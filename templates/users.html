@@ -49,7 +49,6 @@
                             <th>Name</th>
                             <th>Mobile</th>
                             <th>Email</th>
-                            <th>Password</th>
                             <th>Team ID</th>
                             <th>Team Name</th>
                             <th>Department Name</th>
@@ -197,7 +196,6 @@ function loadUsersTable() {
                 user.name,
                 user.mobile,
                 user.email,
-                user.password,
                 user.team_id,
                 user.team_name,
                 user.department_name,
@@ -224,7 +222,6 @@ function loadUsersTable() {
                         { title: "Name" },
                         { title: "Mobile" },
                         { title: "Email" },
-                        { title: "Password" },
                         { title: "Team ID" },
                         { title: "Team Name" },
                         { title: "Department Name" },
@@ -254,7 +251,6 @@ $(document).ready(function() {
                 user.name,
                 user.mobile,
                 user.email,
-                user.password,
                 user.team_id,
                 user.team_name,
                 user.department_name,
@@ -280,7 +276,6 @@ $(document).ready(function() {
                         { title: "Name" },
                         { title: "Mobile" },
                         { title: "Email" },
-                        { title: "Password" },
                         { title: "Team ID" },
                         { title: "Team Name" },
                         { title: "Department Name" },
@@ -412,7 +407,6 @@ $(document).ready(function() {
                                         user.name,
                                         user.mobile,
                                         user.email,
-                                        user.password,
                                         user.team_id,
                                         user.team_name,
                                         user.department_name,
@@ -503,7 +497,6 @@ $(document).ready(function() {
                                 user.name,
                                 user.mobile,
                                 user.email,
-                                user.password,
                                 user.team_id,
                                 user.team_name,
                                 user.department_name,
@@ -931,7 +924,8 @@ $(document).ready(function() {
                     </div>
                     <div class="form-group">
                         <label for="edit_user_password">Password</label>
-                        <input type="password" class="form-control" id="edit_user_password">
+                        <input type="password" class="form-control" id="edit_user_password" autocomplete="new-password">
+                        <small class="form-text text-muted">Leave blank to keep the current password.</small>
                     </div>
                     <div class="form-group">
                         <label for="edit_user_title">Title</label>

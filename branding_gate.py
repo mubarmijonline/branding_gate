@@ -15,6 +15,7 @@ import os
 from datetime import timedelta, datetime
 import re
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 import zipfile
 import ssl
 import shutil
@@ -748,6 +749,40 @@ def get_user_roles(user_id):
     conn.close()
     return all_roles
 
+def role_required(*role_names):
+    """
+    Decorator to restrict access to users with specific roles (from DB), always allowing admin.
+    Usage: @role_required('pricing') or @role_required('admin', 'finance', 'sales')
+
+    Defined here, above the first route, so every route in this module can use it.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user_id = session.get('user_id')
+            if not user_id:
+                return redirect(url_for('login'))
+            conn, cur = connection()
+            # Get all roles for this user (user-only and team roles)
+            cur.execute("""
+                SELECT role_name FROM role WHERE user_id = %s AND team_flag = 0
+                UNION
+                SELECT role_name FROM role WHERE user_id = (
+                    SELECT team_id FROM user WHERE id = %s AND team_id IS NOT NULL
+                ) AND team_flag = 1
+            """, (user_id, user_id))
+            roles = [row['role_name'] for row in cur.fetchall()]
+            cur.close()
+            conn.close()
+            # Allow if user has admin role or any of the required roles
+            if 'admin' in roles or any(role in roles for role in role_names):
+                return f(*args, **kwargs)
+            if request.path.startswith('/api/'):
+                return jsonify(error='Forbidden'), 403
+            return abort(403)
+        return decorated_function
+    return decorator
+
 def get_users_by_role(role_name):
     """
     Returns a list of user IDs that have the specified role (either through team or direct assignment).
@@ -1003,6 +1038,28 @@ def log_item_change(request_id, item_id, item_name, request_type, action_type, a
         traceback.print_exc()
         # Don't fail the main operation if logging fails
 
+PASSWORD_HASH_PREFIXES = ('scrypt:', 'pbkdf2:', 'argon2')
+
+
+def verify_password(user, password, conn, cur):
+    """
+    Check a submitted password against the stored value.
+    Rows still holding a legacy plaintext password are upgraded to a hash
+    on the first successful login, so no flag day is needed.
+    """
+    stored = user.get('password') or ''
+    if stored.startswith(PASSWORD_HASH_PREFIXES):
+        return check_password_hash(stored, password)
+    if not password or stored != password:
+        return False
+    cur.execute(
+        "UPDATE user SET password = %s WHERE id = %s",
+        (generate_password_hash(password), user['id'])
+    )
+    conn.commit()
+    return True
+
+
 @app.route('/login', methods=['GET', 'POST'])
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -1010,36 +1067,29 @@ def login():
         mobile     = request.form.get("mobile")      # we treat username as phone
         password  = request.form.get("password")
         # — 1) Verify your own MySQL user/password —
+        # mobile is UNIQUE on user, so this returns at most one row.
         conn, cur = connection()
-        exist=cur.execute("SELECT * FROM user WHERE mobile = %s AND password = %s", (mobile, password))
-        if int(exist)  == 0:
-            # User not found, return error
+        exist=cur.execute("SELECT * FROM user WHERE mobile = %s", (mobile,))
+        user = cur.fetchone() if int(exist) == 1 else None
+        if user is None or not verify_password(user, password, conn, cur):
+            cur.close()
+            conn.close()
             return jsonify(
                 state   = "error",
                 message = "Invalid username or password"
             )
-        elif int(exist)  == 1:
-            # User found, proceed to next steps
-            user = cur.fetchone()
-            print(user)
-            cur.close()
-            conn.close()
-            # user is now a dict, use column names
-            session['user_id'] = user['id']
-            session['mobile'] = user['mobile']
-            session['email'] = user['email']
-            session['username'] = user['username']
-            session['name'] = user['name']
-            session['team_id'] = user['team_id']
-            session['title'] = user['title']
-            # Use the new function to get roles
-            session['roles'] = get_user_roles(user['id'])
-        else:   
-            # More than one user found, this should not happen
-            return jsonify(
-                state   = "error",
-                message = "Multiple users found with the same credentials"
-            )
+        cur.close()
+        conn.close()
+        # user is now a dict, use column names
+        session['user_id'] = user['id']
+        session['mobile'] = user['mobile']
+        session['email'] = user['email']
+        session['username'] = user['username']
+        session['name'] = user['name']
+        session['team_id'] = user['team_id']
+        session['title'] = user['title']
+        # Use the new function to get roles
+        session['roles'] = get_user_roles(user['id'])
         # — 2) Ensure a Firebase Auth user exists for this phone number —
         fb_mobile = "+20" + str(mobile).lstrip('0')  # Ensure all leading zeros are stripped
         # Validate Egyptian phone number (E.164: +20XXXXXXXXXX)
@@ -1101,22 +1151,29 @@ def test_push():
 
 @app.route('/add_notification', methods=['POST'])
 def add_notification():
-    
-
+    if 'user_id' not in session:
+        return jsonify(success=False, error="Not authenticated"), 401
 
     data    = request.get_json() or {}
     uid     = data.get('uid')
     title   = data.get('title')
     content = data.get('content')
-    added_by = session['name'] if 'name' in session else None
-    added_uid = session['user_id'] if 'user_id' in session else None
+    added_by = session.get('name')
+    added_uid = session['user_id']
 
     if not title or not content:
         return jsonify(success=False, error="Missing title or content"), 400
 
+    if uid in (None, ''):
+        return jsonify(success=False, error="Missing uid"), 400
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return jsonify(success=False, error="Invalid uid"), 400
+
     doc_ref = db.collection('notifications').document()  # auto-ID
     doc_ref.set({
-        'uid':         int(uid),
+        'uid':         uid,
         'title':       title,
         'content':     content,
         'added_by':     added_by,
@@ -1310,6 +1367,7 @@ def home():
     return render_template("home.html")
 
 @app.route("/create_team", methods=["GET", "POST"])
+@role_required('admin')
 def create_team():
     if request.method == "POST":
         data = request.get_json() or {}
@@ -1523,25 +1581,27 @@ def test_notification():
         app.logger.error("Error sending test notification: %s", e)
         return jsonify(error=str(e)), 500
 @app.route('/users', methods=['GET'])
+@role_required('admin')
 def users():
     """Display users page with user data table"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    
+
     return render_template("users.html")
 
 @app.route('/api/users', methods=['GET'])
+@role_required('admin')
 def get_users():
     """API endpoint to fetch users data from MySQL"""
     if 'user_id' not in session:
         return jsonify(error="Not authenticated"), 401
-    
+
     try:
         conn, cur = connection()
-        
-        # Fetch all users with team info from the database
+
+        # Passwords are never returned to the client.
         cur.execute("""
-            SELECT u.id, u.mobile, u.email, u.date, u.name, u.password, u.team_id, u.modified_date, u.added_by, u.username, u.title,
+            SELECT u.id, u.mobile, u.email, u.date, u.name, u.team_id, u.modified_date, u.added_by, u.username, u.title,
                    t.team_name, t.department_name
             FROM user u
             LEFT JOIN team t ON u.team_id = t.team_id
@@ -1556,7 +1616,6 @@ def get_users():
                 'mobile': user['mobile'],
                 'email': user['email'],
                 'name': user['name'],
-                'password': user['password'],
                 'team_id': user['team_id'],
                 'date': user['date'].strftime('%Y-%m-%d %H:%M:%S') if user['date'] else 'N/A',
                 'modified_date': user['modified_date'].strftime('%Y-%m-%d %H:%M:%S') if user['modified_date'] else 'N/A',
@@ -1580,6 +1639,7 @@ def get_users():
         }), 500
 
 @app.route('/api/teams', methods=['GET'])
+@role_required('admin')
 def get_teams():
     """API endpoint to fetch all teams for the teams table, including roles as a comma-separated string"""
     if 'user_id' not in session:
@@ -1605,6 +1665,7 @@ def get_teams():
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/add', methods=['POST'])
+@role_required('admin')
 def add_user():
     """API endpoint to add a new user"""
     if 'user_id' not in session:
@@ -1666,7 +1727,7 @@ def add_user():
             data['name'],
             data['mobile'],
             data['email'],
-            data['password'],
+            generate_password_hash(data['password']),
             data['username'],
             data['title'],
             team_id,
@@ -1703,6 +1764,7 @@ def add_user():
         }), 500
 
 @app.route('/api/users/delete/<int:user_id>', methods=['DELETE'])
+@role_required('admin')
 def delete_user(user_id):
     """API endpoint to delete a user"""
     if 'user_id' not in session:
@@ -1718,7 +1780,17 @@ def delete_user(user_id):
                 'success': False,
                 'error': 'User not found'
             }), 404
-        
+
+        # Nobody may delete their own account, and user 1 is the recovery account.
+        if user_id == session.get('user_id') or user_id == 1:
+            return jsonify({
+                'success': False,
+                'error': 'This account cannot be deleted'
+            }), 400
+
+        # Drop the user's direct role rows first, otherwise a future user that
+        # reuses this auto-increment id silently inherits them.
+        cur.execute("DELETE FROM role WHERE user_id = %s AND team_flag = 0", (user_id,))
         # Delete user
         cur.execute("DELETE FROM user WHERE id = %s", (user_id,))
         conn.commit()
@@ -1738,6 +1810,7 @@ def delete_user(user_id):
         }), 500
 
 @app.route('/api/teams/edit/<int:team_id>', methods=['POST'])
+@role_required('admin')
 def edit_team(team_id):
     """API endpoint to edit a team's name, department, and roles"""
     if 'user_id' not in session:
@@ -1775,6 +1848,7 @@ def edit_team(team_id):
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/teams/<int:team_id>/roles', methods=['GET'])
+@role_required('admin')
 def get_team_roles(team_id):
     """API endpoint to fetch current roles for a team (for edit modal)"""
     if 'user_id' not in session:
@@ -1790,6 +1864,7 @@ def get_team_roles(team_id):
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/users/edit/<int:user_id>', methods=['POST'])
+@role_required('admin')
 def edit_user(user_id):
     """API endpoint to edit an existing user"""
     if 'user_id' not in session:
@@ -1836,7 +1911,8 @@ def edit_user(user_id):
         # Update user details
         cur.execute("""
             UPDATE user
-            SET name = %s, mobile = %s, email = %s, username = %s, title = %s, modified_date = NOW(), modified_by = %s
+            SET name = %s, mobile = %s, email = %s, username = %s, title = %s,
+                modified_date = NOW(), modified_by = %s
             WHERE id = %s
         """, (
             data['name'],
@@ -1847,6 +1923,27 @@ def edit_user(user_id):
             session['username'],
             user_id
         ))
+
+        # team_id is only touched when the client actually sends the key, so an
+        # edit form that omits it does not silently unassign the user's team.
+        if 'team_id' in data:
+            team_id = data.get('team_id')
+            if team_id in [None, '', 'undefined']:
+                team_id = None
+            else:
+                try:
+                    team_id = int(team_id)
+                except Exception:
+                    team_id = None
+            cur.execute("UPDATE user SET team_id = %s WHERE id = %s", (team_id, user_id))
+
+        # The password field is optional on edit; an empty value leaves it unchanged.
+        new_password = (data.get('password') or '').strip()
+        if new_password:
+            cur.execute(
+                "UPDATE user SET password = %s WHERE id = %s",
+                (generate_password_hash(new_password), user_id)
+            )
 
         # --- USER-ONLY ROLES MANAGEMENT ---
         new_user_roles = set(data.get('user_roles', []))
@@ -1879,6 +1976,7 @@ def edit_user(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/all_roles', methods=['GET'])
+@role_required('admin')
 def get_user_all_roles(user_id):
     """Return both user-only roles and team roles for a user (for Edit User modal)"""
     if 'user_id' not in session:
@@ -1936,35 +2034,6 @@ def require_login():
             # For normal requests, redirect to login
             return redirect(url_for('login'))
 
-def role_required(*role_names):
-    """
-    Decorator to restrict access to users with specific roles (from DB), always allowing admin.
-    Usage: @role_required('pricing') or @role_required('admin', 'finance', 'sales')
-    """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = session.get('user_id')
-            if not user_id:
-                return redirect(url_for('login'))
-            conn, cur = connection()
-            # Get all roles for this user (user-only and team roles)
-            cur.execute("""
-                SELECT role_name FROM role WHERE user_id = %s AND team_flag = 0
-                UNION
-                SELECT role_name FROM role WHERE user_id = (
-                    SELECT team_id FROM user WHERE id = %s AND team_id IS NOT NULL
-                ) AND team_flag = 1
-            """, (user_id, user_id))
-            roles = [row['role_name'] for row in cur.fetchall()]
-            cur.close()
-            conn.close()
-            # Allow if user has admin role or any of the required roles
-            if 'admin' in roles or any(role in roles for role in role_names):
-                return f(*args, **kwargs)
-            return abort(403)
-        return decorated_function
-    return decorator
 
 @app.route('/management_admin', methods=['GET'])
 def management_admin():
@@ -5923,13 +5992,13 @@ def add_sales_request():
             
             # Send notification to admins
             try:
-                admin_users = get_users_by_role('admin')
-                for admin_user_id in admin_users:
-                    send_notification_to_role(
-                        admin_user_id,
-                        'Approval Needed',
-                        f'New sales request "{title}" needs approval ({approval_reason})'
-                    )
+                # send_notification_to_role takes a role name and fans out to its
+                # members itself; passing user ids here matched no role at all.
+                send_notification_to_role(
+                    'admin',
+                    'Approval Needed',
+                    f'New sales request "{title}" needs approval ({approval_reason})'
+                )
             except Exception as notif_error:
                 print(f"DEBUG: Failed to send notification: {notif_error}")
             
@@ -9767,6 +9836,7 @@ def serve_item_attachment(item_id, filename):
 # ============================================================================
 
 @app.route('/api/sales-requests/create-with-template', methods=['POST'])
+@role_required('sales')
 def create_request_with_template():
     """Create a new sales request using template system"""
     if 'user_id' not in session:
@@ -10281,6 +10351,7 @@ def create_request_with_template():
         }), 500
 
 @app.route('/api/sales-requests/update-with-template/<int:request_id>', methods=['POST'])
+@role_required('sales')
 def update_request_with_template(request_id):
     """Update an existing sales request using template system"""
     if 'user_id' not in session:
@@ -19115,7 +19186,9 @@ def get_user_balance(user_id):
             return jsonify({'success': False, 'error': 'Not logged in'}), 401
         
         # Users can only view their own balance, admins can view all
-        if session.get('user_role') not in ['admin', 'finance'] and session.get('user_id') != user_id:
+        # session holds 'roles' (a list); the old singular 'user_role' key was never written.
+        _roles = session.get('roles', [])
+        if not any(r in _roles for r in ('admin', 'finance')) and session.get('user_id') != user_id:
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
         
         conn, cur = connection()
@@ -19426,7 +19499,7 @@ def get_balance_requests():
         
         conn, cur = connection()
         
-        is_admin = session.get('user_role') in ['admin', 'finance']
+        is_admin = any(r in session.get('roles', []) for r in ('admin', 'finance'))
         user_id = session.get('user_id')
         
         if is_admin:
