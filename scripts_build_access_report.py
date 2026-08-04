@@ -104,12 +104,15 @@ def main():
             '    <div><dt>Permissions</dt><dd>%d</dd></div>\n'
             '    <div><dt>Pages</dt><dd>%d <span class="of">of %d</span></dd></div>\n'
             '    <div><dt>Read APIs</dt><dd>%d <span class="of">of %d</span></dd></div>\n'
+            '    <div><dt>Sees</dt><dd>%s <span class="of">%s</span></dd></div>\n'
             '  </dl>\n'
             '  <p class="pages">%s</p>\n'
             '</article>' % (
                 html.escape(LABEL[role]), html.escape(LEVEL[info['level']]),
                 html.escape(DEPT[role]), html.escape(role), info['permissions'],
                 len(open_pages), len(pages), api_ok, api_gated,
+                'all' if info.get('sees') is None else info.get('sees', 0),
+                html.escape(info.get('scope') or 'no request access'),
                 ' '.join('<code>%s</code>' % html.escape(p) for p in open_pages)))
 
     probes = len(roles) * (len(matrix['admin']['html']) + len(matrix['admin']['api']))

@@ -99,17 +99,19 @@ footer{color:var(--slate);font-size:.85rem;border-top:1px solid var(--hair);padd
   <p class="eyebrow">Branding Gate · access verification</p>
   <h1>What each role can actually reach</h1>
   <p class="lede">Every role was given a real account wired into a reporting line, then used to
-  request every readable route in the application. An HTTP 200 was not taken as proof: pages that
+  request every readable route in the application. It now runs as the real organisation — one
+  person per role, drawn from the live chart — so what each row sees reflects the actual reporting
+  line, not a test account with no reports. An HTTP 200 was not taken as proof: pages that
   return 200 while rendering their access-denied branch are counted as blocked, and JSON replies
   carrying <code>success: false</code> are counted as broken.</p>
 </header>
 
 <section>
   <dl class="band">
-    <div><dt>Roles</dt><dd>21</dd></div>
-    <div><dt>Pages</dt><dd>32</dd></div>
-    <div><dt>Read APIs</dt><dd>108</dd></div>
-    <div><dt>Write routes</dt><dd>101</dd></div>
+    <div><dt>Roles</dt><dd>__NROLES__</dd></div>
+    <div><dt>Pages</dt><dd>__NPAGES__</dd></div>
+    <div><dt>Read APIs</dt><dd>__NAPI__</dd></div>
+    <div><dt>Write routes</dt><dd>__NWRITE__</dd></div>
     <div><dt>Probes run</dt><dd>__NPROBES__</dd></div>
   </dl>
 </section>
@@ -166,6 +168,16 @@ footer{color:var(--slate);font-size:.85rem;border-top:1px solid var(--hair);padd
     <code>/api/companies/documents/1/download</code> among them, where document 4 answers 200. It
     resolves real ids from the database now and skips routes whose table is empty, since a 404 there
     says nothing about access.</p>
+  </div>
+
+  <div class="finding note">
+    <h3>The Assistant sees every sales request<span class="tag info">decide this</span></h3>
+    <p>Running the sweep against the real organisation rather than throwaway accounts made this
+    visible: <code>assistant</code> holds <code>sales_request.view</code> at company-wide scope, so it
+    reads all 25 requests. The brief said the Assistant should have no automatic access to all company
+    data. Narrowing it to <code>department</code> would confine it to the Executive department, which
+    holds only the CEO and the Assistant — effectively nothing. Say the word and it changes in one
+    line of <code>rbac.py</code>.</p>
   </div>
 
   <div class="finding note">

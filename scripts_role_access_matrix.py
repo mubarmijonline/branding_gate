@@ -203,16 +203,31 @@ def main():
     global SAMPLE_IDS
     SAMPLE_IDS = build_sample_ids()
 
+    # One real person per role, so scope resolves against the actual reporting
+    # line rather than a throwaway account with no reports. The lowest id per
+    # role is picked for stability across runs.
     conn, cur = bg.connection()
     cur.execute("""
         SELECT u.id, u.name, r.code AS role_code, r.level
-        FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
-        WHERE u.username = 'a.diab' OR u.username LIKE 'rolecheck.%%'
+        FROM user u
+        JOIN rbac_role r ON r.id = u.rbac_role_id
+        JOIN (SELECT rbac_role_id, MIN(id) AS id
+                FROM user WHERE rbac_role_id IS NOT NULL
+               GROUP BY rbac_role_id) pick ON pick.id = u.id
         ORDER BY r.level, r.code
     """)
     accounts = cur.fetchall()
+
+    cur.execute("SELECT COUNT(*) AS n FROM rbac_role")
+    defined = cur.fetchone()['n']
     cur.close()
     conn.close()
+
+    if len(accounts) < defined:
+        covered = {a['role_code'] for a in accounts}
+        print("warning: %d of %d roles have nobody assigned, so they are untested: %s\n"
+              % (defined - len(accounts), defined,
+                 ', '.join(sorted(set(rbac.ROLES) - covered))))
 
     html_routes, api_routes, write_routes = gather_routes()
     print("probing %d HTML routes and %d API routes as %d roles "
@@ -222,8 +237,18 @@ def main():
     matrix = {}
     for account in accounts:
         client, role_code, perms = client_for(account['id'])
-        result = {'user_id': account['id'], 'level': account['level'],
-                  'permissions': len(perms), 'html': {}, 'api': {}}
+        # Who this person can actually see, resolved against the real chart.
+        with bg.app.test_request_context('/'):
+            bg.session.update(user_id=account['id'], perms=perms, role_code=role_code)
+            try:
+                owners = bg.visible_user_ids('sales_request.view')
+            except Exception:
+                owners = []
+        result = {'user_id': account['id'], 'name': account['name'],
+                  'level': account['level'], 'permissions': len(perms),
+                  'scope': perms.get('sales_request.view'),
+                  'sees': None if owners is None else len(owners),
+                  'html': {}, 'api': {}}
         for path, pattern, endpoint, route_perms in html_routes:
             verdict, note = classify(client.get(path))
             result['html'][pattern] = {'verdict': verdict, 'note': note,
