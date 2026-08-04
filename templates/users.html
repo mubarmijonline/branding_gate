@@ -135,13 +135,38 @@
     #notificationDropdown, .navbar { display:none !important; }
     .people-page { padding:0; }
     #panel-chart { display:block !important; }
-    /* zoom, not transform: it affects layout, so the printed page is sized to
-       the scaled chart instead of leaving the overflow clipped off the sheet. */
     .chart-scroll, .chart-scroll.panable { overflow:visible; max-height:none;
       border:0; zoom: var(--print-scale, 1); }
     .print-title { display:block !important; }
-    .node { break-inside:avoid; page-break-inside:avoid; }
     a[href]::after { content:none !important; }
+
+    /* Borders and tints are what draw the connectors and the role pills. Without
+       this the browser drops them and the chart prints as floating text. */
+    *, *::before, *::after {
+      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+    }
+    .node { break-inside:avoid; page-break-inside:avoid;
+            border-color:#9aa2b5 !important; box-shadow:none; }
+    /* The top-down connectors are 22px boxes that show only one border, so they
+       take a border colour. Only the indented view's tick is a filled 1px bar. */
+    .tree.topdown li::before, .tree.topdown li::after,
+    .tree.topdown ul::before, .tree.indent ul {
+      border-color:#9aa2b5 !important;
+    }
+    .tree.indent ul li::before { background-color:#9aa2b5 !important; }
+
+    /* Laying 38 people out in one row means shrinking to a quarter size and
+       losing the hairline connectors. Stack the top-level branches instead and
+       keep each one whole: every branch fits a page at full size. */
+    .tree.topdown { width:auto !important; min-width:0 !important; padding:0; }
+    .tree.topdown > li { align-items:flex-start; }
+    .tree.topdown > li > ul { display:block; padding-top:0; }
+    .tree.topdown > li > ul::before { display:none; }
+    .tree.topdown > li > ul > li { break-inside:avoid; page-break-inside:avoid;
+            padding-top:0; margin:0 0 1.6rem; align-items:flex-start; }
+    .tree.topdown > li > ul > li::before,
+    .tree.topdown > li > ul > li::after { display:none; }
+    .tree.topdown > li > ul > li > ul { justify-content:flex-start; }
   }
   .print-title { display:none; margin:0 0 1rem; }
   .print-title h2 { font-size:1.3rem; font-weight:700; color:var(--ink); margin:0; }
@@ -384,12 +409,21 @@
   }
 
   // ---- loading ------------------------------------------------------------
+  // $.when rejects as soon as any one request fails, which would leave the whole
+  // page blank for someone who can read people but not roles or departments.
+  // Each fetch resolves either way and the page renders with what it got.
+  function fetchInto(url, assign) {
+    return $.getJSON(url)
+      .then(function (r) { if (r && r.success) { assign(r); } })
+      .catch(function () { /* denied or unavailable: render without it */ });
+  }
+
   function loadAll() {
     return $.when(
-      $.getJSON('/api/users', function (r) { if (r.success) PEOPLE = r.users; }),
-      $.getJSON('/api/departments', function (r) { if (r.success) DEPARTMENTS = r.departments; }),
-      $.getJSON('/api/rbac/roles', function (r) { if (r.success) ROLES = r.roles; })
-    ).then(function () {
+      fetchInto('/api/users', function (r) { PEOPLE = r.users; }),
+      fetchInto('/api/departments', function (r) { DEPARTMENTS = r.departments; }),
+      fetchInto('/api/rbac/roles', function (r) { ROLES = r.roles; })
+    ).always(function () {
       renderStats(); renderFilters(); renderPeople(); renderTree();
       renderDepartments(); renderRoles();
     });
@@ -585,8 +619,9 @@
     // and needs no library. The print stylesheet hides everything but the chart.
     var stamp = new Date().toLocaleDateString(undefined,
       { year: 'numeric', month: 'long', day: 'numeric' });
-    $('#printMeta').text(PEOPLE.length + ' people  ·  ' + DEPARTMENTS.length +
-      ' departments  ·  ' + stamp);
+    var root = PEOPLE.filter(function (p) { return !p.manager_id; })[0];
+    $('#printMeta').text((root ? root.name + '  ·  ' : '') + PEOPLE.length +
+      ' people  ·  ' + DEPARTMENTS.length + ' departments  ·  ' + stamp);
 
     // A top-down chart is far wider than a sheet of paper. Shrink it to the A3
     // landscape printable width so the whole tree lands on one page instead of
@@ -597,9 +632,16 @@
     var tree = document.getElementById('orgTree');
     var scale = 1;
     if (tree.classList.contains('topdown')) {
-      var width = Math.max(tree.scrollWidth, tree.getBoundingClientRect().width);
+      // Branches stack on paper, so only the widest single branch has to fit --
+      // not the whole row. That keeps the chart at full size in almost every case.
+      var branches = tree.querySelectorAll(':scope > li > ul > li');
+      var widest = 0;
+      branches.forEach(function (li) {
+        widest = Math.max(widest, li.getBoundingClientRect().width);
+      });
+      if (!widest) { widest = tree.scrollWidth; }
       var printableWidth = 1450;   // A3 landscape at 96dpi, less 12mm margins
-      if (width > printableWidth) { scale = printableWidth / width; }
+      if (widest > printableWidth) { scale = printableWidth / widest; }
     }
     document.documentElement.style.setProperty('--print-scale', scale.toFixed(3));
 
