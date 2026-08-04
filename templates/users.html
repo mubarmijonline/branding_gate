@@ -71,11 +71,25 @@
   .seg button + button { border-left:1px solid var(--hair); }
   .seg button.on { background:var(--accent); color:#fff; }
   .seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .pan-hint { display:none; font-size:.78rem; color:var(--muted); }
+  .pan-hint.on { display:inline; }
 
-  .chart-scroll { overflow-x:auto; padding-bottom:.5rem; }
+  .chart-scroll { overflow:auto; padding-bottom:.5rem; }
+  /* Top-down is wider than the page and as tall as the chart, which puts the
+     horizontal scrollbar below the fold where it cannot be reached. Cap the
+     height so both scrollbars stay on screen. */
+  /* Sized so the pane's own scrollbar stays on screen: the page header above it
+     is roughly 430px, and a floor keeps it usable on short displays. */
+  .chart-scroll.panable { max-height:max(320px, calc(100vh - 430px));
+            border:1px solid var(--hair); border-radius:6px; background:#fff; cursor:grab; }
+  .chart-scroll.panable.dragging { cursor:grabbing; user-select:none; }
+  .chart-scroll::-webkit-scrollbar { height:12px; width:12px; }
+  .chart-scroll::-webkit-scrollbar-thumb { background:#c7ccda; border-radius:6px; }
+  .chart-scroll::-webkit-scrollbar-track { background:#f1f3f7; }
+  .chart-scroll { scrollbar-color:#c7ccda #f1f3f7; }
   /* A flex row wider than its container clips at the start when centred, so the
      tree sizes to its content and is centred by margin instead. */
-  .tree.topdown { width:max-content; min-width:100%; margin:0 auto; }
+  .tree.topdown { width:max-content; min-width:100%; margin:0 auto; padding:1rem; }
 
   .node { display:inline-flex; align-items:center; gap:.6rem; border:1px solid var(--hair);
             border-radius:6px; padding:.5rem .8rem; background:#fff; }
@@ -123,7 +137,8 @@
     #panel-chart { display:block !important; }
     /* zoom, not transform: it affects layout, so the printed page is sized to
        the scaled chart instead of leaving the overflow clipped off the sheet. */
-    .chart-scroll { overflow:visible; zoom: var(--print-scale, 1); }
+    .chart-scroll, .chart-scroll.panable { overflow:visible; max-height:none;
+      border:0; zoom: var(--print-scale, 1); }
     .print-title { display:block !important; }
     .node { break-inside:avoid; page-break-inside:avoid; }
     a[href]::after { content:none !important; }
@@ -216,6 +231,7 @@
         <button type="button" data-view="indent" class="on">Indented</button>
         <button type="button" data-view="topdown">Top-down</button>
       </span>
+      <span class="pan-hint" id="panHint">Drag to pan</span>
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPrintChart">
         <i class="fas fa-file-pdf mr-1"></i> Export PDF
       </button>
@@ -526,10 +542,43 @@
 
   // ---- tabs ---------------------------------------------------------------
   $(document).on('click', '.seg button[data-view]', function () {
+    var view = $(this).data('view');
     $('.seg button[data-view]').removeClass('on');
     $(this).addClass('on');
-    $('#orgTree').removeClass('indent topdown').addClass($(this).data('view'));
+    $('#orgTree').removeClass('indent topdown').addClass(view);
+    // Only the wide layout needs a bounded, pannable viewport.
+    $('.chart-scroll').toggleClass('panable', view === 'topdown').scrollLeft(0);
+    $('#panHint').toggleClass('on', view === 'topdown');
+    if (view === 'topdown') { centreChart(); }
   });
+
+  function centreChart() {
+    var pane = document.querySelector('.chart-scroll');
+    if (!pane) { return; }
+    pane.scrollLeft = Math.max(0, (pane.scrollWidth - pane.clientWidth) / 2);
+  }
+
+  // Drag to pan, which is how people expect to move around a chart this wide.
+  (function enableDragPan() {
+    var pane = null, startX = 0, startY = 0, fromX = 0, fromY = 0, down = false;
+    $(document).on('mousedown', '.chart-scroll.panable', function (e) {
+      if ($(e.target).closest('a, button').length) { return; }
+      pane = this; down = true;
+      startX = e.pageX; startY = e.pageY;
+      fromX = pane.scrollLeft; fromY = pane.scrollTop;
+      $(pane).addClass('dragging');
+    });
+    $(document).on('mousemove', function (e) {
+      if (!down || !pane) { return; }
+      pane.scrollLeft = fromX - (e.pageX - startX);
+      pane.scrollTop = fromY - (e.pageY - startY);
+      e.preventDefault();
+    });
+    $(document).on('mouseup mouseleave', function () {
+      if (pane) { $(pane).removeClass('dragging'); }
+      down = false; pane = null;
+    });
+  })();
 
   $(document).on('click', '#btnPrintChart', function () {
     // The browser's own print-to-PDF: it paginates, scales and embeds fonts,
