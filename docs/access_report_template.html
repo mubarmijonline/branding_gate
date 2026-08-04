@@ -116,78 +116,70 @@ footer{color:var(--slate);font-size:.85rem;border-top:1px solid var(--hair);padd
 
 <section>
   <h2>What the sweep found</h2>
+  <p class="lede"><strong>No broken endpoints and no unexpected refusals.</strong> Every non-OK
+  result below is either a correct denial, a redirect the application means to make, or a request for
+  a row that does not exist yet.</p>
 
   <div class="finding fixed">
-    <h3>The sales request page was rendering an empty shell<span class="tag done">fixed</span></h3>
-    <p>Its body gate still tested legacy role names — <code>'sales' in user_roles</code> — while the
-    role codes are now <code>sales_member</code> and <code>sales_head</code>. Every non-admin role
-    received the page with no header and no table, just the surrounding shell. This is the page Sales
-    works in all day. Eighteen further card-level gates across the admin, finance and sales sections
-    had the same fault and are converted too; no template tests a role name any more.</p>
+    <h3>The users page was inert in the browser<span class="tag done">fixed</span></h3>
+    <p>Removing the legacy roles UI with a line-oriented pattern had matched the opening line of a
+    multi-line handler and stopped there, deleting <code>$('#addUserModal').on(...)</code> while
+    leaving its body and closing brace. That closed <code>$(document).ready</code> early and left one
+    brace too many, so the browser aborted the whole script and nothing on the page worked. The page
+    still returned 200 and still rendered, which is why an earlier sweep passed it. Every template's
+    inline JavaScript is now syntax-checked by a test.</p>
+  </div>
+
+  <div class="finding fixed">
+    <h3>The sales request page rendered an empty shell<span class="tag done">fixed</span></h3>
+    <p>Its body gate still tested legacy role names, so every non-admin role received the page with no
+    header and no table. Eighteen further card-level gates had the same fault. No template tests a
+    role name any more, and the page now opens for 20 of the 21 roles.</p>
   </div>
 
   <div class="finding fixed">
     <h3>Pricing controls were hidden from Pricing itself<span class="tag done">fixed</span></h3>
-    <p><code>CAN_CONTROL_PRICING</code> tested <code>'pricing' in user_roles</code> against the role
-    code <code>pricing_manager</code>, so the set-price modal and every pricing control were invisible
-    to everyone — Pricing Manager included. It now reads the permission directly.</p>
+    <p><code>CAN_CONTROL_PRICING</code> compared against the old role string, so the set-price modal
+    was invisible to everyone including Pricing Manager. It reads the permission directly now.</p>
   </div>
 
   <div class="finding fixed">
-    <h3>Supplier report Excel export returned a 500 for everyone<span class="tag done">fixed</span></h3>
-    <p>The handler rebuilds its data by calling the report endpoint inside a fresh request context,
-    then copied the session across <em>after</em> entering it — where <code>session</code> already
-    pointed at the new, empty one. The inner call saw an anonymous caller and refused. The snapshot is
-    taken first now, and the export returns a real workbook.</p>
-  </div>
-
-  <div class="finding fixed">
-    <h3>Two catalog endpoints queried columns that do not exist<span class="tag done">fixed</span></h3>
-    <p><code>/api/sales-requests/catalog/items</code> and <code>/catalog/item-types</code> failed for
-    every role including Admin, reading <code>item_name</code> and <code>item_type_id</code> from a
-    table that has <code>item_label</code> and no type column. Both now match the shipped schema. They
-    return an empty list because those tables are empty — confirmed correct by inserting a type, an
-    item and two descriptions inside a rolled-back transaction and watching them come back grouped.</p>
-  </div>
-
-  <div class="finding fixed">
-    <h3>Client detail failed on a missing table<span class="tag done">fixed</span></h3>
-    <p><code>/api/clients/&lt;id&gt;</code> joined a <code>parent_company</code> table that does not
-    exist. It joins <code>company</code> now, which the client list and the add/edit validation
-    already used.</p>
-  </div>
-
-  <div class="finding fixed">
-    <h3>A missing file reported as a server error<span class="tag done">fixed</span></h3>
-    <p><code>/api/sales/requests/files/&lt;id&gt;/download</code> calls <code>abort(404)</code> when a
-    file is absent, but its own blanket <code>except Exception</code> caught that and re-raised it as a
-    500. It re-raises <code>HTTPException</code> first now. The same pattern was in
-    <code>subscribe()</code>; a scan confirmed no other handler swallows an abort this way.</p>
+    <h3>Four endpoints returned a 500 on every request<span class="tag done">fixed</span></h3>
+    <p>The supplier-report Excel export copied its session into an inner request context after
+    entering it, so the internal call saw an anonymous caller. Two catalog endpoints queried columns
+    that never shipped. Client detail joined a <code>parent_company</code> table that does not exist.
+    A missing file reported as a server error because <code>abort(404)</code> was swallowed by the
+    handler's own blanket exception catch.</p>
   </div>
 
   <div class="finding note">
-    <h3>The probe itself was passing a broken page<span class="tag info">method</span></h3>
-    <p>The first sweep marked the sales request page as working, because it only looked for
-    access-denied strings and short bodies — and a gated-out page still ships 766&nbsp;KB of scripts.
-    The classifier now checks whether the page rendered any content of its own: a card, table, heading
-    or form. That is what caught the empty shell, and the numbers on this page are from the corrected
-    run.</p>
+    <h3>Teams have been retired<span class="tag info">changed</span></h3>
+    <p>Teams granted no access once the permission model landed, and department plus reporting line
+    replaces them. The Teams card, the team endpoints and the three <code>team.*</code> permissions are
+    gone; the table and column remain untouched so nothing is lost.</p>
+  </div>
+
+  <div class="finding note">
+    <h3>The probe was reporting its own gaps as failures<span class="tag info">method</span></h3>
+    <p>It filled URL parameters with a hardcoded <code>1</code>, so routes whose row happened to have
+    another id came back 404 and looked broken —
+    <code>/api/companies/documents/1/download</code> among them, where document 4 answers 200. It
+    resolves real ids from the database now and skips routes whose table is empty, since a 404 there
+    says nothing about access.</p>
   </div>
 
   <div class="finding note">
     <h3>Four roles can open the admin landing page<span class="tag info">by design</span></h3>
     <p>Assistant, Sales Head, Account Director and Account Team Leader reach
-    <code>/management_admin</code> because it admits anyone holding client, company, supplier or entity
-    editing rights, and they manage clients. The cards inside are gated separately, so they see only
-    what they can use.</p>
+    <code>/management_admin</code> because it admits anyone who edits clients, companies, suppliers or
+    entities. The cards inside are gated separately.</p>
   </div>
 
   <div class="finding note">
     <h3>Assistant can open the users page<span class="tag info">check this</span></h3>
-    <p>The Assistant holds <code>user.view</code> so it can read the directory, but not
-    <code>user.create</code>, <code>edit</code> or <code>delete</code> — those buttons all answer 403.
-    If the Assistant should not see staff records at all, drop <code>user.view</code> from the role in
-    <code>rbac.py</code>.</p>
+    <p>The Assistant holds <code>user.view</code> so it reads the directory, but not
+    <code>user.create</code>, <code>edit</code> or <code>delete</code> — those all answer 403. If the
+    Assistant should not see staff records at all, drop <code>user.view</code> from the role.</p>
   </div>
 </section>
 
@@ -230,6 +222,9 @@ footer{color:var(--slate);font-size:.85rem;border-top:1px solid var(--hair);padd
     <b class="c-r">→</b> redirects elsewhere &nbsp;
     <b class="c-b">!</b> server error
   </p>
+  <p class="legend"><b>·</b> covers both a refusal and a 404 for a row that does not exist yet —
+  <code>/api/inventory/items/:id</code> is the only one of the latter, because no inventory has been
+  created. <b>→</b> is the inventory pages' deliberate hop to entity selection.</p>
   <div class="scroller">
     <table>
       <thead><tr><th scope="col">Page</th>__HEAD__</tr></thead>

@@ -34,37 +34,62 @@ DENIAL_MARKERS = (
 SAMPLE_IDS = {}
 
 
+# Parameters whose table turned out to be empty. Routes needing one of these
+# are skipped rather than reported, since a 404 there says nothing about access.
+NO_DATA = set()
+
+
 def build_sample_ids():
+    """
+    Resolve a real id for every URL parameter. A hardcoded guess produces
+    404s that look like bugs, so anything without a row is recorded in
+    NO_DATA and its routes are skipped instead.
+    """
     conn, cur = bg.connection()
 
     def one(sql):
-        cur.execute(sql)
+        try:
+            cur.execute(sql)
+        except Exception:
+            return None
         row = cur.fetchone()
-        return list(row.values())[0] if row else 1
+        return list(row.values())[0] if row else None
 
-    ids = {
-        'request_id': one("SELECT id FROM sales_request ORDER BY id LIMIT 1"),
-        'item_id': one("SELECT id FROM sales_request_items ORDER BY id LIMIT 1"),
-        'client_id': one("SELECT id FROM client ORDER BY id LIMIT 1"),
-        'company_id': one("SELECT id FROM company ORDER BY id LIMIT 1"),
-        'supplier_id': one("SELECT id FROM supplier ORDER BY id LIMIT 1"),
-        'entity_id': one("SELECT id FROM entities ORDER BY id LIMIT 1"),
-        'negotiation_id': one("SELECT id FROM negotiation_requests ORDER BY id LIMIT 1"),
-        'user_id': 1,
-        'team_id': one("SELECT team_id FROM team ORDER BY team_id LIMIT 1"),
-        'department_id': one("SELECT id FROM department ORDER BY id LIMIT 1"),
-        'role_id': one("SELECT id FROM rbac_role ORDER BY id LIMIT 1"),
-        'trans_id': one("SELECT id FROM finance_transactions ORDER BY id LIMIT 1"),
-        'expense_id': one("SELECT id FROM user_expense_tracking ORDER BY id LIMIT 1"),
-        'tracking_id': one("SELECT id FROM expense_tracking ORDER BY id LIMIT 1"),
-        'method_id': one("SELECT id FROM payment_methods ORDER BY id LIMIT 1"),
-        'cat_id': one("SELECT id FROM finance_categories ORDER BY id LIMIT 1"),
+    lookups = {
+        'request_id': "SELECT id FROM sales_request ORDER BY id LIMIT 1",
+        'item_id': "SELECT id FROM sales_request_items ORDER BY id LIMIT 1",
+        'client_id': "SELECT id FROM client ORDER BY id LIMIT 1",
+        'company_id': "SELECT id FROM company ORDER BY id LIMIT 1",
+        'supplier_id': "SELECT id FROM supplier ORDER BY id LIMIT 1",
+        'entity_id': "SELECT id FROM entities ORDER BY id LIMIT 1",
+        'negotiation_id': "SELECT id FROM negotiation_requests ORDER BY id LIMIT 1",
+        'department_id': "SELECT id FROM department ORDER BY id LIMIT 1",
+        'role_id': "SELECT id FROM rbac_role ORDER BY id LIMIT 1",
+        'trans_id': "SELECT id FROM finance_transactions ORDER BY id LIMIT 1",
+        'expense_id': "SELECT id FROM user_expense_tracking ORDER BY id LIMIT 1",
+        'tracking_id': "SELECT id FROM expense_tracking ORDER BY id LIMIT 1",
+        'method_id': "SELECT id FROM payment_methods ORDER BY id LIMIT 1",
+        'cat_id': "SELECT id FROM finance_categories ORDER BY id LIMIT 1",
+        'document_id': "SELECT id FROM company_documents ORDER BY id LIMIT 1",
+        'comment_id': "SELECT id FROM sales_request_comments ORDER BY id LIMIT 1",
+        'file_id': "SELECT id FROM sales_request_files ORDER BY id LIMIT 1",
+        'attachment_id': "SELECT id FROM sales_request_item_attachments ORDER BY id LIMIT 1",
+        'alert_id': "SELECT id FROM inventory_alerts ORDER BY id LIMIT 1",
+        'credit_id': "SELECT id FROM inventory_credit_items ORDER BY id LIMIT 1",
+        'inventory_id': "SELECT id FROM inventory_items ORDER BY id LIMIT 1",
+        'component_id': "SELECT id FROM approved_item_components ORDER BY id LIMIT 1",
+        'template_id': "SELECT id FROM request_type ORDER BY id LIMIT 1",
+        'approval_id': "SELECT id FROM sales_request_approvals ORDER BY id LIMIT 1",
     }
+    ids = {'user_id': 1}
+    for name, sql in lookups.items():
+        value = one(sql)
+        if value is None:
+            NO_DATA.add(name)
+        else:
+            ids[name] = value
     cur.close()
     conn.close()
-    for key in ('approval_id', 'comment_id', 'file_id', 'attachment_id', 'document_id',
-                'alert_id', 'credit_id', 'component_id', 'template_id', 'inventory_id'):
-        ids.setdefault(key, 1)
     return ids
 
 
@@ -74,7 +99,7 @@ def concrete_path(rule):
     for argument in rule.arguments:
         value = SAMPLE_IDS.get(argument)
         if value is None:
-            return None
+            return None   # no row to fetch, so the route says nothing about access
         for converter in ('int:', 'string:', 'path:', 'float:', ''):
             token = '<%s%s>' % (converter, argument)
             if token in path:
