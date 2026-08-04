@@ -64,15 +64,73 @@
   .row-actions button:hover { border-color:var(--accent); color:var(--accent); }
   .row-actions button.danger:hover { border-color:#c0392b; color:#c0392b; }
 
-  .tree { list-style:none; padding-left:0; margin:0; }
-  .tree ul { list-style:none; margin:0; padding-left:1.6rem; border-left:1px solid var(--hair); }
-  .tree li { margin:.4rem 0; position:relative; }
-  .tree ul li::before { content:""; position:absolute; left:-1.6rem; top:1.15rem; width:1.2rem;
-            height:1px; background:var(--hair); }
+  .org-toolbar { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:1rem; }
+  .seg { display:inline-flex; border:1px solid var(--hair); border-radius:6px; overflow:hidden; }
+  .seg button { border:0; background:#fff; padding:.42rem .9rem; font-size:.85rem; font-weight:600;
+            color:var(--muted); cursor:pointer; }
+  .seg button + button { border-left:1px solid var(--hair); }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+
+  .chart-scroll { overflow-x:auto; padding-bottom:.5rem; }
+  /* A flex row wider than its container clips at the start when centred, so the
+     tree sizes to its content and is centred by margin instead. */
+  .tree.topdown { width:max-content; min-width:100%; margin:0 auto; }
+
   .node { display:inline-flex; align-items:center; gap:.6rem; border:1px solid var(--hair);
             border-radius:6px; padding:.5rem .8rem; background:#fff; }
   .node .nm { font-weight:600; color:var(--ink); }
   .node small { color:var(--muted); }
+
+  /* Indented: one line per person, cheap to scan when the chart is deep. */
+  .tree { list-style:none; padding-left:0; margin:0; }
+  .tree.indent ul { list-style:none; margin:0; padding-left:1.6rem;
+            border-left:1px solid var(--hair); }
+  .tree.indent li { margin:.4rem 0; position:relative; }
+  .tree.indent ul li::before { content:""; position:absolute; left:-1.6rem; top:1.15rem;
+            width:1.2rem; height:1px; background:var(--hair); }
+
+  /* Top-down: the conventional org chart, siblings side by side under a parent. */
+  .tree.topdown, .tree.topdown ul { list-style:none; margin:0; padding:0; }
+  .tree.topdown ul { display:flex; justify-content:center; padding-top:22px; position:relative; }
+  .tree.topdown li { position:relative; display:flex; flex-direction:column; align-items:center;
+            padding:22px .5rem 0; }
+  .tree.topdown > li { padding-top:0; }
+  .tree.topdown li::before, .tree.topdown li::after { content:""; position:absolute; top:0;
+            right:50%; width:50%; height:22px; border-top:1px solid var(--hair); }
+  .tree.topdown li::after { right:auto; left:50%; border-left:1px solid var(--hair); }
+  .tree.topdown li:only-child { padding-top:22px; }
+  .tree.topdown li:only-child::before, .tree.topdown li:only-child::after { display:none; }
+  .tree.topdown > li::before, .tree.topdown > li::after { display:none; }
+  .tree.topdown li:first-child::before, .tree.topdown li:last-child::after { border:0 none; }
+  .tree.topdown li:last-child::before { border-right:1px solid var(--hair);
+            border-radius:0 6px 0 0; }
+  .tree.topdown li:first-child::after { border-radius:6px 0 0 0; }
+  .tree.topdown ul::before { content:""; position:absolute; top:0; left:50%; width:0; height:22px;
+            border-left:1px solid var(--hair); }
+  .tree.topdown .node { flex-direction:column; text-align:center; gap:.3rem; min-width:150px;
+            max-width:190px; }
+
+  /* Print: the chart alone, landscape, nothing else on the page. */
+  @page { size: A3 landscape; margin: 12mm; }
+  @media print {
+    body { background:#fff; }
+    nav, footer, .page-head, .stat-row, .tabs, .toolbar, .modal, .modal-backdrop,
+    #panel-people, #panel-depts, #panel-roles, .org-toolbar, #main_nav_bar,
+    .quick-add-fab, .sticky-footer, .scroll-to-top,
+    #notificationDropdown, .navbar { display:none !important; }
+    .people-page { padding:0; }
+    #panel-chart { display:block !important; }
+    /* zoom, not transform: it affects layout, so the printed page is sized to
+       the scaled chart instead of leaving the overflow clipped off the sheet. */
+    .chart-scroll { overflow:visible; zoom: var(--print-scale, 1); }
+    .print-title { display:block !important; }
+    .node { break-inside:avoid; page-break-inside:avoid; }
+    a[href]::after { content:none !important; }
+  }
+  .print-title { display:none; margin:0 0 1rem; }
+  .print-title h2 { font-size:1.3rem; font-weight:700; color:var(--ink); margin:0; }
+  .print-title p { color:var(--muted); font-size:.85rem; margin:.2rem 0 0; }
 
   .dept-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:.8rem; }
   .dept { border:1px solid var(--hair); border-radius:6px; padding:.85rem 1rem; background:#fff; }
@@ -151,9 +209,24 @@
 
   <!-- Org chart -->
   <section class="panel" id="panel-chart">
-    <p class="sub mb-3">Built from who reports to whom. A manager sees the records of everyone
-       beneath them, so this tree is also the visibility map.</p>
-    <ul class="tree" id="orgTree"></ul>
+    <div class="org-toolbar">
+      <span class="sub" style="flex:1 1 320px">Built from who reports to whom. A manager sees the
+        records of everyone beneath them, so this tree is also the visibility map.</span>
+      <span class="seg" role="group" aria-label="Chart layout">
+        <button type="button" data-view="indent" class="on">Indented</button>
+        <button type="button" data-view="topdown">Top-down</button>
+      </span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPrintChart">
+        <i class="fas fa-file-pdf mr-1"></i> Export PDF
+      </button>
+    </div>
+    <div class="print-title">
+      <h2>Organisation chart</h2>
+      <p id="printMeta"></p>
+    </div>
+    <div class="chart-scroll">
+      <ul class="tree indent" id="orgTree"></ul>
+    </div>
   </section>
 
   <!-- Departments -->
@@ -452,6 +525,38 @@
   }
 
   // ---- tabs ---------------------------------------------------------------
+  $(document).on('click', '.seg button[data-view]', function () {
+    $('.seg button[data-view]').removeClass('on');
+    $(this).addClass('on');
+    $('#orgTree').removeClass('indent topdown').addClass($(this).data('view'));
+  });
+
+  $(document).on('click', '#btnPrintChart', function () {
+    // The browser's own print-to-PDF: it paginates, scales and embeds fonts,
+    // and needs no library. The print stylesheet hides everything but the chart.
+    var stamp = new Date().toLocaleDateString(undefined,
+      { year: 'numeric', month: 'long', day: 'numeric' });
+    $('#printMeta').text(PEOPLE.length + ' people  ·  ' + DEPARTMENTS.length +
+      ' departments  ·  ' + stamp);
+
+    // A top-down chart is far wider than a sheet of paper. Shrink it to the A3
+    // landscape printable width so the whole tree lands on one page instead of
+    // being clipped at the right edge.
+    // Only the top-down layout is wider than a sheet. The indented one is tall
+    // rather than wide, so shrinking it would just make it hard to read across
+    // the pages it legitimately needs.
+    var tree = document.getElementById('orgTree');
+    var scale = 1;
+    if (tree.classList.contains('topdown')) {
+      var width = Math.max(tree.scrollWidth, tree.getBoundingClientRect().width);
+      var printableWidth = 1450;   // A3 landscape at 96dpi, less 12mm margins
+      if (width > printableWidth) { scale = printableWidth / width; }
+    }
+    document.documentElement.style.setProperty('--print-scale', scale.toFixed(3));
+
+    window.print();
+  });
+
   $(document).on('click', '.tabs button', function () {
     $('.tabs button').removeClass('on'); $(this).addClass('on');
     $('.panel').removeClass('on');
