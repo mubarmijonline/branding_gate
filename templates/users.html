@@ -125,52 +125,6 @@
   .tree.topdown .node { flex-direction:column; text-align:center; gap:.3rem; min-width:150px;
             max-width:190px; }
 
-  /* Print: the chart alone, landscape, nothing else on the page. */
-  @page { size: A3 landscape; margin: 12mm; }
-  @media print {
-    body { background:#fff; }
-    nav, footer, .page-head, .stat-row, .tabs, .toolbar, .modal, .modal-backdrop,
-    #panel-people, #panel-depts, #panel-roles, .org-toolbar, #main_nav_bar,
-    .quick-add-fab, .sticky-footer, .scroll-to-top,
-    #notificationDropdown, .navbar { display:none !important; }
-    .people-page { padding:0; }
-    #panel-chart { display:block !important; }
-    .chart-scroll, .chart-scroll.panable { overflow:visible; max-height:none;
-      border:0; zoom: var(--print-scale, 1); }
-    .print-title { display:block !important; }
-    a[href]::after { content:none !important; }
-
-    /* Borders and tints are what draw the connectors and the role pills. Without
-       this the browser drops them and the chart prints as floating text. */
-    *, *::before, *::after {
-      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
-    }
-    .node { break-inside:avoid; page-break-inside:avoid;
-            border-color:#9aa2b5 !important; box-shadow:none; }
-    /* The top-down connectors are 22px boxes that show only one border, so they
-       take a border colour. Only the indented view's tick is a filled 1px bar. */
-    .tree.topdown li::before, .tree.topdown li::after,
-    .tree.topdown ul::before, .tree.indent ul {
-      border-color:#9aa2b5 !important;
-    }
-    .tree.indent ul li::before { background-color:#9aa2b5 !important; }
-
-    /* Laying 38 people out in one row means shrinking to a quarter size and
-       losing the hairline connectors. Stack the top-level branches instead and
-       keep each one whole: every branch fits a page at full size. */
-    .tree.topdown { width:auto !important; min-width:0 !important; padding:0; }
-    .tree.topdown > li { align-items:flex-start; }
-    .tree.topdown > li > ul { display:block; padding-top:0; }
-    .tree.topdown > li > ul::before { display:none; }
-    .tree.topdown > li > ul > li { break-inside:avoid; page-break-inside:avoid;
-            padding-top:0; margin:0 0 1.6rem; align-items:flex-start; }
-    .tree.topdown > li > ul > li::before,
-    .tree.topdown > li > ul > li::after { display:none; }
-    .tree.topdown > li > ul > li > ul { justify-content:flex-start; }
-  }
-  .print-title { display:none; margin:0 0 1rem; }
-  .print-title h2 { font-size:1.3rem; font-weight:700; color:var(--ink); margin:0; }
-  .print-title p { color:var(--muted); font-size:.85rem; margin:.2rem 0 0; }
 
   .dept-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:.8rem; }
   .dept { border:1px solid var(--hair); border-radius:6px; padding:.85rem 1rem; background:#fff; }
@@ -260,10 +214,6 @@
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPrintChart">
         <i class="fas fa-file-pdf mr-1"></i> Export PDF
       </button>
-    </div>
-    <div class="print-title">
-      <h2>Organisation chart</h2>
-      <p id="printMeta"></p>
     </div>
     <div class="chart-scroll">
       <ul class="tree indent" id="orgTree"></ul>
@@ -615,37 +565,14 @@
   })();
 
   $(document).on('click', '#btnPrintChart', function () {
-    // The browser's own print-to-PDF: it paginates, scales and embeds fonts,
-    // and needs no library. The print stylesheet hides everything but the chart.
-    var stamp = new Date().toLocaleDateString(undefined,
-      { year: 'numeric', month: 'long', day: 'numeric' });
-    var root = PEOPLE.filter(function (p) { return !p.manager_id; })[0];
-    $('#printMeta').text((root ? root.name + '  ·  ' : '') + PEOPLE.length +
-      ' people  ·  ' + DEPARTMENTS.length + ' departments  ·  ' + stamp);
-
-    // A top-down chart is far wider than a sheet of paper. Shrink it to the A3
-    // landscape printable width so the whole tree lands on one page instead of
-    // being clipped at the right edge.
-    // Only the top-down layout is wider than a sheet. The indented one is tall
-    // rather than wide, so shrinking it would just make it hard to read across
-    // the pages it legitimately needs.
-    var tree = document.getElementById('orgTree');
-    var scale = 1;
-    if (tree.classList.contains('topdown')) {
-      // Branches stack on paper, so only the widest single branch has to fit --
-      // not the whole row. That keeps the chart at full size in almost every case.
-      var branches = tree.querySelectorAll(':scope > li > ul > li');
-      var widest = 0;
-      branches.forEach(function (li) {
-        widest = Math.max(widest, li.getBoundingClientRect().width);
-      });
-      if (!widest) { widest = tree.scrollWidth; }
-      var printableWidth = 1450;   // A3 landscape at 96dpi, less 12mm margins
-      if (widest > printableWidth) { scale = printableWidth / widest; }
-    }
-    document.documentElement.style.setProperty('--print-scale', scale.toFixed(3));
-
-    window.print();
+    // Drawn server-side rather than printed from this page: the browser's print
+    // pipeline was shrinking the chart to a quarter size and dropping the
+    // connectors, which are only CSS borders.
+    var $btn = $(this).prop('disabled', true);
+    var original = $btn.html();
+    $btn.html('<i class="fas fa-spinner fa-spin mr-1"></i> Preparing');
+    window.location = '/api/org-chart/pdf';
+    setTimeout(function () { $btn.prop('disabled', false).html(original); }, 2500);
   });
 
   $(document).on('click', '.tabs button', function () {

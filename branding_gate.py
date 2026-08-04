@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 import rbac
+import org_chart_pdf
 import zipfile
 import ssl
 import shutil
@@ -2064,6 +2065,49 @@ def get_rbac_role_permissions(role_id):
         conn.close()
         return jsonify(success=True, role=role, permissions=permissions)
     except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/org-chart/pdf', methods=['GET'])
+@perm('user.view')
+def export_org_chart_pdf():
+    """
+    Draw the organisation chart as a PDF.
+
+    Printing the CSS chart from the browser either shrank it to a quarter size
+    or dropped the connectors, because both are at the mercy of the print
+    pipeline. org_chart_pdf lays it out and strokes the lines itself.
+    """
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT u.id, u.name, u.manager_id, u.is_pricing,
+                   r.name AS role_name, r.level AS role_level,
+                   d.name AS rbac_department_name
+            FROM user u
+            LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+            LEFT JOIN department d ON d.id = u.department_id
+            ORDER BY r.level, u.name
+        """)
+        people = cur.fetchall()
+        cur.execute("SELECT COUNT(*) AS n FROM department")
+        departments = cur.fetchone()['n']
+        cur.close()
+        conn.close()
+
+        subtitle = '%d people  ·  %d departments  ·  %s' % (
+            len(people), departments, datetime.now().strftime('%d %B %Y'))
+        pdf = org_chart_pdf.build(people, subtitle=subtitle)
+
+        response = make_response(pdf)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = \
+            'attachment; filename="organisation-chart.pdf"'
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: org chart PDF failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
