@@ -1,0 +1,311 @@
+{% extends "main.html" %}
+
+{% block body %}
+{% set _p = session.get('perms', {}) %}
+{% if 'target.view' in _p %}
+{% set can_assign_targets = 'target.assign' in _p %}
+
+<style>
+  /* Scoped under .targets-page: sb-admin-2 already owns generic names like
+     .progress and .bar, and this page must not inherit or fight them. */
+  .targets-page { --hair:#e3e6f0; --ink:#2e3650; --muted:#8891a8; --accent:#3a4fa0;
+                 --accent-soft:#eef1fa; --good:#1b6e4d; --warn:#8a6410; --bad:#c0392b; }
+  .targets-page .page-head { display:flex; flex-wrap:wrap; align-items:flex-end;
+                 justify-content:space-between; gap:1rem; margin-bottom:1.25rem; }
+  .targets-page h1 { font-size:1.6rem; font-weight:700; color:var(--ink); margin:0; }
+  .targets-page .sub { color:var(--muted); margin:.2rem 0 0; font-size:.9rem; }
+
+  .targets-page .tgt-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+                 gap:1px; background:var(--hair); border:1px solid var(--hair);
+                 border-radius:6px; overflow:hidden; margin-bottom:1.25rem; }
+  .targets-page .tgt-stats div { background:#fff; padding:.8rem 1rem; }
+  .targets-page .tgt-stats dt { font-size:.68rem; letter-spacing:.09em; text-transform:uppercase;
+                 color:var(--muted); margin:0; font-weight:600; }
+  .targets-page .tgt-stats dd { margin:.15rem 0 0; font-size:1.4rem; font-weight:700;
+                 color:var(--ink); line-height:1.1; }
+
+  .targets-page .tgt-toolbar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
+                 margin-bottom:1rem; }
+  .targets-page .tgt-toolbar select { border:1px solid var(--hair); border-radius:5px;
+                 padding:.45rem .7rem; font-size:.9rem; min-width:150px; }
+  .targets-page .tgt-note { color:var(--muted); font-size:.85rem; margin-left:auto; }
+
+  .targets-page .tgt-scroll { overflow-x:auto; }
+  .targets-page table.tgt-table { width:100%; border-collapse:collapse; font-size:.9rem;
+                 min-width:860px; }
+  .targets-page table.tgt-table th { text-align:left; font-size:.7rem; letter-spacing:.07em;
+                 text-transform:uppercase; color:var(--muted); border-bottom:2px solid var(--hair);
+                 padding:.5rem .6rem; white-space:nowrap; }
+  .targets-page table.tgt-table td { padding:.6rem; border-bottom:1px solid var(--hair);
+                 vertical-align:middle; }
+  .targets-page table.tgt-table tr:hover td { background:var(--accent-soft); }
+  .targets-page td.num, .targets-page th.num { text-align:right; white-space:nowrap;
+                 font-variant-numeric:tabular-nums; }
+
+  .targets-page .tgt-who { display:flex; align-items:center; gap:.6rem; }
+  .targets-page .tgt-who .nm { font-weight:600; color:var(--ink); }
+  .targets-page .tgt-who .rl { color:var(--muted); font-size:.78rem; }
+  .targets-page .tgt-team { display:inline-block; margin-left:.4rem; padding:.1rem .45rem;
+                 border-radius:20px; font-size:.7rem; font-weight:600;
+                 background:#e4f1ea; color:var(--good); }
+  .targets-page .tgt-team.unnamed { background:#f1f3f7; color:var(--muted); font-weight:500; }
+  .targets-page .tgt-muted { color:var(--muted); }
+
+  .targets-page .tgt-bar { position:relative; height:8px; border-radius:4px; background:#eef0f5;
+                 overflow:hidden; min-width:90px; }
+  .targets-page .tgt-bar i { position:absolute; inset:0 auto 0 0; display:block;
+                 background:var(--accent); }
+  .targets-page .tgt-bar i.ok { background:var(--good); }
+  .targets-page .tgt-bar i.low { background:var(--bad); }
+  .targets-page .tgt-pct { font-size:.75rem; color:var(--muted); }
+
+  .targets-page .tgt-actions button { border:1px solid var(--hair); background:#fff;
+                 border-radius:5px; padding:.28rem .55rem; font-size:.78rem; cursor:pointer;
+                 color:var(--ink); }
+  .targets-page .tgt-actions button:hover { border-color:var(--accent); color:var(--accent); }
+  .targets-page .tgt-empty { padding:2rem; text-align:center; color:var(--muted); }
+  .targets-page .tgt-left { font-weight:600; }
+  .targets-page .tgt-left.over { color:var(--bad); }
+  .targets-page .tgt-left.spare { color:var(--warn); }
+</style>
+
+<div class="container-fluid targets-page">
+  <div class="page-head">
+    <div>
+      <h1>Sales targets</h1>
+      <p class="sub">Each manager splits the number they were given across their own
+        team. The split does not have to be even, and what is left over stays unassigned
+        until they hand it out.</p>
+    </div>
+  </div>
+
+  <dl class="tgt-stats">
+    <div><dt id="tgtTopLabel">Top target</dt><dd id="tgtTop">-</dd></div>
+    <div id="tgtAssignedCard"><dt>Handed down</dt><dd id="tgtAssigned">-</dd></div>
+    <div><dt>Achieved</dt><dd id="tgtAchieved">-</dd></div>
+    <div><dt>People</dt><dd id="tgtPeople">-</dd></div>
+  </dl>
+
+  <div class="tgt-toolbar">
+    <label for="tgtPeriod" class="mb-0 tgt-muted" style="font-size:.85rem;">Quarter</label>
+    <select id="tgtPeriod"></select>
+    <span class="tgt-note" id="tgtNote"></span>
+  </div>
+
+  <div class="tgt-scroll">
+    <table class="tgt-table">
+      <thead>
+        <tr>
+          <th>Person</th>
+          <th class="num">Target</th>
+          <th class="num">Handed down</th>
+          <th class="num">Unassigned</th>
+          <th class="num">Achieved</th>
+          <th style="width:150px;">Progress</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tgtRows"></tbody>
+    </table>
+  </div>
+  <div class="tgt-empty" id="tgtEmpty" style="display:none;">
+    No targets set for this quarter yet.
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var ROWS = [], PERIOD = '';
+  var CAN_ASSIGN = {{ 'true' if can_assign_targets else 'false' }};
+
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function money(v) {
+    if (v === null || v === undefined) { return '-'; }
+    return Number(v).toLocaleString(undefined, { minimumFractionDigits: 0,
+                                                 maximumFractionDigits: 0 });
+  }
+
+  function load(period) {
+    var url = '/api/targets' + (period ? '?period=' + encodeURIComponent(period) : '');
+    $.getJSON(url).done(function (r) {
+      if (!r || !r.success) {
+        $('#tgtNote').text((r && r.error) || 'Could not load targets');
+        return;
+      }
+      ROWS = r.rows || [];
+      PERIOD = r.period;
+      renderPeriods(r.periods || [], r.period);
+      renderRows();
+      renderStats();
+    }).fail(function (xhr) {
+      $('#tgtNote').text((xhr.responseJSON || {}).error || 'Could not load targets');
+    });
+  }
+
+  function renderPeriods(periods, current) {
+    var $sel = $('#tgtPeriod');
+    if ($sel.data('filled')) { $sel.val(current); return; }
+    periods.forEach(function (p) {
+      $sel.append($('<option>').val(p).text(p.replace('-Q', ' Q')));
+    });
+    $sel.data('filled', true).val(current);
+  }
+
+  function renderStats() {
+    // The visible root is whatever the viewer sits at the top of: the CEO sees
+    // the Sales Head's number, a team leader sees their own.
+    var root = ROWS.filter(function (r) { return r.depth === 0; });
+    var top = root.reduce(function (sum, r) { return sum + (r.target || 0); }, 0);
+    var handed = root.reduce(function (sum, r) { return sum + (r.assigned || 0); }, 0);
+    var done = root.reduce(function (sum, r) { return sum + (r.team_achieved || 0); }, 0);
+    $('#tgtTop').text(money(top));
+    $('#tgtAssigned').text(money(handed));
+    $('#tgtAchieved').text(money(done));
+    $('#tgtPeople').text(ROWS.length);
+    // Somebody with nobody under them hands nothing down, so the card would
+    // read a permanent zero. Their own row is the whole page.
+    var leads = ROWS.some(function (r) { return r.is_leader; });
+    $('#tgtAssignedCard').toggle(leads);
+    $('#tgtTopLabel').text(leads ? 'Top target' : 'My target');
+  }
+
+  function barFor(row) {
+    if (row.progress === null || row.progress === undefined) {
+      return '<span class="tgt-muted">no target</span>';
+    }
+    var pct = Math.max(0, Math.min(100, row.progress));
+    var cls = row.progress >= 100 ? 'ok' : (row.progress < 40 ? 'low' : '');
+    return '<div class="tgt-bar"><i class="' + cls + '" style="width:' + pct + '%"></i></div>' +
+           '<span class="tgt-pct">' + Math.round(row.progress) + '%</span>';
+  }
+
+  function leftFor(row) {
+    if (row.unassigned === null || row.unassigned === undefined) { return '<span class="tgt-muted">-</span>'; }
+    if (!row.is_leader) { return '<span class="tgt-muted">-</span>'; }
+    var cls = row.unassigned < 0 ? 'over' : (row.unassigned > 0 ? 'spare' : '');
+    return '<span class="tgt-left ' + cls + '">' + money(row.unassigned) + '</span>';
+  }
+
+  function teamLabel(row) {
+    if (!row.is_leader) { return ''; }
+    if (row.team_name) {
+      return '<span class="tgt-team" data-team="1">' + esc(row.team_name) + '</span>';
+    }
+    if (row.can_name_team) {
+      return '<span class="tgt-team unnamed" data-team="1">name this team</span>';
+    }
+    return '';
+  }
+
+  function renderRows() {
+    var $body = $('#tgtRows').empty();
+    $('#tgtEmpty').toggle(ROWS.length === 0);
+    ROWS.forEach(function (row) {
+      var pad = 0.6 + row.depth * 1.4;
+      var actions = '';
+      if (CAN_ASSIGN && row.can_assign) {
+        actions = '<button class="set-target" data-id="' + row.id + '">' +
+                  (row.target === null ? 'Set target' : 'Change') + '</button>';
+      }
+      var $tr = $('<tr>').attr('data-id', row.id).html(
+        '<td style="padding-left:' + pad + 'rem;">' +
+          '<div class="tgt-who"><div>' +
+            '<div class="nm">' + esc(row.name) +
+              (row.can_name_team ? '<span class="name-team" style="cursor:pointer;">' + teamLabel(row) + '</span>' : teamLabel(row)) +
+            '</div>' +
+            '<div class="rl">' + esc(row.role_name || 'No role') + '</div>' +
+          '</div></div></td>' +
+        '<td class="num">' + money(row.target) + '</td>' +
+        '<td class="num">' + (row.is_leader ? money(row.assigned) : '<span class="tgt-muted">-</span>') + '</td>' +
+        '<td class="num">' + leftFor(row) + '</td>' +
+        '<td class="num">' + money(row.team_achieved) +
+          (row.is_leader && row.own_achieved !== row.team_achieved
+            ? '<div class="tgt-pct">own ' + money(row.own_achieved) + '</div>' : '') + '</td>' +
+        '<td>' + barFor(row) + '</td>' +
+        '<td class="tgt-actions">' + actions + '</td>'
+      );
+      $body.append($tr);
+    });
+    $('#tgtNote').text(PERIOD ? PERIOD.replace('-Q', ' Q') + ' · ' + ROWS.length + ' people' : '');
+  }
+
+  // ---- setting a target ---------------------------------------------------
+  $(document).on('click', '.set-target', function () {
+    var id = Number($(this).data('id'));
+    var row = ROWS.filter(function (r) { return r.id === id; })[0];
+    if (!row) { return; }
+    var manager = ROWS.filter(function (r) { return r.id === row.manager_id; })[0];
+    var hint = '';
+    if (manager && manager.unassigned !== null && manager.unassigned !== undefined) {
+      hint = money(manager.unassigned + (row.target || 0)) + ' of ' +
+             esc(manager.name) + '’s target is available.';
+    }
+    Swal.fire({
+      title: 'Target for ' + row.name,
+      html: '<p style="font-size:.85rem;color:#8891a8;margin-bottom:.5rem;">' +
+            PERIOD.replace('-Q', ' Q') + (hint ? '. ' + hint : '') + '</p>',
+      input: 'text',
+      inputValue: row.target === null ? '' : String(row.target),
+      inputAttributes: { inputmode: 'decimal' },
+      showCancelButton: true,
+      confirmButtonText: 'Save'
+    }).then(function (res) {
+      if (!res.value && res.value !== '0') { return; }
+      $.ajax({
+        url: '/api/targets/assign', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ user_id: id, period: PERIOD, amount: res.value })
+      }).done(function (r) {
+        if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
+        load(PERIOD);
+        Swal.fire({ icon: 'success', title: 'Target set', timer: 1200,
+                    showConfirmButton: false });
+      }).fail(function (xhr) {
+        Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
+      });
+    });
+  });
+
+  // ---- naming a team ------------------------------------------------------
+  $(document).on('click', '.name-team', function () {
+    var id = Number($(this).closest('tr').data('id'));
+    var row = ROWS.filter(function (r) { return r.id === id; })[0];
+    if (!row) { return; }
+    Swal.fire({
+      title: 'Name the team under ' + row.name,
+      input: 'text',
+      inputValue: row.team_name || '',
+      inputAttributes: { maxlength: 255 },
+      showCancelButton: true,
+      confirmButtonText: 'Save'
+    }).then(function (res) {
+      if (res.value === undefined) { return; }
+      $.ajax({
+        url: '/api/teams/name', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ leader_id: id, team_name: res.value })
+      }).done(function (r) {
+        if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
+        load(PERIOD);
+      }).fail(function (xhr) {
+        Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
+      });
+    });
+  });
+
+  $('#tgtPeriod').on('change', function () { load($(this).val()); });
+
+  $(function () { load(''); });
+}());
+</script>
+
+{% else %}
+<div class="container-fluid">
+  <div class="alert alert-danger mt-5">You do not have permission to view this page.</div>
+</div>
+{% endif %}
+{% endblock %}

@@ -594,6 +594,7 @@
   {% set can_set_prices        = 'sales_item.price' in _p %}
   {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
   {% set can_view_sales        = 'sales_request.view' in _p %}
+  {% set can_view_targets      = 'target.view' in _p %}
   {% set can_view_operations   = 'approved_item.view' in _p %}
   {% set can_view_finance      = 'finance_txn.view' in _p %}
   {% set can_approve_finance   = 'finance_txn.approve' in _p %}
@@ -703,6 +704,12 @@
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="{{ url_for('client') }}">
                 <i class="fas fa-handshake"></i> Client
+              </a>
+              {% endif %}
+              {% if can_view_targets %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{{ url_for('targets_page') }}">
+                <i class="fas fa-bullseye"></i> Targets
               </a>
               {% endif %}
               {% if can_decide_negotiation %}

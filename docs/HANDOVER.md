@@ -109,6 +109,34 @@ Most were pre-existing and only surfaced because something actually exercised th
 - **Legacy columns kept for reference** — `sales_request.created_by`, `client.added_by`,
   `team.department_name`. Nothing reads them any more; drop them a quarter later.
 
+## Quarterly targets (added 5 August 2026)
+
+The CEO gives the Sales Head a number for a quarter, the Sales Head splits it
+across their team leaders, each leader splits their slice across their members.
+Splits are free-form -- 200,000 and 800,000 out of 1,000,000 -- and a remainder
+may sit unassigned until someone hands it out.
+
+- `targets.py` holds the quarter maths, the two invariants and the tree, with no
+  Flask and no MySQL, in the same spirit as `rbac.py`. `python targets.py` runs
+  its own self-check.
+- `sales_target(user_id, period, amount, assigned_by)` is the whole schema.
+  **No parent column**: the parent of a target is the target of `user.manager_id`
+  for the same period, so moving someone between managers needs no repair.
+- **Who reads** is the existing scope ladder (`target.view` at own / team /
+  department). **Who writes** is narrower and is checked in the route: only that
+  person's own manager, so nobody sets their own number.
+- **Teams are named branches.** `team.leader_id` was added to the table that the
+  legacy role cutover left behind; membership is derived from `manager_id` and
+  never stored, so a transfer moves someone between teams by itself. Only the
+  Sales Head and admin may name one.
+- Achievement is approved sell value in the quarter, attributed by `created_at`.
+  It reads zero for everyone today for the reason in open item 4 below.
+
+Verified in a browser as three roles: the Sales Head splitting 1,000,000 into
+200,000 and 800,000, the over-assignment refused with the amount left, a team
+leader seeing only their own two members, and a member seeing one row and no
+buttons. 28 new tests, 116 in total.
+
 ## Open items
 
 1. **`app.secret_key` is the literal `"branding gate api secret key"`** in a public repo.

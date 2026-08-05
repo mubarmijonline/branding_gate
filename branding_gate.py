@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 import rbac
+import targets as targets_lib
 import org_chart_pdf
 import zipfile
 import ssl
@@ -2108,6 +2109,311 @@ def export_org_chart_pdf():
         raise
     except Exception as e:
         print("DEBUG: org chart PDF failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+# ---------------------------------------------------------------------------
+# Sales targets
+#
+# The CEO gives the Sales Head a number, the Sales Head splits it across their
+# team leaders, each leader splits their slice across their members. Splits are
+# free-form: 200,000 and 800,000 out of 1,000,000 is the intended shape, and a
+# remainder may be left unassigned. The arithmetic and the invariants live in
+# targets.py; these routes only fetch, authorise and persist.
+#
+# Who may see what falls out of the existing scope machinery: target.view is
+# held at 'own' by a member, 'team' by a team leader and 'department' by the
+# Sales Head. Who may *set* a number is narrower than scope and is checked
+# here: only the person's own manager, or an unrestricted holder.
+# ---------------------------------------------------------------------------
+
+def _target_period(raw):
+    """Validate a requested period, falling back to the current quarter."""
+    if not raw:
+        return targets_lib.current_period()
+    targets_lib.parse_period(raw)      # raises InvalidPeriod
+    return raw.strip().upper()
+
+
+def _target_people(cur):
+    """
+    Everyone, with their reporting line, role and the team they lead.
+
+    The whole table is 38 rows, so it is cheaper to read it once and build the
+    tree in Python than to walk it with a recursive query per request.
+    """
+    cur.execute("""
+        SELECT u.id, u.name, u.manager_id,
+               r.name AS role_name, r.code AS role_code,
+               t.team_name
+        FROM user u
+        LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+        LEFT JOIN team t ON t.leader_id = u.id
+    """)
+    return list(cur.fetchall())
+
+
+def _target_amounts(cur, period):
+    """{user_id: amount} for one quarter."""
+    cur.execute("SELECT user_id, amount FROM sales_target WHERE period = %s", (period,))
+    return {row['user_id']: row['amount'] for row in cur.fetchall()}
+
+
+def _target_achieved(cur, period):
+    """
+    {user_id: approved sell value} for the quarter.
+
+    Attribution is by request date, not by the date the client signed off:
+    sales_added_date is null on most rows, and created_at is the only date
+    every request carries.
+    """
+    start, end = targets_lib.period_bounds(period)
+    cur.execute("""
+        SELECT owner_user_id, COALESCE(SUM(total_sell), 0) AS total
+        FROM sales_request
+        WHERE approval_status = 'approved'
+          AND owner_user_id IS NOT NULL
+          AND DATE(created_at) BETWEEN %s AND %s
+        GROUP BY owner_user_id
+    """, (start, end))
+    return {row['owner_user_id']: (row['total'] or targets_lib.ZERO)
+            for row in cur.fetchall()}
+
+
+def _money_out(value):
+    """Decimal is not JSON. Send a number, or null when there is no target."""
+    return None if value is None else float(value)
+
+
+@app.route('/targets', methods=['GET'])
+@perm('target.view')
+def targets_page():
+    """The target cascade for one quarter."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template("targets.html")
+
+
+@app.route('/api/targets', methods=['GET'])
+@perm('target.view')
+def get_targets():
+    """The rows the caller may see, in reporting order, with their numbers."""
+    try:
+        period = _target_period(request.args.get('period'))
+    except targets_lib.InvalidPeriod as e:
+        return jsonify(success=False, error=str(e)), 400
+
+    try:
+        visible = visible_user_ids('target.view')
+        me = session.get('user_id')
+        can_assign_all = rbac.resolve(session.get('perms') or {}, 'target.assign') == 'all'
+        can_name_teams = has('team.edit')
+
+        conn, cur = connection()
+        people = _target_people(cur)
+        amounts = _target_amounts(cur, period)
+        achieved = _target_achieved(cur, period)
+        cur.close()
+        conn.close()
+
+        rows = targets_lib.build_tree(people, amounts, achieved, visible_ids=visible)
+        by_id = {p['id']: p for p in people}
+        out = []
+        for row in rows:
+            person = by_id.get(row['id'], {})
+            # Scope decides what you read; the reporting line decides what you
+            # set. An unrestricted holder is not bound by the second rule.
+            assignable = can_assign_all or person.get('manager_id') == me
+            out.append({
+                'id': row['id'],
+                'name': row['name'],
+                'role_name': row['role_name'],
+                'role_code': person.get('role_code'),
+                'team_name': row['team_name'],
+                'depth': row['depth'],
+                'is_leader': row['is_leader'],
+                'target': _money_out(row['target']),
+                'assigned': _money_out(row['assigned']),
+                'unassigned': _money_out(row['unassigned']),
+                'own_achieved': _money_out(row['own_achieved']),
+                'team_achieved': _money_out(row['team_achieved']),
+                'progress': row['progress'],
+                'can_assign': bool(assignable),
+                'can_name_team': bool(can_name_teams and row['is_leader']),
+            })
+        return jsonify(
+            success=True,
+            period=period,
+            periods=targets_lib.period_choices(),
+            rows=out,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: targets fetch failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/targets/assign', methods=['POST'])
+@perm('target.assign')
+def assign_target():
+    """Set one person's target for one quarter, within what their manager holds."""
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        user_id = int(data.get('user_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick a person'), 400
+    try:
+        period = _target_period(data.get('period'))
+        amount = targets_lib.to_amount(data.get('amount'))
+    except (targets_lib.InvalidPeriod, ValueError) as e:
+        return jsonify(success=False, error=str(e)), 400
+
+    note = (data.get('note') or '').strip()[:255] or None
+    me = session.get('user_id')
+
+    try:
+        # Readable scope first, then the narrower rule: their manager sets it.
+        assert_scope('target.assign', user_id)
+
+        conn, cur = connection()
+        cur.execute("SELECT id, name, manager_id FROM user WHERE id = %s", (user_id,))
+        person = cur.fetchone()
+        if not person:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such person'), 404
+
+        unrestricted = rbac.resolve(session.get('perms') or {}, 'target.assign') == 'all'
+        if not unrestricted and person['manager_id'] != me:
+            cur.close()
+            conn.close()
+            return jsonify(
+                success=False,
+                error='Only %s\'s own manager can set their target.' % person['name'],
+            ), 403
+
+        manager_id = person['manager_id']
+        parent_amount = None
+        siblings_total = targets_lib.ZERO
+        if manager_id:
+            cur.execute(
+                "SELECT amount FROM sales_target WHERE user_id = %s AND period = %s",
+                (manager_id, period),
+            )
+            parent = cur.fetchone()
+            parent_amount = parent['amount'] if parent else None
+            cur.execute("""
+                SELECT COALESCE(SUM(t.amount), 0) AS total
+                FROM sales_target t
+                JOIN user u ON u.id = t.user_id
+                WHERE u.manager_id = %s AND t.period = %s AND t.user_id != %s
+            """, (manager_id, period, user_id))
+            siblings_total = cur.fetchone()['total'] or targets_lib.ZERO
+
+        cur.execute("""
+            SELECT COALESCE(SUM(t.amount), 0) AS total
+            FROM sales_target t
+            JOIN user u ON u.id = t.user_id
+            WHERE u.manager_id = %s AND t.period = %s
+        """, (user_id, period))
+        child_committed = cur.fetchone()['total'] or targets_lib.ZERO
+
+        error = targets_lib.validate_assignment(
+            amount, parent_amount, siblings_total, child_committed)
+        if error:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error=error), 400
+
+        cur.execute("""
+            INSERT INTO sales_target (user_id, period, amount, assigned_by, note)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                amount = VALUES(amount),
+                assigned_by = VALUES(assigned_by),
+                note = VALUES(note)
+        """, (user_id, period, amount, me, note))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, user_id=user_id, period=period,
+                       amount=float(amount))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: target assign failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/teams/name', methods=['POST'])
+@perm('team.edit')
+def name_team():
+    """
+    Name the branch under one leader. Membership is never stored: the team is
+    whoever reports to them, so a transfer moves people between teams by
+    itself. An empty name clears it.
+    """
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        leader_id = int(data.get('leader_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick a team leader'), 400
+    team_name = (data.get('team_name') or '').strip()[:255]
+
+    try:
+        assert_scope('team.edit', leader_id)
+
+        conn, cur = connection()
+        cur.execute("""
+            SELECT u.id, u.name, d.name AS department_name,
+                   (SELECT COUNT(*) FROM user r WHERE r.manager_id = u.id) AS reports
+            FROM user u
+            LEFT JOIN department d ON d.id = u.department_id
+            WHERE u.id = %s
+        """, (leader_id,))
+        leader = cur.fetchone()
+        if not leader:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such person'), 404
+        if not leader['reports']:
+            cur.close()
+            conn.close()
+            return jsonify(
+                success=False,
+                error='%s has nobody reporting to them, so there is no team to name.'
+                      % leader['name'],
+            ), 400
+
+        if not team_name:
+            cur.execute("DELETE FROM team WHERE leader_id = %s", (leader_id,))
+        else:
+            cur.execute(
+                "SELECT team_id FROM team WHERE team_name = %s AND "
+                "(leader_id IS NULL OR leader_id != %s)",
+                (team_name, leader_id),
+            )
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                return jsonify(success=False,
+                               error='Another team already uses that name.'), 400
+            cur.execute("""
+                INSERT INTO team (team_name, department_name, leader_id, added_by)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE team_name = VALUES(team_name),
+                                        modified_by = VALUES(added_by)
+            """, (team_name, leader['department_name'] or '', leader_id,
+                  session.get('username')))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, leader_id=leader_id, team_name=team_name or None)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: team naming failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 

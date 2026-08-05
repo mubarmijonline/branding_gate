@@ -124,6 +124,13 @@ PERMISSIONS = {
     'catalog.view': 'View the item catalog',
     'catalog.edit': 'Edit the item catalog',
 
+    # Targets. Assigning is further narrowed in the route to a direct report:
+    # scope says whose numbers you may read, the reporting line says whose you
+    # may set.
+    'target.view':   'View sales targets',
+    'target.assign': 'Set the sales target of a direct report',
+    'team.edit':     'Name a team',
+
     # Administration
     'user.view':   'View users',
     'user.create': 'Create users',
@@ -301,13 +308,21 @@ SEED_MATRIX = {
         _sales_line('department', approve=True, decide_client=True, decide_negotiation=True),
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
-        {'client.create': 'department', 'client.edit': 'department'},
+        {
+            'client.create': 'department', 'client.edit': 'department',
+            # Reads the whole department's numbers, sets its team leaders'.
+            'target.view': 'department', 'target.assign': 'department',
+            'team.edit': 'department',
+        },
     ),
     'sales_team_leader': _merge(
         _sales_line('team'),
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
-        {'client.create': 'own', 'client.edit': 'team'},
+        {
+            'client.create': 'own', 'client.edit': 'team',
+            'target.view': 'team', 'target.assign': 'team',
+        },
     ),
     'sales_member': _merge(
         _sales_line('own'),
@@ -316,6 +331,7 @@ SEED_MATRIX = {
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',
             'client.create': 'own',
+            'target.view': 'own',
         },
     ),
 
