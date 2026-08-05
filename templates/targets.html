@@ -64,6 +64,17 @@
                  color:var(--ink); }
   .targets-page .tgt-actions button:hover { border-color:var(--accent); color:var(--accent); }
   .targets-page .tgt-empty { padding:2rem; text-align:center; color:var(--muted); }
+  .targets-page .tgt-seg { display:inline-flex; border:1px solid var(--hair);
+                 border-radius:6px; overflow:hidden; }
+  .targets-page .tgt-seg button { border:0; background:#fff; padding:.42rem .9rem;
+                 font-size:.85rem; font-weight:600; color:var(--muted); cursor:pointer; }
+  .targets-page .tgt-seg button + button { border-left:1px solid var(--hair); }
+  .targets-page .tgt-seg button.on { background:var(--accent); color:#fff; }
+  .targets-page .tgt-seg button:focus-visible { outline:2px solid var(--accent);
+                 outline-offset:-2px; }
+  .targets-page th.qcol { border-left:1px solid var(--hair); }
+  .targets-page td.qcol { border-left:1px solid var(--hair); }
+  .targets-page td.qcol .ach { display:block; font-size:.75rem; color:var(--muted); }
   .targets-page .tgt-left { font-weight:600; }
   .targets-page .tgt-left.over { color:var(--bad); }
   .targets-page .tgt-left.spare { color:var(--warn); }
@@ -87,14 +98,20 @@
   </dl>
 
   <div class="tgt-toolbar">
+    <span class="tgt-seg">
+      <button type="button" id="tgtViewQuarter" class="on">One quarter</button>
+      <button type="button" id="tgtViewYear">Whole year</button>
+    </span>
     <label for="tgtPeriod" class="mb-0 tgt-muted" style="font-size:.85rem;">Quarter</label>
     <select id="tgtPeriod"></select>
+    <label for="tgtYear" class="mb-0 tgt-muted" style="font-size:.85rem;display:none;">Year</label>
+    <select id="tgtYear" style="display:none;"></select>
     <span class="tgt-note" id="tgtNote"></span>
   </div>
 
   <div class="tgt-scroll">
     <table class="tgt-table">
-      <thead>
+      <thead id="tgtHead">
         <tr>
           <th>Person</th>
           <th class="num">Target</th>
@@ -117,7 +134,7 @@
 (function () {
   'use strict';
 
-  var ROWS = [], PERIOD = '';
+  var ROWS = [], PERIOD = '', PERIODS = [], YEAR_PERIODS = [], VIEW = 'quarter';
   var CAN_ASSIGN = {{ 'true' if can_assign_targets else 'false' }};
 
   function esc(v) {
@@ -127,11 +144,34 @@
   }
   function money(v) {
     if (v === null || v === undefined) { return '-'; }
-    return Number(v).toLocaleString(undefined, { minimumFractionDigits: 0,
-                                                 maximumFractionDigits: 0 });
+    return Number(v).toLocaleString('en-US', { minimumFractionDigits: 0,
+                                               maximumFractionDigits: 0 });
+  }
+  // Money is typed with separators and stored without them. Grouping is applied
+  // to the digits only, so the caret keeps its place and the value the server
+  // sees is the same string it always was.
+  function groupDigits(text) {
+    var negative = /^\s*-/.test(text);
+    var cleaned = String(text).replace(/[^0-9.]/g, '');
+    var parts = cleaned.split('.');
+    var whole = parts.shift().replace(/^0+(?=\d)/, '');
+    var rest = parts.length ? '.' + parts.join('').slice(0, 2) : '';
+    if (whole === '') { return negative ? '-' : (rest ? '0' + rest : ''); }
+    return (negative ? '-' : '') +
+           whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + rest;
+  }
+  function attachGrouping(input) {
+    input.addEventListener('input', function () {
+      var before = this.value;
+      var caretFromEnd = before.length - (this.selectionStart || 0);
+      this.value = groupDigits(before);
+      var caret = Math.max(0, this.value.length - caretFromEnd);
+      try { this.setSelectionRange(caret, caret); } catch (e) { /* not focusable */ }
+    });
   }
 
   function load(period) {
+    VIEW = 'quarter';
     var url = '/api/targets' + (period ? '?period=' + encodeURIComponent(period) : '');
     $.getJSON(url).done(function (r) {
       if (!r || !r.success) {
@@ -140,9 +180,31 @@
       }
       ROWS = r.rows || [];
       PERIOD = r.period;
-      renderPeriods(r.periods || [], r.period);
+      PERIODS = r.periods || [];
+      renderPeriods(PERIODS, r.period);
+      renderYears(r.years || [], Number(r.period.split('-')[0]));
+      renderHead();
       renderRows();
       renderStats();
+    }).fail(function (xhr) {
+      $('#tgtNote').text((xhr.responseJSON || {}).error || 'Could not load targets');
+    });
+  }
+
+  function loadYear(year) {
+    VIEW = 'year';
+    $.getJSON('/api/targets/year?year=' + encodeURIComponent(year)).done(function (r) {
+      if (!r || !r.success) {
+        $('#tgtNote').text((r && r.error) || 'Could not load targets');
+        return;
+      }
+      ROWS = r.rows || [];
+      YEAR_PERIODS = r.periods || [];
+      renderYears(r.years || [], r.year);
+      renderHead();
+      renderRows();
+      renderStats();
+      $('#tgtNote').text(r.year + ' · ' + ROWS.length + ' people');
     }).fail(function (xhr) {
       $('#tgtNote').text((xhr.responseJSON || {}).error || 'Could not load targets');
     });
@@ -157,10 +219,45 @@
     $sel.data('filled', true).val(current);
   }
 
+  function renderYears(years, current) {
+    var $sel = $('#tgtYear');
+    if (!$sel.data('filled')) {
+      years.forEach(function (y) { $sel.append($('<option>').val(y).text(y)); });
+      $sel.data('filled', true);
+    }
+    $sel.val(current);
+  }
+
+  function renderHead() {
+    if (VIEW === 'quarter') {
+      $('#tgtHead').html(
+        '<tr><th>Person</th><th class="num">Target</th><th class="num">Handed down</th>' +
+        '<th class="num">Unassigned</th><th class="num">Achieved</th>' +
+        '<th style="width:150px;">Progress</th><th></th></tr>');
+      return;
+    }
+    $('#tgtHead').html(
+      '<tr><th>Person</th>' +
+      YEAR_PERIODS.map(function (p) {
+        return '<th class="num qcol">' + esc(p.replace('-Q', ' Q')) + '</th>';
+      }).join('') +
+      '<th class="num qcol">Year</th></tr>');
+  }
+
   function renderStats() {
     // The visible root is whatever the viewer sits at the top of: the CEO sees
     // the Sales Head's number, a team leader sees their own.
     var root = ROWS.filter(function (r) { return r.depth === 0; });
+    if (VIEW === 'year') {
+      $('#tgtTop').text(money(root.reduce(
+        function (sum, r) { return sum + (r.year_target || 0); }, 0)));
+      $('#tgtAchieved').text(money(root.reduce(
+        function (sum, r) { return sum + (r.year_achieved || 0); }, 0)));
+      $('#tgtPeople').text(ROWS.length);
+      $('#tgtAssignedCard').hide();
+      $('#tgtTopLabel').text('Year target');
+      return;
+    }
     var top = root.reduce(function (sum, r) { return sum + (r.target || 0); }, 0);
     var handed = root.reduce(function (sum, r) { return sum + (r.assigned || 0); }, 0);
     var done = root.reduce(function (sum, r) { return sum + (r.team_achieved || 0); }, 0);
@@ -203,24 +300,56 @@
     return '';
   }
 
-  function renderRows() {
+  function personCell(row) {
+    var pad = 0.6 + row.depth * 1.4;
+    return '<td style="padding-left:' + pad + 'rem;">' +
+      '<div class="tgt-who"><div>' +
+        '<div class="nm">' + esc(row.name) +
+          (row.can_name_team
+            ? '<span class="name-team" style="cursor:pointer;">' + teamLabel(row) + '</span>'
+            : teamLabel(row)) +
+        '</div>' +
+        '<div class="rl">' + esc(row.role_name || 'No role') + '</div>' +
+      '</div></div></td>';
+  }
+
+  function renderYearRows() {
     var $body = $('#tgtRows').empty();
     $('#tgtEmpty').toggle(ROWS.length === 0);
     ROWS.forEach(function (row) {
-      var pad = 0.6 + row.depth * 1.4;
+      var cells = YEAR_PERIODS.map(function (p) {
+        var q = row.quarters[p] || {};
+        var target = q.target === null || q.target === undefined
+          ? '<span class="tgt-muted">-</span>' : money(q.target);
+        var achieved = (q.target === null || q.target === undefined)
+          ? '' : '<span class="ach">' + money(q.achieved) +
+                 (q.progress === null || q.progress === undefined
+                   ? '' : ' · ' + Math.round(q.progress) + '%') + '</span>';
+        return '<td class="num qcol">' + target + achieved + '</td>';
+      }).join('');
+      // No target anywhere in the year reads better as a dash than as a bold 0.
+      var total = row.year_target
+        ? '<strong>' + money(row.year_target) + '</strong>' +
+          '<span class="ach">' + money(row.year_achieved) + '</span>'
+        : '<span class="tgt-muted">-</span>';
+      $body.append($('<tr>').attr('data-id', row.id).html(
+        personCell(row) + cells + '<td class="num qcol">' + total + '</td>'
+      ));
+    });
+  }
+
+  function renderRows() {
+    if (VIEW === 'year') { renderYearRows(); return; }
+    var $body = $('#tgtRows').empty();
+    $('#tgtEmpty').toggle(ROWS.length === 0);
+    ROWS.forEach(function (row) {
       var actions = '';
       if (CAN_ASSIGN && row.can_assign) {
         actions = '<button class="set-target" data-id="' + row.id + '">' +
                   (row.target === null ? 'Set target' : 'Change') + '</button>';
       }
       var $tr = $('<tr>').attr('data-id', row.id).html(
-        '<td style="padding-left:' + pad + 'rem;">' +
-          '<div class="tgt-who"><div>' +
-            '<div class="nm">' + esc(row.name) +
-              (row.can_name_team ? '<span class="name-team" style="cursor:pointer;">' + teamLabel(row) + '</span>' : teamLabel(row)) +
-            '</div>' +
-            '<div class="rl">' + esc(row.role_name || 'No role') + '</div>' +
-          '</div></div></td>' +
+        personCell(row) +
         '<td class="num">' + money(row.target) + '</td>' +
         '<td class="num">' + (row.is_leader ? money(row.assigned) : '<span class="tgt-muted">-</span>') + '</td>' +
         '<td class="num">' + leftFor(row) + '</td>' +
@@ -236,35 +365,77 @@
   }
 
   // ---- setting a target ---------------------------------------------------
+  // The quarter is picked in the dialog rather than inherited silently from the
+  // page: a target only means anything against a period, and setting one for
+  // the wrong quarter by not noticing a dropdown elsewhere is too easy.
   $(document).on('click', '.set-target', function () {
     var id = Number($(this).data('id'));
     var row = ROWS.filter(function (r) { return r.id === id; })[0];
     if (!row) { return; }
     var manager = ROWS.filter(function (r) { return r.id === row.manager_id; })[0];
-    var hint = '';
+    var available = null;
     if (manager && manager.unassigned !== null && manager.unassigned !== undefined) {
-      hint = money(manager.unassigned + (row.target || 0)) + ' of ' +
-             esc(manager.name) + '’s target is available.';
+      available = manager.unassigned + (row.target || 0);
     }
+
+    var options = PERIODS.map(function (p) {
+      return '<option value="' + esc(p) + '"' + (p === PERIOD ? ' selected' : '') +
+             '>' + esc(p.replace('-Q', ' Q')) + '</option>';
+    }).join('');
+
     Swal.fire({
       title: 'Target for ' + row.name,
-      html: '<p style="font-size:.85rem;color:#8891a8;margin-bottom:.5rem;">' +
-            PERIOD.replace('-Q', ' Q') + (hint ? '. ' + hint : '') + '</p>',
-      input: 'text',
-      inputValue: row.target === null ? '' : String(row.target),
-      inputAttributes: { inputmode: 'decimal' },
+      html:
+        '<div style="text-align:left;font-size:.9rem;">' +
+          '<label for="tgtQPick" style="font-weight:600;font-size:.75rem;' +
+            'letter-spacing:.06em;text-transform:uppercase;color:#8891a8;">Quarter</label>' +
+          '<select id="tgtQPick" class="swal2-select" style="display:block;width:100%;' +
+            'margin:.2rem 0 .8rem;padding:.5rem;border:1px solid #e3e6f0;border-radius:5px;">' +
+            options + '</select>' +
+          '<label for="tgtAPick" style="font-weight:600;font-size:.75rem;' +
+            'letter-spacing:.06em;text-transform:uppercase;color:#8891a8;">Amount</label>' +
+          '<input id="tgtAPick" type="text" inputmode="decimal" style="display:block;' +
+            'width:100%;margin:.2rem 0 .4rem;padding:.5rem;border:1px solid #e3e6f0;' +
+            'border-radius:5px;" value="' +
+            (row.target === null ? '' : esc(groupDigits(String(row.target)))) + '">' +
+          '<p id="tgtHint" style="font-size:.8rem;color:#8891a8;margin:0;">' +
+            (available === null ? '' :
+             money(available) + ' of ' + esc(manager.name) + '’s target is available.') +
+          '</p>' +
+        '</div>',
       showCancelButton: true,
-      confirmButtonText: 'Save'
+      confirmButtonText: 'Save',
+      didOpen: function () {
+        attachGrouping(document.getElementById('tgtAPick'));
+        // The amount shown belongs to the quarter on screen. Pick another and it
+        // is no longer that person's number, so clear it rather than carry it over.
+        document.getElementById('tgtQPick').addEventListener('change', function () {
+          if (this.value !== PERIOD) {
+            document.getElementById('tgtAPick').value = '';
+            document.getElementById('tgtHint').textContent =
+              'Nothing is loaded for ' + this.value.replace('-Q', ' Q') +
+              ' yet; the amount is checked against the manager’s target for that quarter.';
+          }
+        });
+      },
+      preConfirm: function () {
+        var amount = document.getElementById('tgtAPick').value.trim();
+        if (!amount) { Swal.showValidationMessage('Enter an amount'); return false; }
+        return { period: document.getElementById('tgtQPick').value, amount: amount };
+      }
     }).then(function (res) {
-      if (!res.value && res.value !== '0') { return; }
+      if (!res.value) { return; }
+      var period = res.value.period;
       $.ajax({
         url: '/api/targets/assign', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ user_id: id, period: PERIOD, amount: res.value })
+        data: JSON.stringify({ user_id: id, period: period, amount: res.value.amount })
       }).done(function (r) {
         if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
-        load(PERIOD);
-        Swal.fire({ icon: 'success', title: 'Target set', timer: 1200,
-                    showConfirmButton: false });
+        // Land on the quarter that was just set, so the result is on screen.
+        $('#tgtPeriod').val(period);
+        load(period);
+        Swal.fire({ icon: 'success', title: 'Target set for ' + period.replace('-Q', ' Q'),
+                    timer: 1400, showConfirmButton: false });
       }).fail(function (xhr) {
         Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
       });
@@ -298,6 +469,23 @@
   });
 
   $('#tgtPeriod').on('change', function () { load($(this).val()); });
+  $('#tgtYear').on('change', function () { loadYear($(this).val()); });
+
+  function showControls(view) {
+    var year = view === 'year';
+    $('#tgtViewQuarter').toggleClass('on', !year);
+    $('#tgtViewYear').toggleClass('on', year);
+    $('#tgtPeriod, label[for=tgtPeriod]').toggle(!year);
+    $('#tgtYear, label[for=tgtYear]').toggle(year);
+  }
+  $('#tgtViewQuarter').on('click', function () {
+    showControls('quarter');
+    load($('#tgtPeriod').val());
+  });
+  $('#tgtViewYear').on('click', function () {
+    showControls('year');
+    loadYear($('#tgtYear').val() || PERIOD.split('-')[0]);
+  });
 
   $(function () { load(''); });
 }());

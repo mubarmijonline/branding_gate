@@ -275,9 +275,8 @@ const rolePortals = {
     icon: 'fas fa-bullhorn',
     title: 'Marketing',
     desc: 'Access marketing campaigns and analytics.',
-    link: '#',
-    theme: 'marketing',
-    comingSoon: true
+    link: '/marketing',
+    theme: 'marketing'
   },
   'finance': {
     icon: 'fas fa-coins',
@@ -297,25 +296,22 @@ const rolePortals = {
     icon: 'fas fa-user-tie',
     title: 'Account Manager',
     desc: 'Oversee client accounts and ensure customer satisfaction.',
-    link: '#',
-    theme: 'account',
-    comingSoon: true
+    link: '/account',
+    theme: 'account'
   },
   '2D designer': {
     icon: 'fas fa-pencil-ruler',
     title: '2D Designer',
     desc: 'Access 2D design tools, assets, and project boards.',
-    link: '#',
-    theme: '2d',
-    comingSoon: true
+    link: '/design-2d',
+    theme: '2d'
   },
   '3D graphic': {
     icon: 'fas fa-cube',
     title: '3D Graphic',
     desc: 'Access 3D modeling, rendering, and visualization resources.',
-    link: '#',
-    theme: '3d',
-    comingSoon: true
+    link: '/design-3d',
+    theme: '3d'
   }
 };
 
@@ -326,11 +322,15 @@ const PORTAL_PERMISSION = {
   'sales':         'sales_request.view',
   'operation':     'approved_item.view',
   'pricing':       'sales_item.price',
-  'marketing':     'client.view',
   'finance':       'finance_txn.view',
-  'account manager': 'client.edit',
-  '2D designer':   'catalog.edit',
-  '3D graphic':    'catalog.edit'
+  // The four department portals carry a permission of their own. They used to
+  // borrow the nearest-looking one, which showed Marketing to most of the
+  // company and hid Account Management and both design portals from their own
+  // members.
+  'marketing':       'portal.marketing',
+  'account manager': 'portal.account',
+  '2D designer':     'portal.design_2d',
+  '3D graphic':      'portal.design_3d'
 };
 
 function renderRolePortals(perms) {

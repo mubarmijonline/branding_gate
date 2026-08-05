@@ -256,6 +256,63 @@ class TargetCascadeTest(unittest.TestCase):
         response = self._assign(self.ceo, self.head, '-5')
         self.assertEqual(response.status_code, 400)
 
+    def test_an_amount_typed_with_separators_is_accepted(self):
+        # The page groups digits as they are typed; the value posted keeps the
+        # commas, so the route has to take them.
+        response = self._assign(self.ceo, self.head, '1,000,000')
+        self.assertEqual(response.status_code, 200, response.get_json())
+        rows = self._rows_for(self.head)
+        self.assertEqual(rows[self.head]['target'], 1000000.0)
+
+    # -- the year view ------------------------------------------------------
+
+    def _year_rows(self, user_id, year=2026):
+        response = self._client_for(user_id).get('/api/targets/year?year=%d' % year)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload.get('success'), payload)
+        return payload, {row['id']: row for row in payload['rows']}
+
+    def test_the_year_view_holds_one_column_per_quarter(self):
+        self._assign(self.ceo, self.head, '1000000')
+        payload, rows = self._year_rows(self.head)
+        self.assertEqual(payload['periods'],
+                         ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4'])
+        head = rows[self.head]
+        self.assertEqual(head['quarters']['2026-Q3']['target'], 1000000.0)
+        self.assertIsNone(head['quarters']['2026-Q1']['target'])
+        self.assertEqual(head['year_target'], 1000000.0)
+
+    def test_the_year_view_sums_every_quarter_set(self):
+        self._assign(self.ceo, self.head, '1000000')
+        self._client_for(self.ceo).post('/api/targets/assign', json={
+            'user_id': self.head, 'period': '2026-Q4', 'amount': '250000'})
+        _, rows = self._year_rows(self.head)
+        self.assertEqual(rows[self.head]['year_target'], 1250000.0)
+
+    def test_the_year_view_agrees_with_the_quarter_view(self):
+        self._assign(self.ceo, self.head, '1000000')
+        self._assign(self.head, self.leader_a, '200000')
+        quarter = self._rows_for(self.head)
+        _, year = self._year_rows(self.head)
+        for person in (self.head, self.leader_a):
+            self.assertEqual(year[person]['quarters']['2026-Q3']['target'],
+                             quarter[person]['target'])
+            self.assertEqual(year[person]['quarters']['2026-Q3']['achieved'],
+                             quarter[person]['team_achieved'])
+
+    def test_the_year_view_is_scoped_like_the_quarter_view(self):
+        _, rows = self._year_rows(self.member_a)
+        self.assertEqual(list(rows), [self.member_a])
+        _, leader_rows = self._year_rows(self.leader_a)
+        self.assertIn(self.member_a, leader_rows)
+        self.assertNotIn(self.member_b, leader_rows)
+        self.assertNotIn(self.head, leader_rows)
+
+    def test_a_rubbish_year_is_refused(self):
+        response = self._client_for(self.head).get('/api/targets/year?year=nope')
+        self.assertEqual(response.status_code, 400)
+
     # -- who sees what ------------------------------------------------------
 
     def test_a_member_sees_only_themselves(self):

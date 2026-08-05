@@ -2180,6 +2180,36 @@ def _target_achieved(cur, period):
             for row in cur.fetchall()}
 
 
+def _target_achieved_by_quarter(cur, year):
+    """{'2026-Q1': {user_id: total}, ...} in one pass over the year."""
+    cur.execute("""
+        SELECT owner_user_id, QUARTER(created_at) AS q,
+               COALESCE(SUM(total_sell), 0) AS total
+        FROM sales_request
+        WHERE approval_status = 'approved'
+          AND owner_user_id IS NOT NULL
+          AND YEAR(created_at) = %s
+        GROUP BY owner_user_id, QUARTER(created_at)
+    """, (year,))
+    out = {'%d-Q%d' % (year, q): {} for q in (1, 2, 3, 4)}
+    for row in cur.fetchall():
+        out['%d-Q%d' % (year, row['q'])][row['owner_user_id']] = (
+            row['total'] or targets_lib.ZERO)
+    return out
+
+
+def _target_amounts_for(cur, periods):
+    """{period: {user_id: amount}} for several quarters at once."""
+    placeholders = ','.join(['%s'] * len(periods))
+    cur.execute(
+        "SELECT user_id, period, amount FROM sales_target WHERE period IN (%s)"
+        % placeholders, list(periods))
+    out = {p: {} for p in periods}
+    for row in cur.fetchall():
+        out[row['period']][row['user_id']] = row['amount']
+    return out
+
+
 def _money_out(value):
     """Decimal is not JSON. Send a number, or null when there is no target."""
     return None if value is None else float(value)
@@ -2245,12 +2275,90 @@ def get_targets():
             success=True,
             period=period,
             periods=targets_lib.period_choices(),
+            years=_target_years(),
             rows=out,
         )
     except HTTPException:
         raise
     except Exception as e:
         print("DEBUG: targets fetch failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+def _target_years():
+    """The years the period picker covers, newest last."""
+    years = sorted({int(p.split('-')[0]) for p in targets_lib.period_choices()})
+    return years
+
+
+@app.route('/api/targets/year', methods=['GET'])
+@perm('target.view')
+def get_targets_by_year():
+    """
+    The same people, but every quarter of one year side by side.
+
+    Built by running the same tree four times rather than by a second set of
+    rules, so a quarter column can never disagree with the quarter page.
+    """
+    try:
+        year = int(request.args.get('year') or targets_lib.current_period().split('-')[0])
+        if year < 2000 or year > 2999:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick a year'), 400
+
+    periods = ['%d-Q%d' % (year, q) for q in (1, 2, 3, 4)]
+    try:
+        visible = visible_user_ids('target.view')
+        me = session.get('user_id')
+        can_assign_all = rbac.resolve(session.get('perms') or {}, 'target.assign') == 'all'
+
+        conn, cur = connection()
+        people = _target_people(cur)
+        amounts = _target_amounts_for(cur, periods)
+        achieved = _target_achieved_by_quarter(cur, year)
+        cur.close()
+        conn.close()
+
+        merged = {}
+        order = []
+        for period in periods:
+            for row in targets_lib.build_tree(
+                    people, amounts[period], achieved[period], visible_ids=visible):
+                entry = merged.get(row['id'])
+                if entry is None:
+                    person = next((p for p in people if p['id'] == row['id']), {})
+                    entry = {
+                        'id': row['id'],
+                        'name': row['name'],
+                        'role_name': row['role_name'],
+                        'team_name': row['team_name'],
+                        'depth': row['depth'],
+                        'is_leader': row['is_leader'],
+                        'can_assign': bool(can_assign_all
+                                           or person.get('manager_id') == me),
+                        'quarters': {},
+                        'year_target': 0.0,
+                        'year_achieved': 0.0,
+                    }
+                    merged[row['id']] = entry
+                    order.append(row['id'])
+                entry['quarters'][period] = {
+                    'target': _money_out(row['target']),
+                    'unassigned': _money_out(row['unassigned']),
+                    'achieved': _money_out(row['team_achieved']),
+                    'progress': row['progress'],
+                }
+                entry['year_target'] += float(row['target'] or 0)
+                entry['year_achieved'] += float(row['team_achieved'] or 0)
+
+        return jsonify(success=True, year=year, periods=periods,
+                       years=_target_years(),
+                       rows=[merged[i] for i in order])
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: targets year fetch failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -5124,6 +5232,89 @@ def pricing_dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template("sales_request.html", pricing_mode=True)
+
+# ---------------------------------------------------------------------------
+# Department portals with nothing in them yet.
+#
+# Four cards on the home page pointed at '#': Marketing, Account Management, 2D
+# and 3D Design. Each now lands on a real page of its own, gated by a permission
+# only that department holds, so the page exists and is reachable before anyone
+# decides what goes on it. Filling one in means changing its render_template
+# call; nothing else here is per-department.
+# ---------------------------------------------------------------------------
+
+_BLANK_PORTALS = {
+    'marketing': {
+        'perm': 'portal.marketing',
+        'title': 'Marketing',
+        'team': 'Marketing',
+        'icon': 'fas fa-bullhorn',
+        'desc': 'Campaigns, analytics and marketing material.',
+    },
+    'account': {
+        'perm': 'portal.account',
+        'title': 'Account Management',
+        'team': 'Account Management',
+        'icon': 'fas fa-user-tie',
+        'desc': 'Client accounts, relationships and satisfaction.',
+    },
+    'design_2d': {
+        'perm': 'portal.design_2d',
+        'title': '2D Design',
+        'team': '2D Design',
+        'icon': 'fas fa-pencil-ruler',
+        'desc': 'Design tools, assets and project boards.',
+    },
+    'design_3d': {
+        'perm': 'portal.design_3d',
+        'title': '3D Design',
+        'team': '3D Design',
+        'icon': 'fas fa-cube',
+        'desc': 'Modelling, rendering and visualisation.',
+    },
+}
+
+
+def _blank_portal(key):
+    portal = _BLANK_PORTALS[key]
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template(
+        "portal_placeholder.html",
+        portal_title=portal['title'],
+        portal_desc=portal['desc'],
+        portal_icon=portal['icon'],
+        portal_team=portal['team'],
+    )
+
+
+@app.route('/marketing', methods=['GET'])
+@perm('portal.marketing')
+def marketing_portal():
+    """Marketing portal. Empty until Marketing decides what belongs here."""
+    return _blank_portal('marketing')
+
+
+@app.route('/account', methods=['GET'])
+@perm('portal.account')
+def account_portal():
+    """Account Management portal. Empty for now."""
+    return _blank_portal('account')
+
+
+@app.route('/design-2d', methods=['GET'])
+@perm('portal.design_2d')
+def design_2d_portal():
+    """2D Design portal. Empty for now."""
+    return _blank_portal('design_2d')
+
+
+@app.route('/design-3d', methods=['GET'])
+@perm('portal.design_3d')
+def design_3d_portal():
+    """3D Design portal. Empty for now."""
+    return _blank_portal('design_3d')
+
 
 @app.route('/workflow_timeline')
 @perm('sales_request.view')

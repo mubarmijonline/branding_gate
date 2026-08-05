@@ -124,6 +124,14 @@ PERMISSIONS = {
     'catalog.view': 'View the item catalog',
     'catalog.edit': 'Edit the item catalog',
 
+    # Department portals. One per team whose home-page card had nowhere to go.
+    # A portal is a landing page, so it carries no row dimension and no scope;
+    # holding it is what puts the card on the home page and opens the page.
+    'portal.marketing': 'Open the Marketing portal',
+    'portal.account':   'Open the Account Management portal',
+    'portal.design_2d': 'Open the 2D Design portal',
+    'portal.design_3d': 'Open the 3D Design portal',
+
     # Targets. Assigning is further narrowed in the route to a direct report:
     # scope says whose numbers you may read, the reporting line says whose you
     # may set.
@@ -158,6 +166,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'role.view', 'role.assign',
     'supplier_report.view',
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
+    'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
 })
 
 
@@ -575,6 +584,26 @@ SEED_MATRIX = {
         },
     ),
 }
+
+# A portal belongs to a department, not to a job title, so grant it by
+# department rather than role by role: a role added to Marketing later gets the
+# card by being in Marketing, not by someone remembering to edit a list.
+#
+# This is what the home page cards are gated on. They used to borrow whatever
+# permission looked close -- Account Management on `client.edit`, which its own
+# members do not hold, and both design teams on `catalog.edit`, which only their
+# heads hold -- so the people the card was for could not see it.
+_DEPARTMENT_PORTALS = {
+    'marketing': 'portal.marketing',
+    'account':   'portal.account',
+    'design_2d': 'portal.design_2d',
+    'design_3d': 'portal.design_3d',
+}
+
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    _portal = _DEPARTMENT_PORTALS.get(_dept_code)
+    if _portal and _role_code in SEED_MATRIX:
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_portal: 'all'})
 
 # Self-service: what every employee needs regardless of job. The navbar balance
 # widget and the item-catalog lookup in main.html are rendered for everyone, so

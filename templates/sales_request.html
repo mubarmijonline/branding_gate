@@ -3296,6 +3296,81 @@ window.chartPieDemo = function() {
         <h1 class="h3 mb-0 text-gray-800">{% if pricing_mode %}Pricing - Operation Dashboard{% else %}Sales Request Management{% endif %}</h1>
     </div>
 
+    {% if 'target.view' in _p and not pricing_mode %}
+    <!-- This quarter's target, one line per team the viewer may see. The scope
+         is the server's: /api/targets already returns only what this permission
+         allows, so a member gets their own line and a head gets every team. -->
+    <div class="sr-target-strip mb-4" id="srTargetStrip" style="display:none;">
+      <div class="sr-target-head">
+        <span class="sr-target-title">Target</span>
+        <span class="sr-target-period" id="srTargetPeriod"></span>
+        <a class="sr-target-link" href="{{ url_for('targets_page') }}">Open targets</a>
+      </div>
+      <div class="sr-target-items" id="srTargetItems"></div>
+    </div>
+    <style>
+      /* Prefixed sr-target-*: the theme owns .progress, .bar and .card-body. */
+      .sr-target-strip { border:1px solid #e3e6f0; border-radius:6px; background:#fff; }
+      .sr-target-head { display:flex; align-items:baseline; gap:.6rem;
+                        padding:.6rem .9rem; border-bottom:1px solid #e3e6f0; }
+      .sr-target-title { font-size:.7rem; letter-spacing:.09em; text-transform:uppercase;
+                        font-weight:700; color:#8891a8; }
+      .sr-target-period { font-size:.8rem; color:#8891a8; }
+      .sr-target-link { margin-left:auto; font-size:.8rem; color:#3a4fa0; font-weight:600; }
+      .sr-target-items { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+                        gap:1px; background:#e3e6f0; }
+      .sr-target-cell { background:#fff; padding:.7rem .9rem; }
+      .sr-target-who { font-weight:600; color:#2e3650; font-size:.88rem; }
+      .sr-target-sub { font-size:.75rem; color:#8891a8; margin-bottom:.35rem; }
+      .sr-target-nums { font-size:.85rem; color:#2e3650; font-variant-numeric:tabular-nums; }
+      .sr-target-nums b { font-weight:700; }
+      .sr-target-track { height:6px; border-radius:3px; background:#eef0f5;
+                        overflow:hidden; margin-top:.35rem; position:relative; }
+      .sr-target-track i { position:absolute; inset:0 auto 0 0; background:#3a4fa0; }
+      .sr-target-track i.hit { background:#1b6e4d; }
+      .sr-target-track i.behind { background:#c0392b; }
+    </style>
+    <script>
+    (function () {
+      'use strict';
+      function fmt(v) {
+        return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+      }
+      function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      $.getJSON('/api/targets').done(function (r) {
+        if (!r || !r.success || !r.rows || !r.rows.length) { return; }
+        // One cell per team, which is a leader plus their reports. Somebody with
+        // nobody under them is their own cell -- that is the member's own target.
+        var cells = r.rows.filter(function (row) { return row.is_leader; });
+        if (!cells.length) { cells = r.rows.filter(function (row) { return row.depth === 0; }); }
+        var html = cells.map(function (row) {
+          var pct = row.progress === null || row.progress === undefined
+            ? null : Math.max(0, Math.min(100, row.progress));
+          var cls = row.progress >= 100 ? 'hit' : (row.progress < 40 ? 'behind' : '');
+          return '<div class="sr-target-cell">' +
+            '<div class="sr-target-who">' +
+              esc(row.team_name || row.name) + '</div>' +
+            '<div class="sr-target-sub">' +
+              esc(row.team_name ? row.name : (row.role_name || '')) + '</div>' +
+            '<div class="sr-target-nums"><b>' + fmt(row.team_achieved) + '</b> of ' +
+              (row.target === null ? 'no target' : fmt(row.target)) +
+              (pct === null ? '' : ' · ' + Math.round(row.progress) + '%') + '</div>' +
+            (pct === null ? '' :
+              '<div class="sr-target-track"><i class="' + cls +
+              '" style="width:' + pct + '%"></i></div>') +
+            '</div>';
+        }).join('');
+        $('#srTargetItems').html(html);
+        $('#srTargetPeriod').text(String(r.period || '').replace('-Q', ' Q'));
+        $('#srTargetStrip').show();
+      });
+    }());
+    </script>
+    {% endif %}
+
     {% if pricing_mode %}
     <!-- Pricing Dashboard Cards -->
     <div class="row mb-4" id="pricingDashboardCards">

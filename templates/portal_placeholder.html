@@ -1,0 +1,38 @@
+{% extends "main.html" %}
+
+{# One template for every department portal that has no tools yet. The route
+   supplies the title, the blurb and the icon; nothing here is per-department,
+   so filling one portal in later means replacing its render_template call, not
+   unpicking a copy of this page. #}
+
+{% block body %}
+<div class="container-fluid portal-blank">
+  <div class="portal-blank-card">
+    <i class="{{ portal_icon }} portal-blank-icon"></i>
+    <h1>{{ portal_title }}</h1>
+    <p class="portal-blank-desc">{{ portal_desc }}</p>
+    <p class="portal-blank-note">
+      This portal is reserved for the {{ portal_team }} team. It is empty for now
+      &mdash; the pages that belong here have not been built yet.
+    </p>
+    <a class="portal-blank-back" href="{{ url_for('home') }}">
+      <i class="fas fa-arrow-left mr-1"></i> Back to portals
+    </a>
+  </div>
+</div>
+
+<style>
+  /* Prefixed portal-blank-*: sb-admin-2 owns .card, .card-body and .icon. */
+  .portal-blank { display:flex; justify-content:center; padding:3rem 1rem; }
+  .portal-blank-card { background:#fff; border:1px solid #e3e6f0; border-radius:8px;
+            padding:3rem 2.5rem; max-width:620px; width:100%; text-align:center; }
+  .portal-blank-icon { font-size:2.6rem; color:#3a4fa0; background:#eef1fa;
+            width:88px; height:88px; line-height:88px; border-radius:50%;
+            display:inline-block; margin-bottom:1.25rem; }
+  .portal-blank h1 { font-size:1.6rem; font-weight:700; color:#2e3650; margin:0 0 .5rem; }
+  .portal-blank-desc { color:#5a6280; margin:0 0 1.25rem; }
+  .portal-blank-note { color:#8891a8; font-size:.9rem; border-top:1px solid #e3e6f0;
+            padding-top:1.25rem; margin:0 0 1.5rem; }
+  .portal-blank-back { font-weight:600; color:#3a4fa0; }
+</style>
+{% endblock %}

@@ -22,17 +22,17 @@ PYTHONPATH=.:tests ./branding_gate_VENV/bin/python -m unittest \
   test_rbac test_scope test_route_coverage test_hierarchy_admin \
   test_password_hashing test_template_javascript test_negotiation_workflow \
   test_negotiation_templates test_negotiation_routes test_sales_request_journey_pdf \
-  test_targets
+  test_targets test_portals
 ```
 
-116 tests. `tests/test_design_system.py` is pytest-style (bare functions) and is run by
+129 tests. `tests/test_design_system.py` is pytest-style (bare functions) and is run by
 calling its `test_*` functions in a loop.
 
 ## Access control
 
 Authorization is `rbac.py` (pure policy, no Flask/MySQL) plus wrappers in `branding_gate.py`.
 
-- **80 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
+- **84 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
   `SEED_MATRIX` maps role → {permission: scope}. Edit it, then run `seed_rbac.py`.
 - **Scope** is `own | team | department | all`. `team` = self + direct reports
   (`user.manager_id`); `department` = same `user.department_id`. Nobody sets scope by
@@ -70,6 +70,29 @@ the storage, `/targets` the page. Sales only, for now.
   the members are whoever reports to that leader. `user.team_id` is still dead.
 - Achievement is `SUM(total_sell)` over `approval_status='approved'`, attributed by
   `created_at` — `sales_added_date` is null on most rows.
+- **The quarter is chosen in the assign dialog**, not inherited from the page, and
+  the amount is cleared when it changes: carrying a number across quarters is how
+  you set the wrong one without noticing.
+- **Amounts are typed with separators and stored without them.** The input groups
+  digits, `targets.to_amount` strips the commas. Never parse money in the template.
+- `/api/targets/year` is the same tree run once per quarter, so a year column can
+  never disagree with the quarter page. `/sales_request` carries a read-only strip
+  fed by `/api/targets`, so it is scoped by the same permission with no new gate.
+
+## Department portals
+
+Marketing, Account Management, 2D and 3D Design have a page of their own at
+`/marketing`, `/account`, `/design-2d`, `/design-3d`. They are **deliberately
+blank** — one shared `templates/portal_placeholder.html`, four thin routes. Filling
+one in means changing its `render_template` call, not unpicking a copy.
+
+- Each is gated on `portal.<team>`, granted **by department** in a loop over `ROLES`
+  after `SEED_MATRIX`, so a role added to a department later gets its portal by
+  being in it. The home page cards read the same permissions.
+- Before this they were `link: '#'` and borrowed the nearest-looking permission:
+  Marketing on `client.view` (most of the company held it), Account Management on
+  `client.edit` and both design portals on `catalog.edit` (their own members did
+  not hold either). `tests/test_portals.py` pins that down.
 
 ## Traps that have already bitten
 
