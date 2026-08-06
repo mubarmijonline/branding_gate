@@ -672,14 +672,100 @@ import requests
 #from time_handling import time_add_for_branch_single_date
 import firebase_admin
 
-from firebase_admin import credentials,firestore, auth, messaging, firestore
+from firebase_admin import credentials, auth, messaging
 from urllib.parse import quote
 import google.auth
 from google.auth.transport.requests import Request
 from google.auth import impersonated_credentials
+from pymongo import MongoClient, DESCENDING
+from bson import ObjectId
+from bson.errors import InvalidId
 cred = credentials.Certificate("./brandinggate-7c1f6-firebase-adminsdk-fbsvc-4e17fc4c74.json")
 firebase_admin.initialize_app(cred)
-db = firestore.client()
+# Firebase is still used for two things and only two: Auth (the custom token
+# minted at login) and Cloud Messaging (push). Firestore is gone -- notifications,
+# comments and device tokens are in MongoDB below.
+
+# ---------------------------------------------------------------------------
+# Firestore is a third party over the network, and every logged-in page polls
+# it for notifications while the sales pages also read comments from it. An
+# unbounded call there is an outage: google.api_core retries inside
+# time.sleep(), the gunicorn worker blocks until the 120s timeout kills it, and
+# with six workers a single Firestore stall takes the whole site to 502. That is
+# exactly what happened on 6 August 2026, twice.
+#
+# So: every Firestore call in a request path carries a deadline and fails soft.
+# An empty notifications tray is a much smaller problem than an ERP that does
+# not answer.
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Notifications, comments and device tokens live in MongoDB.
+#
+# They used to live in Firestore. On 6 August 2026 that project's quota ran out,
+# every call came back RESOURCE_EXHAUSTED ("Quota exceeded", grpc_status 8), the
+# client retried inside time.sleep(), and because every logged-in page polls
+# notifications while the sales pages also read comments, all six gunicorn
+# workers ended up blocked and the site served 502s. Twice.
+#
+# Two lessons are built in here rather than written down: every call carries a
+# deadline, and a failure returns a fallback instead of an exception. An empty
+# notification tray is a much smaller problem than an ERP that does not answer.
+# ---------------------------------------------------------------------------
+MONGO_URI = os.environ.get('BG_MONGO_URI', 'mongodb://127.0.0.1:27017/')
+MONGO_DB_NAME = os.environ.get('BG_MONGO_DB', 'branding_gate')
+
+_mongo_client = None
+
+
+def mongo():
+    """The Mongo database handle, made once and reused."""
+    global _mongo_client
+    if _mongo_client is None:
+        _mongo_client = MongoClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=3000,
+            connectTimeoutMS=3000,
+            socketTimeoutMS=8000,
+        )
+    return _mongo_client[MONGO_DB_NAME]
+
+
+def mongo_safe(call, fallback=None, label='call'):
+    """
+    Run a Mongo call, returning `fallback` if it fails.
+
+    The database is on this host, so this should not fire -- but notifications
+    and comments are decoration around the real work, and neither is worth a
+    500, let alone a worker.
+    """
+    try:
+        return call()
+    except Exception as e:
+        print("DEBUG: Mongo %s unavailable (%s): %s" % (label, type(e).__name__, e))
+        return fallback
+
+
+def ensure_mongo_indexes():
+    """
+    The two access patterns, indexed. Called at startup; safe to repeat.
+    """
+    def build():
+        mongo().notifications.create_index([('uid', 1), ('added_date', -1)])
+        mongo().notifications.create_index([('uid', 1), ('read', 1)])
+        mongo().comments.create_index([('request_id', 1), ('created_at', -1)])
+        mongo().fcm_tokens.create_index([('phone_number', 1)])
+        return True
+    return mongo_safe(build, fallback=False, label='index build')
+
+
+def mongo_id(value):
+    """A document id from the wire, or None when it is not one."""
+    try:
+        return ObjectId(str(value))
+    except (InvalidId, TypeError):
+        return None
+
+
 app = Flask(__name__)
 CORS(app)
 #Bootst/projects/psCalc/templatesrap(app)
@@ -925,20 +1011,25 @@ def send_notification_to_role(role_name, title, content):
         added_by = session.get('name', 'System')
         added_uid = session.get('user_id', 0)
         
-        for user_id in user_ids:
-            doc_ref = db.collection('notifications').document()  # auto-ID
-            doc_ref.set({
-                'uid': int(user_id),
-                'title': title,
-                'content': content,
-                'added_by': added_by,
-                'added_uid': int(added_uid),
-                'added_date': datetime.now(),
-                'triggered': False,
-                'read': False,
-            })
-        
-        return len(user_ids)  # Return number of notifications sent
+        if not user_ids:
+            return 0
+
+        now = datetime.now()
+        documents = [{
+            'uid': int(user_id),
+            'title': title,
+            'content': content,
+            'added_by': added_by,
+            'added_uid': int(added_uid),
+            'added_date': now,
+            'triggered': False,
+            'read': False,
+        } for user_id in user_ids]
+        written = mongo_safe(
+            lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
+            fallback=0, label='notify role')
+
+        return written  # Return number of notifications sent
     except Exception as e:
         print(f"Error sending notifications to role {role_name}: {e}")
         return 0
@@ -1260,65 +1351,61 @@ def add_notification():
     except (TypeError, ValueError):
         return jsonify(success=False, error="Invalid uid"), 400
 
-    doc_ref = db.collection('notifications').document()  # auto-ID
-    doc_ref.set({
-        'uid':         uid,
-        'title':       title,
-        'content':     content,
-        'added_by':     added_by,
-        'added_uid':     int(added_uid),
-        'added_date':  datetime.datetime.utcnow(),
-        'triggered':   False,
-        'read':        False,
-    })
+    inserted = mongo_safe(
+        lambda: mongo().notifications.insert_one({
+            'uid':        uid,
+            'title':      title,
+            'content':    content,
+            'added_by':   added_by,
+            'added_uid':  int(added_uid),
+            'added_date': datetime.now(),
+            'triggered':  False,
+            'read':       False,
+        }).inserted_id,
+        label='add notification')
+    if inserted is None:
+        return jsonify(success=False,
+                       error='Notifications are unavailable right now.'), 503
 
-    return jsonify(success=True, message_id=doc_ref.id)
+    return jsonify(success=True, message_id=str(inserted))
 @app.route('/get_notifications')
 def get_notifications():
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
 
-        # Get reference to Firestore
-        
-        
-        # Query notifications for the current user
-        notifications_ref = db.collection('notifications')
-        print(session['user_id'])
-        query = notifications_ref.where('uid', '==', session['user_id']).order_by('added_date', direction=firebase_admin.firestore.Query.DESCENDING).limit(50)
-        
-        # Get the documents
-        docs = query.get()
-        
+        # The newest fifty for this person. An empty tray if Mongo is unwell:
+        # the notification bell must never be what takes a page down.
+        docs = mongo_safe(
+            lambda: list(mongo().notifications
+                         .find({'uid': session['user_id']})
+                         .sort('added_date', DESCENDING)
+                         .limit(50)),
+            fallback=[], label='notifications')
+
         # Convert to list of dictionaries
         notifications = []
         for doc in docs:
-            data = doc.to_dict()
-            # Convert timestamp to string for JSON serialization
-            if 'added_date' in data:
-                # Handle both timestamp and string dates
-                if hasattr(data['added_date'], 'timestamp'):
-                    # It's a Firestore timestamp
-                    data['timeadded_datestamp'] = data['added_date'].isoformat()
-                else:
-                    # It's already a string or datetime
-                    try:
-                        if isinstance(data['added_date'], str):
-                            # Try to parse and reformat
-                            parsed_date = datetime.strptime(data['added_date'], '%Y-%m-%d %H:%M:%S')
-                            data['timeadded_datestamp'] = parsed_date.isoformat()
-                        else:
-                            data['timeadded_datestamp'] = data['added_date'].isoformat()
-                    except:
-                        data['timeadded_datestamp'] = str(data['added_date'])
-            else:
+            data = {k: v for k, v in doc.items() if k != '_id'}
+            # The front end reads this key; keep the name it already knows.
+            added = data.get('added_date')
+            if added is None:
                 data['timeadded_datestamp'] = datetime.now().isoformat()
-                
+            elif isinstance(added, str):
+                try:
+                    data['timeadded_datestamp'] = datetime.strptime(
+                        added, '%Y-%m-%d %H:%M:%S').isoformat()
+                except ValueError:
+                    data['timeadded_datestamp'] = added
+            else:
+                data['timeadded_datestamp'] = added.isoformat()
+                data['added_date'] = added.isoformat()
+
             notifications.append({
-                'id': doc.id,
+                'id': str(doc['_id']),
                 **data
             })
-        
+
         return jsonify({
             'success': True,
             'notifications': notifications
@@ -1341,19 +1428,23 @@ def mark_notifications_read():
         notification_ids = data.get('notification_ids', [])
         
         if not notification_ids:
-            # Mark all notifications as read for the user
-            notifications_ref = db.collection('notifications')
-            query = notifications_ref.where('uid', '==', session['user_id']).where('read', '==', False)
-            docs = query.get()
-            
-            for doc in docs:
-                doc.reference.update({'read': True})
+            # Mark all of this person's unread notifications, in one write.
+            mongo_safe(
+                lambda: mongo().notifications.update_many(
+                    {'uid': session['user_id'], 'read': False},
+                    {'$set': {'read': True}}),
+                label='mark all read')
         else:
-            # Mark specific notifications as read
-            for notif_id in notification_ids:
-                doc_ref = db.collection('notifications').document(notif_id)
-                doc_ref.update({'read': True})
-        
+            # Only their own: an id from the wire is not a licence to touch
+            # somebody else's row.
+            ids = [oid for oid in (mongo_id(n) for n in notification_ids) if oid]
+            if ids:
+                mongo_safe(
+                    lambda: mongo().notifications.update_many(
+                        {'_id': {'$in': ids}, 'uid': session['user_id']},
+                        {'$set': {'read': True}}),
+                    label='mark read')
+
         return jsonify({'success': True})
     except Exception as e:
         print(f"Error marking notifications as read: {str(e)}")
@@ -1544,33 +1635,31 @@ def push_send_notification(mobile,title,content):
                         print(f"Unexpected error: {e}")
 
 def get_users_with_phone_numbers(phone_numbers):
-    db = firestore.client()
-    users_ref = db.collection('user')
+    """
+    Device tokens for push, by phone number, from Mongo.
 
-    # Query documents where 'phone_number' is in the list of phone numbers
-    # Query users with the specified phone numbers and where 'student_id' is not null
-    query = users_ref \
-    .where("phone_number", "in", phone_numbers) \
-    .stream()
+    These used to be a `user` collection with an `fcm_tokens` subcollection in
+    Firestore, written by the mobile client. One flat `fcm_tokens` collection
+    replaces both: {phone_number, fcm_token, uid, email}. Anything that
+    registers a device has to write here now -- until it does, push finds no
+    tokens and simply sends nothing, which is what it was already doing with
+    the Firestore quota exhausted.
+    """
+    if not phone_numbers:
+        return {}
 
-    tokens = []
-    user_all_info_dict={}
-    
-    for doc in query:
-        user_data = doc.to_dict()
-        print(f"Document ID: {doc.id}, Data: {user_data}")
+    rows = mongo_safe(
+        lambda: list(mongo().fcm_tokens.find(
+            {'phone_number': {'$in': list(phone_numbers)}})),
+        fallback=[], label='device tokens')
 
-        # If fcm_tokens is a subcollection, query it
-        fcm_tokens_ref = db.collection('user').document(doc.id).collection('fcm_tokens').stream()
-        
-        # Retrieve fcmToken from the subcollection
-        print(fcm_tokens_ref)
-        for token_doc in fcm_tokens_ref:
-            token_data = token_doc.to_dict()
-            print(f"Token: {token_data}")
-            if 'fcm_token' in token_data:
-                tokens.append(token_data['fcm_token'])
-        user_all_info_dict[user_data['phone_number']]={"uid":user_data['uid'],"email":user_data['email'],"token":tokens}
+    user_all_info_dict = {}
+    for row in rows:
+        phone = row.get('phone_number')
+        entry = user_all_info_dict.setdefault(
+            phone, {"uid": row.get('uid'), "email": row.get('email'), "token": []})
+        if row.get('fcm_token'):
+            entry['token'].append(row['fcm_token'])
 
     return user_all_info_dict
 def send_notification(device_token,msg_title,msg_body):
@@ -9768,16 +9857,22 @@ def get_request_comments(request_id):
     
     try:
         # Get comments from Firebase
-        comments_ref = db.collection('comments').where('request_id', '==', request_id).order_by('created_at', direction=firestore.Query.DESCENDING)
-        comments = comments_ref.stream()
-        
+        # The sales request pages load this widget on every open, which is what
+        # made a slow read here take the whole site down. It fails soft now.
+        comments = mongo_safe(
+            lambda: list(mongo().comments
+                         .find({'request_id': request_id})
+                         .sort('created_at', DESCENDING)),
+            fallback=[], label='request comments')
+
         comments_list = []
         for comment in comments:
-            comment_data = comment.to_dict()
-            comment_data['id'] = comment.id
+            comment_data = {k: v for k, v in comment.items() if k != '_id'}
+            comment_data['id'] = str(comment['_id'])
             # Format timestamp for frontend
-            if 'created_at' in comment_data:
-                comment_data['created_at'] = comment_data['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            created = comment_data.get('created_at')
+            if created is not None and not isinstance(created, str):
+                comment_data['created_at'] = created.strftime('%Y-%m-%d %H:%M:%S')
             comments_list.append(comment_data)
         
         return jsonify({
@@ -9815,16 +9910,23 @@ def add_request_comment(request_id):
             'user_id': session['user_id'],
             'username': session['username'],
             'comment': data['comment'],
-            'created_at': firestore.SERVER_TIMESTAMP
+            'created_at': datetime.now()
         }
-        
-        # Add to Firebase
-        doc_ref = db.collection('comments').add(comment_data)
-        
+
+        # A write that cannot be made is reported, not hung on.
+        inserted = mongo_safe(
+            lambda: mongo().comments.insert_one(comment_data).inserted_id,
+            label='add comment')
+        if inserted is None:
+            return jsonify({
+                'success': False,
+                'error': 'Comments are unavailable right now. Please try again.'
+            }), 503
+
         return jsonify({
             'success': True,
             'message': 'Comment added successfully',
-            'comment_id': doc_ref[1].id
+            'comment_id': str(inserted)
         })
         
     except Exception as e:
