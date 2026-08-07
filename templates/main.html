@@ -734,6 +734,9 @@
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-cogs mr-1"></i> Operations
+              {# The same count as the Costing item below. That one lives inside
+                 a collapsed menu, so on its own nobody would ever see it. #}
+              <span class="badge badge-danger ml-1 d-none" id="navCostingBadgeTop"></span>
             </a>
             <div class="dropdown-menu" aria-labelledby="operationsDropdown">
               {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
@@ -2195,7 +2198,7 @@ function showToast(title, body) {
       $.getJSON('/api/costing/summary').done(function (r) {
         if (!r || !r.success) { return; }
         var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0);
-        var $b = $('#navCostingBadge');
+        var $b = $('#navCostingBadge, #navCostingBadgeTop');
         if (n > 0) { $b.text(n).removeClass('d-none'); } else { $b.addClass('d-none'); }
       });
     }
