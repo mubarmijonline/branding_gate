@@ -1042,6 +1042,32 @@ window.chartPieDemo = function() {
     <div class="opd-bd" id="opdBody"></div>
 </div>
 
+<!-- ===== Costing actions: assign, propose, decide =====
+     A plain Bootstrap modal, the same one the rest of this page uses. It sits
+     outside #costItemsForm on purpose so nothing inside it can submit that
+     form. -->
+<div class="modal fade" id="costingActionModal" tabindex="-1" role="dialog"
+     aria-labelledby="costingActionTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="costingActionTitle">Costing</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="costingActionError" class="alert alert-danger py-2 px-3 small d-none"></div>
+        <div id="costingActionBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="costingActionConfirm">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Include DataTables JavaScript at the bottom -->
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
@@ -1057,12 +1083,56 @@ function formatNum(n) {
 var CAN_COST_DIRECT   = {{ 'true' if 'sales_item.cost_direct' in _p else 'false' }};
 var CAN_ASSIGN_COSTING = {{ 'true' if 'costing.assign' in _p else 'false' }};
 var CAN_VIEW_COSTING  = {{ 'true' if 'costing.view' in _p else 'false' }};
+var CAN_PROPOSE_COSTING = {{ 'true' if 'costing.propose' in _p else 'false' }};
 var COSTING_STATE = {};      // item_id -> {assignments, proposals}
+var COSTING_ME = {{ session.get('user_id') or 0 }};
 
 function costEsc(v) {
     return String(v === null || v === undefined ? '' : v)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+// ---- one Bootstrap modal for every costing action --------------------------
+// The page already speaks Bootstrap modals; costing uses the same one rather
+// than a second dialog library on top.
+function openCostingModal(options) {
+    $('#costingActionTitle').text(options.title);
+    $('#costingActionBody').html(options.body);
+    $('#costingActionError').addClass('d-none').text('');
+    var $confirm = $('#costingActionConfirm');
+    $confirm.text(options.confirmText || 'Save')
+            .removeClass('btn-primary btn-success btn-danger')
+            .addClass(options.confirmClass || 'btn-primary')
+            .prop('disabled', false)
+            .off('click')
+            .on('click', function () {
+                var value = options.collect ? options.collect() : {};
+                if (value === false) { return; }          // collect() reported a problem
+                $confirm.prop('disabled', true).text('Working...');
+                options.confirm(value);
+            });
+    $('#costingActionModal').modal('show');
+}
+
+function costingModalError(message) {
+    $('#costingActionError').removeClass('d-none').text(message);
+    $('#costingActionConfirm').prop('disabled', false).text('Save');
+}
+
+function closeCostingModal() { $('#costingActionModal').modal('hide'); }
+
+// A quiet line under the page header rather than a dialog that has to be
+// dismissed before you can carry on.
+function costingToast(message, kind) {
+    var $bar = $('#costingToast');
+    if (!$bar.length) {
+        $bar = $('<div id="costingToast" class="alert py-2 px-3 small" ' +
+                 'style="position:fixed;right:1rem;bottom:1rem;z-index:2000;' +
+                 'box-shadow:0 2px 10px rgba(0,0,0,.15);"></div>').appendTo('body');
+    }
+    $bar.attr('class', 'alert py-2 px-3 small alert-' + (kind || 'success'))
+        .text(message).stop(true, true).fadeIn(120).delay(2600).fadeOut(300);
 }
 
 // ---- costing by assignment, inside the request drawer ----------------------
@@ -1114,10 +1184,20 @@ function renderCostingBlocks() {
                 (a.status === 'open' ? 'info' : 'secondary') + ' mr-1">' +
                 costEsc(a.assignee_name) + ' · ' + a.status + '</span>';
         }).join('');
-        var assignBtn = CAN_ASSIGN_COSTING
-            ? '<button type="button" class="btn btn-sm btn-outline-primary op-assign-costing" ' +
-              'data-item="' + itemId + '"><i class="fas fa-user-plus"></i> Assign for costing</button>'
-            : '';
+        var buttons = '';
+        if (CAN_ASSIGN_COSTING) {
+            buttons += '<button type="button" class="btn btn-sm btn-outline-primary op-assign-costing" ' +
+                       'data-item="' + itemId + '"><i class="fas fa-user-plus"></i> Assign for costing</button> ';
+        }
+        // Whoever the item is open with can put up a proposal, here, without
+        // going to the costing desk.
+        var mine = state.assignments.filter(function (a) {
+            return a.assignee_id === COSTING_ME && a.status === 'open';
+        })[0];
+        if (CAN_PROPOSE_COSTING && mine) {
+            buttons += '<button type="button" class="btn btn-sm btn-primary op-propose-costing" ' +
+                       'data-assignment="' + mine.id + '"><i class="fas fa-plus"></i> Add proposal</button>';
+        }
         var hint = (!state.assignments.length && !CAN_COST_DIRECT)
             ? '<div class="text-muted small">This item has not been assigned to you for costing.</div>'
             : '';
@@ -1126,7 +1206,7 @@ function renderCostingBlocks() {
               '<div class="d-flex align-items-center flex-wrap mb-2" style="gap:.4rem;">' +
                 '<strong class="small text-uppercase text-muted mr-2">Costing</strong>' +
                 (chips || '<span class="text-muted small">not assigned</span>') +
-                '<span class="ml-auto">' + assignBtn + '</span>' +
+                '<span class="ml-auto">' + buttons + '</span>' +
               '</div>' + hint + proposalRowsHtml(state.proposals || []) +
             '</div>');
     });
@@ -1138,75 +1218,138 @@ $(document).on('click', '.op-assign-costing', function (e) {
     var itemId = Number($(this).data('item'));
     $.getJSON('/api/costing/team').done(function (r) {
         if (!r || !r.success || !r.people.length) {
-            Swal.fire('Nobody to assign to', 'You have no team members to assign costing to.', 'info');
+            costingToast('You have no team members to assign costing to.', 'warning');
             return;
         }
         var boxes = r.people.map(function (p) {
-            return '<label style="display:flex;gap:.5rem;align-items:center;padding:.25rem 0;">' +
+            return '<label class="d-flex align-items-center mb-1" style="gap:.5rem;">' +
                 '<input type="checkbox" class="op-who" value="' + p.id + '">' +
                 '<span>' + costEsc(p.name) + ' <small class="text-muted">' +
                 costEsc(p.role_name || '') + '</small></span></label>';
         }).join('');
-        Swal.fire({
+        openCostingModal({
             title: 'Assign for costing',
-            html: '<div style="text-align:left;">' + boxes +
-                  '<input id="opCostNote" class="swal2-input" placeholder="Note (optional)" ' +
-                  'style="margin-left:0;width:100%;">' +
-                  '<p class="text-muted small mt-2 mb-0">Pick more than one to have ' +
-                  'several people cost it.</p></div>',
-            showCancelButton: true, confirmButtonText: 'Assign',
-            preConfirm: function () {
-                var ids = Array.prototype.slice
-                    .call(document.querySelectorAll('.op-who:checked'))
-                    .map(function (b) { return Number(b.value); });
-                if (!ids.length) { Swal.showValidationMessage('Pick at least one person'); return false; }
-                return { ids: ids, note: (document.getElementById('opCostNote') || {}).value || '' };
+            confirmText: 'Assign',
+            body: boxes +
+                  '<div class="form-group mt-2 mb-1">' +
+                    '<label class="small text-muted mb-1" for="opCostNote">Note (optional)</label>' +
+                    '<input id="opCostNote" class="form-control form-control-sm" ' +
+                    'placeholder="e.g. needed by Thursday">' +
+                  '</div>' +
+                  '<p class="text-muted small mb-0">Pick more than one to have several ' +
+                  'people cost it.</p>',
+            collect: function () {
+                var ids = $('.op-who:checked').map(function () { return Number(this.value); }).get();
+                if (!ids.length) { costingModalError('Pick at least one person.'); return false; }
+                return { ids: ids, note: $('#opCostNote').val() || '' };
+            },
+            confirm: function (value) {
+                $.ajax({
+                    url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({ item_id: itemId, assignee_ids: value.ids,
+                                           note: value.note })
+                }).done(function (r2) {
+                    if (!r2.success) { costingModalError(r2.error || 'Could not assign'); return; }
+                    closeCostingModal();
+                    loadCostingState(window.currentCostingRequestId);
+                    costingToast('Assigned to ' + value.ids.length + ' person(s).');
+                }).fail(function (xhr) {
+                    costingModalError((xhr.responseJSON || {}).error || 'Request failed');
+                });
             }
-        }).then(function (res) {
-            if (!res.value) { return; }
-            $.ajax({
-                url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
-                data: JSON.stringify({ item_id: itemId, assignee_ids: res.value.ids,
-                                       note: res.value.note })
-            }).done(function (r2) {
-                if (!r2.success) { Swal.fire('Could not assign', r2.error || '', 'error'); return; }
-                loadCostingState(window.currentCostingRequestId);
-                Swal.fire({ icon: 'success', title: 'Assigned', timer: 1200,
-                            showConfirmButton: false });
-            }).fail(function (xhr) {
-                Swal.fire('Could not assign', (xhr.responseJSON || {}).error || 'Request failed', 'error');
-            });
         });
     });
 });
 
-function opDecideProposal(id, decision) {
-    Swal.fire({
-        title: decision === 'accept' ? 'Accept this proposal?' : 'Reject this proposal?',
-        text: decision === 'accept'
-            ? 'The amount becomes the item cost and the other proposals are rejected.'
-            : 'The author can submit another one while the assignment is open.',
-        input: 'text', inputPlaceholder: 'Note (optional)',
-        icon: decision === 'accept' ? 'question' : 'warning',
-        showCancelButton: true,
-        confirmButtonText: decision === 'accept' ? 'Accept' : 'Reject'
-    }).then(function (res) {
-        if (!res.isConfirmed) { return; }
-        $.ajax({
-            url: '/api/costing/proposals/' + id + '/decide',
-            method: 'POST', contentType: 'application/json',
-            data: JSON.stringify({ decision: decision, note: res.value || '' })
-        }).done(function (r) {
-            if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
-            loadCostingState(window.currentCostingRequestId);
-            Swal.fire({
-                icon: 'success',
-                title: decision === 'accept' ? 'Accepted — cost updated' : 'Rejected',
-                timer: 1400, showConfirmButton: false
+// Put up a proposal for an item that is on my desk.
+$(document).on('click', '.op-propose-costing', function (e) {
+    e.preventDefault();
+    var assignmentId = Number($(this).data('assignment'));
+    openCostingModal({
+        title: 'Costing proposal',
+        confirmText: 'Submit',
+        body:
+            '<div class="form-group mb-2">' +
+              '<label class="small text-muted mb-1" for="opPropAmount">Cost per item</label>' +
+              '<input id="opPropAmount" class="form-control" inputmode="decimal" ' +
+              'placeholder="0.00">' +
+            '</div>' +
+            '<div class="form-group mb-2">' +
+              '<label class="small text-muted mb-1" for="opPropNotes">Notes</label>' +
+              '<textarea id="opPropNotes" rows="3" class="form-control"></textarea>' +
+            '</div>' +
+            '<div class="form-group mb-0">' +
+              '<label class="small text-muted mb-1" for="opPropFiles">Documents and images</label>' +
+              '<input id="opPropFiles" type="file" multiple class="form-control-file">' +
+              '<small class="text-muted">PDF, images, spreadsheets or Word, up to 10MB each.</small>' +
+            '</div>',
+        collect: function () {
+            var amount = ($('#opPropAmount').val() || '').trim();
+            if (!amount) { costingModalError('Enter an amount.'); return false; }
+            return { amount: amount, notes: $('#opPropNotes').val() || '',
+                     files: document.getElementById('opPropFiles').files };
+        },
+        confirm: function (value) {
+            $.ajax({
+                url: '/api/costing/proposals', method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ assignment_id: assignmentId, amount: value.amount,
+                                       notes: value.notes })
+            }).done(function (r) {
+                if (!r.success) { costingModalError(r.error || 'Could not submit'); return; }
+                var done = function (warn) {
+                    closeCostingModal();
+                    loadCostingState(window.currentCostingRequestId);
+                    costingToast(warn || 'Proposal submitted.', warn ? 'warning' : 'success');
+                };
+                if (!value.files || !value.files.length) { done(); return; }
+                var form = new FormData();
+                for (var i = 0; i < value.files.length; i++) { form.append('files[]', value.files[i]); }
+                $.ajax({
+                    url: '/api/costing/proposals/' + r.proposal_id + '/files',
+                    method: 'POST', data: form, processData: false, contentType: false
+                }).done(function () { done(); })
+                  .fail(function (xhr) {
+                      done('Proposal saved, but the files were not: ' +
+                           ((xhr.responseJSON || {}).error || 'upload failed'));
+                  });
+            }).fail(function (xhr) {
+                costingModalError((xhr.responseJSON || {}).error || 'Request failed');
             });
-        }).fail(function (xhr) {
-            Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
-        });
+        }
+    });
+});
+
+function opDecideProposal(id, decision) {
+    var accepting = decision === 'accept';
+    openCostingModal({
+        title: accepting ? 'Accept this proposal?' : 'Reject this proposal?',
+        confirmText: accepting ? 'Accept' : 'Reject',
+        confirmClass: accepting ? 'btn-success' : 'btn-danger',
+        body:
+            '<p class="mb-2">' + (accepting
+                ? 'The amount becomes the item cost, and every other proposal on this item is rejected.'
+                : 'The author can submit another one while the assignment is open.') + '</p>' +
+            '<div class="form-group mb-0">' +
+              '<label class="small text-muted mb-1" for="opDecideNote">Note (optional)</label>' +
+              '<input id="opDecideNote" class="form-control form-control-sm">' +
+            '</div>',
+        collect: function () { return { note: $('#opDecideNote').val() || '' }; },
+        confirm: function (value) {
+            $.ajax({
+                url: '/api/costing/proposals/' + id + '/decide',
+                method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ decision: decision, note: value.note })
+            }).done(function (r) {
+                if (!r.success) { costingModalError(r.error || 'Could not save'); return; }
+                closeCostingModal();
+                loadCostingState(window.currentCostingRequestId);
+                costingToast(accepting
+                    ? 'Accepted — item cost is now ' + formatNum(r.amount)
+                    : 'Proposal rejected.');
+            }).fail(function (xhr) {
+                costingModalError((xhr.responseJSON || {}).error || 'Request failed');
+            });
+        }
     });
 }
 $(document).on('click', '.op-accept', function (e) { e.preventDefault(); opDecideProposal(Number($(this).data('id')), 'accept'); });
@@ -1785,10 +1928,10 @@ $(document).ready(function() {
 
                 $('#costItemsModal').modal('show');
             } else {
-                Swal.fire('Error!', 'Failed to load request details.', 'error');
+                costingToast('Failed to load request details.', 'danger');
             }
         }).fail(function() {
-            Swal.fire('Error!', 'Failed to load request details.', 'error');
+            costingToast('Failed to load request details.', 'danger');
         });
     });
 
@@ -1929,14 +2072,14 @@ $(document).ready(function() {
             });
             
             if (isNaN(cost) || cost < 0) {
-                Swal.fire('Error!', 'Please enter valid costs (must be 0 or greater).', 'error');
+                costingToast('Please enter valid costs (must be 0 or greater).', 'danger');
                 hasError = true;
                 return false;
             }
             
             if (!itemId) {
                 console.error('Missing item ID for cost input');
-                Swal.fire('Error!', 'Missing item ID. Please refresh and try again.', 'error');
+                costingToast('Missing item ID. Please refresh and try again.', 'danger');
                 hasError = true;
                 return false;
             }
@@ -1956,7 +2099,7 @@ $(document).ready(function() {
         }
         
         if (itemsToUpdate === 0) {
-            Swal.fire('Error!', 'Please enter costs for at least one item.', 'error');
+            costingToast('Please enter costs for at least one item.', 'danger');
             return;
         }
         
@@ -1990,10 +2133,10 @@ $(document).ready(function() {
                         }
                     }
                     
-                    Swal.fire('Success!', message, 'success');
+                    costingToast(message, 'success');
                 } else {
                     console.error('API Error:', response.error);
-                    Swal.fire('Error!', response.error || 'Unknown error occurred', 'error');
+                    costingToast(response.error || 'Unknown error occurred', 'danger');
                 }
             },
             error: function(xhr, status, error) {
@@ -2004,9 +2147,9 @@ $(document).ready(function() {
                 try {
                     var errorResponse = JSON.parse(xhr.responseText);
                     console.error('Parsed Error Response:', errorResponse);
-                    Swal.fire('Error!', 'Error adding costs: ' + (errorResponse.error || error), 'error');
+                    costingToast('Error adding costs: ' + (errorResponse.error || error), 'danger');
                 } catch (e) {
-                    Swal.fire('Error!', 'Error adding costs: ' + error + ' (Status: ' + xhr.status + ')', 'error');
+                    costingToast('Error adding costs: ' + error + ' (Status: ' + xhr.status + ')', 'danger');
                 }
             }
         });
