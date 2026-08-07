@@ -1052,6 +1052,163 @@ function formatNum(n) {
     return parseFloat(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
+// Who may do what here. Typing a cost straight in is the Operations Head and
+// the team leaders only; everyone else gets there by proposal.
+var CAN_COST_DIRECT   = {{ 'true' if 'sales_item.cost_direct' in _p else 'false' }};
+var CAN_ASSIGN_COSTING = {{ 'true' if 'costing.assign' in _p else 'false' }};
+var CAN_VIEW_COSTING  = {{ 'true' if 'costing.view' in _p else 'false' }};
+var COSTING_STATE = {};      // item_id -> {assignments, proposals}
+
+function costEsc(v) {
+    return String(v === null || v === undefined ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ---- costing by assignment, inside the request drawer ----------------------
+function loadCostingState(requestId) {
+    if (!CAN_VIEW_COSTING) { return $.Deferred().resolve().promise(); }
+    return $.getJSON('/api/costing/request/' + requestId).done(function (r) {
+        if (r && r.success) {
+            COSTING_STATE = r.items || {};
+            renderCostingBlocks();
+        }
+    }).fail(function () { /* costing unavailable: the page still works */ });
+}
+
+function proposalRowsHtml(proposals) {
+    if (!proposals.length) {
+        return '<div class="text-muted small">No proposals yet.</div>';
+    }
+    var rows = proposals.map(function (p) {
+        var decide = p.can_decide
+            ? '<button class="btn btn-sm btn-success op-accept" data-id="' + p.id + '">Accept</button> ' +
+              '<button class="btn btn-sm btn-outline-danger op-reject" data-id="' + p.id + '">Reject</button>'
+            : '';
+        var state = p.status === 'accepted' ? 'success'
+                  : (p.status === 'rejected' ? 'danger' : 'warning');
+        return '<tr>' +
+            '<td>' + costEsc(p.author_name) + (p.is_mine ? ' <em class="text-muted">(you)</em>' : '') + '</td>' +
+            '<td class="text-right font-weight-bold">' + formatNum(p.amount) + '</td>' +
+            '<td>' + (p.notes ? costEsc(p.notes) : '<span class="text-muted">&mdash;</span>') + '</td>' +
+            '<td>' + (p.file_count ? p.file_count + ' file(s)' : '<span class="text-muted">none</span>') + '</td>' +
+            '<td><span class="badge badge-' + state + '">' + p.status + '</span></td>' +
+            '<td class="text-muted small">' + costEsc(p.added_date || '') + '</td>' +
+            '<td class="text-right">' + decide + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="table-responsive"><table class="table table-sm mb-0">' +
+        '<thead><tr><th>Who</th><th class="text-right">Amount</th><th>Notes</th>' +
+        '<th>Files</th><th>State</th><th>Submitted</th><th></th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderCostingBlocks() {
+    $('.op-costing-block').each(function () {
+        var itemId = String($(this).data('item-id'));
+        var state = COSTING_STATE[itemId] || { assignments: [], proposals: [] };
+        var chips = state.assignments.map(function (a) {
+            return '<span class="badge badge-' +
+                (a.status === 'open' ? 'info' : 'secondary') + ' mr-1">' +
+                costEsc(a.assignee_name) + ' · ' + a.status + '</span>';
+        }).join('');
+        var assignBtn = CAN_ASSIGN_COSTING
+            ? '<button class="btn btn-sm btn-outline-primary op-assign-costing" ' +
+              'data-item="' + itemId + '"><i class="fas fa-user-plus"></i> Assign for costing</button>'
+            : '';
+        var hint = (!state.assignments.length && !CAN_COST_DIRECT)
+            ? '<div class="text-muted small">This item has not been assigned to you for costing.</div>'
+            : '';
+        $(this).html(
+            '<div class="border rounded p-2 mt-2" style="background:#f8f9fc;">' +
+              '<div class="d-flex align-items-center flex-wrap mb-2" style="gap:.4rem;">' +
+                '<strong class="small text-uppercase text-muted mr-2">Costing</strong>' +
+                (chips || '<span class="text-muted small">not assigned</span>') +
+                '<span class="ml-auto">' + assignBtn + '</span>' +
+              '</div>' + hint + proposalRowsHtml(state.proposals || []) +
+            '</div>');
+    });
+}
+
+// Assign this item to several people at once.
+$(document).on('click', '.op-assign-costing', function () {
+    var itemId = Number($(this).data('item'));
+    $.getJSON('/api/costing/team').done(function (r) {
+        if (!r || !r.success || !r.people.length) {
+            Swal.fire('Nobody to assign to', 'You have no team members to assign costing to.', 'info');
+            return;
+        }
+        var boxes = r.people.map(function (p) {
+            return '<label style="display:flex;gap:.5rem;align-items:center;padding:.25rem 0;">' +
+                '<input type="checkbox" class="op-who" value="' + p.id + '">' +
+                '<span>' + costEsc(p.name) + ' <small class="text-muted">' +
+                costEsc(p.role_name || '') + '</small></span></label>';
+        }).join('');
+        Swal.fire({
+            title: 'Assign for costing',
+            html: '<div style="text-align:left;">' + boxes +
+                  '<input id="opCostNote" class="swal2-input" placeholder="Note (optional)" ' +
+                  'style="margin-left:0;width:100%;">' +
+                  '<p class="text-muted small mt-2 mb-0">Pick more than one to have ' +
+                  'several people cost it.</p></div>',
+            showCancelButton: true, confirmButtonText: 'Assign',
+            preConfirm: function () {
+                var ids = Array.prototype.slice
+                    .call(document.querySelectorAll('.op-who:checked'))
+                    .map(function (b) { return Number(b.value); });
+                if (!ids.length) { Swal.showValidationMessage('Pick at least one person'); return false; }
+                return { ids: ids, note: (document.getElementById('opCostNote') || {}).value || '' };
+            }
+        }).then(function (res) {
+            if (!res.value) { return; }
+            $.ajax({
+                url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ item_id: itemId, assignee_ids: res.value.ids,
+                                       note: res.value.note })
+            }).done(function (r2) {
+                if (!r2.success) { Swal.fire('Could not assign', r2.error || '', 'error'); return; }
+                loadCostingState(window.currentCostingRequestId);
+                Swal.fire({ icon: 'success', title: 'Assigned', timer: 1200,
+                            showConfirmButton: false });
+            }).fail(function (xhr) {
+                Swal.fire('Could not assign', (xhr.responseJSON || {}).error || 'Request failed', 'error');
+            });
+        });
+    });
+});
+
+function opDecideProposal(id, decision) {
+    Swal.fire({
+        title: decision === 'accept' ? 'Accept this proposal?' : 'Reject this proposal?',
+        text: decision === 'accept'
+            ? 'The amount becomes the item cost and the other proposals are rejected.'
+            : 'The author can submit another one while the assignment is open.',
+        input: 'text', inputPlaceholder: 'Note (optional)',
+        icon: decision === 'accept' ? 'question' : 'warning',
+        showCancelButton: true,
+        confirmButtonText: decision === 'accept' ? 'Accept' : 'Reject'
+    }).then(function (res) {
+        if (!res.isConfirmed) { return; }
+        $.ajax({
+            url: '/api/costing/proposals/' + id + '/decide',
+            method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ decision: decision, note: res.value || '' })
+        }).done(function (r) {
+            if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
+            loadCostingState(window.currentCostingRequestId);
+            Swal.fire({
+                icon: 'success',
+                title: decision === 'accept' ? 'Accepted — cost updated' : 'Rejected',
+                timer: 1400, showConfirmButton: false
+            });
+        }).fail(function (xhr) {
+            Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
+        });
+    });
+}
+$(document).on('click', '.op-accept', function () { opDecideProposal(Number($(this).data('id')), 'accept'); });
+$(document).on('click', '.op-reject', function () { opDecideProposal(Number($(this).data('id')), 'reject'); });
+
 $(document).ready(function() {
     console.log('Operations Request page loaded successfully');
     
@@ -1253,7 +1410,12 @@ $(document).ready(function() {
     $(document).on('click', '.cost-btn', function() {
         var requestId = $(this).data('id');
         console.log('Add costs to request:', requestId);
-        
+        // Remembered so the costing block can reload itself after an assignment
+        // or a decision without re-opening the drawer.
+        window.currentCostingRequestId = requestId;
+        // Only whoever may type a cost straight in gets the save button.
+        $('#saveCostsBtn').toggle(CAN_COST_DIRECT);
+
         // Load request details
         $.get('/api/operations/requests/' + requestId, function(response) {
             if (response.success) {
@@ -1482,8 +1644,11 @@ $(document).ready(function() {
                                     </div>
                                 </div>
 
-                                <!-- Always-visible quick cost input -->
-                                <div class="op-ci-quickinput">
+                                <!-- Always-visible quick cost input. Only for
+                                     whoever may type a cost straight in; for
+                                     everyone else the costing block below is
+                                     the way in. -->
+                                <div class="op-ci-quickinput" style="${CAN_COST_DIRECT ? '' : 'display:none;'}">
                                     <label><i class="fas fa-tag"></i> Unit Cost (EGP)</label>
                                     <div class="input-group input-group-sm">
                                         <div class="input-group-prepend">
@@ -1509,6 +1674,11 @@ $(document).ready(function() {
                                            data-item-id="${item.id}"
                                            value="${currentTotalCost}">
                                 </div>
+
+                                <!-- Costing by assignment: who this item is
+                                     with, their proposals, and the decision.
+                                     Filled in by renderCostingBlocks(). -->
+                                <div class="op-costing-block" data-item-id="${item.id}"></div>
 
                                 <!-- Expandable Body -->
                                 <div class="collapse" id="${collapseId}">
@@ -1602,8 +1772,10 @@ $(document).ready(function() {
                     
                     // Calculate initial total cost
                     calculateTotalCost();
+                    // Who each item is out to, and their proposals.
+                    loadCostingState(requestId);
                 }
-                
+
                 $('#costItemsModal').modal('show');
             } else {
                 Swal.fire('Error!', 'Failed to load request details.', 'error');

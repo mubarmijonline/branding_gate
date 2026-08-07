@@ -50,8 +50,21 @@ PERMISSIONS = {
     'sales_request.comment': 'Comment on a sales request',
 
     # Item money. Cost is Operations, selling price is Pricing.
-    'sales_item.cost':  'Enter or change item cost',
+    #
+    # `sales_item.cost` is what makes cost visible at all -- the columns, the
+    # totals, the operations pages -- so it is held right down the Operations
+    # ladder. Typing a cost straight onto an item is `sales_item.cost_direct`
+    # and is deliberately narrower: costing normally arrives through the
+    # assignment workflow below, and the accepted proposal writes the number.
+    'sales_item.cost':        'See item cost',
+    'sales_item.cost_direct': 'Type a cost straight onto an item, outside the costing workflow',
     'sales_item.price': 'Enter or change item selling price',
+
+    # Costing workflow
+    'costing.view':    'View costing assignments and proposals',
+    'costing.assign':  'Assign an item for costing to your own team',
+    'costing.propose': 'Put up a costing proposal for an item assigned to you',
+    'costing.decide':  'Accept or reject a costing proposal you asked for',
 
     # Client approval
     'client_approval.view':   'View items awaiting client approval',
@@ -124,6 +137,16 @@ PERMISSIONS = {
     'catalog.view': 'View the item catalog',
     'catalog.edit': 'Edit the item catalog',
 
+    # Sections. Which top-level area of the app a role belongs in, and so which
+    # menu it sees. Kept separate from the data permissions on purpose: an
+    # Operations Team Leader has to read a sales request in order to cost its
+    # items, but that is not a reason to show them the Sales section. Before
+    # this the Sales menu was gated on `sales_request.view`, which the whole
+    # Operations ladder holds, so Operations saw Sales.
+    'section.sales':      'See the Sales section',
+    'section.operations': 'See the Operations section',
+    'section.finance':    'See the Finance section',
+
     # Department portals. One per team whose home-page card had nowhere to go.
     # A portal is a landing page, so it carries no row dimension and no scope;
     # holding it is what puts the card on the home page and opens the page.
@@ -167,6 +190,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'supplier_report.view',
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
+    'section.sales', 'section.operations', 'section.finance',
 })
 
 
@@ -407,6 +431,12 @@ SEED_MATRIX = {
             'sales_request.edit': 'all',
             'sales_request.comment': 'all',
             'sales_item.cost': 'all',
+            # The Head can still type a cost. Nobody below can: costing arrives
+            # by assignment, and an accepted proposal writes the number.
+            'sales_item.cost_direct': 'all',
+            'costing.view': 'all',
+            'costing.assign': 'all',
+            'costing.decide': 'all',
             'negotiation.view': 'all',
             'negotiation.complete_costing': 'all',
             'approved_item.view': 'all',
@@ -433,11 +463,19 @@ SEED_MATRIX = {
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
         {
+            # Reads and comments on requests because costing needs the item;
+            # raising and editing one is the Operations Manager's job, not
+            # theirs, and the Sales section is not theirs to see at all.
             'sales_request.view': 'all',
-            'sales_request.create': 'all',
-            'sales_request.edit': 'all',
             'sales_request.comment': 'all',
             'sales_item.cost': 'all',
+            # A leader may type a cost straight in when an item does not need
+            # proposals, and otherwise assigns it to their own people.
+            'sales_item.cost_direct': 'all',
+            'costing.view': 'team',
+            'costing.assign': 'team',
+            'costing.decide': 'team',
+            'costing.propose': 'own',
             'negotiation.view': 'all',
             'negotiation.complete_costing': 'all',
             'approved_item.view': 'all',
@@ -459,6 +497,9 @@ SEED_MATRIX = {
         {
             'sales_request.view': 'all',
             'sales_item.cost': 'all',
+            # Costs what they are asked to cost, and nothing else.
+            'costing.view': 'own',
+            'costing.propose': 'own',
             'approved_item.view': 'all',
             'supplier.view': 'all',
             'inventory.view': 'all',
@@ -604,6 +645,24 @@ for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
     _portal = _DEPARTMENT_PORTALS.get(_dept_code)
     if _portal and _role_code in SEED_MATRIX:
         SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_portal: 'all'})
+
+# A section belongs to a department, so it is granted by department too. The
+# two exceptions are deliberate and named rather than left implicit: Account
+# Management works inside the Sales section on the same requests, and Pricing
+# lives inside the Operations menu.
+_DEPARTMENT_SECTIONS = {
+    'sales':      ('section.sales',),
+    'account':    ('section.sales',),
+    'operations': ('section.operations',),
+    'pricing':    ('section.operations',),
+    'finance':    ('section.finance',),
+    'executive':  ('section.sales', 'section.operations', 'section.finance'),
+}
+
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    for _section in _DEPARTMENT_SECTIONS.get(_dept_code, ()):
+        if _role_code in SEED_MATRIX:
+            SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_section: 'all'})
 
 # Self-service: what every employee needs regardless of job. The navbar balance
 # widget and the item-catalog lookup in main.html are rendered for everyone, so

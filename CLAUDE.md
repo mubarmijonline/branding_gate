@@ -22,17 +22,17 @@ PYTHONPATH=.:tests ./branding_gate_VENV/bin/python -m unittest \
   test_rbac test_scope test_route_coverage test_hierarchy_admin \
   test_password_hashing test_template_javascript test_negotiation_workflow \
   test_negotiation_templates test_negotiation_routes test_sales_request_journey_pdf \
-  test_targets test_portals
+  test_targets test_portals test_costing
 ```
 
-129 tests. `tests/test_design_system.py` is pytest-style (bare functions) and is run by
+169 tests. `tests/test_design_system.py` is pytest-style (bare functions) and is run by
 calling its `test_*` functions in a loop.
 
 ## Access control
 
 Authorization is `rbac.py` (pure policy, no Flask/MySQL) plus wrappers in `branding_gate.py`.
 
-- **84 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
+- **89 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
   `SEED_MATRIX` maps role → {permission: scope}. Edit it, then run `seed_rbac.py`.
 - **Scope** is `own | team | department | all`. `team` = self + direct reports
   (`user.manager_id`); `department` = same `user.department_id`. Nobody sets scope by
@@ -78,6 +78,34 @@ the storage, `/targets` the page. Sales only, for now.
 - `/api/targets/year` is the same tree run once per quarter, so a year column can
   never disagree with the quarter page. `/sales_request` carries a read-only strip
   fed by `/api/targets`, so it is scoped by the same permission with no new gate.
+
+## Costing by assignment
+
+`costing.py` is the pure half (who may assign to whom, the two state machines),
+four tables carry it, `/costing` is the page. **Nobody below the Operations Head
+types a cost any more.**
+
+- Head → team leaders → members, **each step assigns to its own direct reports**
+  and may pick several people at once. One row per person per item in
+  `costing_assignment`; there is no "assigned to" column on the item.
+- A person may put up **as many proposals as they like** (`costing_proposal`,
+  amount + notes + files in `costing_proposal_file`). The **leader who assigned
+  them** accepts one; the Head can decide anywhere so an absent leader cannot
+  stall an item.
+- **Accepting writes the cost.** `sales_request_items.cost_per_item` and
+  `total_cost`, every other live proposal on that item is rejected in the same
+  transaction, the assignments close, and it lands in the item's own change log
+  as well as `costing_log`.
+- **`sales_item.cost` now means *see* cost** (columns, totals, operations pages —
+  held right down the ladder). Typing one in is `sales_item.cost_direct`, held by
+  the Operations Head and admin only.
+- **`item_total_cost()` is the only place the total-cost formula lives**
+  (cost × qty × days × dimensions). Both ways a cost can arrive go through it, so
+  a rental item cannot end up with two different totals. A test asserts they agree.
+- Visibility before a decision: author, the leader who asked, and the Head.
+  Accepted proposals are visible to anyone who can see the item.
+- Every step writes to `costing_log`, including withdrawals and the automatic
+  rejections. Nothing cascades out of that table.
 
 ## Department portals
 
@@ -129,7 +157,7 @@ one in means changing its `render_template` call, not unpicking a copy.
 | `migrate_users.py`, `backfill_interim_roles.py` | One-off migrations, already applied |
 
 Applied migrations: `rbac_schema_migration.sql`, `owner_backfill_migration.sql`,
-`pricing_flag_migration.sql`, `retire_legacy_role_table.sql`, `targets_migration.sql`.
+`pricing_flag_migration.sql`, `retire_legacy_role_table.sql`, `targets_migration.sql`, `costing_migration.sql`.
 Backups in `backups/` (gitignored).
 
 ## Open items

@@ -593,10 +593,15 @@
   {% set can_open_admin        = is_admin or can_manage_clients or can_manage_companies or can_manage_suppliers or can_manage_entities %}
   {% set can_set_prices        = 'sales_item.price' in _p %}
   {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
-  {% set can_view_sales        = 'sales_request.view' in _p %}
+  {# Menus follow the section a role belongs to, not the data it can read. An
+     Operations leader reads a sales request in order to cost its items; that is
+     not a reason to show them the Sales menu, which is exactly what gating on
+     sales_request.view used to do. #}
+  {% set can_view_sales        = 'section.sales' in _p and 'sales_request.view' in _p %}
   {% set can_view_targets      = 'target.view' in _p %}
-  {% set can_view_operations   = 'approved_item.view' in _p %}
-  {% set can_view_finance      = 'finance_txn.view' in _p %}
+  {% set can_view_costing      = 'costing.view' in _p %}
+  {% set can_view_operations   = 'section.operations' in _p and 'approved_item.view' in _p %}
+  {% set can_view_finance      = 'section.finance' in _p and 'finance_txn.view' in _p %}
   {% set can_approve_finance   = 'finance_txn.approve' in _p %}
   {% set can_approve_expense_mgr = 'expense_tracking.approve_manager' in _p %}
   {% set can_approve_expense_fin = 'expense_tracking.approve_finance' in _p %}
@@ -738,6 +743,11 @@
               <div class="dropdown-divider"></div>
               {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_request') }}">
                 <i class="fas fa-tools"></i> Operation Request
+              </a>
+              {% endif %}
+              {% if can_view_costing %}
+              <a class="dropdown-item" href="{{ url_for('costing_page') }}">
+                <i class="fas fa-calculator"></i> Costing
               </a>
               {% endif %}
               {% if can_set_prices %}

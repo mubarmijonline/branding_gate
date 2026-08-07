@@ -264,6 +264,60 @@ class TargetCascadeTest(unittest.TestCase):
         rows = self._rows_for(self.head)
         self.assertEqual(rows[self.head]['target'], 1000000.0)
 
+    # -- the flow, and who set what -----------------------------------------
+
+    def test_a_row_names_who_set_the_number_and_when(self):
+        self._assign(self.ceo, self.head, '1000000')
+        rows = self._rows_for(self.head)
+        self.assertEqual(rows[self.head]['set_by'], 'tgt-ceo')
+        self.assertTrue(rows[self.head]['set_on'])
+        # Nobody set the leaders' yet, so there is nothing to attribute.
+        self.assertIsNone(rows[self.leader_a]['set_by'])
+
+    def test_manager_id_is_dropped_when_the_manager_is_out_of_scope(self):
+        # The flow grid roots a branch wherever the chain leaves the caller's
+        # scope; a manager_id pointing at somebody invisible would orphan it.
+        rows = self._rows_for(self.leader_a)
+        self.assertIsNone(rows[self.leader_a]['manager_id'])
+        self.assertEqual(rows[self.member_a]['manager_id'], self.leader_a)
+
+    # -- the PDF export -----------------------------------------------------
+
+    def _pdf(self, actor, query):
+        return self._client_for(actor).get('/api/targets/pdf?' + query)
+
+    def test_the_quarter_export_is_a_pdf(self):
+        self._assign(self.ceo, self.head, '1000000')
+        self._assign(self.head, self.leader_a, '200000')
+        response = self._pdf(self.head, 'period=' + self.PERIOD)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['Content-Type'], 'application/pdf')
+        self.assertTrue(response.data.startswith(b'%PDF'))
+        self.assertIn(self.PERIOD, response.headers['Content-Disposition'])
+
+    def test_the_year_export_covers_the_whole_year(self):
+        self._assign(self.ceo, self.head, '1000000')
+        response = self._pdf(self.head, 'year=2026')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data.startswith(b'%PDF'))
+        self.assertIn('2026', response.headers['Content-Disposition'])
+
+    def test_an_export_holds_only_what_the_caller_may_see(self):
+        # A bigger scope must produce a bigger document; the member's export is
+        # one person, the head's is the department.
+        self._assign(self.ceo, self.head, '1000000')
+        self._assign(self.head, self.leader_a, '200000')
+        self._assign(self.leader_a, self.member_a, '150000')
+        head = self._pdf(self.head, 'period=' + self.PERIOD)
+        member = self._pdf(self.member_a, 'period=' + self.PERIOD)
+        self.assertEqual(head.status_code, 200)
+        self.assertEqual(member.status_code, 200)
+        self.assertLess(len(member.data), len(head.data))
+
+    def test_a_rubbish_period_is_refused_by_the_export(self):
+        response = self._pdf(self.head, 'period=nonsense')
+        self.assertEqual(response.status_code, 400)
+
     # -- the year view ------------------------------------------------------
 
     def _year_rows(self, user_id, year=2026):

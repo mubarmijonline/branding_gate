@@ -19,7 +19,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 import rbac
 import targets as targets_lib
+import costing
 import org_chart_pdf
+import target_pdf
 import zipfile
 import ssl
 import shutil
@@ -2248,6 +2250,28 @@ def _target_amounts(cur, period):
     return {row['user_id']: row['amount'] for row in cur.fetchall()}
 
 
+def _target_details(cur, period):
+    """
+    {user_id: {'set_by', 'set_on'}} — who put the number there and when.
+
+    The cascade is only auditable if each step names its author, so the page and
+    the PDF both carry it rather than showing a number from nowhere.
+    """
+    cur.execute("""
+        SELECT t.user_id, t.modified_date, u.name AS set_by
+        FROM sales_target t
+        LEFT JOIN user u ON u.id = t.assigned_by
+        WHERE t.period = %s
+    """, (period,))
+    return {
+        row['user_id']: {
+            'set_by': row['set_by'],
+            'set_on': row['modified_date'].strftime('%d %b %Y') if row['modified_date'] else None,
+        }
+        for row in cur.fetchall()
+    }
+
+
 def _target_achieved(cur, period):
     """
     {user_id: approved sell value} for the quarter.
@@ -2331,6 +2355,7 @@ def get_targets():
         conn, cur = connection()
         people = _target_people(cur)
         amounts = _target_amounts(cur, period)
+        details = _target_details(cur, period)
         achieved = _target_achieved(cur, period)
         cur.close()
         conn.close()
@@ -2340,6 +2365,7 @@ def get_targets():
         out = []
         for row in rows:
             person = by_id.get(row['id'], {})
+            detail = details.get(row['id']) or {}
             # Scope decides what you read; the reporting line decides what you
             # set. An unrestricted holder is not bound by the second rule.
             assignable = can_assign_all or person.get('manager_id') == me
@@ -2349,6 +2375,11 @@ def get_targets():
                 'role_name': row['role_name'],
                 'role_code': person.get('role_code'),
                 'team_name': row['team_name'],
+                # Only when the manager is visible too, so a row whose manager is
+                # out of scope is a root of the caller's own tree.
+                'manager_id': (person.get('manager_id')
+                               if visible is None or person.get('manager_id') in (visible or [])
+                               else None),
                 'depth': row['depth'],
                 'is_leader': row['is_leader'],
                 'target': _money_out(row['target']),
@@ -2357,6 +2388,8 @@ def get_targets():
                 'own_achieved': _money_out(row['own_achieved']),
                 'team_achieved': _money_out(row['team_achieved']),
                 'progress': row['progress'],
+                'set_by': detail.get('set_by'),
+                'set_on': detail.get('set_on'),
                 'can_assign': bool(assignable),
                 'can_name_team': bool(can_name_teams and row['is_leader']),
             })
@@ -2448,6 +2481,83 @@ def get_targets_by_year():
         raise
     except Exception as e:
         print("DEBUG: targets year fetch failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/targets/pdf', methods=['GET'])
+@perm('target.view')
+def export_targets_pdf():
+    """
+    The cascade as a PDF, for whatever the page is currently showing.
+
+    Drawn server-side for the reason the org chart is: printing the grid from
+    the browser loses the connectors. The rows come from the same scoped query
+    as the page, so the export can never contain more than the caller may see.
+    """
+    year = request.args.get('year')
+    try:
+        periods = ([('%s-Q%d' % (int(year), q)) for q in (1, 2, 3, 4)] if year
+                   else [_target_period(request.args.get('period'))])
+    except (targets_lib.InvalidPeriod, TypeError, ValueError) as e:
+        return jsonify(success=False, error=str(e)), 400
+
+    try:
+        visible = visible_user_ids('target.view')
+        conn, cur = connection()
+        people = _target_people(cur)
+        pages = []
+        for period in periods:
+            amounts = _target_amounts(cur, period)
+            details = _target_details(cur, period)
+            achieved = _target_achieved(cur, period)
+            rows = targets_lib.build_tree(people, amounts, achieved, visible_ids=visible)
+            by_id = {p['id']: p for p in people}
+            flat = []
+            for row in rows:
+                person = by_id.get(row['id'], {})
+                detail = details.get(row['id']) or {}
+                manager_id = person.get('manager_id')
+                flat.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'role_name': row['role_name'],
+                    'team_name': row['team_name'],
+                    'manager_id': (manager_id
+                                   if visible is None or manager_id in (visible or [])
+                                   else None),
+                    'depth': row['depth'],
+                    'is_leader': row['is_leader'],
+                    'target': row['target'],
+                    'assigned': row['assigned'],
+                    'unassigned': row['unassigned'],
+                    'team_achieved': row['team_achieved'],
+                    'progress': row['progress'],
+                    'set_by': detail.get('set_by'),
+                    'set_on': detail.get('set_on'),
+                })
+            pages.append((period, flat))
+        cur.close()
+        conn.close()
+
+        # A year export is four sections of one document, so what the page shows
+        # is what lands in the file.
+        pdf = target_pdf.build(
+            [(period.replace('-Q', ' Q'), flat) for period, flat in pages],
+            title='Sales targets',
+            subtitle='%s  ·  %s' % (
+                session.get('name') or '', datetime.now().strftime('%d %B %Y')),
+        )
+
+        label = year if year else periods[0]
+        response = make_response(pdf)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = \
+            'attachment; filename="sales-targets-%s.pdf"' % label
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: targets PDF failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -5323,6 +5433,822 @@ def pricing_dashboard():
     return render_template("sales_request.html", pricing_mode=True)
 
 # ---------------------------------------------------------------------------
+# Costing by assignment
+#
+# The Operations Head puts an item on one or more team leaders' desks; each
+# leader passes it to one or more of their own people; each of those puts up as
+# many proposals as they like, with documents and images; the leader who asked
+# accepts one, and that amount becomes the item's cost.
+#
+# The rules are in costing.py. These routes fetch, authorise, persist and log.
+# Every step writes to costing_log, including the ones that undo a previous step.
+# ---------------------------------------------------------------------------
+
+_DIMENSION_FACTORS = {
+    'W': ('width',), 'H': ('height',), 'D': ('depth',),
+    'WH': ('width', 'height'), 'WD': ('width', 'depth'), 'HD': ('height', 'depth'),
+    'WHD': ('width', 'height', 'depth'),
+}
+
+
+def item_total_cost(item_data, cost_per_item):
+    """
+    Total cost = cost per item x quantity x days x dimensions.
+
+    The one place that formula lives. Both ways a cost can arrive -- typed
+    straight in by the Operations Head, or written by an accepted costing
+    proposal -- go through here, so a rental item cannot end up with two
+    different totals depending on which route set it.
+    """
+    cost = float(cost_per_item or 0)
+    if not item_data:
+        return cost
+
+    quantity = float(item_data.get('qty') or 1)
+    effective_qty = quantity if item_data.get('include_qty_in_calc', 1) else 1
+
+    effective_days = 1
+    if (item_data.get('sell_type') or 'rent') == 'rent' and item_data.get('include_days_in_calc', 1):
+        effective_days = int(item_data.get('rental_days') or 1)
+
+    multiplier = 1.0
+    calc = (item_data.get('dimension_calc') or '').replace('*', '').replace(' ', '').upper()
+    factors = []
+    for key in _DIMENSION_FACTORS.get(calc, ()):
+        value = item_data.get(key)
+        factors.append(float(value) if value not in (None, '', 'null') else 0)
+    # All or nothing: a missing dimension means the item was never measured, so
+    # the multiplier stays 1 rather than silently dropping one axis.
+    if factors and all(f > 0 for f in factors):
+        for factor in factors:
+            multiplier *= factor
+
+    return cost * effective_qty * effective_days * multiplier
+
+
+def _costing_unrestricted(code):
+    """True when the caller holds this costing permission without a bound."""
+    return rbac.resolve(session.get('perms') or {}, code) == 'all'
+
+
+def _direct_report_ids(cur, user_id):
+    cur.execute("SELECT id FROM user WHERE manager_id = %s", (user_id,))
+    return [row['id'] for row in cur.fetchall()]
+
+
+def _costing_log(cur, item_id, request_id, action, actor_id,
+                 proposal_id=None, detail=None, amount=None):
+    """Append one line to the trail. Never silently skipped."""
+    if action not in costing.ACTIONS:
+        raise ValueError('unknown costing action: %s' % action)
+    cur.execute("""
+        INSERT INTO costing_log (item_id, request_id, proposal_id, actor_id,
+                                 action, detail, amount)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (item_id, request_id, proposal_id, actor_id, action,
+          (detail or None) and str(detail)[:1000], amount))
+
+
+def _costing_item(cur, item_id):
+    # The same columns the direct-costing route reads, because both feed the
+    # same total-cost formula.
+    cur.execute("""
+        SELECT i.id, i.request_id, i.name, i.qty, i.cost_per_item, i.total_cost,
+               i.sell_type, i.rental_days, i.dimension_calc,
+               i.include_days_in_calc, i.include_qty_in_calc,
+               JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.width')) AS width,
+               JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.height')) AS height,
+               JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.depth')) AS depth,
+               r.title AS request_title, r.request_type
+        FROM sales_request_items i
+        JOIN sales_request r ON r.id = i.request_id
+        WHERE i.id = %s
+    """, (item_id,))
+    return cur.fetchone()
+
+
+@app.route('/costing', methods=['GET'])
+@perm('costing.view')
+def costing_page():
+    """The costing desk: what is on mine, what I gave out, what needs deciding."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template("costing.html")
+
+
+@app.route('/api/costing/queue', methods=['GET'])
+@perm('costing.view')
+def costing_queue():
+    """
+    Everything this person has a part in, in three lists.
+
+    `mine`     items assigned to me that I have not had accepted
+    `given`    items I assigned to somebody else, with their proposals
+    `all`      everything, for whoever holds costing.view unrestricted
+    """
+    try:
+        me = session.get('user_id')
+        unrestricted = _costing_unrestricted('costing.view')
+        conn, cur = connection()
+        reports = _direct_report_ids(cur, me)
+
+        params = []
+        where = ""
+        if not unrestricted:
+            ids = sorted({me, *reports})
+            placeholders = ",".join(["%s"] * len(ids))
+            where = (" WHERE (a.assignee_id IN (%s) OR a.assigned_by IN (%s))"
+                     % (placeholders, placeholders))
+            params = ids + ids
+
+        cur.execute("""
+            SELECT a.id, a.item_id, a.request_id, a.assignee_id, a.assigned_by,
+                   a.status, a.note, a.added_date,
+                   u.name AS assignee_name, m.name AS assigned_by_name,
+                   i.name AS item_name, i.qty, i.cost_per_item,
+                   r.title AS request_title
+            FROM costing_assignment a
+            JOIN user u ON u.id = a.assignee_id
+            JOIN user m ON m.id = a.assigned_by
+            JOIN sales_request_items i ON i.id = a.item_id
+            JOIN sales_request r ON r.id = a.request_id
+        """ + where + " ORDER BY a.added_date DESC", params)
+        assignments = list(cur.fetchall())
+
+        proposals = []
+        if assignments:
+            item_ids = sorted({a['item_id'] for a in assignments})
+            placeholders = ",".join(["%s"] * len(item_ids))
+            cur.execute("""
+                SELECT p.id, p.item_id, p.assignment_id, p.author_id, p.amount,
+                       p.notes, p.status, p.decided_at, p.decision_note,
+                       p.added_date, a.assigned_by,
+                       u.name AS author_name, d.name AS decided_by_name,
+                       (SELECT COUNT(*) FROM costing_proposal_file f
+                        WHERE f.proposal_id = p.id) AS file_count
+                FROM costing_proposal p
+                JOIN costing_assignment a ON a.id = p.assignment_id
+                JOIN user u ON u.id = p.author_id
+                LEFT JOIN user d ON d.id = p.decided_by
+                WHERE p.item_id IN (%s)
+                ORDER BY p.added_date
+            """ % placeholders, item_ids)
+            proposals = costing.visible_proposal_ids(
+                list(cur.fetchall()), me, reports, unrestricted)
+
+        cur.close()
+        conn.close()
+
+        def out_proposal(row):
+            return {
+                'id': row['id'], 'item_id': row['item_id'],
+                'assignment_id': row['assignment_id'],
+                'author_id': row['author_id'], 'author_name': row['author_name'],
+                'amount': float(row['amount']),
+                'notes': row['notes'], 'status': row['status'],
+                'file_count': row['file_count'],
+                'decided_by_name': row['decided_by_name'],
+                'decision_note': row['decision_note'],
+                'can_decide': bool(row['status'] == costing.PROPOSAL_SUBMITTED
+                                   and (unrestricted or row['assigned_by'] == me)),
+                'is_mine': row['author_id'] == me,
+                'added_date': row['added_date'].strftime('%d %b %Y %H:%M')
+                              if row['added_date'] else None,
+            }
+
+        by_item = {}
+        for row in proposals:
+            by_item.setdefault(row['item_id'], []).append(out_proposal(row))
+
+        def out_assignment(row):
+            return {
+                'id': row['id'], 'item_id': row['item_id'],
+                'request_id': row['request_id'], 'item_name': row['item_name'],
+                'request_title': row['request_title'],
+                'qty': float(row['qty']) if row['qty'] is not None else None,
+                'cost_per_item': (float(row['cost_per_item'])
+                                  if row['cost_per_item'] is not None else None),
+                'assignee_id': row['assignee_id'],
+                'assignee_name': row['assignee_name'],
+                'assigned_by': row['assigned_by'],
+                'assigned_by_name': row['assigned_by_name'],
+                'status': row['status'], 'note': row['note'],
+                'assigned_on': row['added_date'].strftime('%d %b %Y')
+                               if row['added_date'] else None,
+                'proposals': by_item.get(row['item_id'], []),
+            }
+
+        rows = [out_assignment(a) for a in assignments]
+        return jsonify(
+            success=True,
+            me=me,
+            can_assign=has('costing.assign'),
+            can_propose=has('costing.propose'),
+            mine=[r for r in rows if r['assignee_id'] == me],
+            given=[r for r in rows if r['assigned_by'] == me],
+            others=[r for r in rows
+                    if r['assignee_id'] != me and r['assigned_by'] != me],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing queue failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/team', methods=['GET'])
+@perm('costing.assign')
+def costing_team():
+    """Who this person may hand costing to: their own direct reports."""
+    try:
+        me = session.get('user_id')
+        conn, cur = connection()
+        if _costing_unrestricted('costing.assign'):
+            # The Head may reach past their own reports, but the list stays
+            # inside Operations rather than offering the whole company.
+            cur.execute("""
+                SELECT u.id, u.name, r.name AS role_name
+                FROM user u
+                LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+                WHERE u.id != %s AND u.department_id = (
+                    SELECT department_id FROM user WHERE id = %s)
+                ORDER BY r.level, u.name
+            """, (me, me))
+        else:
+            cur.execute("""
+                SELECT u.id, u.name, r.name AS role_name
+                FROM user u
+                LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+                WHERE u.manager_id = %s
+                ORDER BY u.name
+            """, (me,))
+        people = list(cur.fetchall())
+        cur.close()
+        conn.close()
+        return jsonify(success=True, people=people)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/request/<int:request_id>', methods=['GET'])
+@perm('costing.view')
+def costing_for_request(request_id):
+    """
+    The costing state of every item on one request, in a single call.
+
+    The operations request page opens a modal with all the items in it, so it
+    asks once rather than once per item.
+    """
+    try:
+        me = session.get('user_id')
+        unrestricted = _costing_unrestricted('costing.view')
+        conn, cur = connection()
+        reports = _direct_report_ids(cur, me)
+
+        cur.execute("""
+            SELECT a.id, a.item_id, a.assignee_id, a.assigned_by, a.status, a.note,
+                   a.added_date, u.name AS assignee_name, m.name AS assigned_by_name
+            FROM costing_assignment a
+            JOIN user u ON u.id = a.assignee_id
+            JOIN user m ON m.id = a.assigned_by
+            WHERE a.request_id = %s
+            ORDER BY a.added_date
+        """, (request_id,))
+        assignments = list(cur.fetchall())
+
+        cur.execute("""
+            SELECT p.id, p.item_id, p.assignment_id, p.author_id, p.amount, p.notes,
+                   p.status, p.decision_note, p.added_date, a.assigned_by,
+                   u.name AS author_name, d.name AS decided_by_name,
+                   (SELECT COUNT(*) FROM costing_proposal_file f
+                    WHERE f.proposal_id = p.id) AS file_count
+            FROM costing_proposal p
+            JOIN costing_assignment a ON a.id = p.assignment_id
+            JOIN user u ON u.id = p.author_id
+            LEFT JOIN user d ON d.id = p.decided_by
+            WHERE p.request_id = %s
+            ORDER BY p.added_date
+        """, (request_id,))
+        proposals = costing.visible_proposal_ids(
+            list(cur.fetchall()), me, reports, unrestricted)
+        cur.close()
+        conn.close()
+
+        items = {}
+        for row in assignments:
+            entry = items.setdefault(row['item_id'], {'assignments': [], 'proposals': []})
+            entry['assignments'].append({
+                'id': row['id'], 'assignee_id': row['assignee_id'],
+                'assignee_name': row['assignee_name'],
+                'assigned_by': row['assigned_by'],
+                'assigned_by_name': row['assigned_by_name'],
+                'status': row['status'], 'note': row['note'],
+                'mine': row['assignee_id'] == me,
+                'assigned_on': row['added_date'].strftime('%d %b %Y')
+                               if row['added_date'] else None,
+            })
+        for row in proposals:
+            entry = items.setdefault(row['item_id'], {'assignments': [], 'proposals': []})
+            entry['proposals'].append({
+                'id': row['id'], 'author_name': row['author_name'],
+                'author_id': row['author_id'], 'amount': float(row['amount']),
+                'notes': row['notes'], 'status': row['status'],
+                'file_count': row['file_count'],
+                'decided_by_name': row['decided_by_name'],
+                'is_mine': row['author_id'] == me,
+                'can_decide': bool(row['status'] == costing.PROPOSAL_SUBMITTED
+                                   and (unrestricted or row['assigned_by'] == me)),
+                'added_date': row['added_date'].strftime('%d %b %Y %H:%M')
+                              if row['added_date'] else None,
+            })
+
+        return jsonify(success=True, request_id=request_id, items=items,
+                       can_assign=has('costing.assign'),
+                       can_propose=has('costing.propose'),
+                       can_cost_direct=has('sales_item.cost_direct'))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing for request failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/items', methods=['GET'])
+@perm('costing.assign')
+def costing_items():
+    """
+    Items that could be sent out for costing.
+
+    Uncosted ones first, because that is what somebody opening this list is
+    looking for; a costed item is still offered so a cost can be revisited.
+    """
+    search = (request.args.get('q') or '').strip()
+    try:
+        conn, cur = connection()
+        sql = """
+            SELECT i.id, i.name, i.qty, i.cost_per_item, i.request_id,
+                   r.title AS request_title,
+                   (SELECT COUNT(*) FROM costing_assignment a
+                    WHERE a.item_id = i.id AND a.status = 'open') AS open_assignments
+            FROM sales_request_items i
+            JOIN sales_request r ON r.id = i.request_id
+            WHERE r.status != 'cancelled'
+        """
+        params = []
+        if search:
+            sql += " AND (i.name LIKE %s OR r.title LIKE %s OR i.request_id = %s)"
+            params += ['%' + search + '%', '%' + search + '%',
+                       search if search.isdigit() else 0]
+        sql += """
+            ORDER BY (i.cost_per_item IS NOT NULL AND i.cost_per_item > 0),
+                     i.id DESC
+            LIMIT 60
+        """
+        cur.execute(sql, params)
+        items = [{
+            'id': row['id'], 'name': row['name'],
+            'qty': float(row['qty']) if row['qty'] is not None else None,
+            'cost_per_item': (float(row['cost_per_item'])
+                              if row['cost_per_item'] is not None else None),
+            'request_id': row['request_id'],
+            'request_title': row['request_title'],
+            'open_assignments': row['open_assignments'],
+        } for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return jsonify(success=True, items=items)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/assign', methods=['POST'])
+@perm('costing.assign')
+def costing_assign():
+    """Put one item on one or more people's desks. Re-asking reopens the row."""
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        item_id = int(data.get('item_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick an item'), 400
+    assignee_ids = data.get('assignee_ids') or []
+    if not isinstance(assignee_ids, list) or not assignee_ids:
+        return jsonify(success=False, error='Pick at least one person'), 400
+    note = (data.get('note') or '').strip()[:500] or None
+
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        item = _costing_item(cur, item_id)
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such item'), 404
+
+        reports = _direct_report_ids(cur, me)
+        unrestricted = _costing_unrestricted('costing.assign')
+        assigned = []
+        for raw in assignee_ids:
+            try:
+                assignee_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            costing.check_assignment(me, assignee_id, reports, unrestricted)
+            cur.execute("""
+                INSERT INTO costing_assignment (item_id, request_id, assignee_id,
+                                                assigned_by, status, note)
+                VALUES (%s, %s, %s, %s, 'open', %s)
+                ON DUPLICATE KEY UPDATE status = 'open',
+                                        assigned_by = VALUES(assigned_by),
+                                        note = VALUES(note)
+            """, (item_id, item['request_id'], assignee_id, me, note))
+            _costing_log(cur, item_id, item['request_id'], 'assigned', me,
+                         detail='assigned to user %d' % assignee_id)
+            assigned.append(assignee_id)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, item_id=item_id, assigned=assigned)
+    except costing.CostingError as e:
+        return jsonify(success=False, error=str(e)), 403
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing assign failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/assignments/<int:assignment_id>/withdraw', methods=['POST'])
+@perm('costing.assign')
+def costing_withdraw(assignment_id):
+    """Take an item back off somebody's desk. The row stays, the trail stays."""
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        cur.execute("SELECT * FROM costing_assignment WHERE id = %s", (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such assignment'), 404
+        if row['assigned_by'] != me and not _costing_unrestricted('costing.assign'):
+            cur.close()
+            conn.close()
+            return jsonify(success=False,
+                           error='Only the person who assigned it can withdraw it.'), 403
+
+        cur.execute("UPDATE costing_assignment SET status = 'withdrawn' WHERE id = %s",
+                    (assignment_id,))
+        _costing_log(cur, row['item_id'], row['request_id'],
+                     'assignment_withdrawn', me,
+                     detail='withdrawn from user %d' % row['assignee_id'])
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/proposals', methods=['POST'])
+@perm('costing.propose')
+def costing_propose():
+    """Put up a costing proposal for an item that is on my desk."""
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        assignment_id = int(data.get('assignment_id'))
+        amount = costing.parse_amount(data.get('amount'))
+    except (TypeError, ValueError) as e:
+        return jsonify(success=False, error=str(e) or 'Enter an amount'), 400
+    notes = (data.get('notes') or '').strip() or None
+
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        cur.execute("SELECT * FROM costing_assignment WHERE id = %s", (assignment_id,))
+        assignment = cur.fetchone()
+        if not assignment:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such assignment'), 404
+        if assignment['assignee_id'] != me:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='That item is not assigned to you.'), 403
+        costing.check_proposal(assignment['status'])
+
+        cur.execute("""
+            INSERT INTO costing_proposal (item_id, request_id, assignment_id,
+                                          author_id, amount, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (assignment['item_id'], assignment['request_id'], assignment_id,
+              me, amount, notes))
+        proposal_id = cur.lastrowid
+        _costing_log(cur, assignment['item_id'], assignment['request_id'],
+                     'proposal_submitted', me, proposal_id=proposal_id,
+                     amount=amount, detail=notes)
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, proposal_id=proposal_id, amount=float(amount))
+    except costing.CostingError as e:
+        return jsonify(success=False, error=str(e)), 403
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing propose failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/proposals/<int:proposal_id>/files', methods=['POST'])
+@perm('costing.propose')
+def costing_proposal_files(proposal_id):
+    """
+    Attach quotations and photographs to a proposal.
+
+    Same allowlist and size cap as the item attachments route: an upload path is
+    a trust boundary and gets the same treatment wherever it appears.
+    """
+    me = session.get('user_id')
+    allowed = {'pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp',
+               'xlsx', 'xls', 'csv', 'doc', 'docx'}
+    max_size = 10 * 1024 * 1024
+
+    try:
+        files = request.files.getlist('files[]')
+        if not files:
+            return jsonify(success=False, error='No files provided'), 400
+
+        conn, cur = connection()
+        cur.execute("SELECT * FROM costing_proposal WHERE id = %s", (proposal_id,))
+        proposal = cur.fetchone()
+        if not proposal:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such proposal'), 404
+        if proposal['author_id'] != me:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='That is not your proposal.'), 403
+        if proposal['status'] != costing.PROPOSAL_SUBMITTED:
+            cur.close()
+            conn.close()
+            return jsonify(success=False,
+                           error='A proposal that has been decided cannot be changed.'), 400
+
+        folder = 'uploads/costing/%d' % proposal_id
+        os.makedirs(folder, exist_ok=True)
+        saved = []
+        for handle in files:
+            if not handle or not handle.filename or '.' not in handle.filename:
+                continue
+            extension = handle.filename.rsplit('.', 1)[1].lower()
+            if extension not in allowed:
+                continue
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(0)
+            if size > max_size:
+                continue
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            safe = secure_filename(handle.filename)
+            path = os.path.join(folder, '%s_%s' % (stamp, safe))
+            handle.save(path)
+            cur.execute("""
+                INSERT INTO costing_proposal_file (proposal_id, file_url,
+                                                   original_name, file_type,
+                                                   file_size, uploaded_by)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (proposal_id, '/' + path, handle.filename, extension, size, me))
+            _costing_log(cur, proposal['item_id'], proposal['request_id'],
+                         'file_attached', me, proposal_id=proposal_id,
+                         detail=handle.filename)
+            saved.append(handle.filename)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        if not saved:
+            return jsonify(success=False,
+                           error='Nothing was saved: check the file type and that it is under 10MB.'), 400
+        return jsonify(success=True, saved=saved)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing upload failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/proposals/<int:proposal_id>/files', methods=['GET'])
+@perm('costing.view')
+def costing_proposal_file_list(proposal_id):
+    """The evidence behind one proposal."""
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT p.*, a.assigned_by
+            FROM costing_proposal p
+            JOIN costing_assignment a ON a.id = p.assignment_id
+            WHERE p.id = %s
+        """, (proposal_id,))
+        proposal = cur.fetchone()
+        if not proposal:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such proposal'), 404
+
+        reports = _direct_report_ids(cur, me)
+        visible = costing.visible_proposal_ids(
+            [proposal], me, reports, _costing_unrestricted('costing.view'))
+        if not visible:
+            cur.close()
+            conn.close()
+            return abort(403)
+
+        cur.execute("""
+            SELECT id, file_url, original_name, file_type, file_size, uploaded_at
+            FROM costing_proposal_file WHERE proposal_id = %s ORDER BY id
+        """, (proposal_id,))
+        files = [{
+            'id': row['id'], 'url': row['file_url'],
+            'name': row['original_name'], 'type': row['file_type'],
+            'size': row['file_size'],
+            'uploaded_at': row['uploaded_at'].strftime('%d %b %Y %H:%M')
+                           if row['uploaded_at'] else None,
+        } for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return jsonify(success=True, files=files)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/proposals/<int:proposal_id>/decide', methods=['POST'])
+@perm('costing.decide')
+def costing_decide(proposal_id):
+    """
+    Accept or reject a proposal. Accepting writes the item's cost.
+
+    The competing proposals are rejected in the same transaction, so an item
+    never has two winners, and every one of those rejections is logged.
+    """
+    data = request.get_json(silent=True) or request.form or {}
+    decision = (data.get('decision') or '').strip().lower()
+    if decision not in ('accept', 'reject'):
+        return jsonify(success=False, error='Decision must be accept or reject'), 400
+    note = (data.get('note') or '').strip()[:500] or None
+    me = session.get('user_id')
+
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT p.*, a.assigned_by, u.name AS author_name
+            FROM costing_proposal p
+            JOIN costing_assignment a ON a.id = p.assignment_id
+            JOIN user u ON u.id = p.author_id
+            WHERE p.id = %s
+        """, (proposal_id,))
+        proposal = cur.fetchone()
+        if not proposal:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such proposal'), 404
+
+        costing.check_decision(proposal['status'], me, proposal['assigned_by'],
+                               _costing_unrestricted('costing.decide'))
+
+        if decision == 'reject':
+            cur.execute("""
+                UPDATE costing_proposal
+                SET status = 'rejected', decided_by = %s, decided_at = NOW(),
+                    decision_note = %s
+                WHERE id = %s
+            """, (me, note, proposal_id))
+            _costing_log(cur, proposal['item_id'], proposal['request_id'],
+                         'proposal_rejected', me, proposal_id=proposal_id,
+                         amount=proposal['amount'], detail=note)
+            conn.commit()
+            cur.close()
+            conn.close()
+            return jsonify(success=True, status='rejected')
+
+        item = _costing_item(cur, proposal['item_id'])
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='The item has gone'), 404
+
+        cur.execute("""
+            UPDATE costing_proposal
+            SET status = 'accepted', decided_by = %s, decided_at = NOW(),
+                decision_note = %s
+            WHERE id = %s
+        """, (me, note, proposal_id))
+
+        # One winner per item: everything else still open loses, on the record.
+        cur.execute("""
+            SELECT id, author_id, amount FROM costing_proposal
+            WHERE item_id = %s AND id != %s AND status = 'submitted'
+        """, (proposal['item_id'], proposal_id))
+        losers = list(cur.fetchall())
+        for loser in losers:
+            cur.execute("""
+                UPDATE costing_proposal
+                SET status = 'rejected', decided_by = %s, decided_at = NOW(),
+                    decision_note = 'Another proposal was accepted'
+                WHERE id = %s
+            """, (me, loser['id']))
+            _costing_log(cur, proposal['item_id'], proposal['request_id'],
+                         'proposal_rejected', me, proposal_id=loser['id'],
+                         amount=loser['amount'],
+                         detail='another proposal was accepted')
+
+        amount = proposal['amount']
+        total = item_total_cost(item, amount)
+        old_cost = item['cost_per_item']
+        cur.execute("""
+            UPDATE sales_request_items
+            SET cost_per_item = %s, total_cost = %s
+            WHERE id = %s
+        """, (amount, total, proposal['item_id']))
+
+        # The item's own history already exists and other pages read it, so the
+        # accepted cost lands there too rather than only in the costing trail.
+        log_item_change(
+            proposal['request_id'], proposal['item_id'], item['name'],
+            item['request_type'], 'ITEM_UPDATE', session.get('name') or 'Unknown',
+            old_data={'cost_per_item': old_cost},
+            new_data={'cost_per_item': amount},
+            change_description='Costing proposal by %s accepted' % proposal['author_name'],
+            conn=conn, cur=cur,
+        )
+        _costing_log(cur, proposal['item_id'], proposal['request_id'],
+                     'proposal_accepted', me, proposal_id=proposal_id,
+                     amount=amount,
+                     detail='cost set from %s to %s' % (old_cost, amount))
+
+        # Their work is done; the assignment closes rather than lingering open.
+        cur.execute("""
+            UPDATE costing_assignment SET status = 'closed'
+            WHERE item_id = %s AND status = 'open'
+        """, (proposal['item_id'],))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, status='accepted', amount=float(amount),
+                       total_cost=total, rejected=len(losers))
+    except costing.CostingError as e:
+        return jsonify(success=False, error=str(e)), 403
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing decision failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/items/<int:item_id>/log', methods=['GET'])
+@perm('costing.view')
+def costing_item_log(item_id):
+    """The whole trail for one item, oldest first."""
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT l.id, l.action, l.detail, l.amount, l.added_date,
+                   l.proposal_id, u.name AS actor_name
+            FROM costing_log l
+            LEFT JOIN user u ON u.id = l.actor_id
+            WHERE l.item_id = %s
+            ORDER BY l.added_date, l.id
+        """, (item_id,))
+        entries = [{
+            'action': row['action'],
+            'detail': row['detail'],
+            'amount': float(row['amount']) if row['amount'] is not None else None,
+            'actor_name': row['actor_name'],
+            'proposal_id': row['proposal_id'],
+            'when': row['added_date'].strftime('%d %b %Y %H:%M')
+                    if row['added_date'] else None,
+        } for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return jsonify(success=True, entries=entries)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+# ---------------------------------------------------------------------------
 # Department portals with nothing in them yet.
 #
 # Four cards on the home page pointed at '#': Marketing, Account Management, 2D
@@ -7508,9 +8434,15 @@ def add_operation_request():
         }), 500
 
 @app.route('/api/operations/requests/add-costs', methods=['POST'])
-@perm('sales_item.cost')
+@perm('sales_item.cost_direct')
 def add_operation_request_costs():
-    """Add costs to existing request items (operations role) - alternative endpoint"""
+    """
+    Type costs straight onto request items, outside the costing workflow.
+
+    Gated on `sales_item.cost_direct` rather than `sales_item.cost`: seeing cost
+    is not the same as setting it. Costing normally arrives by assignment and an
+    accepted proposal writes the number; this is the Operations Head's override.
+    """
     if 'user_id' not in session:
         return jsonify(error="Not authenticated"), 401
     
@@ -7563,61 +8495,16 @@ def add_operation_request_costs():
                 old_cost_per_item = item_data.get('old_cost_per_item') if item_data else None
                 was_negotiation = item_data.get('approval_status') == 'pending_negotiation' if item_data else False
                 
-                # RECALCULATE total_cost using formula: cost_per_item × qty × days × dimension_multiplier
-                quantity = float(item_data.get('qty', 1)) if item_data else 1
-                sell_type = item_data.get('sell_type', 'rent') if item_data else 'rent'
-                rental_days = int(item_data.get('rental_days', 1)) if item_data else 1
-                include_days_in_calc = bool(item_data.get('include_days_in_calc', 1)) if item_data else True
-                include_qty_in_calc = bool(item_data.get('include_qty_in_calc', 1)) if item_data else True
-                dimension_calc = item_data.get('dimension_calc', '') if item_data else ''
-                
-                # Calculate effective days (only for rent items with include_days enabled)
-                effective_days = 1
-                if sell_type == 'rent' and include_days_in_calc:
-                    effective_days = rental_days
-                
-                # Calculate effective quantity (only if include_qty_in_calc is enabled)
-                effective_qty = quantity if include_qty_in_calc else 1
-                
-                # Calculate dimension multiplier based on dimension_calc
-                dimension_multiplier = 1.0
-                if dimension_calc and item_data:
-                    # Extract dimensions from JSON, handle NULL/empty values
-                    width = float(item_data.get('width')) if item_data.get('width') not in (None, '', 'null') else 0
-                    height = float(item_data.get('height')) if item_data.get('height') not in (None, '', 'null') else 0
-                    depth = float(item_data.get('depth')) if item_data.get('depth') not in (None, '', 'null') else 0
-                    
-                    # Normalize dimension_calc string - remove spaces and asterisks for comparison
-                    dimension_calc_normalized = dimension_calc.replace('*', '').replace(' ', '').upper()
-                    
-                    if dimension_calc_normalized == 'W' and width > 0:
-                        dimension_multiplier = width
-                    elif dimension_calc_normalized == 'H' and height > 0:
-                        dimension_multiplier = height
-                    elif dimension_calc_normalized == 'D' and depth > 0:
-                        dimension_multiplier = depth
-                    elif dimension_calc_normalized == 'WH' and width > 0 and height > 0:
-                        dimension_multiplier = width * height
-                    elif dimension_calc_normalized == 'WD' and width > 0 and depth > 0:
-                        dimension_multiplier = width * depth
-                    elif dimension_calc_normalized == 'HD' and height > 0 and depth > 0:
-                        dimension_multiplier = height * depth
-                    elif dimension_calc_normalized == 'WHD' and width > 0 and height > 0 and depth > 0:
-                        dimension_multiplier = width * height * depth
-                else:
-                    width = 0
-                    height = 0
-                    depth = 0
-                
-                # Apply the formula: Total Cost = cost_per_item × effective_qty × effective_days × dimension_multiplier
-                total_cost = cost_per_item * effective_qty * effective_days * dimension_multiplier
-                
-                print(f"DEBUG: Calculated total_cost for item {item_id}:")
-                print(f"  - cost_per_item: {cost_per_item}")
-                print(f"  - quantity: {quantity} (effective_qty: {effective_qty}, include_qty={include_qty_in_calc})")
-                print(f"  - effective_days: {effective_days} (sell_type={sell_type}, rental_days={rental_days}, include_days={include_days_in_calc})")
-                print(f"  - dimension_multiplier: {dimension_multiplier} (dimension_calc={dimension_calc}, W={width}, H={height}, D={depth})")
-                print(f"  - TOTAL_COST: {total_cost}")
+                # Total cost = cost per item x qty x days x dimensions. The
+                # formula lives in item_total_cost so that an accepted costing
+                # proposal computes it the same way this does.
+                total_cost = item_total_cost(item_data, cost_per_item)
+
+                print(f"DEBUG: Calculated total_cost for item {item_id}: "
+                      f"cost_per_item={cost_per_item} qty={item_data.get('qty') if item_data else None} "
+                      f"sell_type={item_data.get('sell_type') if item_data else None} "
+                      f"dimension_calc={item_data.get('dimension_calc') if item_data else None} "
+                      f"TOTAL_COST={total_cost}")
                 
                 # Log price change to history if there's a change in cost
                 if old_cost_per_item != cost_per_item and old_cost_per_item is not None:

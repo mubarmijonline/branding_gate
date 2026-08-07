@@ -72,6 +72,68 @@
   .targets-page .tgt-seg button.on { background:var(--accent); color:#fff; }
   .targets-page .tgt-seg button:focus-visible { outline:2px solid var(--accent);
                  outline-offset:-2px; }
+  .targets-page .tgt-export { border:1px solid var(--hair); background:#fff; border-radius:5px;
+                 padding:.42rem .8rem; font-size:.85rem; font-weight:600; color:var(--ink);
+                 cursor:pointer; }
+  .targets-page .tgt-export:hover { border-color:var(--accent); color:var(--accent); }
+  .targets-page .tgt-export i { color:#c0392b; }
+
+  /* Flow grid. Class names are prefixed because sb-admin-2 owns .tree, .node
+     and .card, and users.html defines its own .tree.topdown for the org chart. */
+  .targets-page .tgt-flow-scroll { overflow:auto; border:1px solid var(--hair);
+                 border-radius:6px; background:#fff; padding:1.5rem .5rem 1rem;
+                 max-height:max(360px, calc(100vh - 330px)); }
+  .targets-page .tgt-flow ul { display:flex; justify-content:center; padding-top:26px;
+                 margin:0; list-style:none; position:relative; }
+  .targets-page .tgt-flow, .targets-page .tgt-flow > ul { width:max-content;
+                 min-width:100%; margin:0 auto; }
+  .targets-page .tgt-flow li { position:relative; display:flex; flex-direction:column;
+                 align-items:center; padding:26px .55rem 0; list-style:none; }
+  .targets-page .tgt-flow > ul > li { padding-top:0; }
+  .targets-page .tgt-flow li::before, .targets-page .tgt-flow li::after {
+                 content:""; position:absolute; top:0; right:50%; width:50%; height:26px;
+                 border-top:1px solid var(--hair); }
+  .targets-page .tgt-flow li::after { right:auto; left:50%; border-left:1px solid var(--hair); }
+  .targets-page .tgt-flow li:only-child::before,
+  .targets-page .tgt-flow li:only-child::after { display:none; }
+  .targets-page .tgt-flow li:only-child { padding-top:26px; }
+  .targets-page .tgt-flow > ul > li::before,
+  .targets-page .tgt-flow > ul > li::after { display:none; }
+  .targets-page .tgt-flow li:first-child::before,
+  .targets-page .tgt-flow li:last-child::after { border:0 none; }
+  .targets-page .tgt-flow li:last-child::before { border-right:1px solid var(--hair);
+                 border-radius:0 5px 0 0; }
+  .targets-page .tgt-flow li:first-child::after { border-radius:5px 0 0 0; }
+  /* The stub from a parent down to its children's bus. Without it the bus and
+     its drops float free and read as a stray box. */
+  .targets-page .tgt-flow ul ul::before { content:""; position:absolute; top:0; left:50%;
+                 border-left:1px solid var(--hair); width:0; height:26px; }
+
+  .targets-page .tgt-node { border:1px solid var(--hair); border-radius:7px; background:#fff;
+                 width:214px; text-align:center; padding:.7rem .7rem .55rem;
+                 position:relative; box-shadow:0 1px 2px rgba(46,54,80,.05); }
+  .targets-page .tgt-node .nname { font-weight:700; color:var(--ink); font-size:.9rem; }
+  .targets-page .tgt-node .nteam { font-size:.72rem; color:var(--muted); margin-bottom:.3rem; }
+  .targets-page .tgt-node .nfig { font-size:1.25rem; font-weight:700; color:var(--ink);
+                 font-variant-numeric:tabular-nums; line-height:1.15; }
+  .targets-page .tgt-node .nsplit { font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+  .targets-page .tgt-node .nach { font-size:.75rem; font-weight:600; margin-top:.2rem; }
+  .targets-page .tgt-node .nset { font-size:.68rem; color:var(--muted); margin-top:.35rem;
+                 border-top:1px dashed var(--hair); padding-top:.3rem; }
+  .targets-page .tgt-node .ntop { position:absolute; inset:0 0 auto 0; height:4px;
+                 border-radius:7px 7px 0 0; background:var(--hair); }
+  .targets-page .tgt-node.hit .ntop { background:var(--good); }
+  .targets-page .tgt-node.hit .nach { color:var(--good); }
+  .targets-page .tgt-node.mid .ntop { background:var(--warn); }
+  .targets-page .tgt-node.mid .nach { color:var(--warn); }
+  .targets-page .tgt-node.low .ntop { background:var(--bad); }
+  .targets-page .tgt-node.low .nach { color:var(--bad); }
+  .targets-page .tgt-node .tgt-bar { margin-top:.4rem; }
+  /* The amount handed down, sitting on the connector into each child. */
+  .targets-page .tgt-flow .nflow { position:absolute; top:-9px; left:50%;
+                 transform:translateX(-50%); background:#fff; padding:0 .35rem;
+                 font-size:.7rem; font-weight:700; color:var(--muted); white-space:nowrap; }
+
   .targets-page th.qcol { border-left:1px solid var(--hair); }
   .targets-page td.qcol { border-left:1px solid var(--hair); }
   .targets-page td.qcol .ach { display:block; font-size:.75rem; color:var(--muted); }
@@ -100,16 +162,25 @@
   <div class="tgt-toolbar">
     <span class="tgt-seg">
       <button type="button" id="tgtViewQuarter" class="on">One quarter</button>
+      <button type="button" id="tgtViewFlow">Flow</button>
       <button type="button" id="tgtViewYear">Whole year</button>
     </span>
     <label for="tgtPeriod" class="mb-0 tgt-muted" style="font-size:.85rem;">Quarter</label>
     <select id="tgtPeriod"></select>
     <label for="tgtYear" class="mb-0 tgt-muted" style="font-size:.85rem;display:none;">Year</label>
     <select id="tgtYear" style="display:none;"></select>
+    <button type="button" id="tgtExport" class="tgt-export">
+      <i class="fas fa-file-pdf mr-1"></i>Export PDF
+    </button>
     <span class="tgt-note" id="tgtNote"></span>
   </div>
 
-  <div class="tgt-scroll">
+  <!-- The cascade as a grid: who gave what to whom, and what is still free. -->
+  <div class="tgt-flow-scroll" id="tgtFlowPane" style="display:none;">
+    <div class="tgt-flow" id="tgtFlow"></div>
+  </div>
+
+  <div class="tgt-scroll" id="tgtTablePane">
     <table class="tgt-table">
       <thead id="tgtHead">
         <tr>
@@ -170,8 +241,8 @@
     });
   }
 
-  function load(period) {
-    VIEW = 'quarter';
+  function load(period, view) {
+    VIEW = view || 'quarter';
     var url = '/api/targets' + (period ? '?period=' + encodeURIComponent(period) : '');
     $.getJSON(url).done(function (r) {
       if (!r || !r.success) {
@@ -229,11 +300,11 @@
   }
 
   function renderHead() {
-    if (VIEW === 'quarter') {
+    if (VIEW === 'quarter' || VIEW === 'flow') {
       $('#tgtHead').html(
         '<tr><th>Person</th><th class="num">Target</th><th class="num">Handed down</th>' +
         '<th class="num">Unassigned</th><th class="num">Achieved</th>' +
-        '<th style="width:150px;">Progress</th><th></th></tr>');
+        '<th style="width:150px;">Progress</th><th>Set by</th><th></th></tr>');
       return;
     }
     $('#tgtHead').html(
@@ -338,7 +409,65 @@
     });
   }
 
+  // ---- the flow grid ------------------------------------------------------
+  // Same rows as the quarter table, drawn as the cascade: each connector
+  // carries the amount that was handed down it.
+  function renderFlow() {
+    var children = {}, roots = [];
+    ROWS.forEach(function (row) {
+      var parent = row.manager_id;
+      if (parent === null || parent === undefined) { roots.push(row); return; }
+      (children[parent] = children[parent] || []).push(row);
+    });
+
+    function node(row, isRoot) {
+      var cls = '';
+      if (row.progress !== null && row.progress !== undefined) {
+        cls = row.progress >= 100 ? ' hit' : (row.progress < 40 ? ' low' : ' mid');
+      }
+      var pct = row.progress === null || row.progress === undefined
+        ? null : Math.max(0, Math.min(100, row.progress));
+      var box =
+        '<div class="tgt-node' + cls + '">' +
+          '<span class="ntop"></span>' +
+          (isRoot || row.target === null || row.target === undefined ? '' :
+            '<span class="nflow">&darr; ' + money(row.target) + '</span>') +
+          '<div class="nname">' + esc(row.name) + '</div>' +
+          '<div class="nteam">' + esc(row.team_name || row.role_name || '') + '</div>' +
+          '<div class="nfig">' + money(row.target) + '</div>' +
+          (row.is_leader
+            ? '<div class="nsplit">down ' + money(row.assigned) +
+              ' · free ' + money(row.unassigned) + '</div>'
+            : '') +
+          '<div class="nach">' + money(row.team_achieved) +
+            (pct === null ? ' achieved' : ' · ' + Math.round(row.progress) + '%') + '</div>' +
+          (pct === null ? '' :
+            '<div class="tgt-bar"><i class="' +
+            (row.progress >= 100 ? 'ok' : (row.progress < 40 ? 'low' : '')) +
+            '" style="width:' + pct + '%"></i></div>') +
+          (row.set_by
+            ? '<div class="nset">set by ' + esc(row.set_by) +
+              (row.set_on ? ' · ' + esc(row.set_on) : '') + '</div>'
+            : '') +
+        '</div>';
+      var kids = children[row.id] || [];
+      return '<li>' + box +
+        (kids.length
+          ? '<ul>' + kids.map(function (k) { return node(k, false); }).join('') + '</ul>'
+          : '') +
+        '</li>';
+    }
+
+    $('#tgtFlow').html(
+      roots.length ? '<ul>' + roots.map(function (r) { return node(r, true); }).join('') + '</ul>'
+                   : '');
+    $('#tgtNote').text(PERIOD ? PERIOD.replace('-Q', ' Q') + ' · ' + ROWS.length + ' people' : '');
+  }
+
   function renderRows() {
+    $('#tgtFlowPane').toggle(VIEW === 'flow');
+    $('#tgtTablePane').toggle(VIEW !== 'flow');
+    if (VIEW === 'flow') { renderFlow(); return; }
     if (VIEW === 'year') { renderYearRows(); return; }
     var $body = $('#tgtRows').empty();
     $('#tgtEmpty').toggle(ROWS.length === 0);
@@ -357,6 +486,10 @@
           (row.is_leader && row.own_achieved !== row.team_achieved
             ? '<div class="tgt-pct">own ' + money(row.own_achieved) + '</div>' : '') + '</td>' +
         '<td>' + barFor(row) + '</td>' +
+        '<td class="tgt-muted" style="font-size:.78rem;">' +
+          (row.set_by ? esc(row.set_by) +
+            (row.set_on ? '<div class="tgt-pct">' + esc(row.set_on) + '</div>' : '')
+                      : '&mdash;') + '</td>' +
         '<td class="tgt-actions">' + actions + '</td>'
       );
       $body.append($tr);
@@ -468,23 +601,39 @@
     });
   });
 
-  $('#tgtPeriod').on('change', function () { load($(this).val()); });
+  $('#tgtPeriod').on('change', function () {
+    load($(this).val(), VIEW === 'flow' ? 'flow' : 'quarter');
+  });
   $('#tgtYear').on('change', function () { loadYear($(this).val()); });
 
   function showControls(view) {
     var year = view === 'year';
-    $('#tgtViewQuarter').toggleClass('on', !year);
+    $('#tgtViewQuarter').toggleClass('on', view === 'quarter');
+    $('#tgtViewFlow').toggleClass('on', view === 'flow');
     $('#tgtViewYear').toggleClass('on', year);
     $('#tgtPeriod, label[for=tgtPeriod]').toggle(!year);
     $('#tgtYear, label[for=tgtYear]').toggle(year);
   }
   $('#tgtViewQuarter').on('click', function () {
     showControls('quarter');
-    load($('#tgtPeriod').val());
+    load($('#tgtPeriod').val(), 'quarter');
+  });
+  $('#tgtViewFlow').on('click', function () {
+    showControls('flow');
+    load($('#tgtPeriod').val(), 'flow');
   });
   $('#tgtViewYear').on('click', function () {
     showControls('year');
     loadYear($('#tgtYear').val() || PERIOD.split('-')[0]);
+  });
+
+  // Export what is on screen. Drawn on the server: printing the grid from the
+  // browser is what produced an unreadable org chart every time.
+  $('#tgtExport').on('click', function () {
+    var query = VIEW === 'year'
+      ? 'year=' + encodeURIComponent($('#tgtYear').val())
+      : 'period=' + encodeURIComponent(PERIOD);
+    window.location = '/api/targets/pdf?' + query;
   });
 
   $(function () { load(''); });
