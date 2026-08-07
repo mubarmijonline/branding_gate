@@ -5700,6 +5700,69 @@ def costing_team():
         return jsonify(success=False, error=str(e)), 500
 
 
+@app.route('/api/costing/summary', methods=['GET'])
+@perm('costing.view')
+def costing_summary():
+    """
+    What is waiting for me, and where.
+
+    Without this an assignment is invisible until somebody happens to open the
+    right request's cost modal. The counts drive the badge on the menu, the
+    banner on the operations pages and the per-row marks in the request list.
+    """
+    try:
+        me = session.get('user_id')
+        conn, cur = connection()
+
+        # On my desk: open assignments where nothing of mine is accepted yet.
+        cur.execute("""
+            SELECT a.request_id, COUNT(*) AS n
+            FROM costing_assignment a
+            WHERE a.assignee_id = %s AND a.status = 'open'
+            GROUP BY a.request_id
+        """, (me,))
+        mine = {row['request_id']: row['n'] for row in cur.fetchall()}
+
+        # Waiting on me: live proposals from people I asked.
+        cur.execute("""
+            SELECT p.request_id, COUNT(*) AS n
+            FROM costing_proposal p
+            JOIN costing_assignment a ON a.id = p.assignment_id
+            WHERE p.status = 'submitted' AND a.assigned_by = %s
+            GROUP BY p.request_id
+        """, (me,))
+        decide = {row['request_id']: row['n'] for row in cur.fetchall()}
+
+        # Everything still out, for the request list, whoever it is with.
+        cur.execute("""
+            SELECT request_id, COUNT(*) AS n
+            FROM costing_assignment WHERE status = 'open'
+            GROUP BY request_id
+        """)
+        out = {row['request_id']: row['n'] for row in cur.fetchall()}
+
+        cur.close()
+        conn.close()
+
+        by_request = {}
+        for request_id in set(list(mine) + list(decide) + list(out)):
+            by_request[str(request_id)] = {
+                'mine': mine.get(request_id, 0),
+                'awaiting_decision': decide.get(request_id, 0),
+                'open': out.get(request_id, 0),
+            }
+        return jsonify(success=True,
+                       mine_total=sum(mine.values()),
+                       awaiting_decision_total=sum(decide.values()),
+                       open_total=sum(out.values()),
+                       by_request=by_request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing summary failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/api/costing/request/<int:request_id>', methods=['GET'])
 @perm('costing.view')
 def costing_for_request(request_id):

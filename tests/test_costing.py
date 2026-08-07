@@ -382,6 +382,49 @@ class CostingChainTest(unittest.TestCase):
         self.assertTrue(entries)
         self.assertEqual(entries[0]['action'], 'assigned')
 
+    # -- being told there is something waiting -------------------------------
+
+    def _summary(self, actor):
+        response = self._client_for(actor).get('/api/costing/summary')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload.get('success'), payload)
+        return payload
+
+    def test_an_assignee_is_told_the_item_is_on_their_desk(self):
+        before = self._summary(self.member)['mine_total']
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member])
+        after = self._summary(self.member)
+        self.assertEqual(after['mine_total'], before + 1)
+        self.assertEqual(after['by_request'][str(self.request_id)]['mine'], 1)
+
+    def test_the_asking_leader_is_told_a_proposal_is_waiting(self):
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member])
+        self.assertEqual(
+            self._summary(self.leader)['by_request'][str(self.request_id)]
+            ['awaiting_decision'], 0)
+        self._propose(self.member, '1000')
+        summary = self._summary(self.leader)
+        self.assertEqual(
+            summary['by_request'][str(self.request_id)]['awaiting_decision'], 1)
+        # And it is not somebody else's problem to chase.
+        self.assertEqual(
+            self._summary(self.leader_b)['by_request']
+            .get(str(self.request_id), {}).get('awaiting_decision', 0), 0)
+
+    def test_the_count_clears_once_a_proposal_is_accepted(self):
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member])
+        proposal = self._propose(self.member, '1000').get_json()['proposal_id']
+        self._client_for(self.leader).post(
+            '/api/costing/proposals/%d/decide' % proposal, json={'decision': 'accept'})
+        leader = self._summary(self.leader)['by_request'].get(str(self.request_id), {})
+        member = self._summary(self.member)['by_request'].get(str(self.request_id), {})
+        self.assertEqual(leader.get('awaiting_decision', 0), 0)
+        self.assertEqual(member.get('mine', 0), 0)
+
     # -- who sees what ------------------------------------------------------
 
     def test_a_member_does_not_see_a_peers_proposal(self):

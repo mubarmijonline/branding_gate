@@ -748,6 +748,9 @@
               {% if can_view_costing %}
               <a class="dropdown-item" href="{{ url_for('costing_page') }}">
                 <i class="fas fa-calculator"></i> Costing
+                {# Filled in by the shared poll below, so an assignment is
+                   visible from any page rather than only inside a cost modal. #}
+                <span class="badge badge-danger ml-1 d-none" id="navCostingBadge"></span>
               </a>
               {% endif %}
               {% if can_set_prices %}
@@ -2181,6 +2184,26 @@ function showToast(title, body) {
     };
   })();
   </script>
+
+  {% if can_view_costing %}
+  <script>
+  // One number on the Costing menu item: items assigned to me plus proposals
+  // waiting on my decision. Without it an assignment is invisible unless you
+  // happen to open the right request.
+  (function () {
+    function paint() {
+      $.getJSON('/api/costing/summary').done(function (r) {
+        if (!r || !r.success) { return; }
+        var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0);
+        var $b = $('#navCostingBadge');
+        if (n > 0) { $b.text(n).removeClass('d-none'); } else { $b.addClass('d-none'); }
+      });
+    }
+    $(paint);
+    setInterval(paint, 120000);   // slow on purpose: it is a hint, not a feed
+  }());
+  </script>
+  {% endif %}
 
 </body>
 

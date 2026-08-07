@@ -823,6 +823,19 @@ window.chartPieDemo = function() {
         <h1 class="h3 mb-0 text-gray-800">Operations Request Management</h1>
     </div>
 
+    {% if 'costing.view' in _p %}
+    <!-- What is waiting for me. Hidden until there is something in it, so it
+         never becomes a row of zeroes people learn to ignore. -->
+    <div id="costingBanner" class="alert alert-info d-none align-items-center flex-wrap mb-4"
+         style="gap:.75rem;">
+        <i class="fas fa-calculator"></i>
+        <span id="costingBannerText"></span>
+        <a href="{{ url_for('costing_page') }}" class="btn btn-sm btn-outline-primary ml-auto">
+            Open the costing desk
+        </a>
+    </div>
+    {% endif %}
+
     <!-- Filter Cards -->
     <style>
         .stat-filter-card { cursor:pointer; transition: transform .15s, box-shadow .15s; }
@@ -1135,6 +1148,51 @@ function costingToast(message, kind) {
         .text(message).stop(true, true).fadeIn(120).delay(2600).fadeOut(300);
 }
 
+// ---- what is waiting for me ------------------------------------------------
+var COSTING_SUMMARY = { by_request: {} };
+
+function loadCostingSummary(then) {
+    if (!CAN_VIEW_COSTING) { if (then) { then(); } return; }
+    $.getJSON('/api/costing/summary').done(function (r) {
+        if (!r || !r.success) { return; }
+        COSTING_SUMMARY = r;
+        var parts = [];
+        if (r.mine_total) {
+            parts.push('<strong>' + r.mine_total + '</strong> item(s) assigned to you to cost');
+        }
+        if (r.awaiting_decision_total) {
+            parts.push('<strong>' + r.awaiting_decision_total +
+                       '</strong> proposal(s) waiting for your decision');
+        }
+        if (parts.length) {
+            $('#costingBannerText').html(parts.join(' &middot; '));
+            $('#costingBanner').removeClass('d-none').addClass('d-flex');
+        } else {
+            $('#costingBanner').addClass('d-none').removeClass('d-flex');
+        }
+    }).always(function () { if (then) { then(); } });
+}
+
+// A mark on the request row, so the list itself says where the work is.
+function costingRowBadges(requestId) {
+    var s = (COSTING_SUMMARY.by_request || {})[String(requestId)];
+    if (!s) { return ''; }
+    var out = '';
+    if (s.mine) {
+        out += '<span class="badge badge-primary d-block mt-1" title="Assigned to you to cost">' +
+               '<i class="fas fa-user-check"></i> ' + s.mine + ' to cost</span>';
+    }
+    if (s.awaiting_decision) {
+        out += '<span class="badge badge-warning d-block mt-1" title="Proposals waiting for your decision">' +
+               '<i class="fas fa-gavel"></i> ' + s.awaiting_decision + ' to decide</span>';
+    }
+    if (!s.mine && !s.awaiting_decision && s.open) {
+        out += '<span class="badge badge-secondary d-block mt-1" title="Out for costing">' +
+               '<i class="fas fa-paper-plane"></i> ' + s.open + ' out for costing</span>';
+    }
+    return out;
+}
+
 // ---- costing by assignment, inside the request drawer ----------------------
 function loadCostingState(requestId) {
     if (!CAN_VIEW_COSTING) { return $.Deferred().resolve().promise(); }
@@ -1252,6 +1310,9 @@ $(document).on('click', '.op-assign-costing', function (e) {
                     if (!r2.success) { costingModalError(r2.error || 'Could not assign'); return; }
                     closeCostingModal();
                     loadCostingState(window.currentCostingRequestId);
+                    loadCostingSummary(function () {
+                        if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
+                    });
                     costingToast('Assigned to ' + value.ids.length + ' person(s).');
                 }).fail(function (xhr) {
                     costingModalError((xhr.responseJSON || {}).error || 'Request failed');
@@ -1299,6 +1360,9 @@ $(document).on('click', '.op-propose-costing', function (e) {
                 var done = function (warn) {
                     closeCostingModal();
                     loadCostingState(window.currentCostingRequestId);
+                    loadCostingSummary(function () {
+                        if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
+                    });
                     costingToast(warn || 'Proposal submitted.', warn ? 'warning' : 'success');
                 };
                 if (!value.files || !value.files.length) { done(); return; }
@@ -1343,6 +1407,9 @@ function opDecideProposal(id, decision) {
                 if (!r.success) { costingModalError(r.error || 'Could not save'); return; }
                 closeCostingModal();
                 loadCostingState(window.currentCostingRequestId);
+                loadCostingSummary(function () {
+                    if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
+                });
                 costingToast(accepting
                     ? 'Accepted — item cost is now ' + formatNum(r.amount)
                     : 'Proposal rejected.');
@@ -1365,8 +1432,14 @@ $(document).ready(function() {
     // Check if user is admin (rendered by Jinja2)
     var isAdminUser = JSON.parse('{{ "true" if "admin" in session.get("roles", []) else "false" }}');
     
+    // The costing summary has to be in hand before rows render, or the badges
+    // that say "assigned to you" would be drawn from an empty summary.
+    loadCostingSummary(function () {
+        if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
+    });
+
     // Initialize DataTable
-    var table = $('#operations-table').DataTable({
+    var table = window.opTable = $('#operations-table').DataTable({
         "ajax": {
             "url": "/api/operations/requests",
             "type": "GET",
@@ -1449,7 +1522,10 @@ $(document).ready(function() {
                     if (row.pending_items_count > 0) {
                         html += '<span class="badge badge-warning mr-1 mb-1">' + row.pending_items_count + ' Pending</span>';
                     }
-                    
+
+                    // Where the costing workflow has got to on this request.
+                    html += costingRowBadges(row.request_id);
+
                     html += '</div>';
                     return html;
                 }

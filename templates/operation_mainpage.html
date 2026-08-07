@@ -88,6 +88,41 @@
         </div>
     </div>
 
+    {% if 'costing.view' in _p %}
+    <!-- What costing is waiting on this person. Hidden when there is nothing,
+         so it never becomes a row of zeroes people stop reading. -->
+    <div id="costingBanner" class="alert alert-info d-none align-items-center flex-wrap mb-4"
+         style="gap:.75rem;">
+        <i class="fas fa-calculator"></i>
+        <span id="costingBannerText"></span>
+        <a href="{{ url_for('costing_page') }}" class="btn btn-sm btn-outline-primary ml-auto">
+            Open the costing desk
+        </a>
+    </div>
+    <script>
+    (function () {
+        $.getJSON('/api/costing/summary').done(function (r) {
+            if (!r || !r.success) { return; }
+            var parts = [];
+            if (r.mine_total) {
+                parts.push('<strong>' + r.mine_total + '</strong> item(s) assigned to you to cost');
+            }
+            if (r.awaiting_decision_total) {
+                parts.push('<strong>' + r.awaiting_decision_total +
+                           '</strong> proposal(s) waiting for your decision');
+            }
+            if (!parts.length && r.open_total) {
+                parts.push('<strong>' + r.open_total + '</strong> item(s) out for costing');
+            }
+            if (parts.length) {
+                $('#costingBannerText').html(parts.join(' &middot; '));
+                $('#costingBanner').removeClass('d-none').addClass('d-flex');
+            }
+        });
+    }());
+    </script>
+    {% endif %}
+
     <!-- ===== NAVIGATION CARDS (top) ===== -->
     <div class="row mb-4">
         <!-- Operations Requests -->
