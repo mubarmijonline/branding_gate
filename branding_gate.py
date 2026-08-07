@@ -5573,13 +5573,17 @@ def costing_queue():
             SELECT a.id, a.item_id, a.request_id, a.assignee_id, a.assigned_by,
                    a.status, a.note, a.added_date,
                    u.name AS assignee_name, m.name AS assigned_by_name,
-                   i.name AS item_name, i.qty, i.cost_per_item,
-                   r.title AS request_title
+                   i.name AS item_name, i.qty, i.cost_per_item, i.total_cost,
+                   i.unit, i.description AS item_description,
+                   i.sell_type, i.rental_days,
+                   r.title AS request_title, r.request_type, r.start_date,
+                   c.client_name
             FROM costing_assignment a
             JOIN user u ON u.id = a.assignee_id
             JOIN user m ON m.id = a.assigned_by
             JOIN sales_request_items i ON i.id = a.item_id
             JOIN sales_request r ON r.id = a.request_id
+            LEFT JOIN client c ON c.id = r.client_id
         """ + where + " ORDER BY a.added_date DESC", params)
         assignments = list(cur.fetchall())
 
@@ -5633,7 +5637,17 @@ def costing_queue():
                 'id': row['id'], 'item_id': row['item_id'],
                 'request_id': row['request_id'], 'item_name': row['item_name'],
                 'request_title': row['request_title'],
+                'request_type': row['request_type'],
+                'client_name': row['client_name'],
+                'item_description': row['item_description'],
+                'unit': row['unit'],
+                'sell_type': row['sell_type'],
+                'rental_days': row['rental_days'],
+                'start_date': (row['start_date'].strftime('%d %b %Y')
+                               if row['start_date'] else None),
                 'qty': float(row['qty']) if row['qty'] is not None else None,
+                'total_cost': (float(row['total_cost'])
+                               if row['total_cost'] is not None else None),
                 'cost_per_item': (float(row['cost_per_item'])
                                   if row['cost_per_item'] is not None else None),
                 'assignee_id': row['assignee_id'],

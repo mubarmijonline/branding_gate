@@ -9,98 +9,167 @@
 <style>
   /* Prefixed cst-*: sb-admin-2 owns .card, .badge, .list-group and friends. */
   .costing-page { --hair:#e3e6f0; --ink:#2e3650; --muted:#8891a8; --accent:#3a4fa0;
-                 --accent-soft:#eef1fa; --good:#1b6e4d; --warn:#8a6410; --bad:#c0392b; }
-  .costing-page .page-head { margin-bottom:1.25rem; }
+                 --soft:#eef1fa; --good:#1b6e4d; --warn:#8a6410; --bad:#c0392b; }
+  .costing-page .cst-head { display:flex; flex-wrap:wrap; align-items:flex-end;
+                 justify-content:space-between; gap:1rem; margin-bottom:1.25rem; }
   .costing-page h1 { font-size:1.6rem; font-weight:700; color:var(--ink); margin:0; }
-  .costing-page .sub { color:var(--muted); margin:.2rem 0 0; font-size:.9rem; }
+  .costing-page .sub { color:var(--muted); margin:.2rem 0 0; font-size:.9rem; max-width:60ch; }
 
-  .costing-page .cst-tabs { display:flex; gap:.25rem; border-bottom:2px solid var(--hair);
-                 margin-bottom:1.25rem; flex-wrap:wrap; }
-  .costing-page .cst-tabs button { border:0; background:none; padding:.6rem 1rem;
-                 font-weight:600; color:var(--muted); border-bottom:2px solid transparent;
-                 margin-bottom:-2px; cursor:pointer; font-size:.92rem; }
-  .costing-page .cst-tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
-  .costing-page .cst-tabs .cst-count { background:var(--accent-soft); color:var(--accent);
-                 border-radius:20px; padding:0 .45rem; font-size:.72rem; margin-left:.35rem; }
+  /* Counters double as the view switch, so the number and the thing it counts
+     are never in two different places. */
+  .costing-page .cst-switch { display:grid; gap:1px; background:var(--hair);
+                 border:1px solid var(--hair); border-radius:8px; overflow:hidden;
+                 grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                 margin-bottom:1.5rem; }
+  .costing-page .cst-switch button { background:#fff; border:0; text-align:left;
+                 padding:.85rem 1.1rem; cursor:pointer; position:relative; }
+  .costing-page .cst-switch button:hover { background:#fafbff; }
+  .costing-page .cst-switch button.on { background:var(--soft); }
+  .costing-page .cst-switch button.on::after { content:""; position:absolute;
+                 inset:auto 0 0 0; height:3px; background:var(--accent); }
+  .costing-page .cst-switch .n { font-size:1.55rem; font-weight:700; color:var(--ink);
+                 line-height:1.1; }
+  .costing-page .cst-switch .t { font-size:.82rem; font-weight:700; color:var(--ink);
+                 margin-top:.15rem; }
+  .costing-page .cst-switch .d { font-size:.74rem; color:var(--muted); margin-top:.1rem; }
+  .costing-page .cst-switch button.on .n { color:var(--accent); }
 
-  .costing-page .cst-card { border:1px solid var(--hair); border-radius:7px; background:#fff;
-                 margin-bottom:.9rem; }
-  .costing-page .cst-card-head { display:flex; flex-wrap:wrap; align-items:center;
-                 gap:.6rem; padding:.75rem .95rem; border-bottom:1px solid var(--hair); }
-  .costing-page .cst-item { font-weight:700; color:var(--ink); }
-  .costing-page .cst-req { color:var(--muted); font-size:.82rem; }
-  .costing-page .cst-chip { font-size:.7rem; font-weight:700; padding:.12rem .5rem;
-                 border-radius:20px; text-transform:uppercase; letter-spacing:.04em; }
-  .costing-page .cst-chip.open { background:#e4f1ea; color:var(--good); }
-  .costing-page .cst-chip.closed { background:#f1f3f7; color:var(--muted); }
-  .costing-page .cst-chip.withdrawn { background:#fdecea; color:var(--bad); }
-  .costing-page .cst-actions { margin-left:auto; display:flex; gap:.4rem; }
-  .costing-page .cst-actions button, .costing-page .cst-link {
-                 border:1px solid var(--hair); background:#fff; border-radius:5px;
-                 padding:.3rem .6rem; font-size:.8rem; cursor:pointer; color:var(--ink); }
-  .costing-page .cst-actions button:hover { border-color:var(--accent); color:var(--accent); }
-  .costing-page .cst-actions button.primary { background:var(--accent); color:#fff;
-                 border-color:var(--accent); }
-  .costing-page .cst-body { padding:.7rem .95rem .85rem; }
-  .costing-page .cst-meta { font-size:.8rem; color:var(--muted); margin-bottom:.5rem; }
-  .costing-page .cst-assignees { display:flex; flex-wrap:wrap; gap:.5rem .9rem; }
-  .costing-page .cst-assignee { display:inline-flex; align-items:center; gap:.35rem;
-                 color:var(--ink); }
-  .costing-page .cst-assignee .cst-link { padding:.1rem .4rem; font-size:.72rem; }
+  .costing-page .cst-card { border:1px solid var(--hair); border-radius:8px;
+                 background:#fff; margin-bottom:1rem; overflow:hidden; }
+  .costing-page .cst-card.is-mine { border-left:4px solid var(--accent); }
+  .costing-page .cst-card.needs-me { border-left:4px solid var(--warn); }
+  .costing-page .cst-card.is-done { border-left:4px solid var(--good); }
+  .costing-page .cst-top { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start;
+                 padding:.9rem 1.1rem; border-bottom:1px solid var(--hair); }
+  .costing-page .cst-title { font-weight:700; color:var(--ink); font-size:1rem; }
+  .costing-page .cst-sub { color:var(--muted); font-size:.8rem; margin-top:.15rem; }
+  .costing-page .cst-desc { color:#5a6280; font-size:.84rem; margin-top:.35rem;
+                 max-width:70ch; }
+  .costing-page .cst-facts { display:flex; flex-wrap:wrap; gap:.35rem .9rem;
+                 margin-top:.45rem; }
+  .costing-page .cst-fact { font-size:.76rem; color:var(--muted); }
+  .costing-page .cst-fact b { color:var(--ink); font-weight:600; }
+  .costing-page .cst-cta { margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap;
+                 align-items:center; }
 
-  .costing-page table.cst-props { width:100%; border-collapse:collapse; font-size:.86rem; }
-  .costing-page table.cst-props th { text-align:left; font-size:.68rem; letter-spacing:.07em;
-                 text-transform:uppercase; color:var(--muted); padding:.35rem .5rem;
-                 border-bottom:1px solid var(--hair); }
-  .costing-page table.cst-props td { padding:.45rem .5rem; border-bottom:1px solid var(--hair);
-                 vertical-align:middle; }
-  .costing-page table.cst-props tr:last-child td { border-bottom:0; }
-  .costing-page .cst-amount { font-weight:700; font-variant-numeric:tabular-nums; }
-  .costing-page .cst-state { font-size:.72rem; font-weight:700; text-transform:uppercase; }
-  .costing-page .cst-state.accepted { color:var(--good); }
-  .costing-page .cst-state.rejected { color:var(--bad); }
-  .costing-page .cst-state.submitted { color:var(--warn); }
-  .costing-page .cst-empty { padding:2rem; text-align:center; color:var(--muted);
-                 border:1px dashed var(--hair); border-radius:7px; }
-  .costing-page .cst-files { font-size:.78rem; color:var(--accent); cursor:pointer; }
-  .costing-page .cst-log li { font-size:.84rem; margin-bottom:.3rem; }
-  .costing-page .cst-start { border:1px solid var(--accent); background:var(--accent);
-                 color:#fff; border-radius:5px; padding:.5rem .9rem; font-size:.88rem;
-                 font-weight:600; cursor:pointer; }
-  .costing-page .cst-start:hover { filter:brightness(1.08); }
-  .cst-pick-list { max-height:320px; overflow:auto; text-align:left;
-                 border:1px solid #e3e6f0; border-radius:6px; }
-  .cst-pick-list label { display:flex; gap:.5rem; align-items:flex-start;
-                 padding:.45rem .6rem; margin:0; border-bottom:1px solid #f1f3f7;
-                 cursor:pointer; }
-  .cst-pick-list label:hover { background:#eef1fa; }
-  .cst-pick-list .pk-name { font-weight:600; color:#2e3650; font-size:.88rem; }
-  .cst-pick-list .pk-meta { color:#8891a8; font-size:.78rem; }
+  .costing-page .cst-pill { font-size:.68rem; font-weight:700; padding:.15rem .55rem;
+                 border-radius:20px; text-transform:uppercase; letter-spacing:.04em;
+                 white-space:nowrap; }
+  .costing-page .cst-pill.open { background:#e4f1ea; color:var(--good); }
+  .costing-page .cst-pill.closed { background:#f1f3f7; color:var(--muted); }
+  .costing-page .cst-pill.withdrawn { background:#fdecea; color:var(--bad); }
+  .costing-page .cst-pill.costed { background:#e4f1ea; color:var(--good); }
+  .costing-page .cst-pill.uncosted { background:#fdf0d9; color:var(--warn); }
+
+  .costing-page .cst-body { padding:.85rem 1.1rem 1rem; }
+  .costing-page .cst-people { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.75rem; }
+  .costing-page .cst-person { display:inline-flex; align-items:center; gap:.4rem;
+                 border:1px solid var(--hair); border-radius:20px; padding:.15rem .6rem;
+                 font-size:.78rem; color:var(--ink); background:#fff; }
+  .costing-page .cst-person .who { font-weight:600; }
+  .costing-page .cst-person.me { border-color:var(--accent); background:var(--soft); }
+
+  .costing-page .cst-sechead { font-size:.7rem; letter-spacing:.08em; text-transform:uppercase;
+                 font-weight:700; color:var(--muted); margin:.9rem 0 .4rem; }
+
+  /* Proposals as cards, not table rows: a description needs room to be read. */
+  .costing-page .cst-prop { border:1px solid var(--hair); border-radius:6px;
+                 padding:.65rem .8rem; margin-bottom:.5rem; background:#fff; }
+  .costing-page .cst-prop.accepted { border-color:#bfe0ce; background:#f4fbf7; }
+  .costing-page .cst-prop.rejected { opacity:.72; }
+  .costing-page .cst-prop-top { display:flex; flex-wrap:wrap; align-items:baseline;
+                 gap:.5rem; }
+  .costing-page .cst-amount { font-size:1.15rem; font-weight:700; color:var(--ink);
+                 font-variant-numeric:tabular-nums; }
+  .costing-page .cst-by { font-size:.82rem; color:var(--ink); font-weight:600; }
+  .costing-page .cst-when { font-size:.75rem; color:var(--muted); }
+  .costing-page .cst-state { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                 letter-spacing:.04em; padding:.1rem .45rem; border-radius:4px; }
+  .costing-page .cst-state.accepted { background:#e4f1ea; color:var(--good); }
+  .costing-page .cst-state.rejected { background:#fdecea; color:var(--bad); }
+  .costing-page .cst-state.submitted { background:#fdf0d9; color:var(--warn); }
+  .costing-page .cst-state.withdrawn { background:#f1f3f7; color:var(--muted); }
+  .costing-page .cst-prop-desc { font-size:.85rem; color:#42485c; margin-top:.35rem;
+                 white-space:pre-wrap; }
+  .costing-page .cst-prop-foot { display:flex; flex-wrap:wrap; gap:.5rem;
+                 align-items:center; margin-top:.5rem; }
+  .costing-page .cst-files-link { font-size:.78rem; color:var(--accent); cursor:pointer;
+                 font-weight:600; }
+  .costing-page .cst-prop-actions { margin-left:auto; display:flex; gap:.35rem; }
+
+  .costing-page .cst-empty { padding:3rem 1rem; text-align:center; color:var(--muted);
+                 border:1px dashed var(--hair); border-radius:8px; background:#fff; }
+  .costing-page .cst-empty i { font-size:2rem; opacity:.45; display:block;
+                 margin-bottom:.6rem; }
+  .costing-page .cst-note { background:#fffbf0; border:1px solid #f2e2bf; color:#7a5c12;
+                 border-radius:6px; padding:.4rem .7rem; font-size:.8rem;
+                 margin-bottom:.75rem; }
+  .cst-pick-row { display:flex; gap:.55rem; align-items:flex-start; padding:.45rem .6rem;
+                 border-bottom:1px solid #f1f3f7; cursor:pointer; margin:0; }
+  .cst-pick-row:hover { background:#eef1fa; }
 </style>
 
 <div class="container-fluid costing-page">
-  <div class="page-head" style="display:flex;flex-wrap:wrap;align-items:flex-end;
-       justify-content:space-between;gap:1rem;">
+  <div class="cst-head">
     <div>
       <h1>Costing</h1>
-      <p class="sub">Items are assigned down the line for costing. Everyone asked may put up
-        as many proposals as they like, with documents; the person who asked accepts one,
-        and that becomes the item's cost.</p>
+      <p class="sub">An item is assigned down the line to be costed. Everyone asked may
+        put up as many proposals as they like, each with a description and its
+        documents. The person who asked accepts one, and that becomes the cost.</p>
     </div>
     {% if can_assign_costing %}
-    <button type="button" id="cstPickItem" class="cst-start">
+    <button type="button" id="cstPickItem" class="btn btn-primary">
       <i class="fas fa-plus mr-1"></i>Send an item for costing
     </button>
     {% endif %}
   </div>
 
-  <div class="cst-tabs">
-    <button type="button" data-pane="mine" class="on">On my desk <span class="cst-count" id="cntMine">0</span></button>
-    <button type="button" data-pane="given">I assigned <span class="cst-count" id="cntGiven">0</span></button>
-    <button type="button" data-pane="others">Everything else <span class="cst-count" id="cntOthers">0</span></button>
+  <div class="cst-switch" id="cstSwitch">
+    <button type="button" data-pane="mine" class="on">
+      <div class="n" id="nMine">0</div>
+      <div class="t"><i class="fas fa-user-check mr-1"></i>To cost — mine</div>
+      <div class="d">Assigned to me. I owe a proposal.</div>
+    </button>
+    <button type="button" data-pane="given">
+      <div class="n" id="nGiven">0</div>
+      <div class="t"><i class="fas fa-paper-plane mr-1"></i>I assigned out</div>
+      <div class="d">I sent these out. I decide the winner.</div>
+    </button>
+    <button type="button" data-pane="decide">
+      <div class="n" id="nDecide">0</div>
+      <div class="t"><i class="fas fa-gavel mr-1"></i>Waiting on my decision</div>
+      <div class="d">Proposals in, nobody has accepted one.</div>
+    </button>
+    <button type="button" data-pane="others">
+      <div class="n" id="nOthers">0</div>
+      <div class="t"><i class="fas fa-eye mr-1"></i>Everything else</div>
+      <div class="d">Visible to me, not mine to action.</div>
+    </button>
   </div>
 
   <div id="cstPanes"></div>
+</div>
+
+<!-- One Bootstrap modal for every action on this page. -->
+<div class="modal fade" id="cstModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cstModalTitle">Costing</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="cstModalError" class="alert alert-danger py-2 px-3 small d-none"></div>
+        <div id="cstModalBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="cstModalConfirm">Save</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -117,7 +186,7 @@
       .replace(/"/g, '&quot;');
   }
   function money(v) {
-    if (v === null || v === undefined) { return '-'; }
+    if (v === null || v === undefined) { return '—'; }
     return Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
   function groupDigits(text) {
@@ -129,163 +198,259 @@
     return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + rest;
   }
 
+  // ---- the modal ----------------------------------------------------------
+  function openModal(options) {
+    $('#cstModalTitle').text(options.title);
+    $('#cstModalBody').html(options.body);
+    $('#cstModalError').addClass('d-none').text('');
+    var $confirm = $('#cstModalConfirm');
+    $confirm.text(options.confirmText || 'Save')
+      .removeClass('btn-primary btn-success btn-danger')
+      .addClass(options.confirmClass || 'btn-primary')
+      .prop('disabled', false)
+      .off('click').on('click', function () {
+        var value = options.collect ? options.collect() : {};
+        if (value === false) { return; }
+        $confirm.prop('disabled', true).text('Working…');
+        options.confirm(value);
+      });
+    if (options.opened) { setTimeout(options.opened, 120); }
+    $('#cstModal').modal('show');
+  }
+  function modalError(message) {
+    $('#cstModalError').removeClass('d-none').text(message);
+    $('#cstModalConfirm').prop('disabled', false).text('Save');
+  }
+  function closeModal() { $('#cstModal').modal('hide'); }
+  function toast(message, kind) {
+    var $bar = $('#cstToast');
+    if (!$bar.length) {
+      $bar = $('<div id="cstToast" class="alert py-2 px-3 small" style="position:fixed;' +
+               'right:1rem;bottom:1rem;z-index:2000;box-shadow:0 2px 10px rgba(0,0,0,.15);">' +
+               '</div>').appendTo('body');
+    }
+    $bar.attr('class', 'alert py-2 px-3 small alert-' + (kind || 'success'))
+        .text(message).stop(true, true).fadeIn(120).delay(2800).fadeOut(300);
+  }
+
+  // ---- loading ------------------------------------------------------------
   function load() {
     $.getJSON('/api/costing/queue').done(function (r) {
       if (!r || !r.success) { return; }
       ME = r.me;
       DATA = { mine: r.mine || [], given: r.given || [], others: r.others || [] };
-      $('#cntMine').text(DATA.mine.length);
-      $('#cntGiven').text(DATA.given.length);
-      $('#cntOthers').text(DATA.others.length);
+      $('#nMine').text(DATA.mine.filter(function (c) { return c.status === 'open'; }).length);
+      $('#nGiven').text(DATA.given.length);
+      $('#nDecide').text(decideCards().length);
+      $('#nOthers').text(DATA.others.length);
       render();
     });
   }
 
-  function proposalsTable(card) {
-    if (!card.proposals.length) {
-      return '<div class="cst-meta">No proposals yet.</div>';
-    }
-    var rows = card.proposals.map(function (p) {
-      var decide = '';
-      if (p.can_decide) {
-        decide =
-          '<button class="cst-link cst-accept" data-id="' + p.id + '">Accept</button> ' +
-          '<button class="cst-link cst-reject" data-id="' + p.id + '">Reject</button>';
-      }
-      return '<tr>' +
-        '<td>' + esc(p.author_name) + (p.is_mine ? ' <span class="cst-req">(you)</span>' : '') + '</td>' +
-        '<td class="cst-amount">' + money(p.amount) + '</td>' +
-        '<td>' + (p.notes ? esc(p.notes) : '<span class="cst-req">—</span>') + '</td>' +
-        '<td>' + (p.file_count
-          ? '<span class="cst-files" data-id="' + p.id + '">' + p.file_count + ' file(s)</span>'
-          : '<span class="cst-req">none</span>') + '</td>' +
-        '<td><span class="cst-state ' + p.status + '">' + p.status + '</span>' +
-          (p.decided_by_name ? '<div class="cst-req">by ' + esc(p.decided_by_name) + '</div>' : '') +
-        '</td>' +
-        '<td class="cst-req">' + esc(p.added_date || '') + '</td>' +
-        '<td style="text-align:right;">' + decide + '</td>' +
-      '</tr>';
-    }).join('');
-    return '<table class="cst-props"><thead><tr>' +
-      '<th>Who</th><th>Amount</th><th>Notes</th><th>Files</th><th>State</th>' +
-      '<th>Submitted</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+  // Cards where a proposal is sitting waiting for this person to decide.
+  function decideCards() {
+    return groupByItem(DATA.given).filter(function (g) {
+      return g.proposals.some(function (p) { return p.can_decide; });
+    });
   }
 
-  // An item can be with several people at once, which is a row each. The page
-  // shows one card per item with everyone it is out to, rather than repeating
-  // the same item and the same proposals once per assignee.
   function groupByItem(cards) {
     var order = [], byItem = {};
     cards.forEach(function (c) {
-      var group = byItem[c.item_id];
-      if (!group) {
-        group = byItem[c.item_id] = {
-          item_id: c.item_id, item_name: c.item_name, request_id: c.request_id,
-          request_title: c.request_title, qty: c.qty,
-          cost_per_item: c.cost_per_item, proposals: c.proposals,
-          assignments: []
-        };
+      var g = byItem[c.item_id];
+      if (!g) {
+        g = byItem[c.item_id] = $.extend({}, c, { assignments: [] });
         order.push(c.item_id);
       }
-      group.assignments.push(c);
+      g.assignments.push(c);
     });
     return order.map(function (id) { return byItem[id]; });
   }
 
-  function assigneeLine(a, pane) {
-    var withdraw = (pane !== 'mine' && a.status === 'open' && a.assigned_by === ME)
-      ? ' <button class="cst-link cst-withdraw" data-id="' + a.id + '">withdraw</button>'
-      : '';
-    return '<span class="cst-assignee">' +
-      '<span class="cst-chip ' + a.status + '">' + a.status + '</span> ' +
-      esc(a.assignee_id === ME ? 'you' : a.assignee_name) +
-      ' <span class="cst-req">from ' + esc(a.assigned_by_name) +
-      (a.assigned_on ? ' · ' + esc(a.assigned_on) : '') +
-      (a.note ? ' · ' + esc(a.note) : '') + '</span>' + withdraw +
-    '</span>';
+  // ---- rendering ----------------------------------------------------------
+  function factsHtml(g) {
+    var facts = [];
+    facts.push('<span class="cst-fact">Qty <b>' + money(g.qty) +
+               (g.unit ? ' ' + esc(g.unit) : '') + '</b></span>');
+    if (g.sell_type === 'rent' && g.rental_days) {
+      facts.push('<span class="cst-fact">Rental <b>' + g.rental_days + ' day(s)</b></span>');
+    }
+    facts.push('<span class="cst-fact">Cost now <b>' +
+               (g.cost_per_item === null ? 'not set' : money(g.cost_per_item)) + '</b></span>');
+    if (g.total_cost) {
+      facts.push('<span class="cst-fact">Total <b>' + money(g.total_cost) + '</b></span>');
+    }
+    if (g.start_date) {
+      facts.push('<span class="cst-fact">Starts <b>' + esc(g.start_date) + '</b></span>');
+    }
+    return '<div class="cst-facts">' + facts.join('') + '</div>';
   }
 
-  function cardHtml(group, pane) {
-    var mine = group.assignments.filter(function (a) {
-      return a.assignee_id === ME && a.status === 'open';
-    })[0];
-    var actions = [];
-    if (CAN_PROPOSE && mine) {
-      actions.push('<button class="primary cst-propose" data-id="' + mine.id + '">Add proposal</button>');
-    }
-    if (CAN_ASSIGN) {
-      actions.push('<button class="cst-assign" data-item="' + group.item_id + '">Assign on</button>');
-    }
-    actions.push('<button class="cst-log-btn" data-item="' + group.item_id + '">Log</button>');
+  function peopleHtml(g) {
+    return '<div class="cst-people">' + g.assignments.map(function (a) {
+      var isMe = a.assignee_id === ME;
+      return '<span class="cst-person' + (isMe ? ' me' : '') + '">' +
+        '<span class="cst-pill ' + a.status + '">' + a.status + '</span>' +
+        '<span class="who">' + esc(isMe ? 'You' : a.assignee_name) + '</span>' +
+        '<span class="cst-when">from ' + esc(a.assigned_by_name) +
+          (a.assigned_on ? ' · ' + esc(a.assigned_on) : '') + '</span>' +
+        (a.status === 'open' && a.assigned_by === ME
+          ? ' <button type="button" class="btn btn-link btn-sm p-0 cst-withdraw" ' +
+            'data-id="' + a.id + '" style="font-size:.74rem;">withdraw</button>'
+          : '') +
+      '</span>';
+    }).join('') + '</div>';
+  }
 
-    return '<div class="cst-card" data-item="' + group.item_id + '">' +
-      '<div class="cst-card-head">' +
-        '<div>' +
-          '<div class="cst-item">' + esc(group.item_name || ('Item ' + group.item_id)) + '</div>' +
-          '<div class="cst-req">' + esc(group.request_title || '') +
-            ' · request #' + group.request_id +
-            (group.qty ? ' · qty ' + money(group.qty) : '') +
-            (group.cost_per_item !== null
-              ? ' · <strong>cost now ' + money(group.cost_per_item) + '</strong>' : '') +
-          '</div>' +
-        '</div>' +
-        '<div class="cst-actions">' + actions.join('') + '</div>' +
+  function proposalHtml(p) {
+    var actions = p.can_decide
+      ? '<div class="cst-prop-actions">' +
+          '<button type="button" class="btn btn-sm btn-success cst-accept" data-id="' + p.id + '">' +
+            '<i class="fas fa-check mr-1"></i>Accept</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-danger cst-reject" data-id="' + p.id + '">' +
+            'Reject</button>' +
+        '</div>'
+      : '';
+    return '<div class="cst-prop ' + p.status + '">' +
+      '<div class="cst-prop-top">' +
+        '<span class="cst-amount">' + money(p.amount) + '</span>' +
+        '<span class="cst-by">' + esc(p.author_name) +
+          (p.is_mine ? ' <span class="cst-when">(you)</span>' : '') + '</span>' +
+        '<span class="cst-state ' + p.status + '">' + p.status + '</span>' +
+        '<span class="cst-when ml-auto">' + esc(p.added_date || '') + '</span>' +
       '</div>' +
-      '<div class="cst-body">' +
-        '<div class="cst-meta cst-assignees">' +
-          group.assignments.map(function (a) { return assigneeLine(a, pane); }).join('') +
-        '</div>' +
-        proposalsTable(group) +
+      '<div class="cst-prop-desc">' +
+        (p.notes ? esc(p.notes) : '<em class="text-muted">No description given.</em>') +
+      '</div>' +
+      (p.decision_note
+        ? '<div class="cst-when mt-1">Decision note: ' + esc(p.decision_note) +
+          (p.decided_by_name ? ' — ' + esc(p.decided_by_name) : '') + '</div>'
+        : '') +
+      '<div class="cst-prop-foot">' +
+        (p.file_count
+          ? '<span class="cst-files-link" data-id="' + p.id + '">' +
+            '<i class="fas fa-paperclip mr-1"></i>' + p.file_count + ' attachment(s)</span>'
+          : '<span class="cst-when"><i class="fas fa-paperclip mr-1"></i>no attachments</span>') +
+        actions +
       '</div>' +
     '</div>';
   }
 
+  function cardHtml(g, pane) {
+    var mine = g.assignments.filter(function (a) {
+      return a.assignee_id === ME && a.status === 'open';
+    })[0];
+    var needsMe = g.proposals.some(function (p) { return p.can_decide; });
+    var accepted = g.proposals.filter(function (p) { return p.status === 'accepted'; })[0];
+
+    var cls = accepted ? 'is-done' : (needsMe ? 'needs-me' : (mine ? 'is-mine' : ''));
+    var cta = '';
+    if (CAN_PROPOSE && mine) {
+      cta += '<button type="button" class="btn btn-primary btn-sm cst-propose" data-id="' +
+             mine.id + '"><i class="fas fa-plus mr-1"></i>Add proposal</button> ';
+    }
+    if (CAN_ASSIGN) {
+      cta += '<button type="button" class="btn btn-outline-secondary btn-sm cst-assign" ' +
+             'data-item="' + g.item_id + '"><i class="fas fa-user-plus mr-1"></i>Assign on</button> ';
+    }
+    cta += '<button type="button" class="btn btn-outline-secondary btn-sm cst-log-btn" ' +
+           'data-item="' + g.item_id + '"><i class="fas fa-history"></i></button>';
+
+    var banner = '';
+    if (pane === 'mine' && mine && !g.proposals.some(function (p) { return p.is_mine; })) {
+      banner = '<div class="cst-note"><i class="fas fa-exclamation-circle mr-1"></i>' +
+               'You have not put up a proposal for this yet' +
+               (mine.note ? ' — <em>' + esc(mine.note) + '</em>' : '') + '.</div>';
+    } else if (needsMe) {
+      banner = '<div class="cst-note"><i class="fas fa-gavel mr-1"></i>' +
+               g.proposals.filter(function (p) { return p.can_decide; }).length +
+               ' proposal(s) waiting for you to accept one.</div>';
+    }
+
+    var visible = g.proposals.length
+      ? g.proposals.map(proposalHtml).join('')
+      : '<div class="cst-when">No proposals yet.</div>';
+
+    return '<div class="cst-card ' + cls + '" data-item="' + g.item_id + '">' +
+      '<div class="cst-top">' +
+        '<div>' +
+          '<div class="cst-title">' + esc(g.item_name || ('Item ' + g.item_id)) +
+            (accepted ? ' <span class="cst-pill costed">costed</span>'
+                      : ' <span class="cst-pill uncosted">not costed</span>') + '</div>' +
+          '<div class="cst-sub">' + esc(g.request_title || '') +
+            ' · request #' + g.request_id +
+            (g.client_name ? ' · ' + esc(g.client_name) : '') +
+            (g.request_type ? ' · ' + esc(g.request_type) : '') + '</div>' +
+          (g.item_description
+            ? '<div class="cst-desc">' + esc(g.item_description) + '</div>' : '') +
+          factsHtml(g) +
+        '</div>' +
+        '<div class="cst-cta">' + cta + '</div>' +
+      '</div>' +
+      '<div class="cst-body">' +
+        banner +
+        '<div class="cst-sechead">Assigned to</div>' + peopleHtml(g) +
+        '<div class="cst-sechead">Proposals (' + g.proposals.length + ')</div>' + visible +
+      '</div>' +
+    '</div>';
+  }
+
+  var EMPTY = {
+    mine: ['inbox', 'Nothing is on your desk', 'When somebody assigns you an item to cost, it appears here.'],
+    given: ['paper-plane', 'You have not sent anything out', 'Use “Send an item for costing” to put an item on your team’s desk.'],
+    decide: ['gavel', 'Nothing is waiting on you', 'When somebody you asked puts up a proposal, it appears here.'],
+    others: ['eye', 'Nothing else to show', 'Items you can see but are not part of will appear here.']
+  };
+
   function render() {
-    var groups = groupByItem(DATA[PANE] || []);
+    var groups = PANE === 'decide' ? decideCards() : groupByItem(DATA[PANE] || []);
     if (!groups.length) {
-      $('#cstPanes').html('<div class="cst-empty">Nothing here.</div>');
+      var e = EMPTY[PANE];
+      $('#cstPanes').html('<div class="cst-empty"><i class="fas fa-' + e[0] + '"></i>' +
+        '<div style="font-weight:600;color:#2e3650;">' + e[1] + '</div>' +
+        '<div class="small mt-1">' + e[2] + '</div></div>');
       return;
     }
     $('#cstPanes').html(groups.map(function (g) { return cardHtml(g, PANE); }).join(''));
   }
 
-  $(document).on('click', '.cst-tabs button', function () {
-    $('.cst-tabs button').removeClass('on');
+  $(document).on('click', '.cst-switch button', function () {
+    $('.cst-switch button').removeClass('on');
     $(this).addClass('on');
     PANE = $(this).data('pane');
     render();
   });
 
-  // ---- picking an item to start a chain -----------------------------------
+  // ---- send an item out ---------------------------------------------------
   function itemRows(items) {
-    if (!items.length) { return '<p style="padding:.8rem;color:#8891a8;">Nothing found.</p>'; }
+    if (!items.length) { return '<p class="p-3 text-muted mb-0">Nothing found.</p>'; }
     return items.map(function (it) {
-      return '<label><input type="radio" name="cstItem" value="' + it.id + '" ' +
-        'style="margin-top:.25rem;">' +
-        '<span><span class="pk-name">' + esc(it.name || ('Item ' + it.id)) + '</span>' +
-        '<span class="pk-meta"><br>' + esc(it.request_title || '') +
-        ' · request #' + it.request_id +
-        (it.qty ? ' · qty ' + money(it.qty) : '') +
-        (it.cost_per_item ? ' · costed ' + money(it.cost_per_item) : ' · not costed') +
-        (it.open_assignments ? ' · ' + it.open_assignments + ' open assignment(s)' : '') +
+      return '<label class="cst-pick-row"><input type="radio" name="cstItem" value="' +
+        it.id + '" class="mt-1">' +
+        '<span><span style="font-weight:600;color:#2e3650;">' +
+          esc(it.name || ('Item ' + it.id)) + '</span><br>' +
+        '<span class="text-muted" style="font-size:.78rem;">' +
+          esc(it.request_title || '') + ' · request #' + it.request_id +
+          (it.qty ? ' · qty ' + money(it.qty) : '') +
+          (it.cost_per_item ? ' · costed ' + money(it.cost_per_item) : ' · not costed') +
+          (it.open_assignments ? ' · ' + it.open_assignments + ' already out' : '') +
         '</span></span></label>';
     }).join('');
   }
 
   $(document).on('click', '#cstPickItem', function () {
     $.getJSON('/api/costing/items').done(function (r) {
-      if (!r || !r.success) { Swal.fire('Could not load items', (r || {}).error || '', 'error'); return; }
-      Swal.fire({
+      if (!r || !r.success) { toast('Could not load items', 'danger'); return; }
+      openModal({
         title: 'Send an item for costing',
-        width: 640,
-        html: '<input id="cstSearch" class="swal2-input" placeholder="Search items or requests" ' +
-              'style="margin-left:0;width:100%;">' +
-              '<div class="cst-pick-list" id="cstItems">' + itemRows(r.items) + '</div>',
-        showCancelButton: true,
-        confirmButtonText: 'Choose people',
-        didOpen: function () {
+        confirmText: 'Choose people',
+        body: '<input id="cstSearch" class="form-control mb-2" ' +
+              'placeholder="Search items or requests">' +
+              '<div id="cstItems" style="max-height:340px;overflow:auto;border:1px solid #e3e6f0;' +
+              'border-radius:6px;">' + itemRows(r.items) + '</div>',
+        opened: function () {
           var timer = null;
-          document.getElementById('cstSearch').addEventListener('input', function () {
+          $('#cstSearch').on('input', function () {
             var q = this.value;
             clearTimeout(timer);
             timer = setTimeout(function () {
@@ -295,223 +460,221 @@
             }, 250);
           });
         },
-        preConfirm: function () {
-          var picked = document.querySelector('input[name=cstItem]:checked');
-          if (!picked) { Swal.showValidationMessage('Pick an item'); return false; }
-          return Number(picked.value);
-        }
-      }).then(function (res) {
-        if (!res.value) { return; }
-        openAssignDialog(res.value);
+        collect: function () {
+          var picked = $('input[name=cstItem]:checked').val();
+          if (!picked) { modalError('Pick an item.'); return false; }
+          return Number(picked);
+        },
+        confirm: function (itemId) { closeModal(); setTimeout(function () { assignDialog(itemId); }, 350); }
       });
     });
   });
 
-  // ---- assigning ----------------------------------------------------------
-  function openAssignDialog(itemId) {
+  function assignDialog(itemId) {
     $.getJSON('/api/costing/team').done(function (r) {
       if (!r || !r.success || !r.people.length) {
-        Swal.fire('Nobody to assign to', 'You have no team members to assign costing to.', 'info');
+        toast('You have no team members to assign costing to.', 'warning');
         return;
       }
-      var boxes = r.people.map(function (p) {
-        return '<label style="display:flex;gap:.5rem;align-items:center;padding:.25rem 0;">' +
-          '<input type="checkbox" class="cst-who" value="' + p.id + '">' +
-          '<span>' + esc(p.name) + ' <span style="color:#8891a8;font-size:.8rem;">' +
-          esc(p.role_name || '') + '</span></span></label>';
-      }).join('');
-      Swal.fire({
+      openModal({
         title: 'Assign for costing',
-        html: '<div style="text-align:left;">' + boxes +
-              '<input id="cstNote" class="swal2-input" placeholder="Note (optional)" ' +
-              'style="margin-left:0;width:100%;">' +
-              '<p style="font-size:.8rem;color:#8891a8;margin:.4rem 0 0;">' +
-              'Pick more than one to have several people cost it.</p></div>',
-        showCancelButton: true,
-        confirmButtonText: 'Assign',
-        preConfirm: function () {
-          var ids = Array.prototype.slice
-            .call(document.querySelectorAll('.cst-who:checked'))
-            .map(function (b) { return Number(b.value); });
-          if (!ids.length) { Swal.showValidationMessage('Pick at least one person'); return false; }
-          return { ids: ids, note: (document.getElementById('cstNote') || {}).value || '' };
+        confirmText: 'Assign',
+        body: r.people.map(function (p) {
+            return '<label class="cst-pick-row"><input type="checkbox" class="cst-who" value="' +
+              p.id + '" class="mt-1"><span><span style="font-weight:600;">' + esc(p.name) +
+              '</span> <span class="text-muted small">' + esc(p.role_name || '') +
+              '</span></span></label>';
+          }).join('') +
+          '<div class="form-group mt-3 mb-0">' +
+            '<label class="small text-muted mb-1" for="cstNote">Note for them (optional)</label>' +
+            '<input id="cstNote" class="form-control" placeholder="e.g. needed by Thursday">' +
+          '</div>' +
+          '<p class="text-muted small mt-2 mb-0">Pick more than one to have several ' +
+          'people cost the same item; you accept one of their proposals later.</p>',
+        collect: function () {
+          var ids = $('.cst-who:checked').map(function () { return Number(this.value); }).get();
+          if (!ids.length) { modalError('Pick at least one person.'); return false; }
+          return { ids: ids, note: $('#cstNote').val() || '' };
+        },
+        confirm: function (value) {
+          $.ajax({
+            url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ item_id: itemId, assignee_ids: value.ids, note: value.note })
+          }).done(function (r2) {
+            if (!r2.success) { modalError(r2.error || 'Could not assign'); return; }
+            closeModal(); load();
+            toast('Assigned to ' + value.ids.length + ' person(s).');
+          }).fail(function (xhr) {
+            modalError((xhr.responseJSON || {}).error || 'Request failed');
+          });
         }
-      }).then(function (res) {
-        if (!res.value) { return; }
-        $.ajax({
-          url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
-          data: JSON.stringify({ item_id: itemId, assignee_ids: res.value.ids,
-                                 note: res.value.note })
-        }).done(function (r2) {
-          if (!r2.success) { Swal.fire('Could not assign', r2.error || '', 'error'); return; }
-          load();
-          Swal.fire({ icon: 'success', title: 'Assigned', timer: 1200, showConfirmButton: false });
-        }).fail(function (xhr) {
-          Swal.fire('Could not assign', (xhr.responseJSON || {}).error || 'Request failed', 'error');
-        });
       });
     });
   }
-
   $(document).on('click', '.cst-assign', function () {
-    openAssignDialog(Number($(this).data('item')));
+    assignDialog(Number($(this).data('item')));
   });
 
   $(document).on('click', '.cst-withdraw', function () {
     var id = Number($(this).data('id'));
-    Swal.fire({
+    openModal({
       title: 'Withdraw this assignment?',
-      text: 'They will no longer be able to propose. The trail is kept.',
-      icon: 'warning', showCancelButton: true, confirmButtonText: 'Withdraw'
-    }).then(function (res) {
-      if (!res.isConfirmed) { return; }
-      $.ajax({ url: '/api/costing/assignments/' + id + '/withdraw', method: 'POST' })
-        .done(function (r) {
-          if (!r.success) { Swal.fire('Could not withdraw', r.error || '', 'error'); return; }
-          load();
-        });
+      confirmText: 'Withdraw', confirmClass: 'btn-danger',
+      body: '<p class="mb-0">They will no longer be able to put up a proposal. ' +
+            'The history is kept.</p>',
+      confirm: function () {
+        $.ajax({ url: '/api/costing/assignments/' + id + '/withdraw', method: 'POST' })
+          .done(function (r) {
+            if (!r.success) { modalError(r.error || 'Could not withdraw'); return; }
+            closeModal(); load(); toast('Withdrawn.');
+          }).fail(function (xhr) {
+            modalError((xhr.responseJSON || {}).error || 'Request failed');
+          });
+      }
     });
   });
 
   // ---- proposing ----------------------------------------------------------
   $(document).on('click', '.cst-propose', function () {
     var assignmentId = Number($(this).data('id'));
-    Swal.fire({
+    openModal({
       title: 'Costing proposal',
-      html:
-        '<div style="text-align:left;font-size:.9rem;">' +
-          '<label for="cstAmount" style="font-weight:600;font-size:.75rem;' +
-            'text-transform:uppercase;color:#8891a8;">Cost per item</label>' +
-          '<input id="cstAmount" type="text" inputmode="decimal" style="display:block;' +
-            'width:100%;margin:.2rem 0 .7rem;padding:.5rem;border:1px solid #e3e6f0;' +
-            'border-radius:5px;">' +
-          '<label for="cstNotes" style="font-weight:600;font-size:.75rem;' +
-            'text-transform:uppercase;color:#8891a8;">Notes</label>' +
-          '<textarea id="cstNotes" rows="3" style="display:block;width:100%;' +
-            'margin:.2rem 0 .7rem;padding:.5rem;border:1px solid #e3e6f0;' +
-            'border-radius:5px;"></textarea>' +
-          '<label for="cstFiles" style="font-weight:600;font-size:.75rem;' +
-            'text-transform:uppercase;color:#8891a8;">Documents and images</label>' +
-          '<input id="cstFiles" type="file" multiple style="display:block;margin-top:.2rem;">' +
-          '<p style="font-size:.78rem;color:#8891a8;margin:.4rem 0 0;">' +
-            'PDF, images, spreadsheets or Word, up to 10MB each.</p>' +
+      confirmText: 'Submit proposal',
+      body:
+        '<div class="form-group">' +
+          '<label for="cstAmount">Cost per item <span class="text-danger">*</span></label>' +
+          '<input id="cstAmount" class="form-control form-control-lg" inputmode="decimal" ' +
+          'placeholder="0.00">' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="cstDesc">Description <span class="text-danger">*</span></label>' +
+          '<textarea id="cstDesc" rows="4" class="form-control" ' +
+          'placeholder="What this covers, which supplier, what is included or excluded…"></textarea>' +
+          '<small class="text-muted">Whoever decides sees this next to your number. ' +
+          'Say what it buys.</small>' +
+        '</div>' +
+        '<div class="form-group mb-0">' +
+          '<label for="cstFiles">Documents and images</label>' +
+          '<input id="cstFiles" type="file" multiple class="form-control-file">' +
+          '<small class="text-muted">Quotations, photographs. PDF, images, ' +
+          'spreadsheets or Word, up to 10MB each.</small>' +
         '</div>',
-      showCancelButton: true,
-      confirmButtonText: 'Submit',
-      didOpen: function () {
+      opened: function () {
         var input = document.getElementById('cstAmount');
-        input.addEventListener('input', function () { this.value = groupDigits(this.value); });
+        if (input) {
+          input.addEventListener('input', function () { this.value = groupDigits(this.value); });
+          input.focus();
+        }
       },
-      preConfirm: function () {
-        var amount = document.getElementById('cstAmount').value.trim();
-        if (!amount) { Swal.showValidationMessage('Enter an amount'); return false; }
-        return {
-          amount: amount,
-          notes: document.getElementById('cstNotes').value,
-          files: document.getElementById('cstFiles').files
-        };
-      }
-    }).then(function (res) {
-      if (!res.value) { return; }
-      $.ajax({
-        url: '/api/costing/proposals', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ assignment_id: assignmentId, amount: res.value.amount,
-                               notes: res.value.notes })
-      }).done(function (r) {
-        if (!r.success) { Swal.fire('Could not submit', r.error || '', 'error'); return; }
-        if (!res.value.files || !res.value.files.length) {
-          load();
-          Swal.fire({ icon: 'success', title: 'Proposal submitted', timer: 1200,
-                      showConfirmButton: false });
-          return;
-        }
-        var form = new FormData();
-        for (var i = 0; i < res.value.files.length; i++) {
-          form.append('files[]', res.value.files[i]);
-        }
+      collect: function () {
+        var amount = ($('#cstAmount').val() || '').trim();
+        var desc = ($('#cstDesc').val() || '').trim();
+        if (!amount) { modalError('Enter a cost per item.'); return false; }
+        if (!desc) { modalError('Add a description — the person deciding needs to know what the number buys.'); return false; }
+        return { amount: amount, notes: desc,
+                 files: document.getElementById('cstFiles').files };
+      },
+      confirm: function (value) {
         $.ajax({
-          url: '/api/costing/proposals/' + r.proposal_id + '/files',
-          method: 'POST', data: form, processData: false, contentType: false
-        }).always(function (up) {
-          load();
-          if (up && up.success === false) {
-            Swal.fire('Proposal saved, files were not', up.error || '', 'warning');
-          } else {
-            Swal.fire({ icon: 'success', title: 'Proposal submitted', timer: 1200,
-                        showConfirmButton: false });
-          }
+          url: '/api/costing/proposals', method: 'POST', contentType: 'application/json',
+          data: JSON.stringify({ assignment_id: assignmentId, amount: value.amount,
+                                 notes: value.notes })
+        }).done(function (r) {
+          if (!r.success) { modalError(r.error || 'Could not submit'); return; }
+          var finish = function (warn) {
+            closeModal(); load();
+            toast(warn || 'Proposal submitted.', warn ? 'warning' : 'success');
+          };
+          if (!value.files || !value.files.length) { finish(); return; }
+          var form = new FormData();
+          for (var i = 0; i < value.files.length; i++) { form.append('files[]', value.files[i]); }
+          $.ajax({
+            url: '/api/costing/proposals/' + r.proposal_id + '/files',
+            method: 'POST', data: form, processData: false, contentType: false
+          }).done(function () { finish(); })
+            .fail(function (xhr) {
+              finish('Proposal saved, but the files were not: ' +
+                     ((xhr.responseJSON || {}).error || 'upload failed'));
+            });
+        }).fail(function (xhr) {
+          modalError((xhr.responseJSON || {}).error || 'Request failed');
         });
-      }).fail(function (xhr) {
-        Swal.fire('Could not submit', (xhr.responseJSON || {}).error || 'Request failed', 'error');
-      });
+      }
     });
   });
 
   // ---- deciding -----------------------------------------------------------
   function decide(id, decision) {
-    Swal.fire({
-      title: decision === 'accept' ? 'Accept this proposal?' : 'Reject this proposal?',
-      text: decision === 'accept'
-        ? 'The amount becomes the item cost and the other proposals are rejected.'
-        : 'The author can still submit another one while the assignment is open.',
-      input: 'text', inputPlaceholder: 'Note (optional)',
-      icon: decision === 'accept' ? 'question' : 'warning',
-      showCancelButton: true,
-      confirmButtonText: decision === 'accept' ? 'Accept' : 'Reject'
-    }).then(function (res) {
-      if (!res.isConfirmed) { return; }
-      $.ajax({
-        url: '/api/costing/proposals/' + id + '/decide',
-        method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ decision: decision, note: res.value || '' })
-      }).done(function (r) {
-        if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
-        load();
-        Swal.fire({
-          icon: 'success',
-          title: decision === 'accept' ? 'Accepted — cost updated' : 'Rejected',
-          timer: 1400, showConfirmButton: false
+    var accepting = decision === 'accept';
+    openModal({
+      title: accepting ? 'Accept this proposal?' : 'Reject this proposal?',
+      confirmText: accepting ? 'Accept and set the cost' : 'Reject',
+      confirmClass: accepting ? 'btn-success' : 'btn-danger',
+      body: '<p>' + (accepting
+          ? 'This amount becomes the item cost, and every other live proposal on the ' +
+            'item is rejected. It is all written to the history.'
+          : 'The author can submit another one while their assignment is open.') + '</p>' +
+        '<div class="form-group mb-0">' +
+          '<label class="small text-muted mb-1" for="cstDecideNote">Note (optional)</label>' +
+          '<input id="cstDecideNote" class="form-control" ' +
+          'placeholder="Why this one">' +
+        '</div>',
+      collect: function () { return { note: $('#cstDecideNote').val() || '' }; },
+      confirm: function (value) {
+        $.ajax({
+          url: '/api/costing/proposals/' + id + '/decide',
+          method: 'POST', contentType: 'application/json',
+          data: JSON.stringify({ decision: decision, note: value.note })
+        }).done(function (r) {
+          if (!r.success) { modalError(r.error || 'Could not save'); return; }
+          closeModal(); load();
+          toast(accepting ? 'Accepted — the item cost is now ' + money(r.amount)
+                          : 'Proposal rejected.');
+        }).fail(function (xhr) {
+          modalError((xhr.responseJSON || {}).error || 'Request failed');
         });
-      }).fail(function (xhr) {
-        Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
-      });
+      }
     });
   }
   $(document).on('click', '.cst-accept', function () { decide(Number($(this).data('id')), 'accept'); });
   $(document).on('click', '.cst-reject', function () { decide(Number($(this).data('id')), 'reject'); });
 
-  // ---- files and the trail ------------------------------------------------
-  $(document).on('click', '.cst-files', function () {
+  // ---- files and history --------------------------------------------------
+  $(document).on('click', '.cst-files-link', function () {
     var id = Number($(this).data('id'));
     $.getJSON('/api/costing/proposals/' + id + '/files').done(function (r) {
-      if (!r || !r.success) { return; }
-      var list = r.files.map(function (f) {
-        return '<li style="margin-bottom:.3rem;"><a href="' + esc(f.url) +
-               '" target="_blank" rel="noopener">' + esc(f.name) + '</a>' +
-               '<span style="color:#8891a8;font-size:.8rem;"> · ' + esc(f.uploaded_at || '') +
-               '</span></li>';
-      }).join('');
-      Swal.fire({ title: 'Attached files',
-                  html: '<ul style="text-align:left;padding-left:1.1rem;">' + list + '</ul>' });
+      if (!r || !r.success) { toast('Could not load the files', 'danger'); return; }
+      openModal({
+        title: 'Attachments',
+        confirmText: 'Close',
+        body: '<ul class="list-unstyled mb-0">' + r.files.map(function (f) {
+            return '<li class="mb-2"><a href="' + esc(f.url) + '" target="_blank" ' +
+              'rel="noopener"><i class="fas fa-file mr-1"></i>' + esc(f.name) + '</a> ' +
+              '<span class="text-muted small">' + esc(f.uploaded_at || '') + '</span></li>';
+          }).join('') + '</ul>',
+        confirm: function () { closeModal(); }
+      });
     });
   });
 
   $(document).on('click', '.cst-log-btn', function () {
     var itemId = Number($(this).data('item'));
     $.getJSON('/api/costing/items/' + itemId + '/log').done(function (r) {
-      if (!r || !r.success) { return; }
-      var list = r.entries.map(function (e) {
-        return '<li><strong>' + esc(e.action.replace(/_/g, ' ')) + '</strong> — ' +
-               esc(e.actor_name || 'someone') +
-               (e.amount !== null ? ' · ' + money(e.amount) : '') +
-               (e.detail ? ' · ' + esc(e.detail) : '') +
-               '<div style="color:#8891a8;font-size:.78rem;">' + esc(e.when || '') + '</div></li>';
-      }).join('');
-      Swal.fire({
+      if (!r || !r.success) { toast('Could not load the history', 'danger'); return; }
+      openModal({
         title: 'Costing history',
-        width: 640,
-        html: '<ul class="cst-log" style="text-align:left;padding-left:1.1rem;">' +
-              (list || '<li>Nothing logged yet.</li>') + '</ul>'
+        confirmText: 'Close',
+        body: r.entries.length
+          ? '<ul class="list-unstyled mb-0">' + r.entries.map(function (e) {
+              return '<li class="mb-2 pb-2" style="border-bottom:1px solid #f1f3f7;">' +
+                '<strong>' + esc(e.action.replace(/_/g, ' ')) + '</strong> — ' +
+                esc(e.actor_name || 'someone') +
+                (e.amount !== null ? ' · <b>' + money(e.amount) + '</b>' : '') +
+                (e.detail ? '<div class="small text-muted">' + esc(e.detail) + '</div>' : '') +
+                '<div class="small text-muted">' + esc(e.when || '') + '</div></li>';
+            }).join('') + '</ul>'
+          : '<p class="mb-0 text-muted">Nothing logged yet.</p>',
+        confirm: function () { closeModal(); }
       });
     });
   });
