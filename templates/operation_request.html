@@ -1081,9 +1081,11 @@ function proposalRowsHtml(proposals) {
         return '<div class="text-muted small">No proposals yet.</div>';
     }
     var rows = proposals.map(function (p) {
+        // type="button" is load-bearing: these sit inside #costItemsForm, and a
+        // button with no type is a submit button, which reloads the page.
         var decide = p.can_decide
-            ? '<button class="btn btn-sm btn-success op-accept" data-id="' + p.id + '">Accept</button> ' +
-              '<button class="btn btn-sm btn-outline-danger op-reject" data-id="' + p.id + '">Reject</button>'
+            ? '<button type="button" class="btn btn-sm btn-success op-accept" data-id="' + p.id + '">Accept</button> ' +
+              '<button type="button" class="btn btn-sm btn-outline-danger op-reject" data-id="' + p.id + '">Reject</button>'
             : '';
         var state = p.status === 'accepted' ? 'success'
                   : (p.status === 'rejected' ? 'danger' : 'warning');
@@ -1113,7 +1115,7 @@ function renderCostingBlocks() {
                 costEsc(a.assignee_name) + ' · ' + a.status + '</span>';
         }).join('');
         var assignBtn = CAN_ASSIGN_COSTING
-            ? '<button class="btn btn-sm btn-outline-primary op-assign-costing" ' +
+            ? '<button type="button" class="btn btn-sm btn-outline-primary op-assign-costing" ' +
               'data-item="' + itemId + '"><i class="fas fa-user-plus"></i> Assign for costing</button>'
             : '';
         var hint = (!state.assignments.length && !CAN_COST_DIRECT)
@@ -1131,7 +1133,8 @@ function renderCostingBlocks() {
 }
 
 // Assign this item to several people at once.
-$(document).on('click', '.op-assign-costing', function () {
+$(document).on('click', '.op-assign-costing', function (e) {
+    e.preventDefault();
     var itemId = Number($(this).data('item'));
     $.getJSON('/api/costing/team').done(function (r) {
         if (!r || !r.success || !r.people.length) {
@@ -1206,8 +1209,12 @@ function opDecideProposal(id, decision) {
         });
     });
 }
-$(document).on('click', '.op-accept', function () { opDecideProposal(Number($(this).data('id')), 'accept'); });
-$(document).on('click', '.op-reject', function () { opDecideProposal(Number($(this).data('id')), 'reject'); });
+$(document).on('click', '.op-accept', function (e) { e.preventDefault(); opDecideProposal(Number($(this).data('id')), 'accept'); });
+$(document).on('click', '.op-reject', function (e) { e.preventDefault(); opDecideProposal(Number($(this).data('id')), 'reject'); });
+
+// Belt and braces: this form is submitted by #saveCostsBtn through AJAX, never
+// by the browser. A stray Enter key or an untyped button must not reload it.
+$(document).on('submit', '#costItemsForm', function (e) { e.preventDefault(); });
 
 $(document).ready(function() {
     console.log('Operations Request page loaded successfully');
