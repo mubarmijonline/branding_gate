@@ -439,18 +439,20 @@ class CostingChainTest(unittest.TestCase):
         # qty 4 x 3 days x 100
         self.assertEqual(accepted, 1200.0)
 
-    def test_direct_costing_is_closed_to_the_ladder(self):
+    def test_direct_costing_is_closed_to_members_only(self):
         payload = {'request_id': self.request_id,
                    'items': [{'id': self.item_id, 'cost_per_item': 5}]}
-        for actor in (self.leader, self.member):
-            response = self._client_for(actor).post(
-                '/api/operations/requests/add-costs', json=payload)
-            self.assertEqual(response.status_code, 403)
-        # The Head keeps the override.
+        # A member's number arrives as a proposal, never typed straight in.
         self.assertEqual(
-            self._client_for(self.head).post(
+            self._client_for(self.member).post(
                 '/api/operations/requests/add-costs', json=payload).status_code,
-            200)
+            403)
+        # The Head and the team leaders may cost an item that needs no proposals.
+        for actor in (self.head, self.leader):
+            self.assertEqual(
+                self._client_for(actor).post(
+                    '/api/operations/requests/add-costs', json=payload).status_code,
+                200, actor)
 
 
 if __name__ == '__main__':

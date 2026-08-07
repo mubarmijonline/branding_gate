@@ -2899,7 +2899,7 @@ def management_admin():
     return render_template("admin_section.html")
 
 @app.route('/sales_mainpage', methods=['GET'])
-@perm('sales_request.view')
+@perm('section.sales')
 def sales_mainpage():
     """Display sales section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
@@ -5401,9 +5401,17 @@ def approvals_page():
     return render_template('approvals.html')
 
 @app.route('/sales_request', methods=['GET'])
-@perm('sales_request.view')
+@perm('section.sales')
 def sales_request():
-    """Display sales request page"""
+    """
+    Display sales request page.
+
+    Gated on the section rather than on sales_request.view: Operations reads
+    request items in order to cost them, which is not the same as belonging in
+    the Sales section. Hiding the menu is not enough on its own -- the URL is
+    still typeable -- so the page carries the same rule the menu does. The data
+    endpoints keep their own gate.
+    """
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
