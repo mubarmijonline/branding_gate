@@ -53,7 +53,7 @@ far is lost or re-entered.
 ```
 someone asks for balance
       │
-      ├─ their manager approves          ← skipped when that manager is the CEO
+      ├─ the line above approves         ← any of them, never the CEO
       │
       ├─ Finance approves (picks the payment method)
       │
@@ -91,9 +91,11 @@ moves. There are no live pending requests to strand.
 - `user_balance.approve` — unchanged, and now means *the Finance step*.
 
 **Who may approve whom.** Holding the permission is not enough: the route checks
-that the requester's `manager_id` is you. Same rule as targets — reading follows
-scope, writing is narrower and is checked in the route. Admin can act anywhere so
-an absent manager cannot strand a request.
+that you are somewhere in the line *above* the requester — their manager, their
+manager's manager, and so on up to but never including the CEO. Any one of them
+can act and all of them are told, so a leader on leave cannot hold up their
+member's عهدة while the head is right there. Same rule as targets — reading
+follows scope, writing is narrower and is checked in the route.
 
 **Routes**
 

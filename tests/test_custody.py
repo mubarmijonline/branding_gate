@@ -143,10 +143,42 @@ class CustodyFlowTest(unittest.TestCase):
         response = self._request_balance(self.ceo)
         self.assertEqual(response.get_json()['status'], 'pending_finance')
 
-    def test_only_their_own_manager_may_sign(self):
+    def test_anybody_above_them_may_sign_not_only_the_nearest(self):
+        # A leader on leave must not be able to hold up their member's عهدة
+        # when the head is right there.
         self._request_balance(self.member)
         request_id = self._latest_for(self.member)['id']
-        # A team leader in the same department, but not theirs.
+        response = self._client_for(self.head).post(
+            '/api/finance/balance-requests/%d/manager-approve' % request_id, json={})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(self._row(request_id)['status'], 'pending_finance')
+
+    def test_the_line_stops_below_the_ceo(self):
+        cur = self._cursor()
+        cur.execute("SELECT manager_id FROM user WHERE id = %s", (self.head,))
+        self.assertEqual(cur.fetchone()['manager_id'], self.ceo)
+        cur.close()
+        # The head reports to the root, so nobody above them signs and the CEO
+        # is never asked.
+        response = self._request_balance(self.head)
+        self.assertEqual(response.get_json()['status'], 'pending_finance')
+
+    def test_the_whole_line_can_see_it_waiting(self):
+        self._request_balance(self.member)
+        for actor in (self.leader, self.head):
+            queue = self._client_for(actor).get(
+                '/api/finance/balance-requests/waiting-on-me').get_json()
+            self.assertEqual([r['to_user_id'] for r in queue['requests']],
+                             [self.member], actor)
+        # Somebody off to the side still sees nothing.
+        theirs = self._client_for(self.other_leader).get(
+            '/api/finance/balance-requests/waiting-on-me').get_json()
+        self.assertEqual(theirs['requests'], [])
+
+    def test_somebody_off_to_the_side_may_not_sign(self):
+        self._request_balance(self.member)
+        request_id = self._latest_for(self.member)['id']
+        # A team leader in the same department, but not above this person.
         refused = self._client_for(self.other_leader).post(
             '/api/finance/balance-requests/%d/manager-approve' % request_id, json={})
         self.assertEqual(refused.status_code, 403)
@@ -348,7 +380,7 @@ class ExpenseSalesRequestTest(CustodyFlowTest):
         cur.close()
         self.assertEqual([r['sales_request_id'] for r in rows], [request_id])
 
-    def test_only_their_own_manager_may_approve_the_sheet(self):
+    def test_somebody_off_to_the_side_may_not_approve_the_sheet(self):
         request_id = self._a_sales_request()
         if not request_id:
             self.skipTest('no sales request in this database')

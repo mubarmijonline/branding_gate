@@ -21661,31 +21661,46 @@ def _may_approve_for(cur, actor_id, subject_id, permission):
     """
     if rbac.resolve(session.get('perms') or {}, permission) == 'all':
         return True
-    cur.execute("SELECT manager_id FROM user WHERE id = %s", (subject_id,))
-    row = cur.fetchone()
-    return bool(row and row['manager_id'] == actor_id)
+    return actor_id in _approval_chain(cur, subject_id)
+
+
+def _approval_chain(cur, user_id, limit=12):
+    """
+    Everyone above this person who may sign for them, nearest first.
+
+    The whole line up, not just the one manager: a team leader on leave should
+    not be able to hold up their member's عهدة when the head is right there.
+    Any one of them can act, and all of them are told.
+
+    The CEO is where the line stops -- they are excluded, and so is anybody
+    whose only superior is the CEO, which is why a head's request goes straight
+    to Finance. Read from user.manager_id, so a transfer needs no fixup here,
+    and guarded against a cycle in the tree rather than trusting it.
+    """
+    chain = []
+    seen = {user_id}
+    current = user_id
+    while len(chain) < limit:
+        cur.execute("SELECT manager_id FROM user WHERE id = %s", (current,))
+        row = cur.fetchone()
+        manager_id = row['manager_id'] if row else None
+        if not manager_id or manager_id in seen:
+            break
+        cur.execute("SELECT manager_id FROM user WHERE id = %s", (manager_id,))
+        above = cur.fetchone()
+        # This one is the root of the tree: the line stops below them.
+        if not above or above['manager_id'] is None:
+            break
+        chain.append(manager_id)
+        seen.add(manager_id)
+        current = manager_id
+    return chain
 
 
 def _approving_manager(cur, user_id):
-    """
-    The manager who signs this person's عهدة, or None when nobody does.
-
-    Nobody does in two cases, and they are the same case seen from two sides:
-    the CEO has no manager, and the nine people who report straight to the CEO
-    are their own top layer. Read from user.manager_id rather than a list of
-    names, so a transfer or a new head needs no edit here.
-    """
-    cur.execute("SELECT manager_id FROM user WHERE id = %s", (user_id,))
-    row = cur.fetchone()
-    manager_id = row['manager_id'] if row else None
-    if not manager_id:
-        return None
-    cur.execute("SELECT manager_id FROM user WHERE id = %s", (manager_id,))
-    above = cur.fetchone()
-    # Their manager is the root of the tree: no layer in between to sign.
-    if not above or above['manager_id'] is None:
-        return None
-    return manager_id
+    """The nearest person who may sign, or None when the line is empty."""
+    chain = _approval_chain(cur, user_id)
+    return chain[0] if chain else None
 
 
 @app.route('/api/finance/request-balance', methods=['POST'])
@@ -21713,8 +21728,8 @@ def request_balance():
 
         # The layer above signs first -- unless that layer is the CEO, in which
         # case there is nobody in between and it goes straight to Finance.
-        manager_id = _approving_manager(cur, me)
-        status = 'pending_manager' if manager_id else 'pending_finance'
+        chain = _approval_chain(cur, me)
+        status = 'pending_manager' if chain else 'pending_finance'
 
         cur.execute("""
             INSERT INTO user_balance_transfers
@@ -21729,9 +21744,9 @@ def request_balance():
         # Whoever has to act next is told, rather than finding it by opening the
         # approvals page on the off-chance.
         asker = session.get('name') or 'A colleague'
-        if manager_id:
-            notify_user(
-                manager_id,
+        if chain:
+            notify_users(
+                chain,
                 'عهدة request from %s' % asker,
                 '%s asked for EGP %s. Reason: %s (%s). It needs your approval '
                 'before Finance sees it.'
@@ -21747,7 +21762,7 @@ def request_balance():
 
         return jsonify({'success': True, 'transfer_code': transfer_code,
                         'status': status,
-                        'message': ('Sent to your manager for approval' if manager_id
+                        'message': ('Sent to the line above you for approval' if chain
                                     else 'Balance request submitted for approval')})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -22048,24 +22063,17 @@ def balance_requests_waiting_on_me():
         me = session.get('user_id')
         unrestricted = rbac.resolve(session.get('perms') or {}, 'user_balance.approve_manager') == 'all'
         conn, cur = connection()
-        if unrestricted:
-            cur.execute("""
-                SELECT ubt.*, u.name AS requester_name
-                FROM user_balance_transfers ubt
-                JOIN user u ON u.id = ubt.to_user_id
-                WHERE ubt.status = 'pending_manager' AND ubt.transfer_type = 'user_request'
-                ORDER BY ubt.created_at DESC
-            """)
-        else:
-            cur.execute("""
-                SELECT ubt.*, u.name AS requester_name
-                FROM user_balance_transfers ubt
-                JOIN user u ON u.id = ubt.to_user_id
-                WHERE ubt.status = 'pending_manager' AND ubt.transfer_type = 'user_request'
-                  AND u.manager_id = %s
-                ORDER BY ubt.created_at DESC
-            """, (me,))
-        rows = list(cur.fetchall())
+        cur.execute("""
+            SELECT ubt.*, u.name AS requester_name
+            FROM user_balance_transfers ubt
+            JOIN user u ON u.id = ubt.to_user_id
+            WHERE ubt.status = 'pending_manager' AND ubt.transfer_type = 'user_request'
+            ORDER BY ubt.created_at DESC
+        """)
+        # Anywhere in the line above them, not only their nearest manager: a
+        # head sees their whole branch and can act when a leader is away.
+        rows = [row for row in cur.fetchall()
+                if unrestricted or me in _approval_chain(cur, row['to_user_id'])]
         cur.close()
         conn.close()
         return jsonify(success=True, requests=rows, count=len(rows))
@@ -22316,7 +22324,7 @@ def manager_approve_balance_request(request_id):
             return jsonify({'success': False,
                             'error': 'Request not found or already decided'}), 404
 
-        if not unrestricted and _approving_manager(cur, req['to_user_id']) != me:
+        if not unrestricted and me not in _approval_chain(cur, req['to_user_id']):
             conn.rollback()
             cur.close()
             conn.close()
@@ -22405,7 +22413,7 @@ def manager_reject_balance_request(request_id):
             return jsonify({'success': False,
                             'error': 'Request not found or already decided'}), 404
 
-        if not unrestricted and _approving_manager(cur, req['to_user_id']) != me:
+        if not unrestricted and me not in _approval_chain(cur, req['to_user_id']):
             conn.rollback()
             cur.close()
             conn.close()
@@ -24075,12 +24083,12 @@ def create_expense_tracking():
         conn.commit()
 
         # The layer above signs it before Finance sees it, so tell them.
-        manager_id = _approving_manager(cur, user_id)
+        chain = _approval_chain(cur, user_id)
         cur.close()
         conn.close()
 
         notify_users(
-            [manager_id] if manager_id else users_holding('expense_tracking.approve_finance'),
+            chain or users_holding('expense_tracking.approve_finance'),
             'Expenses to approve: %s' % user_name,
             '%s submitted EGP %s of expenses (%s) for your approval.'
             % (user_name, f'{total_amount:,.2f}', tracking_code),

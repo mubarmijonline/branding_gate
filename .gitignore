@@ -90,3 +90,6 @@ gunicorn.ctl
 # Uncomment to ignore documentation files
 # *.md
 # *.sql
+
+# The venv is a symlink in worktrees; the trailing-slash rule above misses it.
+branding_gate_VENV
