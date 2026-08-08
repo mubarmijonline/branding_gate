@@ -60,6 +60,7 @@
   .costing-page .cst-pill.withdrawn { background:#fdecea; color:var(--bad); }
   .costing-page .cst-pill.costed { background:#e4f1ea; color:var(--good); }
   .costing-page .cst-pill.uncosted { background:#fdf0d9; color:var(--warn); }
+  .costing-page .cst-pill.recost { background:#fdecea; color:var(--bad); }
 
   .costing-page .cst-body { padding:.85rem 1.1rem 1rem; }
   .costing-page .cst-people { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.75rem; }
@@ -376,7 +377,12 @@
         '<div>' +
           '<div class="cst-title">' + esc(g.item_name || ('Item ' + g.item_id)) +
             (accepted ? ' <span class="cst-pill costed">costed</span>'
-                      : ' <span class="cst-pill uncosted">not costed</span>') + '</div>' +
+                      : ' <span class="cst-pill uncosted">not costed</span>') +
+            // A cost already exists on a re-cost; what is wanted is a new one,
+            // and the client's counter-offer is why.
+            (g.awaiting_recost
+              ? ' <span class="cst-pill recost"><i class="fas fa-redo"></i> re-cost requested</span>'
+              : '') + '</div>' +
           '<div class="cst-sub">' + esc(g.request_title || '') +
             ' · request #' + g.request_id +
             (g.client_name ? ' · ' + esc(g.client_name) : '') +
@@ -425,10 +431,15 @@
   function itemRows(items) {
     if (!items.length) { return '<p class="p-3 text-muted mb-0">Nothing found.</p>'; }
     return items.map(function (it) {
+      // Sent back by Re-Pricing for a new cost. It already carries a cost, so
+      // without saying so it reads as a costed item nobody needs to touch.
+      var recost = it.awaiting_recost
+        ? ' <span class="badge badge-danger"><i class="fas fa-redo"></i> Re-cost requested</span>'
+        : '';
       return '<label class="cst-pick-row"><input type="radio" name="cstItem" value="' +
         it.id + '" class="mt-1">' +
         '<span><span style="font-weight:600;color:#2e3650;">' +
-          esc(it.name || ('Item ' + it.id)) + '</span><br>' +
+          esc(it.name || ('Item ' + it.id)) + '</span>' + recost + '<br>' +
         '<span class="text-muted" style="font-size:.78rem;">' +
           esc(it.request_title || '') + ' · request #' + it.request_id +
           (it.qty ? ' · qty ' + money(it.qty) : '') +

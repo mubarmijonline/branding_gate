@@ -111,6 +111,10 @@
                 parts.push('<strong>' + r.awaiting_decision_total +
                            '</strong> proposal(s) waiting for your decision');
             }
+            if (r.recost_total) {
+                parts.push('<strong>' + r.recost_total +
+                           '</strong> item(s) sent back for re-costing');
+            }
             if (!parts.length && r.open_total) {
                 parts.push('<strong>' + r.open_total + '</strong> item(s) out for costing');
             }

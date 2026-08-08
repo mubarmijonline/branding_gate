@@ -12330,13 +12330,20 @@ window.chartPieDemo = function() {
                     var sumNetPct    = totalSell > 0 ? (sumNet / totalSell * 100) : 0;
                     var sumMarkupStr = totalSell > 0 ? sumMarkupPct.toFixed(1) + '%' : '—';
                     var sumNetPctStr = totalSell > 0 ? sumNetPct.toFixed(1) + '%' : '—';
+                    // "Pending" used to cover two different things: an item with
+                    // no cost, which pricing cannot touch yet, and one costing
+                    // has handed over and is waiting on a price. Only the second
+                    // is work for whoever opened this modal, so say which.
+                    var needsPricing = !isNegotiation && sellPerItem <= 0 && costPerItem > 0;
                     var statusBadge = isNegotiation
                         ? '<span class="badge badge-danger ml-2"><i class="fas fa-handshake mr-1"></i>NEGOTIATION</span>'
                         : (sellPerItem > 0
                             ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
-                            : '<span class="badge badge-warning ml-2"><i class="fas fa-clock mr-1"></i>Pending</span>');
+                            : (needsPricing
+                                ? '<span class="badge badge-info ml-2" title="Costed and waiting for a price"><i class="fas fa-tag mr-1"></i>Needs Pricing</span>'
+                                : '<span class="badge badge-secondary ml-2" title="No cost yet, so it cannot be priced"><i class="fas fa-hourglass-half mr-1"></i>Awaiting Cost</span>'));
                     itemsHtml += `
-                        <div class="price-item-accordion mb-2" data-item-accordion-id="${item.id}">
+                        <div class="price-item-accordion mb-2${needsPricing ? ' price-item-accordion--needs-pricing' : ''}" data-item-accordion-id="${item.id}">
                             <div class="price-item-summary collapsed" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
                                 <div class="psum-left">
                                     <i class="fas fa-chevron-right psum-chevron"></i>

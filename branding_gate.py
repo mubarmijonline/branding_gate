@@ -5527,6 +5527,81 @@ def pricing_summary():
 # Every step writes to costing_log, including the ones that undo a previous step.
 # ---------------------------------------------------------------------------
 
+def notify_negotiation(audience, title, content):
+    """
+    Tell the next desk a negotiation has landed on it.
+
+    Every hand-off in the negotiation flow used to be silent: the state changed
+    and whoever had to act next found out by opening the right page. The three
+    hand-offs that matter -- to Pricing to re-price, to Operations to re-cost,
+    and back to Pricing once the new cost is in -- all come through here.
+    """
+    try:
+        return send_notification_to_role(audience, title, content)
+    except Exception as e:
+        # A notification is a hint. It must never lose the transaction that
+        # earned it.
+        print("DEBUG: negotiation notification failed: %s" % e)
+        return 0
+
+
+def complete_recosting(cur, item_id, new_cost, old_cost, actor_name, item_name=None):
+    """
+    Finish a re-costing and hand the negotiation back to Pricing.
+
+    The one place that happens. A cost can reach a re-costed item two ways --
+    the Operations Head types it in, or a costing proposal is accepted on the
+    costing desk -- and before this only the first of them moved the
+    negotiation on, so an item costed through the desk sat in 'pending_costing'
+    for ever with a new cost nobody was told about.
+
+    Returns the negotiation id when one was completed, else None. Writes inside
+    the caller's transaction and does not commit.
+    """
+    cur.execute("""
+        SELECT nr.id, nr.status, nr.request_id, sri.name AS item_name
+        FROM negotiation_requests nr
+        JOIN sales_request_items sri ON sri.id = nr.item_id
+        WHERE nr.item_id = %s AND nr.status = 'pending_costing'
+        ORDER BY nr.id DESC
+        LIMIT 1
+    """, (item_id,))
+    negotiation = cur.fetchone()
+    if not negotiation:
+        return None
+
+    next_status = transition(negotiation['status'], 'operation', 'complete_costing')
+    cur.execute("""
+        UPDATE negotiation_requests
+        SET status = %s, destination_team = 'pricing', new_cost_price = %s
+        WHERE id = %s
+    """, (next_status, new_cost, negotiation['id']))
+    cur.execute("""
+        INSERT INTO negotiation_logs
+            (negotiation_id, action, actor_user_id, actor_name, notes,
+             old_price, new_price)
+        VALUES (%s, 'recosting_completed', %s, %s, %s, %s, %s)
+    """, (negotiation['id'], session.get('user_id'), actor_name,
+          'Operations completed re-costing and returned the negotiation to Re-Pricing.',
+          old_cost, new_cost))
+
+    # The item carries the same news for the list and the pricing modal.
+    cur.execute("""
+        UPDATE sales_request_items
+        SET negotiation_status = 'negotiated'
+        WHERE id = %s
+    """, (item_id,))
+
+    name = item_name or negotiation['item_name'] or 'an item'
+    notify_negotiation(
+        'pricing',
+        'Re-costing done: %s' % name,
+        'Operations re-costed "%s" on request #%s at EGP %s. It is waiting for '
+        'your new selling price.' % (name, negotiation['request_id'], new_cost),
+    )
+    return negotiation['id']
+
+
 _DIMENSION_FACTORS = {
     'W': ('width',), 'H': ('height',), 'D': ('depth',),
     'WH': ('width', 'height'), 'WD': ('width', 'depth'), 'HD': ('height', 'depth'),
@@ -5652,7 +5727,10 @@ def costing_queue():
                    i.unit, i.description AS item_description,
                    i.sell_type, i.rental_days,
                    r.title AS request_title, r.request_type, r.start_date,
-                   c.client_name
+                   c.client_name,
+                   (SELECT COUNT(*) FROM negotiation_requests nr
+                    WHERE nr.item_id = a.item_id
+                      AND nr.status = 'pending_costing') AS awaiting_recost
             FROM costing_assignment a
             JOIN user u ON u.id = a.assignee_id
             JOIN user m ON m.id = a.assigned_by
@@ -5730,6 +5808,9 @@ def costing_queue():
                 'assigned_by': row['assigned_by'],
                 'assigned_by_name': row['assigned_by_name'],
                 'status': row['status'], 'note': row['note'],
+                # Sent back by Re-Pricing rather than costed for the first time.
+                # Same workflow, but whoever proposes should know which it is.
+                'awaiting_recost': bool(row['awaiting_recost']),
                 'assigned_on': row['added_date'].strftime('%d %b %Y')
                                if row['added_date'] else None,
                 'proposals': by_item.get(row['item_id'], []),
@@ -5830,20 +5911,33 @@ def costing_summary():
         """)
         out = {row['request_id']: row['n'] for row in cur.fetchall()}
 
+        # Sent back by Pricing for a new cost. Operations work like any other,
+        # so it is counted here rather than left to be found in a modal.
+        cur.execute("""
+            SELECT sri.request_id, COUNT(DISTINCT nr.item_id) AS n
+            FROM negotiation_requests nr
+            JOIN sales_request_items sri ON sri.id = nr.item_id
+            WHERE nr.status = 'pending_costing'
+            GROUP BY sri.request_id
+        """)
+        recost = {row['request_id']: row['n'] for row in cur.fetchall()}
+
         cur.close()
         conn.close()
 
         by_request = {}
-        for request_id in set(list(mine) + list(decide) + list(out)):
+        for request_id in set(list(mine) + list(decide) + list(out) + list(recost)):
             by_request[str(request_id)] = {
                 'mine': mine.get(request_id, 0),
                 'awaiting_decision': decide.get(request_id, 0),
                 'open': out.get(request_id, 0),
+                'recost': recost.get(request_id, 0),
             }
         return jsonify(success=True,
                        mine_total=sum(mine.values()),
                        awaiting_decision_total=sum(decide.values()),
                        open_total=sum(out.values()),
+                       recost_total=sum(recost.values()),
                        by_request=by_request)
     except HTTPException:
         raise
@@ -5951,7 +6045,10 @@ def costing_items():
             SELECT i.id, i.name, i.qty, i.cost_per_item, i.request_id,
                    r.title AS request_title,
                    (SELECT COUNT(*) FROM costing_assignment a
-                    WHERE a.item_id = i.id AND a.status = 'open') AS open_assignments
+                    WHERE a.item_id = i.id AND a.status = 'open') AS open_assignments,
+                   (SELECT COUNT(*) FROM negotiation_requests nr
+                    WHERE nr.item_id = i.id
+                      AND nr.status = 'pending_costing') AS awaiting_recost
             FROM sales_request_items i
             JOIN sales_request r ON r.id = i.request_id
             WHERE r.status != 'cancelled'
@@ -5961,8 +6058,12 @@ def costing_items():
             sql += " AND (i.name LIKE %s OR r.title LIKE %s OR i.request_id = %s)"
             params += ['%' + search + '%', '%' + search + '%',
                        search if search.isdigit() else 0]
+        # An item Pricing sent back for a new cost is the most urgent thing on
+        # this list, so it sorts above even the uncosted ones.
         sql += """
-            ORDER BY (i.cost_per_item IS NOT NULL AND i.cost_per_item > 0),
+            ORDER BY (SELECT COUNT(*) FROM negotiation_requests nr
+                      WHERE nr.item_id = i.id AND nr.status = 'pending_costing') DESC,
+                     (i.cost_per_item IS NOT NULL AND i.cost_per_item > 0),
                      i.id DESC
             LIMIT 60
         """
@@ -5975,6 +6076,7 @@ def costing_items():
             'request_id': row['request_id'],
             'request_title': row['request_title'],
             'open_assignments': row['open_assignments'],
+            'awaiting_recost': bool(row['awaiting_recost']),
         } for row in cur.fetchall()]
         cur.close()
         conn.close()
@@ -6362,11 +6464,18 @@ def costing_decide(proposal_id):
             WHERE item_id = %s AND status = 'open'
         """, (proposal['item_id'],))
 
+        # An item sent back for re-costing is finished the same way whichever
+        # route the cost arrived by, so the negotiation moves on from here too.
+        recosted = complete_recosting(
+            cur, proposal['item_id'], amount, old_cost,
+            session.get('name') or 'Operations', item_name=item['name'])
+
         conn.commit()
         cur.close()
         conn.close()
         return jsonify(success=True, status='accepted', amount=float(amount),
-                       total_cost=total, rejected=len(losers))
+                       total_cost=total, rejected=len(losers),
+                       recosted_negotiation=recosted)
     except costing.CostingError as e:
         return jsonify(success=False, error=str(e)), 403
     except HTTPException:
@@ -7032,6 +7141,13 @@ def get_operations_requests():
                                            AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation'))
                              THEN 1 END) as costed_items_count,
                        COUNT(CASE WHEN i.approval_status = 'pending_negotiation' AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation') THEN 1 END) as renegotiation_items_count,
+                       -- Counted from the negotiation itself rather than the
+                       -- copy of its state on the item: those two drift, and
+                       -- when they do it is the item that is stale.
+                       COUNT(DISTINCT CASE WHEN EXISTS (
+                             SELECT 1 FROM negotiation_requests nr
+                             WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
+                             THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN (i.cost_per_item IS NULL OR i.cost_per_item = 0) THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
@@ -7059,6 +7175,13 @@ def get_operations_requests():
                                            AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation'))
                              THEN 1 END) as costed_items_count,
                        COUNT(CASE WHEN i.approval_status = 'pending_negotiation' AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation') THEN 1 END) as renegotiation_items_count,
+                       -- Counted from the negotiation itself rather than the
+                       -- copy of its state on the item: those two drift, and
+                       -- when they do it is the item that is stale.
+                       COUNT(DISTINCT CASE WHEN EXISTS (
+                             SELECT 1 FROM negotiation_requests nr
+                             WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
+                             THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN (i.cost_per_item IS NULL OR i.cost_per_item = 0) THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
@@ -7078,12 +7201,17 @@ def get_operations_requests():
             total_items = req.get('item_count', 0)
             costed_items = req.get('costed_items_count', 0)
             renegotiation_items = req.get('renegotiation_items_count', 0)
+            recost_items = req.get('recost_items_count', 0)
             pending_items = req.get('pending_items_count', 0)
             
             print(f"DEBUG: Request {req.get('request_id')} - Total: {total_items}, Costed: {costed_items}, Renegotiation: {renegotiation_items}, Pending: {pending_items}")
             
             if total_items == 0:
                 status = 'No Items'
+            elif recost_items:
+                # A re-cost already carries a cost, so "all items costed" would
+                # otherwise report it as finished while Pricing waits.
+                status = f'{recost_items} Re-costing Needed'
             elif costed_items == total_items:
                 status = 'Completed'
             else:
@@ -7107,6 +7235,7 @@ def get_operations_requests():
                 'items_count': total_items,
                 'costed_items_count': costed_items,
                 'renegotiation_items_count': renegotiation_items,
+                'recost_items_count': recost_items,
                 'pending_items_count': pending_items,
                 'total_cost': float(req.get('total_cost', 0)) if req.get('total_cost') else 0,
                 'total_sell': float(req.get('total_sell', 0)) if req.get('total_sell') else 0,
@@ -8746,47 +8875,11 @@ def add_operation_request_costs():
                     updated_items_log.append(f'{item_name}: {old_price} → {new_price}')
 
                     if was_negotiation:
-                        cur.execute("""
-                            SELECT id, status
-                            FROM negotiation_requests
-                            WHERE item_id = %s
-                              AND status = 'pending_costing'
-                            ORDER BY id DESC
-                            LIMIT 1
-                        """, (item_id,))
-                        negotiation = cur.fetchone()
-                        if negotiation:
-                            next_status = transition(
-                                negotiation['status'],
-                                'operation',
-                                'complete_costing'
-                            )
-                            cur.execute("""
-                                UPDATE negotiation_requests
-                                SET status = %s,
-                                    destination_team = 'pricing',
-                                    new_cost_price = %s
-                                WHERE id = %s
-                            """, (
-                                next_status,
-                                cost_per_item,
-                                negotiation['id']
-                            ))
-                            cur.execute("""
-                                INSERT INTO negotiation_logs
-                                    (negotiation_id, action, actor_user_id,
-                                     actor_name, notes, old_price, new_price)
-                                VALUES (%s, 'recosting_completed', %s, %s,
-                                        %s, %s, %s)
-                            """, (
-                                negotiation['id'],
-                                session.get('user_id'),
-                                user_name,
-                                'Operations completed re-costing and returned the negotiation to Re-Pricing.',
-                                old_cost_per_item,
-                                cost_per_item
-                            ))
-                            recosted_negotiations.append(negotiation['id'])
+                        negotiation_id = complete_recosting(
+                            cur, item_id, cost_per_item, old_cost_per_item,
+                            user_name, item_name=item_name)
+                        if negotiation_id:
+                            recosted_negotiations.append(negotiation_id)
                 
                 # Accumulate total cost for request-level update
                 print(f"DEBUG: Adding {total_cost} to total_request_cost (currently {total_request_cost})")
@@ -14836,8 +14929,18 @@ def approve_sales_head_negotiation(negotiation_id):
             conn=conn,
             cur=cur
         )
-        
+
         conn.commit()
+
+        # Pricing is the next desk, and nothing told them so until now.
+        notify_negotiation(
+            'pricing',
+            'Re-pricing needed: %s' % negotiation['item_name'],
+            'The Sales Head approved a negotiation on "%s" (request #%s). The '
+            'client expects EGP %s. It is waiting for your decision.'
+            % (negotiation['item_name'], negotiation['request_id'],
+               float(negotiation['client_expected_price'])),
+        )
         cur.close()
         conn.close()
         
@@ -14929,6 +15032,16 @@ def pricing_send_negotiation_to_costing(negotiation_id):
         conn.commit()
         cur.close()
         conn.close()
+
+        # Operations has to re-cost it, and can now put it on somebody's desk
+        # the same way as any other item.
+        notify_negotiation(
+            'operation',
+            'Re-costing needed: %s' % negotiation['item_name'],
+            'Re-Pricing sent "%s" (request #%s) back for a new cost. Assign it '
+            'on the costing desk, or cost it directly.'
+            % (negotiation['item_name'], negotiation['request_id']),
+        )
         return jsonify({
             'success': True,
             'message': 'Negotiation sent to Operations for re-costing'

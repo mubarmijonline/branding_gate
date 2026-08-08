@@ -482,6 +482,83 @@ class CostingChainTest(unittest.TestCase):
         # qty 4 x 3 days x 100
         self.assertEqual(accepted, 1200.0)
 
+    # -- re-costing, which arrives through the same desk ---------------------
+
+    def _open_recosting(self):
+        """Pricing sends the item back for a new cost."""
+        cur = self._cursor()
+        cur.execute("""
+            INSERT INTO negotiation_requests
+                (item_id, request_id, client_expected_price, client_reason,
+                 status, destination_team)
+            VALUES (%s, %s, 80.00, 'Client wants a better price',
+                    'pending_costing', 'costing')
+        """, (self.item_id, self.request_id))
+        negotiation_id = cur.lastrowid
+        cur.execute("""
+            UPDATE sales_request_items
+            SET cost_per_item = 100, approval_status = 'pending_negotiation',
+                negotiation_status = 'pending_negotiation'
+            WHERE id = %s
+        """, (self.item_id,))
+        cur.close()
+        return negotiation_id
+
+    def _negotiation(self, negotiation_id):
+        cur = self._cursor()
+        cur.execute("SELECT status, new_cost_price, destination_team "
+                    "FROM negotiation_requests WHERE id = %s", (negotiation_id,))
+        row = cur.fetchone()
+        cur.close()
+        return row
+
+    def test_accepting_a_proposal_finishes_a_re_costing(self):
+        # Before this, only a cost typed in by the Head moved the negotiation
+        # on; one costed through the desk sat in pending_costing for ever.
+        negotiation_id = self._open_recosting()
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member])
+        proposal = self._propose(self.member, '60').get_json()['proposal_id']
+
+        response = self._client_for(self.leader).post(
+            '/api/costing/proposals/%d/decide' % proposal, json={'decision': 'accept'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['recosted_negotiation'], negotiation_id)
+
+        after = self._negotiation(negotiation_id)
+        self.assertEqual(after['status'], 'pending_pricing')
+        self.assertEqual(float(after['new_cost_price']), 60.0)
+        self.assertEqual(after['destination_team'], 'pricing')
+        self.assertEqual(float(self._item_cost()['cost_per_item']), 60.0)
+
+    def test_the_two_ways_of_re_costing_agree(self):
+        # Typed by the Head, or accepted on the desk: the negotiation ends in
+        # the same state either way.
+        typed_negotiation = self._open_recosting()
+        self._client_for(self.head).post('/api/operations/requests/add-costs', json={
+            'request_id': self.request_id,
+            'items': [{'id': self.item_id, 'cost_per_item': 60}]})
+        typed = self._negotiation(typed_negotiation)
+        self.assertEqual(typed['status'], 'pending_pricing')
+        self.assertEqual(float(typed['new_cost_price']), 60.0)
+
+    def test_a_plain_costing_touches_no_negotiation(self):
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member])
+        proposal = self._propose(self.member, '5').get_json()['proposal_id']
+        response = self._client_for(self.leader).post(
+            '/api/costing/proposals/%d/decide' % proposal, json={'decision': 'accept'})
+        self.assertIsNone(response.get_json()['recosted_negotiation'])
+
+    def test_the_summary_counts_what_was_sent_back(self):
+        before = self._client_for(self.head).get('/api/costing/summary').get_json()
+        self._open_recosting()
+        after = self._client_for(self.head).get('/api/costing/summary').get_json()
+        # An absolute total would depend on whatever else is mid-negotiation in
+        # this database, so measure the change this test caused.
+        self.assertEqual(after['recost_total'], before['recost_total'] + 1)
+        self.assertEqual(after['by_request'][str(self.request_id)]['recost'], 1)
+
     def test_direct_costing_is_closed_to_members_only(self):
         payload = {'request_id': self.request_id,
                    'items': [{'id': self.item_id, 'cost_per_item': 5}]}

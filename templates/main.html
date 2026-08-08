@@ -584,7 +584,7 @@
 
   {% block head %}{% endblock %}
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260808-pricing-alert">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260808-pricing-alert-2">
 
 </head>
 
@@ -2241,9 +2241,18 @@ function showToast(title, body) {
     function paint() {
       $.getJSON('/api/costing/summary').done(function (r) {
         if (!r || !r.success) { return; }
-        var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0);
+        // Items Pricing sent back for a new cost count too: they are Operations
+        // work that nothing else on screen would mention.
+        var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0) + (r.recost_total || 0);
         var $b = $('#navCostingBadge, #navCostingBadgeTop');
-        if (n > 0) { $b.text(n).removeClass('d-none'); } else { $b.addClass('d-none'); }
+        if (n > 0) {
+          $b.text(n).attr('title', (r.mine_total || 0) + ' to cost, ' +
+                                   (r.awaiting_decision_total || 0) + ' to decide, ' +
+                                   (r.recost_total || 0) + ' to re-cost')
+            .removeClass('d-none');
+        } else {
+          $b.addClass('d-none');
+        }
       });
     }
     $(paint);

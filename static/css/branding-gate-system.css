@@ -845,6 +845,16 @@ table.dataTable.display tbody tr:hover {
   background: var(--bg-surface);
 }
 
+/* Costed and waiting for a price: the one card in this modal that is actually
+   work. Same blue as the mark on the request row it came from. */
+#setPriceModal .price-item-accordion--needs-pricing {
+  border-left: 4px solid var(--bg-status-info);
+}
+
+#setPriceModal .price-item-accordion--needs-pricing > .price-item-summary {
+  background: #f4f9fe;
+}
+
 #setPriceModal .price-item-summary:hover {
   background: #f2f7fb;
 }

@@ -1164,6 +1164,10 @@ function loadCostingSummary(then) {
             parts.push('<strong>' + r.awaiting_decision_total +
                        '</strong> proposal(s) waiting for your decision');
         }
+        if (r.recost_total) {
+            parts.push('<strong>' + r.recost_total +
+                       '</strong> item(s) sent back for re-costing');
+        }
         if (parts.length) {
             $('#costingBannerText').html(parts.join(' &middot; '));
             $('#costingBanner').removeClass('d-none').addClass('d-flex');
@@ -1186,7 +1190,11 @@ function costingRowBadges(requestId) {
         out += '<span class="badge badge-warning d-block mt-1" title="Proposals waiting for your decision">' +
                '<i class="fas fa-gavel"></i> ' + s.awaiting_decision + ' to decide</span>';
     }
-    if (!s.mine && !s.awaiting_decision && s.open) {
+    if (s.recost) {
+        out += '<span class="badge badge-danger d-block mt-1" title="Sent back by Re-Pricing for a new cost">' +
+               '<i class="fas fa-redo"></i> ' + s.recost + ' to re-cost</span>';
+    }
+    if (!s.mine && !s.awaiting_decision && !s.recost && s.open) {
         out += '<span class="badge badge-secondary d-block mt-1" title="Out for costing">' +
                '<i class="fas fa-paper-plane"></i> ' + s.open + ' out for costing</span>';
     }
@@ -1470,7 +1478,7 @@ $(document).ready(function() {
                     var iconMap = { 'pending':'fa-clock', 'completed':'fa-check-circle',
                                     'no items':'fa-inbox', 'no-items':'fa-inbox' };
                     var ic = iconMap[s] || 'fa-info-circle';
-                    if (row.renegotiation_items_count > 0) {
+                    if (recostCount(row) > 0) {
                         statusClass = 'status-recosting'; ic = 'fa-handshake';
                         data = 'Re-costing';
                     }
@@ -1487,9 +1495,9 @@ $(document).ready(function() {
                         counts += '<span class="op-c warn"><i class="fas fa-clock"></i>' +
                                   row.pending_items_count + ' Pending</span>';
                     }
-                    if (row.renegotiation_items_count > 0) {
+                    if (recostCount(row) > 0) {
                         counts += '<span class="op-c dng"><i class="fas fa-handshake"></i>' +
-                                  row.renegotiation_items_count + ' Re-cost</span>';
+                                  recostCount(row) + ' Re-cost</span>';
                     }
                     counts += '</div>';
                     return chip + counts;
@@ -1514,8 +1522,8 @@ $(document).ready(function() {
                     }
                     
                     // Re-costing needed (red/orange badge)
-                    if (row.renegotiation_items_count > 0) {
-                        html += '<span class="badge badge-danger mr-1 mb-1"><i class="fas fa-handshake"></i> ' + row.renegotiation_items_count + ' Re-costing</span><br>';
+                    if (recostCount(row) > 0) {
+                        html += '<span class="badge badge-danger mr-1 mb-1"><i class="fas fa-handshake"></i> ' + recostCount(row) + ' Re-costing</span><br>';
                     }
                     
                     // Pending first-time costing (yellow badge)
@@ -1537,12 +1545,12 @@ $(document).ready(function() {
                     var actions = '';
                     
                     // Determine if items need costing
-                    var needsCosting = (row.pending_items_count > 0) || (row.renegotiation_items_count > 0);
+                    var needsCosting = (row.pending_items_count > 0) || (recostCount(row) > 0);
                     var allCosted = row.costed_items_count === row.items_count;
                     
                     // Show appropriate cost button
                     // Re-costing takes priority - show red button if any items need re-costing
-                    if (row.renegotiation_items_count > 0) {
+                    if (recostCount(row) > 0) {
                         actions += '<button class="btn btn-sm btn-danger cost-btn" data-id="' + row.request_id + '"><i class="fas fa-handshake"></i> Re-cost Items</button> ';
                     } else if (row.pending_items_count > 0) {
                         // Items need first-time costing
@@ -1566,6 +1574,14 @@ $(document).ready(function() {
         "responsive": true
     });
 
+    // How many items on this request are waiting for a new cost. The item's own
+    // negotiation columns are a copy that drifts, so the negotiation table wins
+    // and the copy is only a fallback for rows it never covered.
+    function recostCount(row) {
+        return Math.max((row && row.recost_items_count) || 0,
+                        (row && row.renegotiation_items_count) || 0);
+    }
+
     // Update status counts
     function updateStatusCounts(requests) {
         var pending = 0;
@@ -1574,13 +1590,15 @@ $(document).ready(function() {
         var total = requests.length;
         
         requests.forEach(function(request) {
-            // Check if completed (all items costed)
-            if (request.costed_items_count === request.items_count && request.items_count > 0) {
-                completed++;
-            }
-            // Check if has re-costing items
-            else if (request.renegotiation_items_count > 0) {
+            // Re-costing first: the item already has a cost, so "all items
+            // costed" is true of every one of them and this counter read zero
+            // however many were waiting.
+            if (recostCount(request) > 0) {
                 needsRecosting++;
+            }
+            // Check if completed (all items costed)
+            else if (request.costed_items_count === request.items_count && request.items_count > 0) {
+                completed++;
             }
             // Otherwise it's pending
             else if (request.pending_items_count > 0 || request.costed_items_count < request.items_count) {
@@ -1600,7 +1618,7 @@ $(document).ready(function() {
         if (settings.nTable.id !== 'operations-table') return true;
         if (!recostingFilterActive) return true;
         var row = settings.aoData[dataIndex]._aData;
-        return (row && row.renegotiation_items_count > 0);
+        return (row && recostCount(row) > 0);
     });
 
     // Status filter
