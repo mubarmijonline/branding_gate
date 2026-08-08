@@ -157,8 +157,14 @@ one in means changing its `render_template` call, not unpicking a copy.
 | `migrate_users.py`, `backfill_interim_roles.py` | One-off migrations, already applied |
 
 Applied migrations: `rbac_schema_migration.sql`, `owner_backfill_migration.sql`,
-`pricing_flag_migration.sql`, `retire_legacy_role_table.sql`, `targets_migration.sql`, `costing_migration.sql`.
+`pricing_flag_migration.sql`, `retire_legacy_role_table.sql`, `targets_migration.sql`,
+`costing_migration.sql`, `custody_migration.sql`.
 Backups in `backups/` (gitignored).
+
+`fix_dimension_units.py` has been **run** (8 August 2026): six items rescaled to
+metres and their totals rebuilt, including the two `Main Led Screens 3x10` rows
+the owner confirmed as 3 x 10 m. It reports `0 to correct, 30 already in metres`
+now, so it is a check rather than a pending job.
 
 ## Open items
 
