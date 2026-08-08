@@ -3296,6 +3296,25 @@ window.chartPieDemo = function() {
         <h1 class="h3 mb-0 text-gray-800">{% if pricing_mode %}Pricing - Operation Dashboard{% else %}Sales Request Management{% endif %}</h1>
     </div>
 
+    {% if not pricing_mode %}
+    <!-- Costing hands the item over here. Without this the only sign that an
+         item is waiting for a price was one badge in one column of one row.
+         The counts follow the same scope as the list below, so a member is told
+         about their own requests and a head about the department's. Hidden
+         while there is nothing waiting, so it never becomes furniture. The
+         pricing dashboard has its own counters, hence not there. -->
+    <div id="pricingBanner" class="alert alert-info d-none align-items-center flex-wrap mb-4"
+         style="gap:.75rem;">
+        <i class="fas fa-tag"></i>
+        <span id="pricingBannerText"></span>
+        {% if 'sales_item.price' in _p %}
+        <a href="{{ url_for('pricing_dashboard') }}" class="btn btn-sm btn-outline-primary ml-auto">
+            Open the pricing dashboard
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% if 'target.view' in _p and not pricing_mode %}
     <!-- This quarter's target, one line per team the viewer may see. The scope
          is the server's: /api/targets already returns only what this permission
@@ -4488,12 +4507,24 @@ window.chartPieDemo = function() {
             "width": "230px",
             "render": function(data, type, row) {
                 var title = data || 'No Title';
-                var repricingCount = ((row.approval_stats || {}).repricing || 0);
-                if (type !== 'display' || repricingCount === 0) return title;
-                return '<div class="sales-request-title-cell">' + title +
-                    '<span class="repricing-row-alert" title="This request has items awaiting a pricing decision">' +
-                    '<i class="fas fa-exclamation-circle"></i>Re-Pricing Required (' + repricingCount + ')' +
-                    '</span></div>';
+                var stats = (row.approval_stats || {});
+                var repricingCount = (stats.repricing || 0);
+                // Costed and waiting for a price: the same kind of mark as
+                // re-pricing, on the row itself rather than only in the status
+                // column, because that column is off the right of the screen
+                // as often as not.
+                var notPricedCount = (stats.not_priced || 0);
+                if (type !== 'display' || (repricingCount === 0 && notPricedCount === 0)) return title;
+                var marks = '';
+                if (notPricedCount > 0) {
+                    marks += '<span class="pricing-row-alert" title="Costed items with no price yet">' +
+                        '<i class="fas fa-tag"></i>Needs Pricing (' + notPricedCount + ')</span>';
+                }
+                if (repricingCount > 0) {
+                    marks += '<span class="repricing-row-alert" title="This request has items awaiting a pricing decision">' +
+                        '<i class="fas fa-exclamation-circle"></i>Re-Pricing Required (' + repricingCount + ')</span>';
+                }
+                return '<div class="sales-request-title-cell">' + title + marks + '</div>';
             }
         },
         { 
@@ -4951,6 +4982,7 @@ window.chartPieDemo = function() {
                     if (window.PRICING_MODE && typeof updatePricingDashboard === 'function') {
                         updatePricingDashboard(json.requests);
                     }
+                    updatePricingBanner(json.requests);
                     return json.requests;
                 } else {
                     console.error('Error loading requests:', json.error);
@@ -5036,8 +5068,11 @@ window.chartPieDemo = function() {
         },
         "rowCallback": function(row, data) {
             applySalesRequestMobileLabels(row);
-            var repricingCount = (((data || {}).approval_stats || {}).repricing || 0);
-            $(row).toggleClass('sales-request-row--repricing', repricingCount > 0);
+            var stats = ((data || {}).approval_stats || {});
+            $(row).toggleClass('sales-request-row--repricing', (stats.repricing || 0) > 0);
+            // Costed, no price yet: the row says so on its own edge rather than
+            // only in the status column.
+            $(row).toggleClass('sales-request-row--needs-pricing', (stats.not_priced || 0) > 0);
         },
         "initComplete": function() {
             console.log('DataTable initialization complete');
@@ -5050,6 +5085,27 @@ window.chartPieDemo = function() {
     // Make table globally accessible for CRUD operations
     window.requestsTable = table;
     console.log('DataTable initialized and assigned to window.requestsTable');
+
+    // What is waiting for a price, counted from the rows already loaded rather
+    // than from a second endpoint. Silent when the banner is not on the page.
+    function updatePricingBanner(requests) {
+        var $banner = $('#pricingBanner');
+        if (!$banner.length) { return; }
+        var items = 0, reqs = 0;
+        (requests || []).forEach(function(r) {
+            var n = ((r.approval_stats || {}).not_priced || 0);
+            if (n > 0) { items += n; reqs++; }
+        });
+        if (!items) {
+            $banner.addClass('d-none').removeClass('d-flex');
+            return;
+        }
+        $('#pricingBannerText').html(
+            '<strong>' + items + '</strong> item' + (items === 1 ? '' : 's') +
+            ' in <strong>' + reqs + '</strong> request' + (reqs === 1 ? '' : 's') +
+            ' are costed and waiting to be priced.');
+        $banner.removeClass('d-none').addClass('d-flex');
+    }
 
     // ============= PRICING DASHBOARD (pricing_mode only) =============
     window.PRICING_FILTER = 'all';

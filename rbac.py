@@ -754,6 +754,41 @@ def resolve(perms, code):
     return scope if scope in SCOPES else None
 
 
+def sections(perms):
+    """
+    Which sections a permission set earns: one navbar menu and one home card
+    each, both read from here.
+
+    The two lists used to be gated separately and had drifted apart -- a 2D
+    designer was offered Sales and Operations cards for menus they could not
+    see, an Assistant an Admin card, a Sales Head an Admin menu. A section is
+    either on or off for a role; what sits inside it is still gated item by
+    item.
+    """
+    held = perms or {}
+    out = []
+    # Client is edited from the Sales menu, so client.edit alone is not what
+    # makes somebody an administrator.
+    if any(c in held for c in ('user.create', 'company.edit', 'entity.edit', 'supplier.edit')):
+        out.append('admin')
+    if 'section.sales' in held and 'sales_request.view' in held:
+        out.append('sales')
+    if 'section.operations' in held and 'approved_item.view' in held:
+        out.append('operations')
+    # Pricing is its own section rather than a link inside Operations: the
+    # pricing roles hold section.operations only in order to reach it, and
+    # nothing else on that menu is theirs.
+    if 'sales_item.price' in held:
+        out.append('pricing')
+    if 'section.finance' in held and 'finance_txn.view' in held:
+        out.append('finance')
+    for code, key in (('portal.marketing', 'marketing'), ('portal.account', 'account'),
+                      ('portal.design_2d', 'design_2d'), ('portal.design_3d', 'design_3d')):
+        if code in held:
+            out.append(key)
+    return out
+
+
 def allowed_user_ids(scope, me, direct_report_ids=(), department_member_ids=()):
     """
     Translate a scope into the set of owner ids a caller may see.

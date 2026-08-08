@@ -1018,7 +1018,8 @@ table.dataTable.display tbody tr:hover {
   flex-direction: column;
 }
 
-.repricing-row-alert {
+.repricing-row-alert,
+.pricing-row-alert {
   display: inline-flex;
   gap: 0.3rem;
   align-items: center;
@@ -1034,12 +1035,35 @@ table.dataTable.display tbody tr:hover {
   white-space: normal;
 }
 
+/* Waiting for a first price, not a second one: blue, so the two marks stay
+   tellable apart on a row carrying both. */
+.pricing-row-alert {
+  border-color: #b6cde8;
+  color: #1d4b7d;
+  background: #eff6fd;
+}
+
 #requests-table tbody tr.sales-request-row--repricing td:first-child {
   box-shadow: inset 3px 0 0 var(--bg-status-warning);
 }
 
 #requests-table tbody tr.sales-request-row--repricing:hover td {
   background-color: #fffdf7 !important;
+}
+
+/* Costed and waiting for a price. Repricing keeps the amber edge, so this one
+   is blue: a row can be in both states and the two must stay tellable apart. */
+#requests-table tbody tr.sales-request-row--needs-pricing td:first-child {
+  box-shadow: inset 3px 0 0 var(--bg-status-info);
+}
+
+#requests-table tbody tr.sales-request-row--needs-pricing:hover td {
+  background-color: #f7fafd !important;
+}
+
+/* Both at once: two stripes rather than one winning silently. */
+#requests-table tbody tr.sales-request-row--needs-pricing.sales-request-row--repricing td:first-child {
+  box-shadow: inset 3px 0 0 var(--bg-status-info), inset 6px 0 0 var(--bg-status-warning);
 }
 
 @media (max-width: 768px) {

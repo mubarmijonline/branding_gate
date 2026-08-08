@@ -296,9 +296,11 @@
       color: rgba(255,255,255,.88) !important;
       font-weight: 500;
       font-size: 0.875rem;
-      padding: 0.55rem 0.85rem !important;
+      padding: 0.55rem 0.7rem !important;
       border-radius: 6px;
       transition: background .2s, color .2s;
+      /* A label that breaks in half ("Help / Center") reads as two menus. */
+      white-space: nowrap;
     }
     .navbar-nav .nav-link:hover,
     .navbar-nav .nav-link:focus {
@@ -306,6 +308,14 @@
       background: rgba(255,255,255,.12);
     }
     .navbar-nav .nav-item { margin: 0 1px; }
+    /* The badge below is absolutely positioned; without this it anchors to the
+       page and lands in the top-right corner instead of on its own menu. */
+    .navbar-nav .nav-link { position: relative; }
+    /* The owner holds every section, which is eight menus plus the balance,
+       chat, bell and profile. Below ~1600px that is wider than the bar, so the
+       menus take a second row rather than pushing the profile off the screen.
+       Everybody else has four or fewer and never sees this. */
+    .navbar-nav.mr-auto { flex-wrap: wrap; }
     .nav-link .badge {
       position: absolute;
       top: 2px; right: 2px;
@@ -574,7 +584,7 @@
 
   {% block head %}{% endblock %}
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260801-pricing-2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260808-pricing-alert">
 
 </head>
 
@@ -590,22 +600,25 @@
   {% set can_manage_companies  = 'company.edit'  in _p %}
   {% set can_manage_suppliers  = 'supplier.edit' in _p %}
   {% set can_manage_entities   = 'entity.edit'   in _p %}
-  {% set can_open_admin        = is_admin or can_manage_clients or can_manage_companies or can_manage_suppliers or can_manage_entities %}
   {% set can_set_prices        = 'sales_item.price' in _p %}
   {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
-  {# Menus follow the section a role belongs to, not the data it can read. An
-     Operations leader reads a sales request in order to cost its items; that is
-     not a reason to show them the Sales menu, which is exactly what gating on
-     sales_request.view used to do. #}
-  {% set can_view_sales        = 'section.sales' in _p and 'sales_request.view' in _p %}
+  {# Which menus exist is rbac.sections(), the same list the home page cards are
+     built from, so a card can never offer a section the navbar hides. What sits
+     inside a menu is still gated item by item below. #}
+  {% set can_open_admin        = 'admin' in nav_sections %}
+  {% set can_view_sales        = 'sales' in nav_sections %}
+  {% set can_view_operations   = 'operations' in nav_sections %}
+  {% set can_view_pricing      = 'pricing' in nav_sections %}
+  {% set can_view_finance      = 'finance' in nav_sections %}
   {% set can_view_targets      = 'target.view' in _p %}
   {% set can_view_costing      = 'costing.view' in _p %}
-  {% set can_view_operations   = 'section.operations' in _p and 'approved_item.view' in _p %}
-  {% set can_view_finance      = 'section.finance' in _p and 'finance_txn.view' in _p %}
   {% set can_approve_finance   = 'finance_txn.approve' in _p %}
   {% set can_approve_expense_mgr = 'expense_tracking.approve_manager' in _p %}
   {% set can_approve_expense_fin = 'expense_tracking.approve_finance' in _p %}
-  <script>window.USER_PERMS = {{ _p | tojson }};</script>
+  <script>
+    window.USER_PERMS = {{ _p | tojson }};
+    window.USER_SECTIONS = {{ nav_sections | tojson }};
+  </script>
 
 
   <nav id="main_nav_bar" class="navbar sticky-top navbar-expand-lg navbar-light" style="background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);">
@@ -728,9 +741,8 @@
 
           {% endif %}
 
-          <!-- Operations Dropdown. Pricing lives in here, so Pricing roles must
-               be able to open it even without operations access. -->
-          {% if can_view_operations or can_set_prices %}
+          <!-- Operations Dropdown -->
+          {% if can_view_operations %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-cogs mr-1"></i> Operations
@@ -739,26 +751,19 @@
               <span class="badge badge-danger ml-1 d-none" id="navCostingBadgeTop"></span>
             </a>
             <div class="dropdown-menu" aria-labelledby="operationsDropdown">
-              {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
+              <a class="dropdown-item" href="{{ url_for('operation_mainpage') }}">
                 <i class="fas fa-tachometer-alt"></i> Operations Section
               </a>
-              {% endif %}
               <div class="dropdown-divider"></div>
-              {% if can_view_operations %}<a class="dropdown-item" href="{{ url_for('operation_request') }}">
+              <a class="dropdown-item" href="{{ url_for('operation_request') }}">
                 <i class="fas fa-tools"></i> Operation Request
               </a>
-              {% endif %}
               {% if can_view_costing %}
               <a class="dropdown-item" href="{{ url_for('costing_page') }}">
                 <i class="fas fa-calculator"></i> Costing
                 {# Filled in by the shared poll below, so an assignment is
                    visible from any page rather than only inside a cost modal. #}
                 <span class="badge badge-danger ml-1 d-none" id="navCostingBadge"></span>
-              </a>
-              {% endif %}
-              {% if can_set_prices %}
-              <a class="dropdown-item" href="{{ url_for('pricing_dashboard') }}">
-                <i class="fas fa-tags"></i> Pricing &amp; Re-Pricing
               </a>
               {% endif %}
               <a class="dropdown-item" href="{{ url_for('workflow_timeline') }}">
@@ -778,6 +783,20 @@
             </div>
           </li>
 
+          {% endif %}
+
+          <!-- Pricing. Its own menu rather than a link inside Operations: the
+               pricing roles hold the operations section only to reach it. -->
+          {% if can_view_pricing %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('pricing_dashboard') }}">
+              <i class="fas fa-tags mr-1"></i> Pricing
+              {# Items costed but not priced, plus anything sent back for
+                 re-pricing. Filled in by the shared poll below, so the work is
+                 visible from any page and not only from the dashboard. #}
+              <span class="badge badge-danger ml-1 d-none" id="navPricingBadge"></span>
+            </a>
+          </li>
           {% endif %}
 
           <!-- Finance Dropdown -->
@@ -813,6 +832,31 @@
                 <i class="fas fa-file-invoice-dollar"></i> Finance Expense Approval
               </a>
               {% endif %}
+            </div>
+          </li>
+          {% endif %}
+
+          {# The department portals. Blank pages for now, but reachable from any
+             page rather than only from the home card. One is a link; several
+             would wrap the navbar onto a second line, so they collapse. #}
+          {% if nav_portals | length == 1 %}
+          {% set portal = nav_portals[0] %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for(portal.endpoint) }}">
+              <i class="{{ portal.icon }} mr-1"></i> {{ portal.label }}
+            </a>
+          </li>
+          {% elif nav_portals %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="portalsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-th-large mr-1"></i> Portals
+            </a>
+            <div class="dropdown-menu" aria-labelledby="portalsDropdown">
+              {% for portal in nav_portals %}
+              <a class="dropdown-item" href="{{ url_for(portal.endpoint) }}">
+                <i class="{{ portal.icon }}"></i> {{ portal.label }}
+              </a>
+              {% endfor %}
             </div>
           </li>
           {% endif %}
@@ -2204,6 +2248,31 @@ function showToast(title, body) {
     }
     $(paint);
     setInterval(paint, 120000);   // slow on purpose: it is a hint, not a feed
+  }());
+  </script>
+  {% endif %}
+
+  {% if can_view_pricing %}
+  <script>
+  // The same idea on the Pricing menu: items costed and waiting for a price,
+  // plus anything the client sent back for re-pricing.
+  (function () {
+    function paint() {
+      $.getJSON('/api/pricing/summary').done(function (r) {
+        if (!r || !r.success) { return; }
+        var n = (r.to_price_total || 0) + (r.to_reprice_total || 0);
+        var $b = $('#navPricingBadge');
+        if (n > 0) {
+          $b.text(n).attr('title', (r.to_price_total || 0) + ' to price, ' +
+                                   (r.to_reprice_total || 0) + ' to re-price')
+            .removeClass('d-none');
+        } else {
+          $b.addClass('d-none');
+        }
+      });
+    }
+    $(paint);
+    setInterval(paint, 120000);   // a hint, not a feed
   }());
   </script>
   {% endif %}

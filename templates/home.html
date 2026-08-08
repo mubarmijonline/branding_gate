@@ -219,7 +219,9 @@ window.sessionUserId = "{{ session['user_id'] }}";
 </script>
 
 <script>
-// Map role name to portal info
+// One card per section. The keys are rbac.sections() -- the same list the
+// navbar menus are built from, so a card is never offered for a menu the
+// navbar hides.
 const rolePortals = {
   'admin': {
     icon: 'fas fa-shield-alt',
@@ -247,7 +249,7 @@ const rolePortals = {
       { name: 'Sales Head Approval', url: '/sales-head-approval', icon: 'fas fa-user-check' }
     ]
   },
-  'operation': {
+  'operations': {
     icon: 'fas fa-cogs',
     title: 'Operations',
     desc: 'Costing, approved items, workflow timelines, and inventory management.',
@@ -292,21 +294,21 @@ const rolePortals = {
       { name: 'My Expenses', url: '/my-expenses', icon: 'fas fa-user-tag' }
     ]
   },
-  'account manager': {
+  'account': {
     icon: 'fas fa-user-tie',
     title: 'Account Manager',
     desc: 'Oversee client accounts and ensure customer satisfaction.',
     link: '/account',
     theme: 'account'
   },
-  '2D designer': {
+  'design_2d': {
     icon: 'fas fa-pencil-ruler',
     title: '2D Designer',
     desc: 'Access 2D design tools, assets, and project boards.',
     link: '/design-2d',
     theme: '2d'
   },
-  '3D graphic': {
+  'design_3d': {
     icon: 'fas fa-cube',
     title: '3D Graphic',
     desc: 'Access 3D modeling, rendering, and visualization resources.',
@@ -315,33 +317,13 @@ const rolePortals = {
   }
 };
 
-// Which permission earns each portal card. Mirrors the server gate on the
-// portal's own landing page.
-const PORTAL_PERMISSION = {
-  'admin':         'user.view',
-  'sales':         'sales_request.view',
-  'operation':     'approved_item.view',
-  'pricing':       'sales_item.price',
-  'finance':       'finance_txn.view',
-  // The four department portals carry a permission of their own. They used to
-  // borrow the nearest-looking one, which showed Marketing to most of the
-  // company and hid Account Management and both design portals from their own
-  // members.
-  'marketing':       'portal.marketing',
-  'account manager': 'portal.account',
-  '2D designer':     'portal.design_2d',
-  '3D graphic':      'portal.design_3d'
-};
-
-function renderRolePortals(perms) {
+function renderRolePortals(sections) {
   const container = document.getElementById('role-portals-container');
   container.innerHTML = '';
 
-  const held = perms || {};
+  const held = sections || [];
   Object.entries(rolePortals).forEach(([key, portal]) => {
-    if (key === 'users') return;
-    const needed = PORTAL_PERMISSION[key];
-    if (needed && needed in held) {
+    if (held.indexOf(key) !== -1) {
       container.innerHTML += createPortalCard(portal);
     }
   });
@@ -407,14 +389,18 @@ function createPortalCard(portal) {
     </div>`;
 }
 
-// Fetch the current permission set and render the portals it earns.
+// Render what the shell already knows, then re-render once the server has
+// answered, so a role change lands without a reload and a slow round trip does
+// not leave the page empty.
 function fetchAndRenderRoles() {
+  renderRolePortals(window.USER_SECTIONS);
   fetch('/api/refresh-roles', { method: 'POST' })
     .then(res => res.json())
     .then(data => {
       if (data.success) {
         window.USER_PERMS = data.perms || {};
-        renderRolePortals(window.USER_PERMS);
+        window.USER_SECTIONS = data.sections || [];
+        renderRolePortals(window.USER_SECTIONS);
       }
     });
 }

@@ -878,6 +878,29 @@ def has(code):
     return rbac.resolve(session.get('perms') or {}, code) is not None
 
 
+# The four blank department portals, in navbar order.
+NAV_PORTALS = [
+    ('marketing', 'Marketing',  'fas fa-bullhorn',      'marketing_portal'),
+    ('account',   'Account',    'fas fa-user-tie',      'account_portal'),
+    ('design_2d', '2D Design',  'fas fa-pencil-ruler',  'design_2d_portal'),
+    ('design_3d', '3D Design',  'fas fa-cube',          'design_3d_portal'),
+]
+
+
+@app.context_processor
+def inject_nav_sections():
+    """The navbar menus and the home cards both read this one list."""
+    current = rbac.sections(session.get('perms'))
+    return {
+        'nav_sections': current,
+        # Everyone but the owner holds one of these, so they are a link each.
+        # Four of them side by side pushed the navbar onto a second line, so
+        # more than one collapses into a single menu.
+        'nav_portals': [{'key': key, 'label': label, 'icon': icon, 'endpoint': endpoint}
+                        for key, label, icon, endpoint in NAV_PORTALS if key in current],
+    }
+
+
 def visible_user_ids(code):
     """
     Owner ids the caller may see for this permission.
@@ -1489,6 +1512,9 @@ def refresh_user_roles():
             'roles': fresh_roles,
             'perms': fresh_perms,
             'role_code': role_code,
+            # The home page builds its cards from this, the same list the
+            # navbar menus come from.
+            'sections': rbac.sections(fresh_perms),
             'message': 'Roles refreshed successfully'
         })
         
@@ -5439,6 +5465,55 @@ def pricing_dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template("sales_request.html", pricing_mode=True)
+
+@app.route('/api/pricing/summary', methods=['GET'])
+@perm('sales_item.price')
+def pricing_summary():
+    """
+    What is waiting for a price, and where.
+
+    Costing hands an item over by writing its cost; until this, the only sign
+    was a badge in one column of the request list, which nobody sees unless
+    they are already on that page. The counts drive the badge on the Pricing
+    menu and the banner on the sales request page.
+
+    Two kinds of work, both belonging to Pricing: an item costed but never
+    priced, and one the client sent back for re-pricing.
+    """
+    try:
+        conn, cur = connection()
+        scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+
+        cur.execute("""
+            SELECT sr.id AS request_id,
+                   COUNT(CASE WHEN i.cost_per_item IS NOT NULL
+                               AND i.sell_per_item IS NULL THEN 1 END) AS to_price,
+                   COUNT(CASE WHEN i.approval_status = 'pending_negotiation'
+                               AND i.negotiation_status = 'negotiated' THEN 1 END) AS to_reprice
+            FROM sales_request sr
+            JOIN sales_request_items i ON i.request_id = sr.id
+            WHERE 1=1 """ + scope_sql + """
+            GROUP BY sr.id
+            HAVING to_price > 0 OR to_reprice > 0
+        """, scope_params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        by_request = {str(row['request_id']): {'to_price': row['to_price'],
+                                               'to_reprice': row['to_reprice']}
+                      for row in rows}
+        return jsonify(success=True,
+                       to_price_total=sum(row['to_price'] for row in rows),
+                       to_reprice_total=sum(row['to_reprice'] for row in rows),
+                       request_count=len(rows),
+                       by_request=by_request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: pricing summary failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
 
 # ---------------------------------------------------------------------------
 # Costing by assignment
