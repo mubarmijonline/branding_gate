@@ -229,6 +229,42 @@
     .notification-item .notification-title { font-weight: bold; margin-bottom: 5px; color: #333; }
     .notification-item .notification-time { font-size: 0.75em; color: #6c757d; }
 
+    /* The tray. One row is an icon, a line you can read at a glance, and when
+       it happened -- rather than a paragraph of grey text and a full date. */
+    .notif-row {
+      display: flex; gap: .7rem; align-items: flex-start;
+      padding: .7rem .95rem; border-bottom: 1px solid #f0f1f5;
+      color: inherit; text-decoration: none;
+    }
+    .notif-row:hover { background: #f6f8fc; text-decoration: none; color: inherit; }
+    .notif-row.is-unread { background: #f2f7ff; }
+    .notif-row.is-unread .notif-title { font-weight: 700; }
+    .notif-row.is-unread .notif-icon::after {
+      content: ''; position: absolute; top: -1px; right: -1px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #e74a3b; border: 2px solid #fff;
+    }
+    .notif-icon {
+      position: relative; flex: 0 0 32px; width: 32px; height: 32px;
+      border-radius: 9px; background: #eef2f9;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .82rem;
+    }
+    .notif-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .notif-head { display: flex; align-items: baseline; gap: .5rem; }
+    .notif-title {
+      font-size: .82rem; color: #2e3650; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .notif-when { margin-left: auto; font-size: .68rem; color: #98a1b3; white-space: nowrap; }
+    .notif-text {
+      font-size: .76rem; color: #6b7280; line-height: 1.35; margin-top: .12rem;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .notif-empty { padding: 2rem 1rem; text-align: center; color: #98a1b3; }
+    .notif-empty i { font-size: 1.6rem; display: block; margin-bottom: .5rem; color: #1cc88a; }
+
     .badge-counter {
       position: absolute;
       transform: scale(0.7);
@@ -897,6 +933,13 @@
               <a class="dropdown-item" href="#" onclick="openGlobalRequestBalanceModal(); return false;">
                 <i class="fas fa-hand-holding-usd fa-fw mr-2 text-primary"></i>
                 Request Balance
+              </a>
+              {# Handing back what is left. Hidden while there is nothing to
+                 hand back, so it is never an action that cannot be taken. #}
+              <a class="dropdown-item d-none" href="#" id="settleCustodyLink"
+                 onclick="openSettleCustodyModal(); return false;">
+                <i class="fas fa-undo fa-fw mr-2 text-success"></i>
+                تسوية عهدة — Settle balance
               </a>
               <a class="dropdown-item" href="#" onclick="openGlobalMyRequestsModal(); return false;">
                 <i class="fas fa-list-alt fa-fw mr-2 text-info"></i>
@@ -2423,44 +2466,84 @@ function formatDate(dateString) {
   }
 }
 
+// ---- how a notification is shown -------------------------------------------
+// Shared by the bell and the notifications page, so one notification does not
+// look like two different things depending on where it is read.
+
+window.notifRelativeTime = function (value) {
+  var then = new Date(value);
+  if (isNaN(then.getTime())) { return ''; }
+  var seconds = Math.round((Date.now() - then.getTime()) / 1000);
+  if (seconds < 60) { return 'just now'; }
+  var minutes = Math.round(seconds / 60);
+  if (minutes < 60) { return minutes + 'm ago'; }
+  var hours = Math.round(minutes / 60);
+  if (hours < 24) { return hours + 'h ago'; }
+  var days = Math.round(hours / 24);
+  if (days < 7) { return days + 'd ago'; }
+  return then.toLocaleDateString();
+};
+
+window.notifEscape = function (value) {
+  return $('<div>').text(value === null || value === undefined ? '' : value).html();
+};
+
+// Read from the title, because that is the only thing every sender fills in.
+// A notification with no icon and no colour is a wall of identical grey rows.
+window.notifKind = function (notification) {
+  var text = ((notification.title || '') + ' ' + (notification.content || '')).toLowerCase();
+  if (/عهدة|balance|custody|تسوية/.test(text))      return {icon: 'fa-hand-holding-usd', tone: 'success', label: 'عهدة'};
+  if (/expense|مصروف/.test(text))                    return {icon: 'fa-receipt',          tone: 'warning', label: 'Expenses'};
+  if (/cost|تكلفة/.test(text))                       return {icon: 'fa-calculator',       tone: 'primary', label: 'Costing'};
+  if (/pric|سعر/.test(text))                         return {icon: 'fa-tag',              tone: 'info',    label: 'Pricing'};
+  if (/negotiat|تفاوض/.test(text))                   return {icon: 'fa-handshake',        tone: 'danger',  label: 'Negotiation'};
+  if (/approv|reject|declin/.test(text))             return {icon: 'fa-clipboard-check',  tone: 'secondary', label: 'Approvals'};
+  return {icon: 'fa-bell', tone: 'secondary', label: 'General'};
+};
+
 // Function to display notifications in dropdown
 function displayNotifications(notifications) {
   const container = document.getElementById('notificationList');
   container.innerHTML = '';
   
   if (notifications.length === 0) {
-    container.innerHTML = '<div class="dropdown-item text-muted">No notifications</div>';
+    container.innerHTML =
+      '<div class="notif-empty">' +
+        '<i class="fas fa-check-circle"></i>' +
+        '<div>You are all caught up</div>' +
+      '</div>';
     updateNotificationBadge(0);
     return;
   }
-  
+
   // Update badge with unread count
   const unreadCount = notifications.filter(n => !n.read).length;
   updateNotificationBadge(unreadCount);
-  
-  // Show only first 5 notifications in dropdown
-  const displayNotifications = notifications.slice(0, 5);
-  
-  displayNotifications.forEach(notif => {
-    const item = document.createElement('div');
+
+  // Unread first: the tray is a to-do list, not a diary. Six of them, because
+  // a dropdown that scrolls is a page in disguise.
+  const ordered = notifications.slice().sort(function (a, b) {
+    if (!!a.read !== !!b.read) { return a.read ? 1 : -1; }
+    return new Date(b.timeadded_datestamp) - new Date(a.timeadded_datestamp);
+  }).slice(0, 6);
+
+  container.innerHTML = ordered.map(function (notif) {
     const isUnread = !notif.read;
-    
-    item.innerHTML = `
-      <a class="dropdown-item notification-item ${isUnread ? 'unread' : ''}" 
-         href="#" onclick="markNotificationAsRead('${notif.id}', event)">
-        <div class="d-flex flex-column">
-          <div class="d-flex justify-content-between align-items-start">
-            <div class="notification-title">${notif.title || 'Notification'}</div>
-            <small class="notification-time">${formatDate(notif.timeadded_datestamp)}</small>
-          </div>
-          <small class="text-muted mt-1">${notif.content || notif.body || ''}</small>
-          ${isUnread ? '<span class="badge badge-primary badge-sm mt-1">New</span>' : ''}
-        </div>
-      </a>
-    `;
-    
-    container.appendChild(item);
-  });
+    const kind = window.notifKind(notif);
+    return '' +
+      '<a class="notif-row ' + (isUnread ? 'is-unread' : '') + '" href="#" ' +
+         'onclick="markNotificationAsRead(\'' + notif.id + '\', event)">' +
+        '<span class="notif-icon text-' + kind.tone + '">' +
+          '<i class="fas ' + kind.icon + '"></i></span>' +
+        '<span class="notif-body">' +
+          '<span class="notif-head">' +
+            '<span class="notif-title">' + window.notifEscape(notif.title || 'Notification') + '</span>' +
+            '<span class="notif-when">' + window.notifRelativeTime(notif.timeadded_datestamp) + '</span>' +
+          '</span>' +
+          '<span class="notif-text">' + window.notifEscape(notif.content || notif.body || '') + '</span>' +
+        '</span>' +
+      '</a>';
+  }).join('');
 }
 
 // Function to refresh notifications
@@ -3264,9 +3347,14 @@ function loadNavbarBalance() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
-        var formatted = 'EGP ' + parseFloat(data.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var held = parseFloat(data.balance || 0);
+        var formatted = 'EGP ' + held.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         $('#navbarMyBalance').text(formatted);
         $('#navbarBalanceLarge').text(formatted);
+        // Settling is only offered while there is something to settle.
+        $('#settleAmount').data('held', held);
+        $('#settleHeldAmount').text(formatted);
+        $('#settleCustodyLink').toggleClass('d-none', !(held > 0));
         if (data.pending_requests > 0) {
           $('#navbarPendingBadge').text(data.pending_requests).show();
         } else {
@@ -3295,13 +3383,45 @@ function loadGlobalMyRequests() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success && data.requests.length > 0) {
-        var html = '<table class="table table-sm"><thead><tr><th>Code</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>';
+        var esc = function (v) {
+          return $('<div>').text(v === null || v === undefined ? '' : v).html();
+        };
+        var html = '<table class="table table-sm"><thead><tr><th>Code</th><th>Reason</th>' +
+                   '<th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>';
         data.requests.forEach(function(req) {
-          var statusClass = req.status === 'approved' ? 'success' : (req.status === 'pending' ? 'warning' : 'danger');
-          html += '<tr><td><code>' + req.transfer_code + '</code></td>' +
+          // Say who is holding it, not just that it is "pending".
+          var WAITING = {
+            pending_manager: ['warning', 'with your manager'],
+            pending_finance: ['info', 'with Finance'],
+            pending: ['warning', 'pending'],
+            approved: ['success', 'approved'],
+            rejected: ['danger', 'declined'],
+            cancelled: ['secondary', 'withdrawn']
+          };
+          var shown = WAITING[req.status] || ['secondary', req.status];
+          var statusClass = shown[0];
+          var statusLabel = shown[1] +
+            (req.transfer_type === 'settlement' ? ' · تسوية' : '');
+          // A rejection used to show a red word and nothing else, so the one
+          // thing the requester needed -- why -- was the one thing missing.
+          var outcome = '';
+          if (req.status === 'rejected' && req.rejection_reason) {
+            outcome = '<div class="small text-danger mt-1">' + esc(req.rejection_reason) + '</div>';
+          } else if (req.status === 'approved' && req.approved_by_name) {
+            outcome = '<div class="small text-muted mt-1">Approved by ' + esc(req.approved_by_name) + '</div>';
+          }
+          var waiting = req.status === 'pending_manager' || req.status === 'pending_finance'
+                     || req.status === 'pending';
+          var action = (waiting && req.transfer_type !== 'settlement')
+            ? '<button class="btn btn-sm btn-outline-danger" onclick="cancelGlobalBalanceRequest(' +
+              req.id + ')">Withdraw</button>'
+            : '';
+          html += '<tr><td><code>' + esc(req.transfer_code) + '</code></td>' +
+                  '<td>' + esc(req.description || '-') + outcome + '</td>' +
                   '<td>EGP ' + parseFloat(req.amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) + '</td>' +
-                  '<td><span class="badge badge-' + statusClass + '">' + req.status + '</span></td>' +
-                  '<td>' + (req.created_at ? new Date(req.created_at).toLocaleDateString() : '-') + '</td></tr>';
+                  '<td><span class="badge badge-' + statusClass + '">' + esc(statusLabel) + '</span></td>' +
+                  '<td>' + (req.created_at ? new Date(req.created_at).toLocaleDateString() : '-') + '</td>' +
+                  '<td class="text-right">' + action + '</td></tr>';
         });
         html += '</tbody></table>';
         $('#globalMyRequestsBody').html(html);
@@ -3359,6 +3479,63 @@ $(document).on('pointerdown.bgTableDrag', '.table-responsive, .dataTables_scroll
 
   e.preventDefault();
 });
+
+function openSettleCustodyModal() {
+  var held = parseFloat($('#settleAmount').data('held') || 0);
+  $('#settleAmount').val(held ? held.toFixed(2) : '');
+  $('#settleNote').val('');
+  $('#settleCustodyModal').modal('show');
+}
+
+function submitCustodySettlement() {
+  var amount = parseFloat($('#settleAmount').val());
+  if (!amount || amount <= 0) {
+    Swal.fire('Error', 'Enter the amount you are handing back', 'error');
+    return;
+  }
+  fetch('/api/finance/custody/settle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: amount, description: $('#settleNote').val() })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (data) {
+    if (data.success) {
+      $('#settleCustodyModal').modal('hide');
+      Swal.fire('Sent to Finance',
+                'They will confirm it when the money arrives. ' + data.transfer_code,
+                'success');
+      loadNavbarBalance();
+    } else {
+      Swal.fire('Error', data.error || 'Could not send it', 'error');
+    }
+  })
+  .catch(function () { Swal.fire('Error', 'Server error', 'error'); });
+}
+
+function cancelGlobalBalanceRequest(requestId) {
+  Swal.fire({
+    title: 'Withdraw this request?',
+    text: 'It disappears from the approvers’ list. You can always ask again.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Withdraw it',
+    confirmButtonColor: '#dc3545'
+  }).then(function (result) {
+    if (!result.value) { return; }
+    fetch('/api/finance/balance-requests/' + requestId + '/cancel', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          loadGlobalMyRequests();
+          loadNavbarBalance();
+        } else {
+          Swal.fire('Error', data.error || 'Could not withdraw it', 'error');
+        }
+      })
+      .catch(function () { Swal.fire('Error', 'Server error', 'error'); });
+  });
+}
 
 function submitGlobalBalanceRequest() {
   var amount = $('#globalReqAmount').val();
@@ -3427,6 +3604,47 @@ $(document).ready(function() {
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="submitGlobalBalanceRequest()">
           <i class="fas fa-paper-plane mr-1"></i> Submit Request
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- تسوية عهدة: hand back what is left of the balance -->
+<div class="modal fade" id="settleCustodyModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white;">
+        <h5 class="modal-title"><i class="fas fa-undo mr-2"></i>تسوية عهدة — Settle balance</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light border">
+          You are holding <strong id="settleHeldAmount">EGP 0.00</strong>.
+          Tell Finance how much you are handing back; it leaves your balance once
+          they confirm the money has arrived.
+        </div>
+        <div class="form-group">
+          <label style="font-weight: 600;">Amount handed back (EGP) *</label>
+          <input type="number" class="form-control" id="settleAmount" step="0.01" min="0.01" required>
+          <small class="form-text text-muted">
+            <a href="#" onclick="$('#settleAmount').val($('#settleAmount').data('held')); return false;">
+              Hand back all of it
+            </a>
+          </small>
+        </div>
+        <div class="form-group">
+          <label style="font-weight: 600;">Note</label>
+          <textarea class="form-control" id="settleNote" rows="2"
+                    placeholder="Anything Finance should know"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" onclick="submitCustodySettlement()">
+          <i class="fas fa-paper-plane mr-1"></i> Send to Finance
         </button>
       </div>
     </div>

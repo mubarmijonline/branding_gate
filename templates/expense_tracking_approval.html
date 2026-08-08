@@ -58,6 +58,33 @@
         </h1>
     </div>
 
+    {% if 'user_balance.approve_manager' in session.get('perms', {}) %}
+    <!-- عهدة asked for by my own reports. Their manager signs before Finance
+         ever sees it, so this is the only place it can be signed. Hidden while
+         empty rather than showing an empty box on every visit. -->
+    <div class="card shadow mb-4 d-none" id="custodyQueueCard">
+        <div class="card-header py-3 d-flex align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-hand-holding-usd mr-2"></i>عهدة waiting on you
+            </h6>
+            <span class="badge badge-warning ml-2" id="custodyQueueCount">0</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" id="custodyQueueTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Code</th><th>Who</th><th>Reason</th>
+                            <th class="text-right">Amount</th><th>Asked</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Summary Cards -->
     <div class="row mb-4">
         <div class="col-xl-4 col-md-6 mb-4">
@@ -298,7 +325,101 @@ let reimbursementExpenses = [];
 
 $(document).ready(function() {
     loadAllExpenses();
+    loadCustodyQueue();
 });
+
+// ---- عهدة waiting on this manager -----------------------------------------
+
+function custodyEsc(value) {
+    return $('<div>').text(value === null || value === undefined ? '' : value).html();
+}
+
+function loadCustodyQueue() {
+    if (!$('#custodyQueueCard').length) { return; }
+    $.getJSON('/api/finance/balance-requests/waiting-on-me').done(function (data) {
+        if (!data || !data.success) { return; }
+        var rows = data.requests || [];
+        if (!rows.length) {
+            $('#custodyQueueCard').addClass('d-none');
+            return;
+        }
+        $('#custodyQueueCount').text(rows.length);
+        $('#custodyQueueTable tbody').html(rows.map(function (r) {
+            return '<tr>' +
+                '<td><code>' + custodyEsc(r.transfer_code) + '</code></td>' +
+                '<td>' + custodyEsc(r.requester_name) + '</td>' +
+                '<td>' + custodyEsc(r.description || '-') + '</td>' +
+                '<td class="text-right font-weight-bold">EGP ' +
+                    parseFloat(r.amount).toLocaleString('en-US', {minimumFractionDigits: 2}) + '</td>' +
+                '<td>' + (r.created_at ? new Date(r.created_at).toLocaleDateString() : '-') + '</td>' +
+                '<td class="text-right text-nowrap">' +
+                    '<button class="btn btn-sm btn-success mr-1" onclick="approveCustody(' +
+                        r.id + ', ' + parseFloat(r.amount) + ')">' +
+                        '<i class="fas fa-check"></i> Approve</button>' +
+                    '<button class="btn btn-sm btn-outline-danger" onclick="rejectCustody(' +
+                        r.id + ')"><i class="fas fa-times"></i></button>' +
+                '</td></tr>';
+        }).join(''));
+        $('#custodyQueueCard').removeClass('d-none');
+    });
+}
+
+function approveCustody(requestId, asked) {
+    // The manager may send a different figure than the one asked for.
+    Swal.fire({
+        title: 'Approve this عهدة?',
+        input: 'number',
+        inputValue: asked,
+        inputLabel: 'Amount to send to Finance (EGP)',
+        showCancelButton: true,
+        confirmButtonText: 'Approve',
+        confirmButtonColor: '#1cc88a'
+    }).then(function (result) {
+        if (!result.value) { return; }
+        $.ajax({
+            url: '/api/finance/balance-requests/' + requestId + '/manager-approve',
+            method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ amount: parseFloat(result.value) })
+        }).done(function (data) {
+            if (data.success) {
+                Swal.fire('Sent to Finance', '', 'success');
+                loadCustodyQueue();
+            } else {
+                Swal.fire('Error', data.error || 'Could not approve it', 'error');
+            }
+        }).fail(function (xhr) {
+            Swal.fire('Error', (xhr.responseJSON || {}).error || 'Server error', 'error');
+        });
+    });
+}
+
+function rejectCustody(requestId) {
+    Swal.fire({
+        title: 'Decline this عهدة?',
+        input: 'text',
+        inputLabel: 'Reason — they will see this',
+        showCancelButton: true,
+        confirmButtonText: 'Decline',
+        confirmButtonColor: '#e74a3b',
+        inputValidator: function (value) {
+            return value ? null : 'A reason is required';
+        }
+    }).then(function (result) {
+        if (!result.value) { return; }
+        $.ajax({
+            url: '/api/finance/balance-requests/' + requestId + '/manager-reject',
+            method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ reason: result.value })
+        }).done(function (data) {
+            if (data.success) {
+                Swal.fire('Declined', '', 'success');
+                loadCustodyQueue();
+            } else {
+                Swal.fire('Error', data.error || 'Could not decline it', 'error');
+            }
+        });
+    });
+}
 
 function loadAllExpenses() {
     // Load personal expenses

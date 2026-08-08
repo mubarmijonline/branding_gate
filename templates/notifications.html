@@ -3,6 +3,50 @@
 {% block head %}
 <!-- Additional CSS for notifications page -->
 <style>
+    /* One card per notification, grouped under the day it arrived. */
+    .notif-day {
+        font-size: .7rem; letter-spacing: .09em; text-transform: uppercase;
+        font-weight: 700; color: #8891a8; margin: 1.15rem 0 .5rem;
+    }
+    .notif-day:first-child { margin-top: 0; }
+
+    .notif-card {
+        display: flex; gap: .85rem; align-items: flex-start;
+        background: #fff; border: 1px solid #e7e9f0; border-radius: 10px;
+        padding: .85rem 1rem; margin-bottom: .5rem;
+        transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    .notif-card:hover { box-shadow: 0 3px 14px rgba(58,59,69,.09); border-color: #d9deea; }
+    .notif-card.is-unread { border-left: 3px solid #4e73df; background: #fbfcff; }
+
+    .notif-card-icon {
+        flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px;
+        background: #eef2f9; display: inline-flex; align-items: center;
+        justify-content: center; font-size: .9rem;
+    }
+    .notif-card-body { flex: 1; min-width: 0; }
+    .notif-card-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .notif-card-title { font-weight: 600; color: #2e3650; font-size: .92rem; }
+    .notif-card-when { margin-left: auto; font-size: .72rem; color: #98a1b3; white-space: nowrap; }
+    .notif-card-text { color: #5a6072; font-size: .84rem; line-height: 1.45; margin-top: .2rem; }
+    .notif-card-by { font-size: .72rem; color: #98a1b3; margin-top: .25rem; }
+    .notif-card-action { display: flex; align-items: center; }
+
+    .notif-chip {
+        font-size: .63rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .04em; padding: .1rem .4rem; border-radius: 4px;
+        background: #eef2f9; color: #6b7280;
+    }
+    .notif-chip-success { background: #e4f1ea; color: #168754; }
+    .notif-chip-warning { background: #fdf0d9; color: #b7791f; }
+    .notif-chip-primary { background: #e7edfb; color: #3a4fa0; }
+    .notif-chip-info    { background: #e3f1f7; color: #2563a8; }
+    .notif-chip-danger  { background: #fdecea; color: #b42318; }
+
+    @media (max-width: 576px) {
+        .notif-card-when { margin-left: 0; width: 100%; }
+    }
+
     .notification-item {
         transition: all 0.3s ease;
         cursor: pointer;
@@ -73,7 +117,7 @@
             <button class="btn btn-primary btn-sm" onclick="markAllAsRead()">
                 <i class="fas fa-check-double mr-1"></i>Mark All as Read
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="refreshNotifications()">
+            <button class="btn btn-secondary btn-sm" onclick="refreshNotificationsPage()">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -209,7 +253,7 @@ let currentPage = 1;
 const notificationsPerPage = 20;
 
 // Format date function
-function formatDate(dateString) {
+function formatNotificationDate(dateString) {
     try {
         const date = new Date(dateString);
         if (isNaN(date.getTime())) {
@@ -248,8 +292,10 @@ function isToday(dateString) {
     }
 }
 
-// Fetch notifications
-async function fetchNotifications() {
+// Fetch notifications. Named apart from the navbar's own copy in main.html:
+// that file loads after this block, so a shared name here is a function that
+// never runs.
+async function loadNotificationsPage() {
     try {
         const response = await fetch('/get_notifications');
         const data = await response.json();
@@ -260,7 +306,7 @@ async function fetchNotifications() {
         
         allNotifications = data.notifications || [];
         updateStatistics();
-        displayNotifications();
+        renderNotificationsPage();
         
     } catch (error) {
         console.error('Error fetching notifications:', error);
@@ -288,11 +334,11 @@ function updateStatistics() {
 function filterNotifications(type) {
     currentFilter = type;
     currentPage = 1;
-    displayNotifications();
+    renderNotificationsPage();
 }
 
 // Display notifications
-function displayNotifications() {
+function renderNotificationsPage() {
     const container = document.getElementById('notificationsContainer');
     const loadingState = document.getElementById('loadingState');
     const emptyState = document.getElementById('emptyState');
@@ -332,10 +378,20 @@ function displayNotifications() {
     const paginatedNotifications = filteredNotifications.slice(startIndex, endIndex);
     
     container.innerHTML = '';
-    
+
+    // Grouped by day. A flat list of eighty rows all stamped with a full date
+    // is the reason nobody reads the second screen.
+    let lastHeading = null;
     paginatedNotifications.forEach(notification => {
-        const notificationElement = createNotificationElement(notification);
-        container.appendChild(notificationElement);
+        const heading = dayHeading(notification.timeadded_datestamp);
+        if (heading !== lastHeading) {
+            const bar = document.createElement('div');
+            bar.className = 'notif-day';
+            bar.textContent = heading;
+            container.appendChild(bar);
+            lastHeading = heading;
+        }
+        container.appendChild(createNotificationElement(notification));
     });
     
     // Show/hide load more button
@@ -347,36 +403,49 @@ function displayNotifications() {
     }
 }
 
-// Create notification element
+// Which day's pile this belongs on.
+function dayHeading(value) {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) { return 'Earlier'; }
+    const today = new Date();
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const days = Math.floor((midnight - new Date(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000);
+    if (days <= 0) { return 'Today'; }
+    if (days === 1) { return 'Yesterday'; }
+    if (days < 7) { return date.toLocaleDateString(undefined, {weekday: 'long'}); }
+    return date.toLocaleDateString(undefined, {day: 'numeric', month: 'long', year: 'numeric'});
+}
+
+// Create notification element. The icon, the tone and the relative time all
+// come from main.html, so a notification reads the same here as in the bell.
 function createNotificationElement(notification) {
     const div = document.createElement('div');
     const isUnread = !notification.read;
-    
-    div.className = `notification-item p-3 mb-2 border rounded ${isUnread ? 'unread' : 'read'}`;
+    const kind = window.notifKind(notification);
+    const esc = window.notifEscape;
+
+    div.className = `notif-card ${isUnread ? 'is-unread' : ''}`;
     div.innerHTML = `
-        <div class="d-flex justify-content-between align-items-start">
-            <div class="flex-grow-1">
-                <div class="d-flex align-items-center mb-1">
-                    <div class="notification-title">${notification.title || 'Notification'}</div>
-                    ${isUnread ? '<span class="badge badge-primary notification-badge ml-2">New</span>' : ''}
-                </div>
-                <div class="notification-content">${notification.content || notification.body || ''}</div>
-                <div class="notification-time">
-                    <i class="fas fa-clock mr-1"></i>${formatDate(notification.timeadded_datestamp)}
-                </div>
+        <span class="notif-card-icon text-${kind.tone}"><i class="fas ${kind.icon}"></i></span>
+        <div class="notif-card-body">
+            <div class="notif-card-head">
+                <span class="notif-card-title">${esc(notification.title || 'Notification')}</span>
+                <span class="notif-chip notif-chip-${kind.tone}">${esc(kind.label)}</span>
+                <span class="notif-card-when" title="${esc(formatNotificationDate(notification.timeadded_datestamp))}">
+                    ${window.notifRelativeTime(notification.timeadded_datestamp)}
+                </span>
             </div>
-            <div class="ml-3">
-                ${isUnread ? `
-                    <button class="btn btn-sm btn-outline-primary mark-read-btn" onclick="markAsRead('${notification.id}')">
-                        <i class="fas fa-check"></i>
-                    </button>
-                ` : `
-                    <i class="fas fa-check-circle text-success"></i>
-                `}
-            </div>
+            <div class="notif-card-text">${esc(notification.content || notification.body || '')}</div>
+            ${notification.added_by ? `<div class="notif-card-by">from ${esc(notification.added_by)}</div>` : ''}
+        </div>
+        <div class="notif-card-action">
+            ${isUnread
+                ? `<button class="btn btn-sm btn-outline-primary" title="Mark as read"
+                           onclick="markAsRead('${notification.id}')"><i class="fas fa-check"></i></button>`
+                : '<i class="fas fa-check-circle text-success" title="Read"></i>'}
         </div>
     `;
-    
+
     return div;
 }
 
@@ -401,7 +470,7 @@ async function markAsRead(notificationId) {
                 notification.read = true;
             }
             updateStatistics();
-            displayNotifications();
+            renderNotificationsPage();
         }
     } catch (error) {
         console.error('Error marking notification as read:', error);
@@ -424,7 +493,7 @@ async function markAllAsRead() {
             // Update all notifications in our local array
             allNotifications.forEach(n => n.read = true);
             updateStatistics();
-            displayNotifications();
+            renderNotificationsPage();
             
             // Show success message
             Swal.fire({
@@ -443,21 +512,21 @@ async function markAllAsRead() {
 // Load more notifications
 function loadMoreNotifications() {
     currentPage++;
-    displayNotifications();
+    renderNotificationsPage();
 }
 
 // Refresh notifications
-async function refreshNotifications() {
+async function refreshNotificationsPage() {
     document.getElementById('loadingState').style.display = 'block';
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('notificationsContainer').innerHTML = '';
     
-    await fetchNotifications();
+    await loadNotificationsPage();
 }
 
 // Initialize when document is ready
 $(document).ready(function() {
-    fetchNotifications();
+    loadNotificationsPage();
 });
 </script>
 {% endblock %}

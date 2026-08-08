@@ -100,7 +100,12 @@ PERMISSIONS = {
     'user_balance.view':    'View user balances',
     'user_balance.request': 'Request a balance top-up',
     'user_balance.transfer': 'Transfer balance between users',
+    # The two signatures on a عهدة request, in the order they are given. The
+    # manager's is first and covers their own reports only; Finance's is what
+    # actually moves the money.
+    'user_balance.approve_manager': "Approve a direct report's balance request",
     'user_balance.approve': 'Approve or reject balance requests',
+    'user_balance.settle':  'Hand back what is left of a عهدة',
     'loan.view':            'View loans',
     'loan.create':          'Create loans',
 
@@ -664,6 +669,28 @@ for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
         if _role_code in SEED_MATRIX:
             SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_section: 'all'})
 
+# Anybody with people under them signs their عهدة requests and may correct the
+# money on their expense sheets. Granted by level rather than by naming the
+# roles, so a new team leader is covered by being one. Scope is 'team' -- self
+# plus direct reports -- and the route narrows that further to the requester's
+# own manager, because holding a permission is not the same as being the person
+# somebody actually reports to.
+#
+# The Assistant is the named exception: a head by level, with nobody reporting
+# to them and deliberately no approvals of any kind. tests/test_rbac.py holds
+# that line.
+_NO_REPORTS = {'assistant'}
+
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    if (_level in (LEVEL_HEAD, LEVEL_TEAM_LEADER)
+            and _role_code not in _NO_REPORTS
+            and _role_code in SEED_MATRIX):
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {
+            'user_balance.approve_manager': 'team',
+            'user_balance.view': 'team',
+            'expense_tracking.edit_amount': 'team',
+        })
+
 # Self-service: what every employee needs regardless of job. The navbar balance
 # widget and the item-catalog lookup in main.html are rendered for everyone, so
 # gating them behind a departmental permission would break the shell itself.
@@ -672,6 +699,8 @@ _SELF_SERVICE = _merge(
     {
         'user_balance.view': 'own',
         'user_balance.request': 'own',
+        # Everybody who can hold a عهدة can hand back what is left of it.
+        'user_balance.settle': 'own',
         'catalog.view': 'all',
         'expense_tracking.view': 'own',
         'expense_tracking.create': 'own',

@@ -1016,9 +1016,10 @@ def get_users_by_role(role_name):
         return []
     conn, cur = connection()
     placeholders = ",".join(["%s"] * len(role_codes))
+    # The CEO is out of every fan-out, for the reason in users_holding().
     cur.execute(
         "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
-        "WHERE r.code IN (%s)" % placeholders,
+        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL" % placeholders,
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
@@ -1027,21 +1028,38 @@ def get_users_by_role(role_name):
     return user_ids
 
 
-def send_notification_to_role(role_name, title, content):
+def notifications_disabled():
     """
-    Send notification to all users with the specified role.
+    True when a notification would be noise rather than news.
+
+    The tests roll MySQL back but Mongo is not in that transaction, so every run
+    used to leave its notifications behind for ever: 1757 of the 1825 in the
+    tray were fixtures telling real people about 'Costing test item'. That is
+    the whole of the "it goes up when nobody did anything" complaint.
     """
+    return bool(os.environ.get('BG_NO_NOTIFICATIONS')) or 'unittest' in sys.modules
+
+
+def notify_users(user_ids, title, content):
+    """
+    Send one notification to each of these people.
+
+    The one place a notification is written. A notification is a hint: it must
+    never take down the work that earned it, so every failure here is swallowed
+    and counted as nothing sent.
+    """
+    if notifications_disabled():
+        return 0
     try:
-        user_ids = get_users_by_role(role_name)
-        added_by = session.get('name', 'System')
-        added_uid = session.get('user_id', 0)
-        
-        if not user_ids:
+        recipients = sorted({int(user_id) for user_id in (user_ids or []) if user_id})
+        if not recipients:
             return 0
 
+        added_by = session.get('name', 'System')
+        added_uid = session.get('user_id', 0)
         now = datetime.now()
         documents = [{
-            'uid': int(user_id),
+            'uid': user_id,
             'title': title,
             'content': content,
             'added_by': added_by,
@@ -1049,15 +1067,77 @@ def send_notification_to_role(role_name, title, content):
             'added_date': now,
             'triggered': False,
             'read': False,
-        } for user_id in user_ids]
-        written = mongo_safe(
+        } for user_id in recipients]
+        return mongo_safe(
             lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
-            fallback=0, label='notify role')
+            fallback=0, label='notify users')
+    except Exception as e:
+        print(f"Error sending notifications: {e}")
+        return 0
 
-        return written  # Return number of notifications sent
+
+def notify_user(user_id, title, content):
+    """Tell one person. Named so a caller cannot mistake it for a role."""
+    return notify_users([user_id], title, content)
+
+
+def notify_username(username, title, content):
+    """
+    Tell one person named by their username.
+
+    sales_request_approvals.requested_by holds a username rather than an id, and
+    two call sites handed it to send_notification_to_role, which looks its
+    argument up as a workflow role and quietly found nobody -- so the requester
+    was never told their request had been approved or rejected.
+    """
+    if not username:
+        return 0
+    conn, cur = connection()
+    cur.execute("SELECT id FROM user WHERE username = %s OR name = %s LIMIT 1",
+                (username, username))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return notify_user(row['id'], title, content) if row else 0
+
+
+def send_notification_to_role(role_name, title, content):
+    """
+    Send notification to all users with the specified role.
+    """
+    try:
+        return notify_users(get_users_by_role(role_name), title, content)
     except Exception as e:
         print(f"Error sending notifications to role {role_name}: {e}")
         return 0
+
+
+def users_holding(permission):
+    """
+    Everyone whose role grants this permission, for telling a desk that
+    something has landed on it. Audiences follow the grant matrix rather than a
+    hand-kept list of role names, so a role that gains the permission later is
+    told without anybody remembering to add it.
+
+    The CEO is left out. They hold every permission, so every fan-out in the
+    system landed on them -- two hundred of them, most about work they were
+    never going to do. Anything genuinely theirs is sent to them by name
+    through notify_user, which does not go through here.
+    """
+    role_codes = [code for code, grants in rbac.SEED_MATRIX.items() if permission in grants]
+    if not role_codes:
+        return []
+    conn, cur = connection()
+    placeholders = ",".join(["%s"] * len(role_codes))
+    cur.execute(
+        "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL" % placeholders,
+        role_codes,
+    )
+    user_ids = [row['id'] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return user_ids
 def calculate_duration_days(start_date, end_date):
     """Calculate duration in days between two dates (inclusive)"""
     if not start_date:
@@ -8703,10 +8783,21 @@ def add_operation_request():
             cur.close()
             conn.close()
             
+            # Same rule: the owner and Pricing, not the whole Sales department.
+            conn_owner, cur_owner = connection()
+            cur_owner.execute("SELECT owner_user_id FROM sales_request WHERE id = %s",
+                              (data['request_id'],))
+            owner_row = cur_owner.fetchone()
+            cur_owner.close()
+            conn_owner.close()
+
             notification_title = f"Request #{data['request_id']:06d} Costing Completed"
-            notification_content = f"Operations team has completed costing for request #{data['request_id']:06d} (Client: {client_name}). The request is now ready for final pricing review."
-            notifications_sent = send_notification_to_role('sales', notification_title, notification_content)
-            print(f"DEBUG: Sent {notifications_sent} notifications to sales team for completed costing")
+            notification_content = f"Operations completed costing for request #{data['request_id']:06d} (Client: {client_name}). It is ready for pricing."
+            notifications_sent = notify_users(
+                ([owner_row['owner_user_id']] if owner_row else [])
+                + users_holding('sales_item.price'),
+                notification_title, notification_content)
+            print(f"DEBUG: Sent {notifications_sent} costing-completed notifications")
         except Exception as e:
             print(f"DEBUG: Error sending costing completion notifications: {e}")
             # Don't fail the costing update if notification fails
@@ -9020,10 +9111,23 @@ def add_operation_request_costs():
                 cur_notif.close()
                 conn_notif.close()
                 
+                # The person whose request it is, and Pricing, who act on it --
+                # not all thirty-odd holders of a sales permission. A costing
+                # finished on somebody else's request is not news.
+                conn_owner, cur_owner = connection()
+                cur_owner.execute("SELECT owner_user_id FROM sales_request WHERE id = %s",
+                                  (data['request_id'],))
+                owner_row = cur_owner.fetchone()
+                cur_owner.close()
+                conn_owner.close()
+
                 notification_title = f"Request #{data['request_id']:06d} Costing Completed"
-                notification_content = f"Operations team has completed costing for request #{data['request_id']:06d} (Client: {client_name}). All items have been costed. Total cost: EGP {final_total_cost:.2f}. The request is ready for final pricing review."
-                notifications_sent = send_notification_to_role('sales', notification_title, notification_content)
-                print(f"DEBUG: Sent {notifications_sent} notifications to sales team for completed costing")
+                notification_content = f"Operations completed costing for request #{data['request_id']:06d} (Client: {client_name}). Total cost: EGP {final_total_cost:.2f}. It is ready for pricing."
+                notifications_sent = notify_users(
+                    ([owner_row['owner_user_id']] if owner_row else [])
+                    + users_holding('sales_item.price'),
+                    notification_title, notification_content)
+                print(f"DEBUG: Sent {notifications_sent} costing-completed notifications")
             except Exception as e:
                 print(f"DEBUG: Error sending costing completion notifications: {e}")
                 # Don't fail the costing update if notification fails
@@ -10199,7 +10303,7 @@ def approve_request(approval_id):
         
         # Send notification to original requester
         try:
-            send_notification_to_role(
+            notify_username(
                 approval['requested_by'],
                 'Request Approved',
                 f'Your sales request "{request_data.get("title")}" has been approved by {session["username"]}'
@@ -10262,7 +10366,7 @@ def reject_request(approval_id):
         # Send notification to original requester
         request_data = json.loads(approval['request_data']) if isinstance(approval['request_data'], str) else approval['request_data']
         try:
-            send_notification_to_role(
+            notify_username(
                 approval['requested_by'],
                 'Request Rejected',
                 f'Your sales request "{request_data.get("title")}" was rejected. Reason: {rejection_reason}'
@@ -21325,7 +21429,8 @@ def get_my_balance():
         cur.execute("""
             SELECT COUNT(*) as pending_count
             FROM user_balance_transfers
-            WHERE to_user_id = %s AND status = 'pending' AND transfer_type = 'user_request'
+            WHERE to_user_id = %s AND transfer_type = 'user_request'
+              AND status IN ('pending_manager', 'pending_finance')
         """, (user_id,))
         pending = cur.fetchone()
         
@@ -21528,6 +21633,61 @@ def transfer_balance_to_user():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _next_transfer_code(cur):
+    """
+    A free REQ- code.
+
+    transfer_code carries a UNIQUE index and the old line picked a random one
+    and hoped: five digits is ninety thousand codes, so by the three hundredth
+    request the odds of a clash -- and of the 500 it causes -- are about even.
+    """
+    import random
+    for _ in range(50):
+        code = "REQ-%d" % random.randint(10000, 99999)
+        cur.execute("SELECT id FROM user_balance_transfers WHERE transfer_code = %s", (code,))
+        if not cur.fetchone():
+            return code
+    raise RuntimeError('could not find a free transfer code')
+
+
+def _may_approve_for(cur, actor_id, subject_id, permission):
+    """
+    May this person sign for that one?
+
+    The reporting line decides, not the permission on its own: holding
+    approve_manager makes you a manager, it does not make you *their* manager.
+    Unrestricted scope reaches anywhere, so an absent manager cannot strand
+    somebody's money.
+    """
+    if rbac.resolve(session.get('perms') or {}, permission) == 'all':
+        return True
+    cur.execute("SELECT manager_id FROM user WHERE id = %s", (subject_id,))
+    row = cur.fetchone()
+    return bool(row and row['manager_id'] == actor_id)
+
+
+def _approving_manager(cur, user_id):
+    """
+    The manager who signs this person's عهدة, or None when nobody does.
+
+    Nobody does in two cases, and they are the same case seen from two sides:
+    the CEO has no manager, and the nine people who report straight to the CEO
+    are their own top layer. Read from user.manager_id rather than a list of
+    names, so a transfer or a new head needs no edit here.
+    """
+    cur.execute("SELECT manager_id FROM user WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    manager_id = row['manager_id'] if row else None
+    if not manager_id:
+        return None
+    cur.execute("SELECT manager_id FROM user WHERE id = %s", (manager_id,))
+    above = cur.fetchone()
+    # Their manager is the root of the tree: no layer in between to sign.
+    if not above or above['manager_id'] is None:
+        return None
+    return manager_id
+
+
 @app.route('/api/finance/request-balance', methods=['POST'])
 @perm('user_balance.request')
 def request_balance():
@@ -21543,24 +21703,52 @@ def request_balance():
         if amount <= 0:
             return jsonify({'success': False, 'error': 'Invalid amount'}), 400
         
+        if not (description or '').strip():
+            return jsonify({'success': False, 'error': 'A reason is required'}), 400
+
+        me = session.get('user_id')
         conn, cur = connection()
-        
-        # Generate transfer code
-        import random
-        transfer_code = f"REQ-{random.randint(10000, 99999)}"
-        
-        # Create pending request
+
+        transfer_code = _next_transfer_code(cur)
+
+        # The layer above signs first -- unless that layer is the CEO, in which
+        # case there is nobody in between and it goes straight to Finance.
+        manager_id = _approving_manager(cur, me)
+        status = 'pending_manager' if manager_id else 'pending_finance'
+
         cur.execute("""
-            INSERT INTO user_balance_transfers 
+            INSERT INTO user_balance_transfers
             (transfer_code, from_user_id, to_user_id, amount, transfer_type, status, description, requested_by)
-            VALUES (%s, NULL, %s, %s, 'user_request', 'pending', %s, %s)
-        """, (transfer_code, session.get('user_id'), amount, description, session.get('user_id')))
-        
+            VALUES (%s, NULL, %s, %s, 'user_request', %s, %s, %s)
+        """, (transfer_code, me, amount, status, description, me))
+
         conn.commit()
         cur.close()
         conn.close()
-        
-        return jsonify({'success': True, 'transfer_code': transfer_code, 'message': 'Balance request submitted for approval'})
+
+        # Whoever has to act next is told, rather than finding it by opening the
+        # approvals page on the off-chance.
+        asker = session.get('name') or 'A colleague'
+        if manager_id:
+            notify_user(
+                manager_id,
+                'عهدة request from %s' % asker,
+                '%s asked for EGP %s. Reason: %s (%s). It needs your approval '
+                'before Finance sees it.'
+                % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
+            )
+        else:
+            notify_users(
+                users_holding('user_balance.approve'),
+                'عهدة request: %s' % asker,
+                '%s asked for EGP %s. Reason: %s (%s)'
+                % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
+            )
+
+        return jsonify({'success': True, 'transfer_code': transfer_code,
+                        'status': status,
+                        'message': ('Sent to your manager for approval' if manager_id
+                                    else 'Balance request submitted for approval')})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -21602,24 +21790,34 @@ def get_balance_requests():
             query += " ORDER BY ubt.created_at DESC LIMIT 100"
             cur.execute(query, params)
         else:
-            # User sees only their requests
+            # Everyone else sees what their scope covers, which for own-scope is
+            # their own and for a manager is their team's. It used to be own
+            # only whatever the scope said, so team and department granted
+            # nothing over own.
+            visible = visible_user_ids('user_balance.view') or [user_id]
+            if user_id not in visible:
+                visible = list(visible) + [user_id]
+            placeholders = ",".join(["%s"] * len(visible))
             cur.execute("""
-                SELECT 
+                SELECT
                     ubt.*,
+                    u_to.name as to_user_name,
                     u_app.name as approved_by_name
                 FROM user_balance_transfers ubt
+                LEFT JOIN user u_to ON ubt.to_user_id = u_to.id
                 LEFT JOIN user u_app ON ubt.approved_by = u_app.id
-                WHERE ubt.to_user_id = %s OR ubt.requested_by = %s
+                WHERE ubt.to_user_id IN (%s) OR ubt.requested_by = %%s
                 ORDER BY ubt.created_at DESC
                 LIMIT 50
-            """, (user_id, user_id))
+            """ % placeholders, list(visible) + [user_id])
         
         requests_list = cur.fetchall()
         
         # Get pending count for admin
         pending_count = 0
         if is_admin:
-            cur.execute("SELECT COUNT(*) as cnt FROM user_balance_transfers WHERE status = 'pending'")
+            cur.execute("SELECT COUNT(*) as cnt FROM user_balance_transfers "
+                        "WHERE status = 'pending_finance'")
             pending_count = cur.fetchone()['cnt']
         
         cur.close()
@@ -21644,34 +21842,43 @@ def approve_balance_request(request_id):
         
         conn, cur = connection()
         
-        # Get request details
+        # Locked for the length of the transaction. Without this two approvers
+        # clicking together both read 'pending', both pass the funds check and
+        # the payment method is debited twice for one request.
         cur.execute("""
-            SELECT ubt.*, u.name as user_name 
+            SELECT ubt.*, u.name as user_name
             FROM user_balance_transfers ubt
             JOIN user u ON ubt.to_user_id = u.id
-            WHERE ubt.id = %s AND ubt.status = 'pending'
+            WHERE ubt.id = %s AND ubt.status = 'pending_finance'
+              AND ubt.transfer_type = 'user_request'
+            FOR UPDATE
         """, (request_id,))
         req = cur.fetchone()
-        
+
         if not req:
+            conn.rollback()
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'Request not found or already processed'}), 404
-        
+
         to_user_id = req['to_user_id']
         amount = float(req['amount'])
         user_name_to = req['user_name']
-        
-        # Check payment method balance
-        cur.execute("SELECT * FROM payment_methods WHERE id = %s", (payment_method_id,))
+
+        # Check payment method balance. Locked for the same reason.
+        cur.execute("SELECT * FROM payment_methods WHERE id = %s FOR UPDATE", (payment_method_id,))
         pm = cur.fetchone()
         if not pm:
+            conn.rollback()
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'Payment method not found'}), 404
-        
+
         pm_balance_before = float(pm['current_balance'])
         if pm_balance_before < amount:
+            # Release the locks taken above rather than leaving the row held
+            # until the connection is reaped.
+            conn.rollback()
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': f'Insufficient balance in {pm["method_name"]}. Available: {pm_balance_before:.2f}, Requested: {amount:.2f}'}), 400
@@ -21762,7 +21969,14 @@ def approve_balance_request(request_id):
         conn.commit()
         cur.close()
         conn.close()
-        
+
+        notify_user(
+            to_user_id,
+            'Balance approved: EGP %s' % f'{amount:,.2f}',
+            '%s approved your request %s. Your balance is now EGP %s.'
+            % (approver_name, req['transfer_code'], f'{balance_after:,.2f}'),
+        )
+
         return jsonify({'success': True, 'message': 'Request approved', 'new_balance': balance_after, 'transaction_code': transaction_code})
     except Exception as e:
         import traceback
@@ -21782,22 +21996,489 @@ def reject_balance_request(request_id):
             return jsonify({'success': False, 'error': 'Rejection reason is required'}), 400
         
         conn, cur = connection()
-        
+
+        # Only a person's own ask for money is rejected here. An admin transfer
+        # is a different thing on the same table and this route used to take
+        # any pending row by id.
         cur.execute("""
-            UPDATE user_balance_transfers 
+            UPDATE user_balance_transfers
             SET status = 'rejected', approved_by = %s, approved_at = NOW(), rejection_reason = %s
-            WHERE id = %s AND status = 'pending'
+            WHERE id = %s AND status = 'pending_finance' AND transfer_type = 'user_request'
         """, (session.get('user_id'), reason, request_id))
-        
+
         if cur.rowcount == 0:
+            conn.rollback()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'Request not found or already processed'}), 404
-        
+
+        cur.execute("""
+            SELECT transfer_code, to_user_id, amount FROM user_balance_transfers WHERE id = %s
+        """, (request_id,))
+        rejected = cur.fetchone()
+
         conn.commit()
         cur.close()
         conn.close()
-        
+
+        # A rejection nobody is told about reads as a request that vanished.
+        notify_user(
+            rejected['to_user_id'],
+            'Balance request declined: %s' % rejected['transfer_code'],
+            'Your request for EGP %s was declined by %s. Reason: %s'
+            % (f"{float(rejected['amount']):,.2f}",
+               session.get('name') or 'Finance', reason),
+        )
+
         return jsonify({'success': True, 'message': 'Request rejected'})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/balance-requests/waiting-on-me', methods=['GET'])
+@perm('user_balance.approve_manager')
+def balance_requests_waiting_on_me():
+    """
+    The عهدة requests from my own reports that I have not signed yet.
+
+    A queue of its own rather than a filter on the finance list: what a manager
+    has to do is a different question from what Finance has to do.
+    """
+    try:
+        me = session.get('user_id')
+        unrestricted = rbac.resolve(session.get('perms') or {}, 'user_balance.approve_manager') == 'all'
+        conn, cur = connection()
+        if unrestricted:
+            cur.execute("""
+                SELECT ubt.*, u.name AS requester_name
+                FROM user_balance_transfers ubt
+                JOIN user u ON u.id = ubt.to_user_id
+                WHERE ubt.status = 'pending_manager' AND ubt.transfer_type = 'user_request'
+                ORDER BY ubt.created_at DESC
+            """)
+        else:
+            cur.execute("""
+                SELECT ubt.*, u.name AS requester_name
+                FROM user_balance_transfers ubt
+                JOIN user u ON u.id = ubt.to_user_id
+                WHERE ubt.status = 'pending_manager' AND ubt.transfer_type = 'user_request'
+                  AND u.manager_id = %s
+                ORDER BY ubt.created_at DESC
+            """, (me,))
+        rows = list(cur.fetchall())
+        cur.close()
+        conn.close()
+        return jsonify(success=True, requests=rows, count=len(rows))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: manager balance queue failed: %s" % e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/custody/settle', methods=['POST'])
+@perm('user_balance.settle')
+def settle_custody():
+    """
+    تسوية عهدة: hand back what is left.
+
+    Raised by whoever holds the عهدة, not by Finance -- they are the one who
+    knows the cash is going back. Finance confirms it arrived and says which
+    payment method it landed on; only then does the balance fall. Until then
+    this is a declaration, and it moves nothing.
+    """
+    try:
+        me = session.get('user_id')
+        data = request.get_json(silent=True) or {}
+        try:
+            amount = float(data.get('amount') or 0)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid amount'}), 400
+        if amount <= 0:
+            return jsonify({'success': False, 'error': 'Amount must be more than zero'}), 400
+
+        conn, cur = connection()
+        cur.execute("""
+            SELECT COALESCE(balance, 0) AS balance FROM user_finance_balances WHERE user_id = %s
+        """, (me,))
+        row = cur.fetchone()
+        held = float(row['balance']) if row else 0.0
+        if amount > held + 0.004:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'You are handing back more than you hold. '
+                                     'Your عهدة is EGP %s.' % f'{held:,.2f}'}), 400
+
+        cur.execute("""
+            SELECT COUNT(*) AS n FROM user_balance_transfers
+            WHERE requested_by = %s AND transfer_type = 'settlement'
+              AND status = 'pending_finance'
+        """, (me,))
+        if cur.fetchone()['n']:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'You already have a settlement waiting for Finance'}), 409
+
+        code = _next_transfer_code(cur)
+        cur.execute("""
+            INSERT INTO user_balance_transfers
+            (transfer_code, from_user_id, to_user_id, amount, transfer_type,
+             status, description, requested_by)
+            VALUES (%s, %s, %s, %s, 'settlement', 'pending_finance', %s, %s)
+        """, (code, me, me, amount, (data.get('description') or '').strip() or None, me))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        notify_users(
+            users_holding('user_balance.approve'),
+            'تسوية عهدة from %s' % (session.get('name') or 'a colleague'),
+            '%s is handing back EGP %s (%s). Confirm it when the cash arrives.'
+            % (session.get('name') or 'Someone', f'{amount:,.2f}', code),
+        )
+        return jsonify({'success': True, 'transfer_code': code,
+                        'message': 'Settlement sent to Finance'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: custody settlement failed: %s" % e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/custody/settlements/<int:settlement_id>/confirm', methods=['POST'])
+@perm('user_balance.approve')
+def confirm_custody_settlement(settlement_id):
+    """
+    Finance confirms the money came back: the عهدة falls and the payment method
+    rises by the same amount, on the record, in one transaction.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        payment_method_id = data.get('payment_method_id')
+        if not payment_method_id:
+            return jsonify({'success': False, 'error': 'Payment method is required'}), 400
+        notes = (data.get('notes') or '').strip()
+        me = session.get('user_id')
+
+        conn, cur = connection()
+        cur.execute("""
+            SELECT ubt.*, u.name AS holder_name
+            FROM user_balance_transfers ubt
+            JOIN user u ON u.id = ubt.from_user_id
+            WHERE ubt.id = %s AND ubt.transfer_type = 'settlement'
+              AND ubt.status = 'pending_finance'
+            FOR UPDATE
+        """, (settlement_id,))
+        settlement = cur.fetchone()
+        if not settlement:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Settlement not found or already handled'}), 404
+
+        holder_id = settlement['from_user_id']
+        amount = float(settlement['amount'])
+
+        cur.execute("SELECT * FROM payment_methods WHERE id = %s FOR UPDATE", (payment_method_id,))
+        pm = cur.fetchone()
+        if not pm:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Payment method not found'}), 404
+
+        cur.execute("""
+            SELECT COALESCE(balance, 0) AS balance FROM user_finance_balances
+            WHERE user_id = %s FOR UPDATE
+        """, (holder_id,))
+        row = cur.fetchone()
+        balance_before = float(row['balance']) if row else 0.0
+        if amount > balance_before + 0.004:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'They no longer hold that much. عهدة is EGP %s.'
+                                     % f'{balance_before:,.2f}'}), 400
+        balance_after = balance_before - amount
+
+        pm_before = float(pm['current_balance'] or 0)
+        pm_after = pm_before + amount
+        approver_name = session.get('name') or 'Finance'
+
+        # The money comes back in, so it is income against the same internal
+        # transfer category the outward leg uses.
+        transaction_code = generate_transaction_code()
+        cur.execute("SELECT id FROM finance_transactions WHERE transaction_code = %s", (transaction_code,))
+        while cur.fetchone():
+            transaction_code = generate_transaction_code()
+            cur.execute("SELECT id FROM finance_transactions WHERE transaction_code = %s", (transaction_code,))
+        cur.execute("SELECT COALESCE(MAX(serial_number), 0) + 1 AS next_serial FROM finance_transactions")
+        serial_number = cur.fetchone()['next_serial']
+
+        from datetime import date
+        cur.execute("""
+            INSERT INTO finance_transactions
+            (transaction_code, transaction_type, amount, payment_method_id, category_id,
+             description, transaction_date, notes, status, serial_number,
+             added_by, added_by_user_id, approved_by, approved_by_user_id, approved_at,
+             balance_before, balance_after)
+            VALUES (%s, 'income', %s, %s, 44, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
+        """, (transaction_code, amount, payment_method_id,
+              'تسوية عهدة — returned by %s (%s)' % (settlement['holder_name'], settlement['transfer_code']),
+              date.today(), notes or None, serial_number,
+              approver_name, me, approver_name, me, pm_before, pm_after))
+        transaction_id = cur.lastrowid
+
+        cur.execute("UPDATE payment_methods SET current_balance = %s, updated_at = NOW() WHERE id = %s",
+                    (pm_after, payment_method_id))
+        cur.execute("""
+            INSERT INTO payment_method_balance_history
+            (payment_method_id, change_type, change_amount, previous_balance, new_balance,
+             transaction_id, description, created_by)
+            VALUES (%s, 'income', %s, %s, %s, %s, %s, %s)
+        """, (payment_method_id, amount, pm_before, pm_after, transaction_id,
+              'تسوية عهدة %s' % settlement['transfer_code'], approver_name))
+
+        cur.execute("""
+            INSERT INTO user_finance_balances (user_id, balance)
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE balance = balance - %s, last_updated = NOW()
+        """, (holder_id, -amount, amount))
+        cur.execute("""
+            INSERT INTO user_balance_history
+            (user_id, change_type, change_amount, balance_before, balance_after,
+             reference_id, reference_type, description, created_by)
+            VALUES (%s, 'settlement', %s, %s, %s, %s, 'settlement', %s, %s)
+        """, (holder_id, -amount, balance_before, balance_after, settlement_id,
+              'تسوية عهدة returned onto %s' % pm['method_name'], me))
+
+        cur.execute("""
+            UPDATE user_balance_transfers
+            SET status = 'approved', approved_by = %s, approved_at = NOW(),
+                payment_method_id = %s, notes = %s
+            WHERE id = %s
+        """, (me, payment_method_id, notes or None, settlement_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        notify_user(
+            holder_id,
+            'تسوية عهدة confirmed: EGP %s' % f'{amount:,.2f}',
+            '%s confirmed your return of EGP %s. Your عهدة is now EGP %s.'
+            % (approver_name, f'{amount:,.2f}', f'{balance_after:,.2f}'),
+        )
+        return jsonify({'success': True, 'new_balance': balance_after,
+                        'transaction_code': transaction_code,
+                        'message': 'Settlement confirmed'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/balance-requests/<int:request_id>/manager-approve', methods=['POST'])
+@perm('user_balance.approve_manager')
+def manager_approve_balance_request(request_id):
+    """
+    The layer above signs, and may correct the amount on the way through.
+
+    Holding the permission is not enough: it has to be your own report. Admin
+    reaches anywhere so an absent manager cannot strand somebody's عهدة.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        notes = (data.get('notes') or '').strip()
+        me = session.get('user_id')
+        unrestricted = rbac.resolve(session.get('perms') or {}, 'user_balance.approve_manager') == 'all'
+
+        conn, cur = connection()
+        cur.execute("""
+            SELECT ubt.*, u.name AS requester_name
+            FROM user_balance_transfers ubt
+            JOIN user u ON u.id = ubt.to_user_id
+            WHERE ubt.id = %s AND ubt.status = 'pending_manager'
+              AND ubt.transfer_type = 'user_request'
+            FOR UPDATE
+        """, (request_id,))
+        req = cur.fetchone()
+        if not req:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Request not found or already decided'}), 404
+
+        if not unrestricted and _approving_manager(cur, req['to_user_id']) != me:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Only their own manager may approve this'}), 403
+
+        amount = float(req['amount'])
+        if data.get('amount') not in (None, ''):
+            try:
+                amount = float(data['amount'])
+            except (TypeError, ValueError):
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'Invalid amount'}), 400
+            if amount <= 0:
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'Amount must be more than zero'}), 400
+
+        # What was asked for is kept whatever the manager decides it should be.
+        cur.execute("""
+            UPDATE user_balance_transfers
+            SET status = 'pending_finance',
+                original_amount = COALESCE(original_amount, amount),
+                amount = %s,
+                manager_approved_by = %s,
+                manager_approved_at = NOW(),
+                manager_notes = %s
+            WHERE id = %s
+        """, (amount, me, notes or None, request_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        manager_name = session.get('name') or 'Your manager'
+        changed = abs(amount - float(req['amount'])) > 0.004
+        notify_users(
+            users_holding('user_balance.approve'),
+            'عهدة request approved by %s' % manager_name,
+            '%s approved EGP %s for %s (%s). It is waiting for Finance.'
+            % (manager_name, f'{amount:,.2f}', req['requester_name'], req['transfer_code']),
+        )
+        notify_user(
+            req['to_user_id'],
+            'Your عهدة request went to Finance',
+            '%s approved %s%s. Finance decides next.'
+            % (manager_name, req['transfer_code'],
+               (' at EGP %s instead of EGP %s'
+                % (f'{amount:,.2f}', f"{float(req['amount']):,.2f}")) if changed else ''),
+        )
+        return jsonify({'success': True, 'amount': amount,
+                        'message': 'Approved and sent to Finance'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: manager balance approval failed: %s" % e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/balance-requests/<int:request_id>/manager-reject', methods=['POST'])
+@perm('user_balance.approve_manager')
+def manager_reject_balance_request(request_id):
+    """The layer above refuses it, with a reason the requester can read."""
+    try:
+        data = request.get_json(silent=True) or {}
+        reason = (data.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'success': False, 'error': 'A reason is required'}), 400
+
+        me = session.get('user_id')
+        unrestricted = rbac.resolve(session.get('perms') or {}, 'user_balance.approve_manager') == 'all'
+
+        conn, cur = connection()
+        cur.execute("""
+            SELECT * FROM user_balance_transfers
+            WHERE id = %s AND status = 'pending_manager' AND transfer_type = 'user_request'
+            FOR UPDATE
+        """, (request_id,))
+        req = cur.fetchone()
+        if not req:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Request not found or already decided'}), 404
+
+        if not unrestricted and _approving_manager(cur, req['to_user_id']) != me:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Only their own manager may decide this'}), 403
+
+        cur.execute("""
+            UPDATE user_balance_transfers
+            SET status = 'rejected', approved_by = %s, approved_at = NOW(),
+                rejection_reason = %s
+            WHERE id = %s
+        """, (me, reason, request_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        notify_user(
+            req['to_user_id'],
+            'عهدة request declined: %s' % req['transfer_code'],
+            'Your request for EGP %s was declined by %s. Reason: %s'
+            % (f"{float(req['amount']):,.2f}", session.get('name') or 'your manager', reason),
+        )
+        return jsonify({'success': True, 'message': 'Request declined'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: manager balance rejection failed: %s" % e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/finance/balance-requests/<int:request_id>/cancel', methods=['POST'])
+@perm('user_balance.request')
+def cancel_balance_request(request_id):
+    """
+    Withdraw your own request while it is still pending.
+
+    The status enum has carried 'cancelled' from the start and nothing ever set
+    it, so a mistyped amount could only be fixed by asking Finance to reject it.
+    Yours and still pending only: an approved one has moved money and is a
+    record, not a draft.
+    """
+    try:
+        me = session.get('user_id')
+        conn, cur = connection()
+        cur.execute("""
+            UPDATE user_balance_transfers
+            SET status = 'cancelled'
+            WHERE id = %s AND status IN ('pending_manager', 'pending_finance')
+              AND transfer_type = 'user_request' AND requested_by = %s
+        """, (request_id, me))
+        if cur.rowcount == 0:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Not your request, or it has already been decided'}), 404
+        cur.execute("SELECT transfer_code FROM user_balance_transfers WHERE id = %s", (request_id,))
+        code = cur.fetchone()['transfer_code']
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # The approvers were told it arrived, so they are told it is gone.
+        notify_users(
+            users_holding('user_balance.approve'),
+            'Balance request withdrawn: %s' % code,
+            '%s withdrew their request %s.' % (session.get('name') or 'A colleague', code),
+        )
+        return jsonify({'success': True, 'message': 'Request withdrawn'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: cancel balance request failed: %s" % e)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -21838,7 +22519,7 @@ def get_all_pending_approvals():
                 'balance_request' as approval_type
             FROM user_balance_transfers ubt
             LEFT JOIN user u ON ubt.requested_by = u.id
-            WHERE ubt.status = 'pending'
+            WHERE ubt.status = 'pending_finance'
             ORDER BY ubt.created_at DESC
         """)
         pending_requests = cur.fetchall()
@@ -23320,14 +24001,46 @@ def create_expense_tracking():
         
         if not items or len(items) == 0:
             return jsonify({'success': False, 'error': 'At least one expense item is required'}), 400
-        
+
         # Calculate total
         total_amount = sum(float(item.get('amount', 0)) for item in items)
-        
+
         if total_amount <= 0:
             return jsonify({'success': False, 'error': 'Total amount must be greater than zero'}), 400
-        
+
         conn, cur = connection()
+
+        # Every line names the work it was spent on, and the request has to
+        # exist -- a number nobody checks is not a reference.
+        requested_ids = []
+        for position, item in enumerate(items, start=1):
+            raw = item.get('sales_request_id')
+            if raw in (None, '', 0, '0'):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False,
+                                'error': 'Line %d has no sales request. Every expense '
+                                         'line must say which request it was spent on.'
+                                         % position}), 400
+            try:
+                requested_ids.append(int(raw))
+            except (TypeError, ValueError):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False,
+                                'error': 'Line %d has an invalid sales request' % position}), 400
+
+        placeholders = ",".join(["%s"] * len(requested_ids))
+        cur.execute("SELECT id FROM sales_request WHERE id IN (%s)" % placeholders,
+                    requested_ids)
+        known = {row['id'] for row in cur.fetchall()}
+        missing = sorted(set(requested_ids) - known)
+        if missing:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'No such sales request: %s'
+                                     % ', '.join('#%d' % r for r in missing)}), 400
         
         # Generate unique tracking code
         tracking_code = generate_tracking_code()
@@ -23351,16 +24064,28 @@ def create_expense_tracking():
         tracking_id = cur.lastrowid
         
         # Insert items
-        for item in items:
+        for item, sales_request_id in zip(items, requested_ids):
             cur.execute("""
-                INSERT INTO expense_tracking_items (tracking_id, item_description, amount, notes)
-                VALUES (%s, %s, %s, %s)
-            """, (tracking_id, item.get('description', ''), float(item.get('amount', 0)), item.get('notes', '')))
-        
+                INSERT INTO expense_tracking_items
+                    (tracking_id, sales_request_id, item_description, amount, notes)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (tracking_id, sales_request_id, item.get('description', ''),
+                  float(item.get('amount', 0)), item.get('notes', '')))
+
         conn.commit()
+
+        # The layer above signs it before Finance sees it, so tell them.
+        manager_id = _approving_manager(cur, user_id)
         cur.close()
         conn.close()
-        
+
+        notify_users(
+            [manager_id] if manager_id else users_holding('expense_tracking.approve_finance'),
+            'Expenses to approve: %s' % user_name,
+            '%s submitted EGP %s of expenses (%s) for your approval.'
+            % (user_name, f'{total_amount:,.2f}', tracking_code),
+        )
+
         return jsonify({
             'success': True,
             'message': 'Expense tracking submitted for approval',
@@ -23386,20 +24111,31 @@ def manager_approve_expense_tracking(tracking_id):
         notes = data.get('notes', '')
         
         conn, cur = connection()
-        
+
         # Check status
-        cur.execute("SELECT status FROM expense_tracking WHERE id = %s", (tracking_id,))
+        cur.execute("SELECT status, user_id, user_name, total_amount, tracking_code "
+                    "FROM expense_tracking WHERE id = %s", (tracking_id,))
         tracking = cur.fetchone()
-        
+
         if not tracking:
             return jsonify({'success': False, 'error': 'Tracking not found'}), 404
-        
+
         if tracking['status'] != 'pending':
             return jsonify({'success': False, 'error': f'Cannot approve: status is {tracking["status"]}'}), 400
-        
+
         user_name = session.get('name', session.get('username', 'System'))
         user_id = session.get('user_id')
-        
+
+        # Their own manager, or admin. This route used to accept anybody holding
+        # the permission, for anybody's sheet, so a team leader in one
+        # department could sign off a sheet from another.
+        if not _may_approve_for(cur, user_id, tracking['user_id'],
+                                'expense_tracking.approve_manager'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Only their own manager may approve this'}), 403
+
         # Update to manager_approved
         cur.execute("""
             UPDATE expense_tracking 
@@ -23713,27 +24449,40 @@ def update_expense_tracking_items(tracking_id):
             return jsonify({'success': False, 'error': 'No items provided'}), 400
         
         conn, cur = connection()
-        
+
         # Check tracking status - can only edit if pending
-        cur.execute("SELECT status FROM expense_tracking WHERE id = %s", (tracking_id,))
+        cur.execute("SELECT status, user_id FROM expense_tracking WHERE id = %s", (tracking_id,))
         tracking = cur.fetchone()
-        
+
         if not tracking:
             return jsonify({'success': False, 'error': 'Tracking not found'}), 404
-        
+
         if tracking['status'] != 'pending':
             return jsonify({'success': False, 'error': 'Can only edit items when status is pending'}), 400
-        
+
+        # The manager correcting the figures has to be their manager. Finance
+        # holds this unrestricted and keeps its own later window.
+        if not _may_approve_for(cur, session.get('user_id'), tracking['user_id'],
+                                'expense_tracking.edit_amount'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Only their own manager may change these amounts'}), 403
+
         # Update each item
         for item in items:
             item_id = item.get('id')
             new_amount = item.get('amount')
             new_description = item.get('description')
-            
+
             if item_id and new_amount is not None:
+                # What was claimed survives what it was corrected to, so the
+                # submitter can see the difference and so can an audit.
                 cur.execute("""
-                    UPDATE expense_tracking_items 
-                    SET amount = %s, item_description = COALESCE(%s, item_description)
+                    UPDATE expense_tracking_items
+                    SET original_amount = COALESCE(original_amount, amount),
+                        amount = %s,
+                        item_description = COALESCE(%s, item_description)
                     WHERE id = %s AND tracking_id = %s
                 """, (float(new_amount), new_description, item_id, tracking_id))
         

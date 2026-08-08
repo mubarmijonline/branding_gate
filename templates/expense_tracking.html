@@ -342,7 +342,7 @@ function addExpenseItem() {
     const html = `
         <div class="expense-item-row" id="expenseItem_${expenseItemCounter}">
             <div class="row align-items-center">
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <div class="form-group mb-0">
                         <label class="small">Description | الوصف <span class="text-danger">*</span></label>
                         <input type="text" class="form-control form-control-sm expense-description" 
@@ -350,6 +350,14 @@ function addExpenseItem() {
                     </div>
                 </div>
                 <div class="col-md-3">
+                    <div class="form-group mb-0">
+                        <label class="small">Sales Request | طلب البيع <span class="text-danger">*</span></label>
+                        <select class="form-control form-control-sm expense-sales-request" required>
+                            <option value="">Choose a request…</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-2">
                     <div class="form-group mb-0">
                         <label class="small">Amount | المبلغ <span class="text-danger">*</span></label>
                         <div class="input-group input-group-sm">
@@ -361,10 +369,10 @@ function addExpenseItem() {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <div class="form-group mb-0">
                         <label class="small">Notes | ملاحظات</label>
-                        <input type="text" class="form-control form-control-sm expense-notes" placeholder="Optional notes">
+                        <input type="text" class="form-control form-control-sm expense-notes" placeholder="Optional">
                     </div>
                 </div>
                 <div class="col-md-1 text-right">
@@ -377,6 +385,26 @@ function addExpenseItem() {
     `;
     
     $('#expenseItemsContainer').append(html);
+    fillSalesRequestOptions($('#expenseItem_' + expenseItemCounter).find('.expense-sales-request'));
+}
+
+// Every expense line says which job the money went on. Loaded once and reused,
+// because a form with ten lines should not ask the server ten times.
+var SALES_REQUEST_OPTIONS = null;
+
+function fillSalesRequestOptions($select) {
+    if (SALES_REQUEST_OPTIONS) { $select.append(SALES_REQUEST_OPTIONS); return; }
+    $.getJSON('/api/sales/requests').done(function (data) {
+        if (!data || !data.success) { return; }
+        SALES_REQUEST_OPTIONS = (data.requests || []).map(function (r) {
+            var label = '#' + r.request_id + ' — ' + (r.title || r.client_name || 'Untitled');
+            return '<option value="' + r.request_id + '">' +
+                   $('<div>').text(label).html() + '</option>';
+        }).join('');
+        $('.expense-sales-request').each(function () {
+            if ($(this).children().length <= 1) { $(this).append(SALES_REQUEST_OPTIONS); }
+        });
+    });
 }
 
 function removeExpenseItem(id) {
@@ -419,24 +447,37 @@ function submitExpenseTracking() {
     // Collect items
     const items = [];
     let hasError = false;
+    let missingRequest = false;
     
     $('.expense-item-row').each(function() {
         const desc = $(this).find('.expense-description').val();
         const amount = parseFloat($(this).find('.expense-amount').val()) || 0;
         const itemNotes = $(this).find('.expense-notes').val();
-        
+        const salesRequestId = $(this).find('.expense-sales-request').val();
+
         if (!desc || amount <= 0) {
             hasError = true;
             return false;
         }
-        
+        if (!salesRequestId) {
+            missingRequest = true;
+            return false;
+        }
+
         items.push({
             description: desc,
             amount: amount,
-            notes: itemNotes
+            notes: itemNotes,
+            sales_request_id: parseInt(salesRequestId, 10)
         });
     });
     
+    if (missingRequest) {
+        Swal.fire({icon: 'error', title: 'Which job?',
+                   text: 'Every expense line must name the sales request it was spent on.'});
+        return;
+    }
+
     if (hasError || items.length === 0) {
         Swal.fire({icon: 'error', title: 'Error', text: 'Please fill in all expense items with valid amounts'});
         return;
