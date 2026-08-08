@@ -265,6 +265,62 @@
     .notif-empty { padding: 2rem 1rem; text-align: center; color: #98a1b3; }
     .notif-empty i { font-size: 1.6rem; display: block; margin-bottom: .5rem; color: #1cc88a; }
 
+    /* The tray as a panel: room for the whole sentence, and the same slide as
+       the chat drawer so the right edge behaves one way, not two. */
+    #notifDrawerOverlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1055;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s ease;
+    }
+    #notifDrawerOverlay.open { opacity: 1; pointer-events: auto; }
+    #notifDrawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 460px; max-width: 100vw;
+      background: #fff; z-index: 1060;
+      box-shadow: -6px 0 24px rgba(0,0,0,.25);
+      transform: translateX(100%);
+      transition: transform .28s ease;
+      display: flex; flex-direction: column;
+    }
+    #notifDrawer.open { transform: translateX(0); }
+    .notif-drawer-header {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+      color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      flex: 0 0 auto;
+    }
+    .notif-drawer-header h5 {
+      margin: 0; font-size: 1rem; font-weight: 600;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .notif-drawer-count {
+      background: rgba(255,255,255,.22); border-radius: 20px;
+      padding: .05rem .5rem; font-size: .72rem; font-weight: 700;
+    }
+    .notif-drawer-close {
+      background: transparent; border: 0; color: #fff;
+      font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 6px;
+    }
+    .notif-drawer-tools {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .5rem .75rem; border-bottom: 1px solid #eceef3; background: #fafbfe;
+      flex: 0 0 auto;
+    }
+    .notif-drawer-body { flex: 1 1 auto; overflow-y: auto; }
+    .notif-drawer-footer {
+      flex: 0 0 auto; padding: .65rem; text-align: center;
+      border-top: 1px solid #eceef3; background: #fafbfe; font-size: .82rem;
+    }
+    /* Wider panel, so a row can afford three lines and a bigger icon. */
+    #notifDrawer .notif-row { padding: .85rem 1rem; }
+    #notifDrawer .notif-icon { flex-basis: 36px; width: 36px; height: 36px; font-size: .9rem; }
+    #notifDrawer .notif-title { font-size: .88rem; white-space: normal; }
+    #notifDrawer .notif-text { font-size: .8rem; -webkit-line-clamp: 3; }
+    @media (max-width: 576px) { #notifDrawer { width: 100vw; } }
+
     .badge-counter {
       position: absolute;
       transform: scale(0.7);
@@ -958,27 +1014,13 @@
 
           <!-- Notification Dropdown -->
           <li class="nav-item dropdown">
-            <a class="nav-link" href="#" id="notificationDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            {# A panel, not a dropdown: the same drawer the chat uses, so the
+               two things that slide out of the right edge behave alike. #}
+            <a class="nav-link position-relative" href="#" id="notificationDropdown"
+               role="button" title="Notifications">
               <i class="fas fa-bell fa-fw"></i>
               <span class="badge badge-danger notification-badge" style="display: none;">0</span>
             </a>
-            <div class="dropdown-menu dropdown-menu-right notification-dropdown shadow animated--fade-in" aria-labelledby="notificationDropdown">
-              <h6 class="dropdown-header border-bottom">
-                Notifications
-              </h6>
-              <div id="notificationList" class="scrollable-menu" style="max-height: 400px; overflow-y: auto;">
-                <!-- Notifications will be inserted here -->
-              </div>
-              <div class="dropdown-divider"></div>
-              <a class="dropdown-item text-center small text-gray-500" href="/notifications">
-                <i class="fas fa-list fa-fw mr-1"></i>
-                Show All Notifications
-              </a>
-              <a class="dropdown-item text-center small text-gray-500" href="#" onclick="markAllNotificationsAsRead()">
-                <i class="fas fa-check-double fa-fw mr-1"></i>
-                Mark All as Read
-              </a>
-            </div>
           </li>
 
           <!-- User Profile Dropdown -->
@@ -1690,6 +1732,32 @@ function showToast(title, body) {
 </script>
   {% block body %}{% endblock %}
 
+  <!-- ===== Notifications Drawer ===== -->
+  <div id="notifDrawerOverlay"></div>
+  <aside id="notifDrawer" aria-hidden="true">
+    <div class="notif-drawer-header">
+      <h5><i class="fas fa-bell mr-2"></i>Notifications
+        <span class="notif-drawer-count d-none" id="notifDrawerCount">0</span>
+      </h5>
+      <button type="button" class="notif-drawer-close" id="notifDrawerCloseBtn" title="Close">&times;</button>
+    </div>
+    <div class="notif-drawer-tools">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Filter">
+        <button type="button" class="btn btn-outline-secondary active" data-notif-filter="all">All</button>
+        <button type="button" class="btn btn-outline-secondary" data-notif-filter="unread">Unread</button>
+      </div>
+      <button type="button" class="btn btn-sm btn-link ml-auto" onclick="markAllNotificationsAsRead()">
+        <i class="fas fa-check-double mr-1"></i>Mark all read
+      </button>
+    </div>
+    <div id="notificationList" class="notif-drawer-body">
+      <!-- Notifications will be inserted here -->
+    </div>
+    <div class="notif-drawer-footer">
+      <a href="/notifications"><i class="fas fa-list fa-fw mr-1"></i>Open the full page</a>
+    </div>
+  </aside>
+
   <!-- ===== Sales Request Chat Drawer ===== -->
   <div id="chatDrawerOverlay"></div>
   <aside id="chatDrawer" aria-hidden="true">
@@ -2284,14 +2352,15 @@ function showToast(title, body) {
     function paint() {
       $.getJSON('/api/costing/summary').done(function (r) {
         if (!r || !r.success) { return; }
-        // Items Pricing sent back for a new cost count too: they are Operations
-        // work that nothing else on screen would mention.
-        var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0) + (r.recost_total || 0);
+        // Strictly what is on this person's own desk. Re-costs are counted
+        // company-wide, so adding them here put a 3 on the badge of every
+        // Operations user while their costing page correctly showed nothing --
+        // a number that points at an empty page is worse than no number.
+        var n = (r.mine_total || 0) + (r.awaiting_decision_total || 0);
         var $b = $('#navCostingBadge, #navCostingBadgeTop');
         if (n > 0) {
           $b.text(n).attr('title', (r.mine_total || 0) + ' to cost, ' +
-                                   (r.awaiting_decision_total || 0) + ' to decide, ' +
-                                   (r.recost_total || 0) + ' to re-cost')
+                                   (r.awaiting_decision_total || 0) + ' waiting on your decision')
             .removeClass('d-none');
         } else {
           $b.addClass('d-none');
@@ -2506,26 +2575,33 @@ function displayNotifications(notifications) {
   const container = document.getElementById('notificationList');
   container.innerHTML = '';
   
-  if (notifications.length === 0) {
+  // Keep what came back, so the filter buttons need no second request.
+  window.NOTIFICATIONS = notifications;
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+  updateNotificationBadge(unreadCount);
+  $('#notifDrawerCount').text(unreadCount + ' unread').toggleClass('d-none', unreadCount === 0);
+
+  const showing = window.NOTIF_FILTER === 'unread'
+    ? notifications.filter(n => !n.read)
+    : notifications;
+
+  if (showing.length === 0) {
     container.innerHTML =
       '<div class="notif-empty">' +
         '<i class="fas fa-check-circle"></i>' +
-        '<div>You are all caught up</div>' +
+        '<div>' + (window.NOTIF_FILTER === 'unread'
+                   ? 'Nothing unread' : 'You are all caught up') + '</div>' +
       '</div>';
-    updateNotificationBadge(0);
     return;
   }
 
-  // Update badge with unread count
-  const unreadCount = notifications.filter(n => !n.read).length;
-  updateNotificationBadge(unreadCount);
-
-  // Unread first: the tray is a to-do list, not a diary. Six of them, because
-  // a dropdown that scrolls is a page in disguise.
-  const ordered = notifications.slice().sort(function (a, b) {
+  // Unread first: the panel is a to-do list, not a diary. It scrolls now, so
+  // there is room for thirty rather than the five a dropdown could hold.
+  const ordered = showing.slice().sort(function (a, b) {
     if (!!a.read !== !!b.read) { return a.read ? 1 : -1; }
     return new Date(b.timeadded_datestamp) - new Date(a.timeadded_datestamp);
-  }).slice(0, 6);
+  }).slice(0, 30);
 
   container.innerHTML = ordered.map(function (notif) {
     const isUnread = !notif.read;
@@ -2551,6 +2627,39 @@ async function refreshNotifications() {
   const notifications = await fetchNotifications();
   displayNotifications(notifications);
 }
+
+// ---- the notifications panel ----------------------------------------------
+window.NOTIF_FILTER = 'all';
+
+function openNotifDrawer() {
+  $('#notifDrawer').addClass('open').attr('aria-hidden', 'false');
+  $('#notifDrawerOverlay').addClass('open');
+  $('body').css('overflow', 'hidden');
+  refreshNotifications();
+}
+
+function closeNotifDrawer() {
+  $('#notifDrawer').removeClass('open').attr('aria-hidden', 'true');
+  $('#notifDrawerOverlay').removeClass('open');
+  $('body').css('overflow', '');
+}
+
+$(function () {
+  $('#notificationDropdown').on('click', function (e) {
+    e.preventDefault();
+    $('#notifDrawer').hasClass('open') ? closeNotifDrawer() : openNotifDrawer();
+  });
+  $('#notifDrawerCloseBtn, #notifDrawerOverlay').on('click', closeNotifDrawer);
+  $(document).on('keydown', function (e) {
+    if (e.key === 'Escape' && $('#notifDrawer').hasClass('open')) { closeNotifDrawer(); }
+  });
+  $('#notifDrawer').on('click', '[data-notif-filter]', function () {
+    window.NOTIF_FILTER = $(this).data('notif-filter');
+    $('#notifDrawer [data-notif-filter]').removeClass('active');
+    $(this).addClass('active');
+    displayNotifications(window.NOTIFICATIONS || []);
+  });
+});
 
 // Function to mark a single notification as read
 async function markNotificationAsRead(notificationId, event) {

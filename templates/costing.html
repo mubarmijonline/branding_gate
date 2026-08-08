@@ -61,6 +61,11 @@
   .costing-page .cst-pill.costed { background:#e4f1ea; color:var(--good); }
   .costing-page .cst-pill.uncosted { background:#fdf0d9; color:var(--warn); }
   .costing-page .cst-pill.recost { background:#fdecea; color:var(--bad); }
+  .costing-page .cst-recost {
+    display:flex; align-items:center; gap:.4rem;
+    border:1px solid #f0c9c4; background:#fdf3f2; color:#8a2c22;
+    border-radius:8px; padding:.6rem .9rem; margin-bottom:1rem; font-size:.88rem;
+  }
 
   .costing-page .cst-body { padding:.85rem 1.1rem 1rem; }
   .costing-page .cst-people { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.75rem; }
@@ -124,6 +129,20 @@
     </button>
     {% endif %}
   </div>
+
+  {% if can_assign_costing %}
+  {# Items Pricing sent back for a new cost, which nobody has been asked for
+     yet. They belong to the department rather than to one desk, so they are
+     said here -- next to the button that puts them on somebody's desk --
+     rather than counted into a badge that claims to be personal. #}
+  <div class="cst-recost d-none" id="cstRecostStrip">
+    <i class="fas fa-redo mr-2"></i>
+    <span id="cstRecostText"></span>
+    <button type="button" class="btn btn-sm btn-outline-danger ml-auto" id="cstRecostSend">
+      Send one out
+    </button>
+  </div>
+  {% endif %}
 
   <div class="cst-switch" id="cstSwitch">
     <button type="button" data-pane="mine" class="on">
@@ -246,7 +265,25 @@
       $('#nOthers').text(DATA.others.length);
       render();
     });
+    loadRecostStrip();
   }
+
+  // What Pricing has sent back and nobody has been asked to cost yet.
+  function loadRecostStrip() {
+    var $strip = $('#cstRecostStrip');
+    if (!$strip.length) { return; }
+    $.getJSON('/api/costing/summary').done(function (r) {
+      var waiting = (r && r.success && r.recost_total) || 0;
+      if (!waiting) { $strip.addClass('d-none'); return; }
+      $('#cstRecostText').html(
+        '<strong>' + waiting + '</strong> item' + (waiting === 1 ? '' : 's') +
+        ' sent back by Re-Pricing for a new cost. ' +
+        'They are marked at the top of the item list.');
+      $strip.removeClass('d-none');
+    });
+  }
+
+  $(document).on('click', '#cstRecostSend', function () { $('#cstPickItem').trigger('click'); });
 
   // Cards where a proposal is sitting waiting for this person to decide.
   function decideCards() {
