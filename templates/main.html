@@ -877,6 +877,18 @@
 
           {% endif %}
 
+          {# Approvals. Its own menu because the page it opens used to live only
+             inside the Finance menu, which the people who actually approve --
+             team leaders and heads outside Finance -- cannot see at all. #}
+          {% if can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('expense_tracking_approval_page') }}">
+              <i class="fas fa-clipboard-check mr-1"></i> Approvals
+              <span class="badge badge-danger ml-1 d-none" id="navApprovalsBadge"></span>
+            </a>
+          </li>
+          {% endif %}
+
           <!-- Pricing. Its own menu rather than a link inside Operations: the
                pricing roles hold the operations section only to reach it. -->
           {% if can_view_pricing %}
@@ -2369,6 +2381,28 @@ function showToast(title, body) {
     }
     $(paint);
     setInterval(paint, 120000);   // slow on purpose: it is a hint, not a feed
+  }());
+  </script>
+  {% endif %}
+
+  {% if 'user_balance.approve_manager' in _p %}
+  <script>
+  // عهدة waiting on this person, on the menu that opens the queue.
+  (function () {
+    function paint() {
+      $.getJSON('/api/finance/balance-requests/waiting-on-me').done(function (r) {
+        if (!r || !r.success) { return; }
+        var $b = $('#navApprovalsBadge');
+        if (r.count > 0) {
+          $b.text(r.count).attr('title', r.count + ' عهدة request(s) waiting on you')
+            .removeClass('d-none');
+        } else {
+          $b.addClass('d-none');
+        }
+      });
+    }
+    $(paint);
+    setInterval(paint, 120000);
   }());
   </script>
   {% endif %}
