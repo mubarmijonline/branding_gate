@@ -8626,9 +8626,9 @@ window.chartPieDemo = function() {
             if (item.width || item.height || item.depth) {
                 summary += ' <small class="text-muted">(';
                 let dimensions = [];
-                if (item.width) dimensions.push(`W: ${item.width}cm`);
-                if (item.height) dimensions.push(`H: ${item.height}cm`);
-                if (item.depth) dimensions.push(`D: ${item.depth}cm`);
+                if (item.width) dimensions.push(`W: ${item.width}m`);
+                if (item.height) dimensions.push(`H: ${item.height}m`);
+                if (item.depth) dimensions.push(`D: ${item.depth}m`);
                 summary += dimensions.join(', ') + ')</small>';
             }
             
@@ -8821,10 +8821,14 @@ window.chartPieDemo = function() {
                             quantity: parseInt(itemQuantity) || 0,
                             unit: itemUnit || 'pcs',
                             comment: itemComment || '',
-                            // Dimensions: user enters CM in UI but we save in METRES (÷100)
-                            width: itemWidth && itemWidth !== '' ? (parseFloat(itemWidth) / 100) : null,
-                            height: itemHeight && itemHeight !== '' ? (parseFloat(itemHeight) / 100) : null,
-                            depth: itemDepth && itemDepth !== '' ? (parseFloat(itemDepth) / 100) : null,
+                            // Metres in, metres stored. The old form took
+                            // centimetres and divided by 100 on the way in, but
+                            // the edit form loaded the stored metres straight
+                            // back into the same box, so every re-save shrank
+                            // the item another hundredfold.
+                            width: itemWidth && itemWidth !== '' ? parseFloat(itemWidth) : null,
+                            height: itemHeight && itemHeight !== '' ? parseFloat(itemHeight) : null,
+                            depth: itemDepth && itemDepth !== '' ? parseFloat(itemDepth) : null,
                             sell_type: itemSellType,
                             rental_days: itemRentalDays,
                             include_days_in_calc: itemIncludeDaysInCalc,
@@ -9080,7 +9084,7 @@ window.chartPieDemo = function() {
                                 </div>
                                 <small class="form-text text-muted">
                                     <i class="fas fa-info-circle mr-1"></i>
-                                    Enter dimensions in centimeters (cm)
+                                    Enter dimensions in metres (m)
                                 </small>
                                 <!-- Dimension Calculation Section -->
                                 <div class="dimension-calc-section mt-3">
@@ -9348,19 +9352,19 @@ window.chartPieDemo = function() {
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Width (cm)</label>
+                                <label>Width (m)</label>
                                 <input type="number" step="0.01" class="form-control item-width" placeholder="0">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Height (cm)</label>
+                                <label>Height (m)</label>
                                 <input type="number" step="0.01" class="form-control item-height" placeholder="0">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Depth (cm)</label>
+                                <label>Depth (m)</label>
                                 <input type="number" step="0.01" class="form-control item-depth" placeholder="0">
                             </div>
                         </div>
@@ -9816,17 +9820,13 @@ window.chartPieDemo = function() {
     });
     
     // Function to update dimension calculation
-    // NOTE: Inputs are in CM but calculation/storage is in METRES (cm ÷ 100).
+    // Metres throughout: typed, calculated, stored and shown in the same unit,
+    // so nothing has to be converted and nothing can be converted twice.
     function updateDimensionCalculation($itemRow) {
-        const widthCm  = parseFloat($itemRow.find('.item-width').val())  || 0;
-        const heightCm = parseFloat($itemRow.find('.item-height').val()) || 0;
-        const depthCm  = parseFloat($itemRow.find('.item-depth').val())  || 0;
+        const width  = parseFloat($itemRow.find('.item-width').val())  || 0;
+        const height = parseFloat($itemRow.find('.item-height').val()) || 0;
+        const depth  = parseFloat($itemRow.find('.item-depth').val())  || 0;
 
-        // Convert CM → Metres for the equation
-        const width  = widthCm  / 100;
-        const height = heightCm / 100;
-        const depth  = depthCm  / 100;
-        
         // Sync the visual .checked class with actual checkbox state for all dimension checkboxes in this item
         $itemRow.find('.dim-calc-check').each(function() {
             const $cb = $(this);
@@ -10308,7 +10308,7 @@ window.chartPieDemo = function() {
                     if (template.width) dims.push(`W:${template.width}`);
                     if (template.height) dims.push(`H:${template.height}`);
                     if (template.depth) dims.push(`D:${template.depth}`);
-                    measurements = dims.join(', ') + ' cm';
+                    measurements = dims.join(', ') + ' m';
                 }
                 
                 const lastUsed = template.lastUsed ? new Date(template.lastUsed).toLocaleDateString() : 'Never';
@@ -11514,18 +11514,12 @@ window.chartPieDemo = function() {
                                                 console.log(`✓ FINAL EXTRACTED Dimensions: W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
                                                 console.log(`✓ Types: W=${typeof itemWidth}, H=${typeof itemHeight}, D=${typeof itemDepth}`);
 
-                                                // Convert stored METRES → CM for display (inputs are in CM).
-                                                // Heuristic: values ≤ 10 are treated as metres (new items); larger values are legacy CM.
-                                                const _mToCm = function(v) {
-                                                    if (v === '' || v === null || v === undefined) return '';
-                                                    const _n = parseFloat(v);
-                                                    if (isNaN(_n)) return '';
-                                                    return (_n > 0 && _n <= 10) ? (_n * 100) : _n;
-                                                };
-                                                itemWidth  = _mToCm(itemWidth);
-                                                itemHeight = _mToCm(itemHeight);
-                                                itemDepth  = _mToCm(itemDepth);
-                                                console.log(`✓ Display (CM): W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
+                                                // Metres in the box, metres in the row. There used to be a
+                                                // guess here -- multiply by 100 if the number is 10 or less --
+                                                // which meant a 5 m item opened as 500 and a legacy 300 opened
+                                                // unchanged, so what an edit saved depended on the size of the
+                                                // thing being edited.
+                                                console.log(`✓ Dimensions (metres): W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
                                                 
                                                 // Get description (could be in 'description' or 'comment' field)
                                                 const itemDescription = item.description || item.comment || '';
@@ -11658,21 +11652,21 @@ window.chartPieDemo = function() {
                                                             <div class="row">
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
-                                                                        <label>Width (cm)</label>
+                                                                        <label>Width (m)</label>
                                                                         <input type="number" step="0.01" class="form-control item-width" 
                                                                                placeholder="0" value="${itemWidth}">
                                                                     </div>
                                                                 </div>
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
-                                                                        <label>Height (cm)</label>
+                                                                        <label>Height (m)</label>
                                                                         <input type="number" step="0.01" class="form-control item-height" 
                                                                                placeholder="0" value="${itemHeight}">
                                                                     </div>
                                                                 </div>
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
-                                                                        <label>Depth (cm)</label>
+                                                                        <label>Depth (m)</label>
                                                                         <input type="number" step="0.01" class="form-control item-depth" 
                                                                                placeholder="0" value="${itemDepth}">
                                                                     </div>
@@ -12311,9 +12305,9 @@ window.chartPieDemo = function() {
                     var dimensionsHtml = '';
                     if (item.width || item.height || item.depth) {
                         var dimParts = [];
-                        if (item.width) dimParts.push('W: ' + item.width + 'cm');
-                        if (item.height) dimParts.push('H: ' + item.height + 'cm');
-                        if (item.depth) dimParts.push('D: ' + item.depth + 'cm');
+                        if (item.width) dimParts.push('W: ' + item.width + 'm');
+                        if (item.height) dimParts.push('H: ' + item.height + 'm');
+                        if (item.depth) dimParts.push('D: ' + item.depth + 'm');
                         dimensionsHtml = '<div class="enhanced-info-box"><div class="info-label"><i class="fas fa-ruler-combined"></i> Dimensions</div><div class="info-value">' + dimParts.join(' × ') + '</div></div>';
                     }
                     
@@ -12412,7 +12406,7 @@ window.chartPieDemo = function() {
                                     ${(item.width || item.height || item.depth) ? `
                                     <div style="flex: 1; min-width: 140px; background: #f8fafc; border-radius: 6px; padding: 8px 12px; border: 1px solid #e0e6ed;">
                                         <div style="font-size: 0.65rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fas fa-ruler-combined mr-1"></i>Dimensions</div>
-                                        <div style="font-size: 1rem; font-weight: 600; color: #1e3a5f;">${[item.width ? 'W:'+item.width : '', item.height ? 'H:'+item.height : '', item.depth ? 'D:'+item.depth : ''].filter(Boolean).join(' × ')}cm</div>
+                                        <div style="font-size: 1rem; font-weight: 600; color: #1e3a5f;">${[item.width ? 'W:'+item.width : '', item.height ? 'H:'+item.height : '', item.depth ? 'D:'+item.depth : ''].filter(Boolean).join(' × ')}m</div>
                                     </div>
                                     ` : ''}
                                     <div style="flex: 1; min-width: 100px; background: #f8fafc; border-radius: 6px; padding: 8px 12px; border: 1px solid #e0e6ed;">
@@ -14459,9 +14453,9 @@ window.chartPieDemo = function() {
                 let measurementsHtml = '';
                 if (item.width || item.height || item.depth) {
                     let dimensions = [];
-                    if (item.width) dimensions.push(`W: ${item.width}cm`);
-                    if (item.height) dimensions.push(`H: ${item.height}cm`);
-                    if (item.depth) dimensions.push(`D: ${item.depth}cm`);
+                    if (item.width) dimensions.push(`W: ${item.width}m`);
+                    if (item.height) dimensions.push(`H: ${item.height}m`);
+                    if (item.depth) dimensions.push(`D: ${item.depth}m`);
                     measurementsHtml = `<p><strong>Measurements:</strong> ${dimensions.join(', ')}</p>`;
                 }
                 

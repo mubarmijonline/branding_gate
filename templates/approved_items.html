@@ -1476,7 +1476,7 @@ $(document).ready(function() {
             group.items.forEach(function(item, index) {
                 var dimensions = '';
                 if (item.width || item.height || item.depth) {
-                    dimensions = `${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} cm`;
+                    dimensions = `${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} m`;
                 }
                 
                 // Supplier assignment badge
@@ -1808,7 +1808,7 @@ $(document).ready(function() {
         
         var dimensions = '';
         if (item.width || item.height || item.depth) {
-            dimensions = `${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} cm`;
+            dimensions = `${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} m`;
         }
 
         var html = `

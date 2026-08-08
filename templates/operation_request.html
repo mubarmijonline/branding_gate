@@ -1836,9 +1836,9 @@ $(document).ready(function() {
                         var dimensionsHtml = '';
                         if (item.width || item.height || item.depth) {
                             var dimParts = [];
-                            if (item.width) dimParts.push('W: ' + item.width + 'cm');
-                            if (item.height) dimParts.push('H: ' + item.height + 'cm');
-                            if (item.depth) dimParts.push('D: ' + item.depth + 'cm');
+                            if (item.width) dimParts.push('W: ' + item.width + 'm');
+                            if (item.height) dimParts.push('H: ' + item.height + 'm');
+                            if (item.depth) dimParts.push('D: ' + item.depth + 'm');
                             dimensionsHtml = '<div class="enhanced-info-box"><div class="info-label"><i class="fas fa-ruler-combined"></i> Dimensions</div><div class="info-value">' + dimParts.join(' × ') + '</div></div>';
                         }
                         
