@@ -408,7 +408,10 @@
        menus take a second row rather than pushing the profile off the screen.
        Everybody else has four or fewer and never sees this. */
     .navbar-nav.mr-auto { flex-wrap: wrap; }
-    .nav-link .badge {
+    /* Navbar only. Unscoped, this also caught the nav-pills on content pages,
+       whose .nav-link is not positioned -- so their badges anchored to the page
+       and sat five pixels off the right edge, giving those pages a scrollbar. */
+    .navbar-nav .nav-link .badge {
       position: absolute;
       top: 2px; right: 2px;
       transform: translate(50%, -50%);
@@ -676,7 +679,7 @@
 
   {% block head %}{% endblock %}
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260808-pricing-alert-2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260811-full-width">
 
 </head>
 

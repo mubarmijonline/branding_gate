@@ -250,8 +250,22 @@ a:hover {
   letter-spacing: 0 !important;
 }
 
+/* Full width. The 1680px cap left a band of empty page on every wide screen,
+   and these are dense working pages -- tables, timelines, item lists -- that
+   use the room. The padding stays, so nothing touches the window edge. */
 .container-fluid {
-  max-width: 1680px;
+  max-width: none;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+/* The two drawers wait off the right edge, which counts towards the page width
+   and gave every page a horizontal scrollbar once the width cap was gone.
+   `clip` rather than `hidden`: hidden would make this a scroll container and
+   the sticky navbar would stop sticking. */
+html,
+body {
+  overflow-x: clip;
 }
 
 .card,
