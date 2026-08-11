@@ -506,9 +506,13 @@
             </h1>
             <p class="text-muted mb-0">Track the status flow of sales requests and their items</p>
         </div>
+        {# Same reason: the timeline is open to anyone who may read a request,
+           which is most of the company; the sales list is not. #}
+        {% if 'section.sales' in session.get('perms', {}) %}
         <a href="/sales_request" class="btn btn-primary">
             <i class="fas fa-arrow-left mr-2"></i>Back to Sales Requests
         </a>
+        {% endif %}
     </div>
     
     <div class="row">

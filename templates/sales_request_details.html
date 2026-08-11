@@ -123,9 +123,13 @@
     <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
       <i class="fas fa-arrow-left"></i> Back
     </a>
+    {# Operations opens this page to cost an item and cannot open the sales
+       list at all, so offering it was a button that only ever said 403. #}
+    {% if 'section.sales' in session.get('perms', {}) %}
     <a href="/sales_request" class="btn btn-sm btn-outline-primary ml-1">
       <i class="fas fa-list"></i> All Sales Requests
     </a>
+    {% endif %}
     <button id="srdOpenChat" class="btn btn-sm btn-outline-success ml-1">
       <i class="fas fa-comments"></i> Open Chat
     </button>

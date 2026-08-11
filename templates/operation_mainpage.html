@@ -210,7 +210,13 @@
                         </div>
                     </div>
                     <div class="d-flex justify-content-center">
+                        {# An operations member reads this page but not the
+                           supplier report, so the button only ever said 403. #}
+                        {% if 'supplier_report.view' in session.get('perms', {}) %}
                         <a href="/supplier-report" class="btn btn-dark"><i class="fas fa-arrow-right mr-1"></i>View Report</a>
+                        {% else %}
+                        <span class="text-muted small">Not yours to open</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
