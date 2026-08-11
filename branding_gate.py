@@ -1019,7 +1019,7 @@ def get_users_by_role(role_name):
     # The CEO is out of every fan-out, for the reason in users_holding().
     cur.execute(
         "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
-        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL" % placeholders,
+        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL AND u.is_active = 1" % placeholders,
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
@@ -1131,7 +1131,7 @@ def users_holding(permission):
     placeholders = ",".join(["%s"] * len(role_codes))
     cur.execute(
         "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
-        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL" % placeholders,
+        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL AND u.is_active = 1" % placeholders,
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
@@ -1380,6 +1380,16 @@ def login():
             return jsonify(
                 state   = "error",
                 message = "Invalid username or password"
+            )
+        # A disabled account keeps its place in the reporting line and loses
+        # only this. Checked after the password so the answer does not tell an
+        # outsider which mobile numbers exist.
+        if not user.get('is_active', 1):
+            cur.close()
+            conn.close()
+            return jsonify(
+                state   = "error",
+                message = "This account has been disabled. Ask an administrator."
             )
         cur.close()
         conn.close()
@@ -1828,7 +1838,7 @@ def get_users():
         # Passwords are never returned to the client.
         cur.execute("""
             SELECT u.id, u.mobile, u.email, u.date, u.name, u.modified_date, u.added_by, u.username, u.title,
-                   u.department_id, u.rbac_role_id, u.manager_id, u.is_pricing,
+                   u.department_id, u.rbac_role_id, u.manager_id, u.is_pricing, u.is_active,
                    d.name AS rbac_department_name, d.code AS rbac_department_code,
                    r.code AS role_code, r.name AS role_name, r.level AS role_level,
                    m.name AS manager_name
@@ -1862,7 +1872,8 @@ def get_users():
                 'role_level': user['role_level'],
                 'manager_id': user['manager_id'],
                 'manager_name': user['manager_name'],
-                'is_pricing': bool(user['is_pricing'])
+                'is_pricing': bool(user['is_pricing']),
+                'is_active': bool(user['is_active'])
             })
         cur.close()
         conn.close()
@@ -1980,6 +1991,46 @@ def add_user():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/users/<int:user_id>/active', methods=['POST'])
+@perm('user.edit')
+def set_user_active(user_id):
+    """
+    Turn an account on or off without touching where it sits.
+
+    Disabling is what to do instead of deleting: people report to this person,
+    scopes are computed from them, and removing the row would move everybody
+    underneath. The login is refused; the tree is untouched.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        active = 1 if data.get('active') else 0
+        if user_id == session.get('user_id') and not active:
+            return jsonify(success=False,
+                           error='You cannot disable your own account'), 400
+        conn, cur = connection()
+        cur.execute("SELECT manager_id FROM user WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such user'), 404
+        if row['manager_id'] is None and not active:
+            cur.close()
+            conn.close()
+            return jsonify(success=False,
+                           error='The root of the tree cannot be disabled'), 400
+        cur.execute("UPDATE user SET is_active = %s WHERE id = %s", (active, user_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, is_active=bool(active))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: set user active failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
 
 @app.route('/api/users/delete/<int:user_id>', methods=['DELETE'])
 @perm('user.delete')
@@ -21686,12 +21737,17 @@ def _approval_chain(cur, user_id, limit=12):
         manager_id = row['manager_id'] if row else None
         if not manager_id or manager_id in seen:
             break
-        cur.execute("SELECT manager_id FROM user WHERE id = %s", (manager_id,))
+        cur.execute("SELECT manager_id, is_active FROM user WHERE id = %s", (manager_id,))
         above = cur.fetchone()
         # This one is the root of the tree: the line stops below them.
         if not above or above['manager_id'] is None:
             break
-        chain.append(manager_id)
+        # A disabled account cannot log in, so it cannot sign. Walk past it to
+        # the next live person rather than parking the request on somebody who
+        # will never see it -- which is what the retired placeholders would do,
+        # since half the tree still hangs off them.
+        if above.get('is_active', 1):
+            chain.append(manager_id)
         seen.add(manager_id)
         current = manager_id
     return chain

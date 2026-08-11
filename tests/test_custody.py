@@ -175,6 +175,32 @@ class CustodyFlowTest(unittest.TestCase):
             '/api/finance/balance-requests/waiting-on-me').get_json()
         self.assertEqual(theirs['requests'], [])
 
+    def test_a_disabled_manager_is_stepped_over(self):
+        # Half the tree still hangs off retired placeholders. A request must not
+        # park itself on an account that cannot log in.
+        cur = self._cursor()
+        cur.execute("UPDATE user SET is_active = 0 WHERE id = %s", (self.leader,))
+        cur.close()
+        self._request_balance(self.member)
+        request_id = self._latest_for(self.member)['id']
+
+        refused = self._client_for(self.leader).post(
+            '/api/finance/balance-requests/%d/manager-approve' % request_id, json={})
+        self.assertEqual(refused.status_code, 403)
+
+        # The head above them picks it up instead.
+        allowed = self._client_for(self.head).post(
+            '/api/finance/balance-requests/%d/manager-approve' % request_id, json={})
+        self.assertEqual(allowed.status_code, 200, allowed.get_json())
+
+    def test_a_request_under_only_disabled_managers_goes_to_finance(self):
+        cur = self._cursor()
+        cur.execute("UPDATE user SET is_active = 0 WHERE id IN (%s, %s)",
+                    (self.leader, self.head))
+        cur.close()
+        response = self._request_balance(self.member)
+        self.assertEqual(response.get_json()['status'], 'pending_finance')
+
     def test_somebody_off_to_the_side_may_not_sign(self):
         self._request_balance(self.member)
         request_id = self._latest_for(self.member)['id']
