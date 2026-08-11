@@ -722,6 +722,13 @@
     {% set user_roles = session.get('roles', []) %}
     {% set _p = session.get('perms', {}) %}
     {% if 'approved_item.view' in _p %}
+    <script>
+      // Assigning and re-assigning are different rights. The page shows the
+      // difference rather than letting somebody fill a form that will be
+      // refused when they press save.
+      window.CAN_ASSIGN   = {{ ('approved_item.edit' in _p) | tojson }};
+      window.CAN_REASSIGN = {{ ('approved_item.reassign' in _p) | tojson }};
+    </script>
     
     <!-- Page Header -->
     <div class="page-header">
@@ -2022,6 +2029,9 @@ $(document).ready(function() {
                     $('#directSupplier').val(info.supplier_id || '');
                     $('#directDueDate').val(info.supplier_due_date || '');
                     $('#directReceivedDate').val(info.supplier_received_date || '');
+                    if (typeof applyAssignmentLock === 'function') {
+                        applyAssignmentLock(!!info.supplier_id);
+                    }
                     
                     if (info.received_by_name) {
                         $('#directReceivedByName').text(info.received_by_name);
@@ -2240,6 +2250,21 @@ $(document).ready(function() {
         });
     };
     
+    // Lock the direct-assignment form once the item is placed, for anybody who
+    // may not rewrite an assignment.
+    window.applyAssignmentLock = function (alreadyAssigned) {
+        var locked = alreadyAssigned && !window.CAN_REASSIGN;
+        $('#directSupplier, #directDueDate, #directReceivedDate').prop('disabled', locked);
+        $('#saveDirectAssignmentBtn').prop('disabled', locked);
+        $('#assignmentLockNote').remove();
+        if (locked) {
+            $('#saveDirectAssignmentBtn').before(
+                '<div id="assignmentLockNote" class="alert alert-warning py-2 px-3 mb-2 small">' +
+                '<i class="fas fa-lock mr-1"></i>This item is already with a supplier. ' +
+                'Ask the Operations Manager to change it.</div>');
+        }
+    };
+
     // Save direct supplier assignment
     $('#saveDirectAssignmentBtn').click(function() {
         var itemId = $('#componentsItemId').val();
@@ -2268,8 +2293,14 @@ $(document).ready(function() {
                     Swal.fire('Error', response.error || 'Failed to save', 'error');
                 }
             },
-            error: function() {
-                Swal.fire('Error', 'Failed to save supplier assignment', 'error');
+            error: function(xhr) {
+                // 403 here is the assignment lock, not a broken save: an item
+                // already placed with a supplier is a commitment, and only the
+                // Operations Manager rewrites one.
+                var said = (xhr.responseJSON || {}).error;
+                Swal.fire(xhr.status === 403 ? 'Already assigned' : 'Error',
+                          said || 'Failed to save supplier assignment',
+                          xhr.status === 403 ? 'warning' : 'error');
             }
         });
     });

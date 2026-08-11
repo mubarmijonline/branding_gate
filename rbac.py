@@ -80,6 +80,10 @@ PERMISSIONS = {
     # Operations
     'approved_item.view':   'View client-approved items',
     'approved_item.edit':   'Edit approved item components and suppliers',
+    # Making an assignment and changing one afterwards are different acts. The
+    # first is the daily work of the operations floor; the second rewrites a
+    # commitment somebody already made to a supplier, so it stops with the head.
+    'approved_item.reassign': 'Change a supplier assignment after it has been made',
     'supplier_report.view': 'View the supplier report',
 
     # Inventory
@@ -434,6 +438,7 @@ SEED_MATRIX = {
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
         {
+            'approved_item.reassign': 'all',
             'sales_request.view': 'all',
             # Operations raises and maintains its own requests through
             # /operation_request, so it needs create and edit, not just view.

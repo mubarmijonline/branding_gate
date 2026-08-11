@@ -127,6 +127,124 @@
     </script>
     {% endif %}
 
+    {# Where the supplier work stands. Four questions the floor actually asks,
+       answered before anybody opens another page. Hidden when there is nothing
+       outstanding rather than showing four zeroes. #}
+    <div class="card chart-card mb-4 d-none" id="pipelineCard">
+        <div class="card-header d-flex align-items-center flex-wrap" style="gap:.5rem;">
+            <h6 class="mb-0"><i class="fas fa-truck-loading mr-2"></i>Supplier pipeline</h6>
+            <div class="btn-group btn-group-sm ml-auto" role="group" id="pipelineTabs">
+                <button type="button" class="btn btn-outline-danger active" data-pipe="overdue">
+                    Overdue <span class="badge badge-light ml-1" id="pipeOverdueN">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-pipe="unassigned">
+                    Unassigned <span class="badge badge-light ml-1" id="pipeUnassignedN">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-warning" data-pipe="due_soon">
+                    Due this week <span class="badge badge-light ml-1" id="pipeDueN">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-info" data-pipe="by_supplier">
+                    By supplier <span class="badge badge-light ml-1" id="pipeSupN">0</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" id="pipelineTable">
+                    <thead class="thead-light"><tr id="pipelineHead"></tr></thead>
+                    <tbody id="pipelineBody"></tbody>
+                </table>
+            </div>
+            <div class="p-2 text-center border-top">
+                <a href="/approved-items" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-arrow-right mr-1"></i>Open approved items to assign
+                </a>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var PIPE = {}, view = 'overdue';
+        function esc(v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); }
+        function name(row) {
+            return esc(row.item_name) +
+                   (row.component_name ? ' <span class="text-muted">&middot; ' +
+                    esc(row.component_name) + '</span>' : '');
+        }
+        var VIEWS = {
+            overdue: {
+                head: ['Item', 'Client', 'Supplier', 'Due', 'Late'],
+                row: function (r) {
+                    return '<td>' + name(r) + '</td><td>' + esc(r.client_name || '-') + '</td>' +
+                        '<td>' + esc(r.supplier_name || '-') + '</td>' +
+                        '<td>' + esc(r.due_date || '-') + '</td>' +
+                        '<td><span class="badge badge-danger">' + r.days_late + ' days</span></td>';
+                },
+                empty: 'Nothing is late.'
+            },
+            unassigned: {
+                head: ['Item', 'Client', 'Request', ''],
+                row: function (r) {
+                    return '<td>' + name(r) + '</td><td>' + esc(r.client_name || '-') + '</td>' +
+                        '<td>#' + r.request_id + '</td>' +
+                        '<td class="text-right"><a class="btn btn-sm btn-outline-primary" ' +
+                        'href="/approved-items">Assign</a></td>';
+                },
+                empty: 'Everything approved has a supplier.'
+            },
+            due_soon: {
+                head: ['Item', 'Client', 'Supplier', 'Due', 'In'],
+                row: function (r) {
+                    return '<td>' + name(r) + '</td><td>' + esc(r.client_name || '-') + '</td>' +
+                        '<td>' + esc(r.supplier_name || '-') + '</td>' +
+                        '<td>' + esc(r.due_date || '-') + '</td>' +
+                        '<td>' + r.days_left + ' day(s)</td>';
+                },
+                empty: 'Nothing due in the next seven days.'
+            },
+            by_supplier: {
+                head: ['Supplier', 'Outstanding', 'Late', 'Received'],
+                row: function (r) {
+                    return '<td>' + esc(r.supplier_name) + '</td><td>' + r.open + '</td>' +
+                        '<td>' + (r.late ? '<span class="badge badge-danger">' + r.late + '</span>' : '0') + '</td>' +
+                        '<td>' + r.received + '</td>';
+                },
+                empty: 'Nothing is with a supplier.'
+            }
+        };
+        function render() {
+            var spec = VIEWS[view], rows = PIPE[view] || [];
+            $('#pipelineHead').html(spec.head.map(function (h) { return '<th>' + h + '</th>'; }).join(''));
+            $('#pipelineBody').html(rows.length
+                ? rows.slice(0, 12).map(function (r) { return '<tr>' + spec.row(r) + '</tr>'; }).join('')
+                : '<tr><td colspan="' + spec.head.length +
+                  '" class="text-center text-muted py-4">' + spec.empty + '</td></tr>');
+        }
+        $(document).on('click', '#pipelineTabs button', function () {
+            view = $(this).data('pipe');
+            $('#pipelineTabs button').removeClass('active');
+            $(this).addClass('active');
+            render();
+        });
+        $.getJSON('/api/approved-items/pipeline').done(function (r) {
+            if (!r || !r.success) { return; }
+            PIPE = r;
+            $('#pipeOverdueN').text(r.totals.overdue);
+            $('#pipeUnassignedN').text(r.totals.unassigned);
+            $('#pipeDueN').text(r.totals.due_soon);
+            $('#pipeSupN').text(r.totals.suppliers);
+            // Open on whichever question has an answer worth reading.
+            view = r.totals.overdue ? 'overdue' : (r.totals.unassigned ? 'unassigned' : 'by_supplier');
+            $('#pipelineTabs button').removeClass('active')
+                .filter('[data-pipe="' + view + '"]').addClass('active');
+            render();
+            if (r.totals.overdue || r.totals.unassigned || r.totals.due_soon) {
+                $('#pipelineCard').removeClass('d-none');
+            }
+        });
+    }());
+    </script>
+
     <!-- ===== NAVIGATION CARDS (top) ===== -->
     <div class="row mb-4">
         <!-- Operations Requests -->

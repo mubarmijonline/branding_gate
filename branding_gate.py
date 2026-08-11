@@ -3603,9 +3603,21 @@ def update_item_component(component_id):
     """Update a component"""
     try:
         data = request.get_json()
-        
+
         conn, cur = connection()
-        
+
+        # Same rule as the item itself: a component already placed with a
+        # supplier is a commitment, and rewriting it stops with the head.
+        cur.execute("SELECT supplier_id FROM approved_item_components WHERE id = %s",
+                    (component_id,))
+        current = cur.fetchone()
+        if current and not _may_change_assignment(current['supplier_id']):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'This component is already assigned. Only the '
+                                     'Operations Manager can change an assignment.'}), 403
+
         # Build dynamic update query
         update_fields = []
         update_values = []
@@ -3649,7 +3661,7 @@ def update_item_component(component_id):
 
 
 @app.route('/api/approved-items/components/<int:component_id>', methods=['DELETE'])
-@perm('approved_item.edit')
+@perm('approved_item.reassign')
 def delete_item_component(component_id):
     """Delete a component"""
     try:
@@ -3690,6 +3702,20 @@ def delete_item_component(component_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _may_change_assignment(existing_supplier_id):
+    """
+    May the caller rewrite an assignment that already exists?
+
+    Making one and changing one are different acts. Anybody on the operations
+    floor with approved_item.edit may put an item with a supplier; changing it
+    afterwards rewrites a commitment somebody has already made, and stops with
+    the Operations Manager.
+    """
+    if not existing_supplier_id:
+        return True
+    return has('approved_item.reassign')
+
+
 @app.route('/api/approved-items/<int:item_id>/supplier', methods=['PUT'])
 @perm('approved_item.edit')
 def update_item_supplier(item_id):
@@ -3702,7 +3728,16 @@ def update_item_supplier(item_id):
         received_date = data.get('received_date')
         
         conn, cur = connection()
-        
+
+        cur.execute("SELECT supplier_id FROM sales_request_items WHERE id = %s", (item_id,))
+        current = cur.fetchone()
+        if current and not _may_change_assignment(current['supplier_id']):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'This item is already assigned. Only the Operations '
+                                     'Manager can change an assignment.'}), 403
+
         # Build update query
         update_fields = ['supplier_id = %s', 'supplier_due_date = %s']
         update_values = [supplier_id if supplier_id else None, due_date if due_date else None]
@@ -3734,6 +3769,103 @@ def update_item_supplier(item_id):
         print(f"Error updating item supplier: {str(e)}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/approved-items/pipeline', methods=['GET'])
+@perm('approved_item.view')
+def approved_items_pipeline():
+    """
+    Where the supplier work stands, in one call.
+
+    Four questions the operations floor actually asks: what is late, what has
+    not been given to anybody, what lands this week, and who owes what. An item
+    can be placed with a supplier directly or split into components each with
+    their own, so both are read and treated the same -- a line of work with a
+    supplier, a due date and a delivery.
+    """
+    try:
+        conn, cur = connection()
+
+        # Both shapes of assignment, flattened into one list of lines.
+        cur.execute("""
+            SELECT i.id AS item_id, i.request_id, i.name AS item_name, NULL AS component_id,
+                   NULL AS component_name, i.supplier_id, s.supplier_name,
+                   i.supplier_due_date AS due_date, i.supplier_received_date AS received_date,
+                   c.client_name
+            FROM sales_request_items i
+            LEFT JOIN supplier s ON s.id = i.supplier_id
+            LEFT JOIN sales_request r ON r.id = i.request_id
+            LEFT JOIN client c ON c.id = r.client_id
+            WHERE i.approval_status = 'approved'
+              AND NOT EXISTS (SELECT 1 FROM approved_item_components k WHERE k.sales_item_id = i.id)
+            UNION ALL
+            SELECT i.id, i.request_id, i.name, k.id, k.component_name, k.supplier_id,
+                   s.supplier_name, k.due_date, k.received_date, c.client_name
+            FROM approved_item_components k
+            JOIN sales_request_items i ON i.id = k.sales_item_id
+            LEFT JOIN supplier s ON s.id = k.supplier_id
+            LEFT JOIN sales_request r ON r.id = i.request_id
+            LEFT JOIN client c ON c.id = r.client_id
+            WHERE i.approval_status = 'approved'
+        """)
+        rows = list(cur.fetchall())
+        cur.close()
+        conn.close()
+
+        from datetime import date, timedelta
+        today = date.today()
+        week = today + timedelta(days=7)
+
+        def out(row, extra=None):
+            line = {
+                'item_id': row['item_id'], 'request_id': row['request_id'],
+                'item_name': row['item_name'], 'component_id': row['component_id'],
+                'component_name': row['component_name'],
+                'supplier_id': row['supplier_id'], 'supplier_name': row['supplier_name'],
+                'client_name': row['client_name'],
+                'due_date': row['due_date'].strftime('%Y-%m-%d') if row['due_date'] else None,
+            }
+            line.update(extra or {})
+            return line
+
+        overdue, unassigned, due_soon = [], [], []
+        by_supplier = {}
+        for row in rows:
+            waiting = row['received_date'] is None
+            if not row['supplier_id']:
+                if waiting:
+                    unassigned.append(out(row))
+                continue
+            if waiting and row['due_date']:
+                if row['due_date'] < today:
+                    overdue.append(out(row, {'days_late': (today - row['due_date']).days}))
+                elif row['due_date'] <= week:
+                    due_soon.append(out(row, {'days_left': (row['due_date'] - today).days}))
+            entry = by_supplier.setdefault(row['supplier_id'], {
+                'supplier_id': row['supplier_id'],
+                'supplier_name': row['supplier_name'] or 'Unnamed supplier',
+                'open': 0, 'late': 0, 'received': 0})
+            if waiting:
+                entry['open'] += 1
+                if row['due_date'] and row['due_date'] < today:
+                    entry['late'] += 1
+            else:
+                entry['received'] += 1
+
+        overdue.sort(key=lambda r: -r['days_late'])
+        due_soon.sort(key=lambda r: r['days_left'])
+        suppliers = sorted(by_supplier.values(), key=lambda e: (-e['late'], -e['open']))
+
+        return jsonify(success=True, today=today.strftime('%Y-%m-%d'),
+                       overdue=overdue, unassigned=unassigned, due_soon=due_soon,
+                       by_supplier=suppliers,
+                       totals={'overdue': len(overdue), 'unassigned': len(unassigned),
+                               'due_soon': len(due_soon), 'suppliers': len(suppliers)})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: approved items pipeline failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
 
 
 @app.route('/api/suppliers/list', methods=['GET'])
