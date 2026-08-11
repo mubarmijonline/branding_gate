@@ -243,6 +243,11 @@ ROLES = {
     'design_2d_member':       ('2D Designer',            'design_2d',  LEVEL_MEMBER),
 
     'design_3d_head':         ('3D Head',                'design_3d',  LEVEL_HEAD),
+    # One person wears both hats today. A role of its own rather than widening
+    # design_3d_head, which would hand purchasing to the next 3D head by
+    # accident, and rather than a per-user override, which this system
+    # deliberately does not have.
+    'design_3d_purchasing':   ('3D Head & Purchasing',   'design_3d',  LEVEL_HEAD),
     'design_3d_member':       ('3D Designer',            'design_3d',  LEVEL_MEMBER),
 
     'operations_manager':     ('Operations Manager',     'operations', LEVEL_HEAD),
@@ -617,6 +622,26 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'catalog.edit': 'all',
             'client.view': 'all',
+        },
+    ),
+    # 3D Head, plus what purchasing needs until purchasing is a thing of its own:
+    # the suppliers bought from and the stock bought into.
+    'design_3d_purchasing': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'catalog.edit': 'all',
+            'client.view': 'all',
+            'supplier.view': 'all',
+            'supplier.create': 'all',
+            'supplier.edit': 'all',
+            'inventory.view': 'all',
+            'inventory.create': 'all',
+            'inventory.edit': 'all',
+            'inventory.transact': 'all',
         },
     ),
     'design_3d_member': _merge(

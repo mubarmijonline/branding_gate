@@ -40,6 +40,9 @@ EXPECTED = {
     'design_2d_head':         ['design_2d'],
     'design_2d_member':       ['design_2d'],
     'design_3d_head':         ['design_3d'],
+    # Purchasing brings supplier.edit, and Supplier lives on the Admin menu --
+    # the same reason the Operations Manager sees it.
+    'design_3d_purchasing':   ['admin', 'design_3d'],
     'design_3d_member':       ['design_3d'],
     'operations_manager':     ['admin', 'operations'],
     'operations_team_leader': ['operations'],
