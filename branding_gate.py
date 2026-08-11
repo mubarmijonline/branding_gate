@@ -3112,7 +3112,19 @@ def get_approved_items():
                 sri.attributes,
                 sri.supplier_id,
                 sri.has_components,
+                sri.supplier_due_date,
+                sri.supplier_received_date,
                 sup.supplier_name as item_supplier_name,
+                -- The components roll-up, so the page can say where an item
+                -- stands without a request per item.
+                (SELECT COUNT(*) FROM approved_item_components k
+                 WHERE k.sales_item_id = sri.id) AS component_count,
+                (SELECT COUNT(*) FROM approved_item_components k
+                 WHERE k.sales_item_id = sri.id AND k.supplier_id IS NOT NULL) AS component_assigned,
+                (SELECT COUNT(*) FROM approved_item_components k
+                 WHERE k.sales_item_id = sri.id AND k.received_date IS NOT NULL) AS component_received,
+                (SELECT MIN(k.due_date) FROM approved_item_components k
+                 WHERE k.sales_item_id = sri.id AND k.received_date IS NULL) AS component_next_due,
                 sr.title as request_title,
                 sr.client_id,
                 sr.start_date,
@@ -3194,7 +3206,16 @@ def get_approved_items():
                 'depth': depth,
                 'supplier_id': item['supplier_id'],
                 'supplier_name': item['item_supplier_name'],
-                'has_components': bool(item['has_components'])
+                'has_components': bool(item['has_components']),
+                'supplier_due_date': (item['supplier_due_date'].isoformat()
+                                      if item['supplier_due_date'] else None),
+                'supplier_received_date': (item['supplier_received_date'].isoformat()
+                                           if item['supplier_received_date'] else None),
+                'component_count': int(item['component_count'] or 0),
+                'component_assigned': int(item['component_assigned'] or 0),
+                'component_received': int(item['component_received'] or 0),
+                'component_next_due': (item['component_next_due'].isoformat()
+                                       if item['component_next_due'] else None),
             }
             
             items_list.append(item_data)

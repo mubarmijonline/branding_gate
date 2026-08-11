@@ -189,6 +189,53 @@
     }
     
     /* Grouped Request Card Styles */
+
+    /* ---- revamp: one visual language for the four states ---------------- */
+    .ai-switch { display:grid; gap:1px; background:#e3e6f0; border:1px solid #e3e6f0;
+                 border-radius:10px; overflow:hidden; margin-bottom:.75rem;
+                 grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+    .ai-switch button { background:#fff; border:0; text-align:left; padding:.85rem 1.1rem;
+                        cursor:pointer; position:relative; }
+    .ai-switch button:hover { background:#fafbff; }
+    .ai-switch button.on { background:#eef1fa; }
+    .ai-switch button.on::after { content:''; position:absolute; inset:auto 0 0 0;
+                                  height:3px; background:#3a4fa0; }
+    .ai-switch .n { font-size:1.6rem; font-weight:700; line-height:1.1; color:#2e3650; }
+    .ai-switch .t { font-size:.82rem; font-weight:700; color:#2e3650; margin-top:.1rem; }
+    .ai-switch .d { font-size:.74rem; color:#8891a8; margin-top:.05rem; }
+    .ai-money { font-size:.85rem; }
+
+    /* A request is a heading, not a billboard. */
+    .ai-req { border:1px solid #e3e6f0; border-radius:10px; background:#fff;
+              margin-bottom:.85rem; overflow:hidden; }
+    .ai-req-head { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem;
+                   padding:.75rem 1rem; cursor:pointer; border-bottom:1px solid #eef0f5; }
+    .ai-req-head:hover { background:#fafbff; }
+    .ai-req-id { font-weight:700; color:#2e3650; }
+    .ai-req-meta { font-size:.8rem; color:#8891a8; }
+    .ai-req-right { margin-left:auto; display:flex; align-items:center; gap:.5rem; }
+    .ai-prog { width:120px; height:6px; border-radius:3px; background:#eef0f5; overflow:hidden; }
+    .ai-prog i { display:block; height:100%; background:#1cc88a; }
+
+    .ai-line { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem;
+               padding:.7rem 1rem; border-bottom:1px solid #f4f5f9; }
+    .ai-line:last-child { border-bottom:0; }
+    .ai-line:hover { background:#fbfcff; }
+    .ai-line-name { font-weight:600; color:#2e3650; min-width:170px; flex:1; }
+    .ai-line-sub { font-size:.75rem; color:#8891a8; font-weight:400; }
+    .ai-line-sup { font-size:.82rem; color:#42485c; min-width:150px; }
+    .ai-line-due { font-size:.78rem; color:#8891a8; min-width:120px; }
+    .ai-line-act { margin-left:auto; display:flex; gap:.35rem; }
+
+    .ai-pill { font-size:.68rem; font-weight:700; text-transform:uppercase;
+               letter-spacing:.04em; padding:.15rem .5rem; border-radius:20px;
+               white-space:nowrap; }
+    .ai-pill.unassigned { background:#f1f3f7; color:#64748b; }
+    .ai-pill.assigned   { background:#e7edfb; color:#3a4fa0; }
+    .ai-pill.late       { background:#fdecea; color:#b42318; }
+    .ai-pill.received   { background:#e4f1ea; color:#168754; }
+    .ai-pill.partial    { background:#fdf0d9; color:#8a6410; }
+
     .request-group-card {
         background: white;
         border-radius: 12px;
@@ -750,26 +797,35 @@
         </div>
     </div>
 
-    <!-- Statistics Cards -->
-    <div class="row mb-4">
-        <div class="col-xl-4 col-md-6 mb-4">
-            <div class="stats-card">
-                <div class="stats-number" id="totalApprovedCount">0</div>
-                <div class="stats-label"><i class="fas fa-check-circle mr-2"></i>Total Approved Items</div>
-            </div>
-        </div>
-        <div class="col-xl-4 col-md-6 mb-4">
-            <div class="stats-card" style="border-left-color: #007bff;">
-                <div class="stats-number" id="totalRequestsCount">0</div>
-                <div class="stats-label"><i class="fas fa-file-alt mr-2"></i>Requests with Approvals</div>
-            </div>
-        </div>
-        <div class="col-xl-4 col-md-6 mb-4">
-            <div class="stats-card" style="border-left-color: #dc3545;">
-                <div class="stats-number" id="totalCostValue">EGP 0</div>
-                <div class="stats-label"><i class="fas fa-coins mr-2"></i>Total Cost Value</div>
-            </div>
-        </div>
+    <!-- The four states an approved item can be in. Each is also the filter for
+         it, so the number and the thing it counts are never in two places. -->
+    <div class="ai-switch" id="aiSwitch">
+        <button type="button" data-state="all" class="on">
+            <div class="n" id="aiAll">0</div>
+            <div class="t"><i class="fas fa-check-circle mr-1"></i>Approved</div>
+            <div class="d">Everything the client signed off.</div>
+        </button>
+        <button type="button" data-state="unassigned">
+            <div class="n text-secondary" id="aiUnassigned">0</div>
+            <div class="t"><i class="fas fa-user-slash mr-1"></i>Not assigned</div>
+            <div class="d">Nobody has been asked to make these.</div>
+        </button>
+        <button type="button" data-state="late">
+            <div class="n text-danger" id="aiLate">0</div>
+            <div class="t"><i class="fas fa-exclamation-triangle mr-1"></i>Late</div>
+            <div class="d">Past the date the supplier promised.</div>
+        </button>
+        <button type="button" data-state="received">
+            <div class="n text-success" id="aiReceived">0</div>
+            <div class="t"><i class="fas fa-box-open mr-1"></i>Received</div>
+            <div class="d">In from the supplier. Done.</div>
+        </button>
+    </div>
+    <div class="ai-money text-muted mb-4">
+        <span id="aiRequests">0</span> request(s) &middot;
+        total cost <strong id="totalCostValue">EGP 0</strong>
+        <span class="d-none" id="totalApprovedCount"></span>
+        <span class="d-none" id="totalRequestsCount"></span>
     </div>
 
     <!-- Filters -->
@@ -1313,6 +1369,20 @@ $(document).ready(function() {
         loadReportSupplierDropdown();
     });
     
+    // One button per line, opening the same assignment modal the old page used.
+    $(document).on('click', '.manage-components-btn', function () {
+        openComponentsModal($(this).data('item-id'), $(this).data('item-name'),
+                            $(this).data('request-id'));
+    });
+
+    window.AI_STATE = 'all';
+    $(document).on('click', '#aiSwitch button', function () {
+        window.AI_STATE = $(this).data('state');
+        $('#aiSwitch button').removeClass('on');
+        $(this).addClass('on');
+        filterItems();
+    });
+
     function loadApprovedItems() {
         var clientId = $('#clientFilter').val();
         var dateRange = $('#dateFilter').val();
@@ -1382,224 +1452,139 @@ $(document).ready(function() {
         $('#totalCostValue').text('EGP ' + (stats.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
     }
     
+    // The state an item is in, which is the whole vocabulary of this page:
+    // nobody asked for it, somebody was asked, they are late, it arrived.
+    function itemState(item) {
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        if (item.component_count > 0) {
+            if (item.component_received >= item.component_count) return 'received';
+            if (item.component_assigned === 0) return 'unassigned';
+            var due = item.component_next_due ? new Date(item.component_next_due) : null;
+            if (due && due < today) return 'late';
+            return item.component_assigned < item.component_count ? 'partial' : 'assigned';
+        }
+        if (item.supplier_received_date) return 'received';
+        if (!item.supplier_id) return 'unassigned';
+        var itemDue = item.supplier_due_date ? new Date(item.supplier_due_date) : null;
+        if (itemDue && itemDue < today) return 'late';
+        return 'assigned';
+    }
+
+    var STATE_LABEL = {unassigned: 'Not assigned', assigned: 'With supplier',
+                       late: 'Late', received: 'Received', partial: 'Part assigned'};
+
+    function daysLate(dateStr) {
+        if (!dateStr) return 0;
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        return Math.round((today - new Date(dateStr)) / 86400000);
+    }
+
+    function aiEsc(v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); }
+
     function renderItems(items) {
-        if (items.length === 0) {
-            $('#itemsContainer').html(`
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <h4>No Approved Items Found</h4>
-                    <p>There are no approved items matching your filters</p>
-                </div>
-            `);
+        // The counters count everything approved, not just what the state
+        // filter is showing, or they would count themselves.
+        var counts = {all: allItems.length, unassigned: 0, late: 0, received: 0};
+        allItems.forEach(function (i) {
+            var st = itemState(i);
+            if (st === 'unassigned') counts.unassigned++;
+            else if (st === 'late') counts.late++;
+            else if (st === 'received') counts.received++;
+        });
+        $('#aiAll').text(counts.all);
+        $('#aiUnassigned').text(counts.unassigned);
+        $('#aiLate').text(counts.late);
+        $('#aiReceived').text(counts.received);
+
+        var shown = window.AI_STATE && window.AI_STATE !== 'all'
+            ? items.filter(function (i) {
+                  var st = itemState(i);
+                  return window.AI_STATE === 'late' ? st === 'late'
+                       : window.AI_STATE === 'unassigned' ? st === 'unassigned'
+                       : window.AI_STATE === 'received' ? st === 'received' : true;
+              })
+            : items;
+
+        if (shown.length === 0) {
+            $('#itemsContainer').html(
+                '<div class="empty-state"><i class="fas fa-inbox"></i>' +
+                '<h4>Nothing here</h4><p>No approved item matches what you asked for.</p></div>');
+            $('#aiRequests').text(0);
             return;
         }
-        
-        // Group items by sales request
-        var groupedItems = {};
-        items.forEach(function(item) {
-            var reqId = item.request_id;
-            if (!groupedItems[reqId]) {
-                groupedItems[reqId] = {
-                    request_id: reqId,
-                    request_title: item.request_title,
-                    client_name: item.client_name,
-                    request_type: item.request_type,
-                    priority: item.priority,
-                    start_date: item.start_date,
-                    end_date: item.end_date,
-                    items: [],
-                    total_cost: 0,
-                    total_qty: 0,
-                    suppliers: new Set(),
-                    assigned_count: 0,
-                    unassigned_count: 0,
-                    sub_items_count: 0
-                };
+
+        var groups = {};
+        shown.forEach(function (item) {
+            var key = item.request_id;
+            if (!groups[key]) {
+                groups[key] = {request_id: key, title: item.request_title,
+                               client_name: item.client_name, start_date: item.start_date,
+                               end_date: item.end_date, items: [], total_cost: 0};
             }
-            groupedItems[reqId].items.push(item);
-            groupedItems[reqId].total_cost += (item.total_cost || 0);
-            groupedItems[reqId].total_qty  += (item.qty || 0);
-            if (item.supplier_id) {
-                groupedItems[reqId].assigned_count++;
-                if (item.supplier_name) groupedItems[reqId].suppliers.add(item.supplier_name);
-            } else if (!item.has_components) {
-                groupedItems[reqId].unassigned_count++;
-            }
-            if (item.has_components) groupedItems[reqId].sub_items_count++;
+            groups[key].items.push(item);
+            groups[key].total_cost += (item.total_cost || 0);
         });
-        
-        // Sort groups by request_id descending
-        var sortedGroups = Object.values(groupedItems).sort((a, b) => b.request_id - a.request_id);
-        
-        var html = '';
-        sortedGroups.forEach(function(group) {
-            var totalCostFmt = group.total_cost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            var supplierChip = group.suppliers.size > 0
-                ? '<span class="req-chip ok" title="Suppliers: ' + Array.from(group.suppliers).join(", ") + '"><i class="fas fa-truck"></i>' + group.suppliers.size + ' Supplier' + (group.suppliers.size > 1 ? 's' : '') + '</span>'
-                : '';
-            var unassignedChip = group.unassigned_count > 0
-                ? '<span class="req-chip warn"><i class="fas fa-exclamation-triangle"></i>' + group.unassigned_count + ' Unassigned</span>'
-                : '';
-            var subItemsChip = group.sub_items_count > 0
-                ? '<span class="req-chip"><i class="fas fa-puzzle-piece"></i>' + group.sub_items_count + ' w/ Sub-Items</span>'
-                : '';
-            html += `
-                <div class="request-group-card">
-                    <div class="request-group-header collapsed" data-toggle="collapse" data-target="#group-${group.request_id}" aria-expanded="false">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div style="flex:1; min-width:0;">
-                                <div class="request-title">
-                                    <i class="fas fa-file-alt mr-2"></i>Request #${group.request_id}
-                                    <i class="fas fa-chevron-down toggle-icon ml-2"></i>
-                                </div>
-                                <div class="request-meta">
-                                    <span><i class="fas fa-heading mr-1"></i>${group.request_title || 'Untitled'}</span>
-                                    <span><i class="fas fa-building mr-1"></i>${group.client_name || 'N/A'}</span>
-                                    <span><i class="fas fa-calendar mr-1"></i>${formatDate(group.start_date)} → ${formatDate(group.end_date)}</span>
-                                </div>
-                                <div class="request-header-chips">
-                                    <span class="req-chip"><i class="fas fa-cubes"></i>${group.items.length} Item${group.items.length !== 1 ? 's' : ''}</span>
-                                    <span class="req-chip"><i class="fas fa-layer-group"></i>${group.total_qty} Qty</span>
-                                    <span class="req-chip cost"><i class="fas fa-coins"></i>EGP ${totalCostFmt}</span>
-                                    ${supplierChip}
-                                    ${unassignedChip}
-                                    ${subItemsChip}
-                                </div>
-                            </div>
-                            <div class="request-group-stats">
-                                <div class="stat-item">
-                                    <div class="stat-value">${group.items.length}</div>
-                                    <div class="stat-label">Items</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="collapse" id="group-${group.request_id}">
-                        <div class="request-group-body">
-            `;
-            
-            // Render each item in the group
-            group.items.forEach(function(item, index) {
-                var dimensions = '';
-                if (item.width || item.height || item.depth) {
-                    dimensions = `${item.width || '-'} x ${item.height || '-'} x ${item.depth || '-'} m`;
-                }
-                
-                // Supplier assignment badge
-                var supplierBadge = '';
-                if (item.supplier_id && item.supplier_name) {
-                    supplierBadge = `
-                        <div class="supplier-assignment-badge">
-                            <i class="fas fa-truck"></i>
-                            <span>${item.supplier_name}</span>
-                        </div>
-                    `;
-                }
-                
-                // Sub-items indicator
-                var subItemsIndicator = '';
-                var subItemsExpand = '';
-                if (item.has_components) {
-                    subItemsIndicator = `
-                        <span class="sub-items-badge" title="Has Sub-Items">
-                            <i class="fas fa-puzzle-piece"></i> Has Sub-Items
-                        </span>
-                    `;
-                    subItemsExpand = `
-                        <div class="sub-items-expand-section">
-                            <button class="btn btn-sm btn-link expand-sub-items-btn p-0" onclick="toggleSubItems(${item.id}, this)" data-expanded="false">
-                                <i class="fas fa-chevron-down mr-1"></i>View Sub-Items
-                            </button>
-                            <div class="sub-items-container" id="sub-items-${item.id}" style="display: none;"></div>
-                        </div>
-                    `;
-                }
-                
-                html += `
-                            <div class="group-item-card">
-                                <div class="group-item-header">
-                                    <div>
-                                        <div class="group-item-name">
-                                            <i class="fas fa-box mr-2"></i>${item.name}
-                                            <span class="badge badge-${item.sell_type === 'sell' ? 'primary' : 'info'} ml-2">
-                                                ${item.sell_type === 'sell' ? 'Sell' : 'Rent'}
-                                            </span>
-                                            ${subItemsIndicator}
-                                        </div>
-                                        ${item.description ? `<small class="text-muted">${item.description}</small>` : ''}
-                                        ${supplierBadge}
-                                    </div>
-                                    <div class="d-flex align-items-center">
-                                        <span class="approval-badge badge-approved mr-2">
-                                            <i class="fas fa-check mr-1"></i>Approved
-                                        </span>
-                                        <button class="btn btn-sm btn-outline-info mr-1 manage-components-btn" onclick="openComponentsModal(${item.id}, '${item.name.replace(/'/g, "\\'")}', ${item.request_id})" title="Manage Components">
-                                            <i class="fas fa-puzzle-piece"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-primary" onclick="viewItemDetails(${item.id})">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <div class="group-item-details">
-                                    <div class="group-item-detail">
-                                        <div class="label">Quantity</div>
-                                        <div class="value">${item.qty} ${item.unit || 'pcs'}</div>
-                                    </div>
-                                    <div class="group-item-detail">
-                                        <div class="label">Days</div>
-                                        <div class="value">${item.rental_days || 1} day${(item.rental_days || 1) > 1 ? 's' : ''}</div>
-                                    </div>
-                                    ${dimensions ? `
-                                    <div class="group-item-detail">
-                                        <div class="label">Dimensions</div>
-                                        <div class="value">${dimensions}</div>
-                                    </div>
-                                    ` : ''}
-                                    <div class="group-item-detail">
-                                        <div class="label">Cost/Unit</div>
-                                        <div class="value" style="color: #dc3545;">EGP ${(item.cost_per_item || 0).toFixed(2)}</div>
-                                    </div>
-                                    <div class="group-item-detail">
-                                        <div class="label">Total Cost</div>
-                                        <div class="value" style="color: #dc3545;">EGP ${(item.total_cost || 0).toFixed(2)}</div>
-                                    </div>
-                                    <div class="group-item-detail">
-                                        <div class="label">Approved On</div>
-                                        <div class="value">${formatDate(item.client_approval_date)}</div>
-                                    </div>
-                                </div>
-                                ${subItemsExpand}
-                            </div>
-                `;
-            });
-            
-            html += `
-                        </div>
-                        
-                        <div class="group-footer">
-                            <div class="group-totals">
-                                <div class="group-total-item">
-                                    <div class="total-label">Total Cost</div>
-                                    <div class="total-value cost">EGP ${group.total_cost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                                </div>
-                            </div>
-                            <div class="d-flex align-items-center">
-                                <button class="btn btn-outline-success mr-2 export-request-btn" data-request-id="${group.request_id}" title="Export this Request's items to Excel">
-                                    <i class="fas fa-file-excel mr-1"></i>Export Items
-                                </button>
-                                <a href="/sales_request?request_id=${group.request_id}" class="btn btn-outline-primary">
-                                    <i class="fas fa-external-link-alt mr-1"></i>View Full Request
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
+        var ordered = Object.keys(groups).sort(function (a, b) { return b - a; });
+        $('#aiRequests').text(ordered.length);
+
+        var html = ordered.map(function (key) {
+            var g = groups[key];
+            var done = g.items.filter(function (i) { return itemState(i) === 'received'; }).length;
+            var late = g.items.filter(function (i) { return itemState(i) === 'late'; }).length;
+            var open = g.items.filter(function (i) { return itemState(i) === 'unassigned'; }).length;
+            var pct = Math.round(done / g.items.length * 100);
+
+            var lines = g.items.map(function (item) {
+                var st = itemState(item);
+                var supplier = item.component_count > 0
+                    ? item.component_assigned + ' of ' + item.component_count + ' parts placed'
+                    : (item.supplier_name || '<span class="text-muted">no supplier yet</span>');
+                var due = item.component_count > 0 ? item.component_next_due : item.supplier_due_date;
+                var dueText = st === 'received'
+                    ? 'received ' + (item.supplier_received_date || '')
+                    : (due ? 'due ' + due + (st === 'late'
+                        ? ' <span class="text-danger font-weight-bold">(' + daysLate(due) + 'd late)</span>'
+                        : '') : 'no date set');
+                var verb = st === 'unassigned' ? 'Assign' : 'Open';
+                return '' +
+                  '<div class="ai-line">' +
+                    '<div class="ai-line-name">' + aiEsc(item.name) +
+                      '<div class="ai-line-sub">' + (item.qty || 0) + ' ' + aiEsc(item.unit || 'pcs') +
+                      ' &middot; EGP ' + (item.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) +
+                      (item.component_count > 0 ? ' &middot; ' + item.component_count + ' parts' : '') +
+                      '</div></div>' +
+                    '<span class="ai-pill ' + st + '">' + STATE_LABEL[st] + '</span>' +
+                    '<div class="ai-line-sup">' + supplier + '</div>' +
+                    '<div class="ai-line-due">' + dueText + '</div>' +
+                    '<div class="ai-line-act">' +
+                      '<button class="btn btn-sm ' + (st === 'unassigned' ? 'btn-primary' : 'btn-outline-secondary') +
+                        ' manage-components-btn" data-item-id="' + item.id +
+                        '" data-request-id="' + item.request_id +
+                        '" data-item-name="' + aiEsc(item.name) + '">' +
+                        '<i class="fas fa-truck mr-1"></i>' + verb + '</button>' +
+                    '</div>' +
+                  '</div>';
+            }).join('');
+
+            return '' +
+              '<div class="ai-req">' +
+                '<div class="ai-req-head" data-toggle="collapse" data-target="#aiReq' + g.request_id + '">' +
+                  '<span class="ai-req-id">#' + g.request_id + '</span>' +
+                  '<span class="ai-req-meta">' + aiEsc(g.title || 'Untitled') +
+                    ' &middot; ' + aiEsc(g.client_name || 'no client') + '</span>' +
+                  (late ? '<span class="ai-pill late">' + late + ' late</span>' : '') +
+                  (open ? '<span class="ai-pill unassigned">' + open + ' to assign</span>' : '') +
+                  '<div class="ai-req-right">' +
+                    '<span class="ai-req-meta">' + done + ' of ' + g.items.length + ' in</span>' +
+                    '<span class="ai-prog"><i style="width:' + pct + '%"></i></span>' +
+                    '<span class="ai-req-meta">EGP ' +
+                      g.total_cost.toLocaleString('en-US', {maximumFractionDigits: 0}) + '</span>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="collapse show" id="aiReq' + g.request_id + '">' + lines + '</div>' +
+              '</div>';
+        }).join('');
+
         $('#itemsContainer').html(html);
         
         // Handle collapse toggle icon rotation via Bootstrap events
