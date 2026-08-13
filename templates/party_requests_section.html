@@ -1,0 +1,255 @@
+{# Asking for a client or a supplier.
+
+   One include, used by both /client and /supplier. The page sets `party_kind`
+   before including it; everything else -- the fields, the wording, the queue --
+   follows from that, so the two pages cannot drift apart.
+
+   Shown to whoever may raise one, and to whoever may decide one. Somebody with
+   neither never sees it. #}
+{% set _pp = session.get('perms', {}) %}
+{% set can_raise = (party_kind == 'client' and 'client_request.create' in _pp)
+                or (party_kind == 'supplier' and 'supplier_request.create' in _pp) %}
+{% set can_decide = 'party_request.approve_head' in _pp or 'party_request.approve_admin' in _pp %}
+
+{% if can_raise or can_decide %}
+<div class="card shadow mb-4" id="partyRequestCard">
+  <div class="card-header py-3 d-flex align-items-center flex-wrap" style="gap:.5rem;">
+    <h6 class="m-0 font-weight-bold text-primary">
+      <i class="fas fa-user-plus mr-2"></i>
+      {{ 'Client' if party_kind == 'client' else 'Supplier' }} requests
+      <span class="badge badge-warning ml-2 d-none" id="partyWaitingBadge">0</span>
+    </h6>
+    <span class="text-muted small ml-2">
+      Your head passes it, an admin adds it.
+    </span>
+    {% if can_raise %}
+    <button type="button" class="btn btn-primary btn-sm ml-auto" id="partyRequestNew">
+      <i class="fas fa-plus mr-1"></i>Request a new {{ party_kind }}
+    </button>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="partyRequestTable">
+        <thead class="thead-light">
+          <tr>
+            <th>Code</th><th>Name</th><th>Asked by</th><th>Status</th><th>When</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- The proposed record, in full, for whoever has to decide it -->
+<div class="modal fade" id="partyRequestModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg,#4e73df,#224abe);color:#fff;">
+        <h5 class="modal-title" id="partyRequestModalTitle">Request a new {{ party_kind }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body" id="partyRequestModalBody"></div>
+      <div class="modal-footer" id="partyRequestModalFoot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KIND = {{ party_kind | tojson }};
+  var CAN_RAISE = {{ can_raise | tojson }};
+  // Field, label, and whether it is required -- the same list the route
+  // enforces, so the form cannot ask for something that will be thrown away.
+  var FIELDS = {
+    client: [
+      ['client_name', 'Client name', true],
+      ['mobile_number', 'Mobile', true],
+      ['email_address', 'Email', true],
+      ['secondary_mobile_number', 'Second mobile', false],
+      ['job_title', 'Job title', false],
+      ['preferred_contact_channel', 'Preferred contact', false],
+      ['additional_notes', 'Notes', false]
+    ],
+    supplier: [
+      ['supplier_name', 'Supplier name', true],
+      ['email_address', 'Email', true],
+      ['company_name', 'Company', false],
+      ['supplier_type', 'Type', false],
+      ['contact_person_name', 'Contact person', false],
+      ['primary_phone', 'Phone', false],
+      ['whatsapp_number', 'WhatsApp', false],
+      ['address', 'Address', false],
+      ['website', 'Website', false],
+      ['business_registration_number', 'Registration no.', false],
+      ['additional_notes', 'Notes', false]
+    ]
+  }[KIND];
+
+  var STATUS = {
+    pending_head: ['warning', 'with your head'],
+    pending_admin: ['info', 'with the admins'],
+    approved: ['success', 'added'],
+    rejected: ['danger', 'declined'],
+    cancelled: ['secondary', 'withdrawn']
+  };
+
+  function esc(v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); }
+
+  function load() {
+    $.getJSON('/api/party-requests?kind=' + KIND).done(function (r) {
+      if (!r || !r.success) { return; }
+      var $badge = $('#partyWaitingBadge');
+      if (r.waiting) { $badge.text(r.waiting + ' waiting on you').removeClass('d-none'); }
+      else { $badge.addClass('d-none'); }
+
+      if (!r.requests.length) {
+        $('#partyRequestTable tbody').html(
+          '<tr><td colspan="6" class="text-center text-muted py-4">' +
+          'No ' + KIND + ' requests yet.</td></tr>');
+        return;
+      }
+      $('#partyRequestTable tbody').html(r.requests.map(function (q) {
+        var shown = STATUS[q.status] || ['secondary', q.status];
+        var name = q.payload.client_name || q.payload.supplier_name || '-';
+        var buttons = '<button class="btn btn-sm btn-outline-secondary party-view" data-id=' +
+                      q.id + '>Open</button>';
+        if (q.can_pass || q.can_finalise) {
+          buttons = '<button class="btn btn-sm btn-primary party-view" data-id=' + q.id +
+                    '>Review</button>';
+        } else if (q.is_mine && (q.status === 'pending_head' || q.status === 'pending_admin')) {
+          buttons += ' <button class="btn btn-sm btn-outline-danger party-cancel" data-id=' +
+                     q.id + '>Withdraw</button>';
+        }
+        return '<tr>' +
+          '<td><code>' + esc(q.request_code) + '</code></td>' +
+          '<td>' + esc(name) + '</td>' +
+          '<td>' + esc(q.requested_by_name) +
+            '<div class="small text-muted">' + esc(q.department_name || '') + '</div></td>' +
+          '<td><span class="badge badge-' + shown[0] + '">' + shown[1] + '</span>' +
+            (q.status === 'rejected' && q.rejection_reason
+              ? '<div class="small text-danger">' + esc(q.rejection_reason) + '</div>' : '') +
+          '</td>' +
+          '<td class="small">' + esc(q.requested_at || '') + '</td>' +
+          '<td class="text-right text-nowrap">' + buttons + '</td>' +
+        '</tr>';
+      }).join(''));
+      window.PARTY_REQUESTS = r.requests;
+    });
+  }
+
+  function formHtml() {
+    return '<div class="row">' + FIELDS.map(function (f) {
+      var big = f[0] === 'additional_notes' || f[0] === 'address';
+      return '<div class="' + (big ? 'col-12' : 'col-md-6') + ' mb-3">' +
+        '<label class="small font-weight-bold">' + f[1] +
+          (f[2] ? ' <span class="text-danger">*</span>' : '') + '</label>' +
+        (big ? '<textarea class="form-control party-field" data-field="' + f[0] + '" rows="2"></textarea>'
+             : '<input type="text" class="form-control party-field" data-field="' + f[0] + '">') +
+        '</div>';
+    }).join('') +
+    '<div class="col-12"><label class="small font-weight-bold">Why this one</label>' +
+    '<input type="text" class="form-control" id="partyNote" ' +
+    'placeholder="What they are for, so whoever approves knows"></div></div>';
+  }
+
+  function detailHtml(q) {
+    var rows = FIELDS.filter(function (f) { return q.payload[f[0]]; }).map(function (f) {
+      return '<tr><th class="text-muted small" style="width:38%">' + f[1] + '</th>' +
+             '<td>' + esc(q.payload[f[0]]) + '</td></tr>';
+    }).join('');
+    var trail = '<tr><th class="text-muted small">Asked by</th><td>' +
+                esc(q.requested_by_name) + ' &middot; ' + esc(q.requested_at || '') + '</td></tr>';
+    if (q.note) { trail += '<tr><th class="text-muted small">Reason given</th><td>' + esc(q.note) + '</td></tr>'; }
+    if (q.head_name) { trail += '<tr><th class="text-muted small">Passed by</th><td>' +
+                esc(q.head_name) + ' &middot; ' + esc(q.head_approved_at || '') +
+                (q.head_notes ? '<div class="small text-muted">' + esc(q.head_notes) + '</div>' : '') +
+                '</td></tr>'; }
+    if (q.admin_name) { trail += '<tr><th class="text-muted small">Approved by</th><td>' +
+                esc(q.admin_name) + ' &middot; ' + esc(q.admin_approved_at || '') + '</td></tr>'; }
+    if (q.rejection_reason) { trail += '<tr><th class="text-muted small">Declined</th><td class="text-danger">' +
+                esc(q.rejection_reason) + '</td></tr>'; }
+    return '<table class="table table-sm mb-0">' + rows + trail + '</table>';
+  }
+
+  $(document).on('click', '#partyRequestNew', function () {
+    $('#partyRequestModalTitle').text('Request a new ' + KIND);
+    $('#partyRequestModalBody').html(formHtml());
+    $('#partyRequestModalFoot').html(
+      '<button class="btn btn-secondary" data-dismiss="modal">Cancel</button>' +
+      '<button class="btn btn-primary" id="partySubmit">Send for approval</button>');
+    $('#partyRequestModal').modal('show');
+  });
+
+  $(document).on('click', '#partySubmit', function () {
+    var body = {kind: KIND, note: $('#partyNote').val()};
+    $('.party-field').each(function () { body[$(this).data('field')] = $(this).val(); });
+    $.ajax({url: '/api/party-requests', method: 'POST', contentType: 'application/json',
+            data: JSON.stringify(body)})
+      .done(function (r) {
+        if (!r.success) { Swal.fire('Not sent', r.error || 'Try again', 'error'); return; }
+        $('#partyRequestModal').modal('hide');
+        Swal.fire('Sent', 'Your head decides next. ' + r.request_code, 'success');
+        load();
+      })
+      .fail(function (x) {
+        Swal.fire('Not sent', (x.responseJSON || {}).error || 'Server error', 'error');
+      });
+  });
+
+  $(document).on('click', '.party-view', function () {
+    var q = (window.PARTY_REQUESTS || []).filter(function (x) {
+      return x.id === $(this).data('id'); }.bind(this))[0];
+    if (!q) { return; }
+    $('#partyRequestModalTitle').text(q.request_code + ' — ' + q.kind);
+    $('#partyRequestModalBody').html(detailHtml(q));
+    var foot = '<button class="btn btn-secondary" data-dismiss="modal">Close</button>';
+    if (q.can_pass) {
+      foot += '<button class="btn btn-outline-danger party-decide" data-id=' + q.id +
+              ' data-act="reject">Decline</button>' +
+              '<button class="btn btn-primary party-decide" data-id=' + q.id +
+              ' data-act="head-approve">Pass to admin</button>';
+    } else if (q.can_finalise) {
+      foot += '<button class="btn btn-outline-danger party-decide" data-id=' + q.id +
+              ' data-act="reject">Decline</button>' +
+              '<button class="btn btn-success party-decide" data-id=' + q.id +
+              ' data-act="approve">Approve and add</button>';
+    }
+    $('#partyRequestModalFoot').html(foot);
+    $('#partyRequestModal').modal('show');
+  });
+
+  $(document).on('click', '.party-decide', function () {
+    var id = $(this).data('id'), act = $(this).data('act');
+    var go = function (payload) {
+      $.ajax({url: '/api/party-requests/' + id + '/' + act, method: 'POST',
+              contentType: 'application/json', data: JSON.stringify(payload || {})})
+        .done(function (r) {
+          if (!r.success) { Swal.fire('No', r.error || 'Try again', 'error'); return; }
+          $('#partyRequestModal').modal('hide');
+          Swal.fire('Done', r.message || '', 'success');
+          load();
+        })
+        .fail(function (x) { Swal.fire('No', (x.responseJSON || {}).error || 'Server error', 'error'); });
+    };
+    if (act === 'reject') {
+      Swal.fire({title: 'Decline it?', input: 'text', inputLabel: 'Reason — they will see this',
+                 showCancelButton: true,
+                 inputValidator: function (v) { return v ? null : 'A reason is required'; }})
+        .then(function (res) { if (res.value) { go({reason: res.value}); } });
+    } else {
+      go({});
+    }
+  });
+
+  $(document).on('click', '.party-cancel', function () {
+    var id = $(this).data('id');
+    $.ajax({url: '/api/party-requests/' + id + '/cancel', method: 'POST'})
+      .done(function () { load(); });
+  });
+
+  $(load);
+}());
+</script>
+{% endif %}

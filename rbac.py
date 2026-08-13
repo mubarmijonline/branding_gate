@@ -127,6 +127,14 @@ PERMISSIONS = {
     'expense_tracking.reject':          'Reject an expense',
 
     # Master data
+    # Asking for a client or a supplier. Sales and Account meet clients,
+    # Operations and Purchasing meet suppliers; their own head passes it and an
+    # admin makes it real, so nothing enters the books unlooked at.
+    'client_request.create':   'Ask for a new client to be added',
+    'supplier_request.create': 'Ask for a new supplier to be added',
+    'party_request.approve_head':  "Pass a client or supplier request as the department's head",
+    'party_request.approve_admin': 'Make an approved client or supplier request real',
+
     'client.view':   'View clients',
     'client.create': 'Create clients',
     'client.edit':   'Edit clients',
@@ -698,6 +706,28 @@ for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
     for _section in _DEPARTMENT_SECTIONS.get(_dept_code, ()):
         if _role_code in SEED_MATRIX:
             SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_section: 'all'})
+
+# Who may ask for a client or a supplier, by the department they are in rather
+# than by naming every role: Sales and Account Management meet clients,
+# Operations and Purchasing meet suppliers. Everybody on those teams may ask;
+# the approval is what protects the books, not the asking.
+_REQUEST_BY_DEPARTMENT = {
+    'sales':      ('client_request.create',),
+    'account':    ('client_request.create',),
+    'operations': ('supplier_request.create',),
+    'design_3d':  ('supplier_request.create',),
+}
+
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    for _code in _REQUEST_BY_DEPARTMENT.get(_dept_code, ()):
+        if _role_code in SEED_MATRIX:
+            SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_code: 'own'})
+    # The head of one of those departments passes what their own people ask
+    # for. Checked again in the route against the requester's department, so
+    # holding this does not mean signing for another team.
+    if _level == LEVEL_HEAD and _dept_code in _REQUEST_BY_DEPARTMENT and _role_code in SEED_MATRIX:
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code],
+                                         {'party_request.approve_head': 'department'})
 
 # Anybody with people under them signs their عهدة requests and may correct the
 # money on their expense sheets. Granted by level rather than by naming the

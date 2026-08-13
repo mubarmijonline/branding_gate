@@ -1112,7 +1112,7 @@ def send_notification_to_role(role_name, title, content):
         return 0
 
 
-def users_holding(permission):
+def users_holding(permission, include_root=False):
     """
     Everyone whose role grants this permission, for telling a desk that
     something has landed on it. Audiences follow the grant matrix rather than a
@@ -1123,6 +1123,11 @@ def users_holding(permission):
     system landed on them -- two hundred of them, most about work they were
     never going to do. Anything genuinely theirs is sent to them by name
     through notify_user, which does not go through here.
+
+    `include_root` is for the one case where leaving them out is wrong: when the
+    audience *is* the admins, and the CEO is one. A client or supplier waiting
+    on an admin signature is exactly that, and excluding them would tell
+    everybody except the person most likely to sign it.
     """
     role_codes = [code for code, grants in rbac.SEED_MATRIX.items() if permission in grants]
     if not role_codes:
@@ -1131,7 +1136,8 @@ def users_holding(permission):
     placeholders = ",".join(["%s"] * len(role_codes))
     cur.execute(
         "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
-        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL AND u.is_active = 1" % placeholders,
+        "WHERE r.code IN (%s) AND u.is_active = 1%s" % (
+            placeholders, "" if include_root else " AND u.manager_id IS NOT NULL"),
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
@@ -3886,6 +3892,363 @@ def approved_items_pipeline():
         raise
     except Exception as e:
         print("DEBUG: approved items pipeline failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+# ---------------------------------------------------------------------------
+# Asking for a client or a supplier
+#
+# Sales and Account Management meet clients; Operations and Purchasing meet
+# suppliers. Neither creates one outright: they propose the record, their own
+# department head passes it, and an admin makes it real. Two people look at
+# anything that enters the books, and whoever has to act next is told.
+# ---------------------------------------------------------------------------
+
+# What may be written into each table from a payload. A closed list, so a
+# payload cannot reach a column it has no business setting -- owner_user_id,
+# added_by and the dates are ours to fill in, not the requester's.
+PARTY_FIELDS = {
+    'client': ('client_name', 'mobile_number', 'secondary_mobile_number',
+               'email_address', 'job_title', 'preferred_contact_channel',
+               'additional_notes', 'parent_company_id'),
+    'supplier': ('supplier_name', 'supplier_type', 'other_supplier_type',
+                 'company_name', 'business_registration_number', 'address',
+                 'contact_person_name', 'primary_phone', 'secondary_phone',
+                 'email_address', 'whatsapp_number', 'preferred_contact_method',
+                 'website', 'job_title', 'additional_notes'),
+}
+PARTY_REQUIRED = {
+    'client': ('client_name', 'mobile_number', 'email_address'),
+    'supplier': ('supplier_name', 'email_address'),
+}
+PARTY_CREATE_PERMISSION = {
+    'client': 'client_request.create',
+    'supplier': 'supplier_request.create',
+}
+
+
+def _party_request_code(cur, kind):
+    """A free code. The column is unique, so it is looked up, not hoped for."""
+    import random
+    prefix = 'CLR' if kind == 'client' else 'SUP'
+    for _ in range(50):
+        code = '%s-%d' % (prefix, random.randint(10000, 99999))
+        cur.execute("SELECT id FROM party_request WHERE request_code = %s", (code,))
+        if not cur.fetchone():
+            return code
+    raise RuntimeError('could not find a free request code')
+
+
+def _party_heads(cur, requester_id):
+    """
+    Who may pass this: the heads of the requester's own department. Read from
+    the department rather than the reporting line, because a new client or
+    supplier is the department's business, not one manager's.
+    """
+    cur.execute("""
+        SELECT h.id FROM user u
+        JOIN user h ON h.department_id = u.department_id
+        JOIN rbac_role r ON r.id = h.rbac_role_id
+        WHERE u.id = %s AND h.is_active = 1 AND h.id != u.id AND r.level = 1
+    """, (requester_id,))
+    return [row['id'] for row in cur.fetchall()]
+
+
+def _may_pass_party_request(cur, actor_id, requester_id):
+    """A head passes their own department's requests; admin passes anything."""
+    if rbac.resolve(session.get('perms') or {}, 'party_request.approve_head') == 'all':
+        return True
+    cur.execute("SELECT a.department_id AS mine, r.department_id AS theirs "
+                "FROM user a, user r WHERE a.id = %s AND r.id = %s",
+                (actor_id, requester_id))
+    row = cur.fetchone()
+    return bool(row and row['mine'] and row['mine'] == row['theirs'])
+
+
+def _party_payload(row):
+    """The proposed record, whichever way MySQL hands the JSON back."""
+    payload = row['payload']
+    if isinstance(payload, (bytes, bytearray)):
+        payload = payload.decode('utf-8')
+    return json.loads(payload) if isinstance(payload, str) else payload
+
+
+@app.route('/api/party-requests', methods=['POST'])
+@perm('client_request.create', 'supplier_request.create')
+def create_party_request():
+    """Propose a client or a supplier. It is a request, not a record."""
+    try:
+        data = request.get_json(silent=True) or {}
+        kind = (data.get('kind') or '').strip().lower()
+        if kind not in PARTY_FIELDS:
+            return jsonify(success=False, error='Say whether this is a client or a supplier'), 400
+        if not has(PARTY_CREATE_PERMISSION[kind]):
+            return jsonify(success=False, error='Your team does not raise %s requests' % kind), 403
+
+        payload = {field: (data.get(field) or None) for field in PARTY_FIELDS[kind]}
+        missing = [f for f in PARTY_REQUIRED[kind] if not payload.get(f)]
+        if missing:
+            return jsonify(success=False,
+                           error='Missing: %s' % ', '.join(m.replace('_', ' ') for m in missing)), 400
+
+        me = session.get('user_id')
+        conn, cur = connection()
+        code = _party_request_code(cur, kind)
+        cur.execute("""
+            INSERT INTO party_request (request_code, kind, payload, status, requested_by, note)
+            VALUES (%s, %s, %s, 'pending_head', %s, %s)
+        """, (code, kind, json.dumps(payload), me,
+              (data.get('note') or '').strip()[:500] or None))
+        heads = _party_heads(cur, me)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        name = payload.get('client_name') or payload.get('supplier_name')
+        notify_users(heads or users_holding('party_request.approve_admin', include_root=True),
+                     'New %s request: %s' % (kind, name),
+                     '%s asks to add the %s "%s" (%s). It needs your approval.'
+                     % (session.get('name') or 'A colleague', kind, name, code))
+        return jsonify(success=True, request_code=code,
+                       message='Sent to your department head for approval')
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: party request failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/party-requests', methods=['GET'])
+@perm('client_request.create', 'supplier_request.create',
+      'party_request.approve_head', 'party_request.approve_admin')
+def list_party_requests():
+    """
+    What this person asked for, and what they have to decide.
+
+    Deliberately not gated on one permission: a member sees their own, a head
+    their department's, an admin everything. The query decides, not four
+    separate endpoints.
+    """
+    try:
+        me = session.get('user_id')
+        if not me:
+            return jsonify(success=False, error='Not logged in'), 401
+        kind = request.args.get('kind')
+        is_admin = has('party_request.approve_admin')
+        is_head = has('party_request.approve_head')
+
+        conn, cur = connection()
+        sql = """
+            SELECT p.*, u.name AS requested_by_name, d.name AS department_name,
+                   h.name AS head_name, a.name AS admin_name
+            FROM party_request p
+            JOIN user u ON u.id = p.requested_by
+            LEFT JOIN department d ON d.id = u.department_id
+            LEFT JOIN user h ON h.id = p.head_approved_by
+            LEFT JOIN user a ON a.id = p.admin_approved_by
+            WHERE 1=1
+        """
+        params = []
+        if not is_admin:
+            if is_head:
+                sql += (" AND (p.requested_by = %s OR u.department_id ="
+                        " (SELECT department_id FROM user WHERE id = %s))")
+                params += [me, me]
+            else:
+                sql += " AND p.requested_by = %s"
+                params.append(me)
+        if kind in PARTY_FIELDS:
+            sql += " AND p.kind = %s"
+            params.append(kind)
+        sql += (" ORDER BY FIELD(p.status,'pending_admin','pending_head','approved',"
+                "'rejected','cancelled'), p.id DESC")
+        cur.execute(sql, params)
+
+        rows = []
+        for row in cur.fetchall():
+            row['payload'] = _party_payload(row)
+            row['requested_at'] = (row['requested_at'].strftime('%Y-%m-%d %H:%M')
+                                   if row['requested_at'] else None)
+            for field in ('head_approved_at', 'admin_approved_at', 'rejected_at'):
+                row[field] = row[field].strftime('%Y-%m-%d %H:%M') if row[field] else None
+            row['can_pass'] = bool(row['status'] == 'pending_head' and (is_admin or is_head))
+            row['can_finalise'] = bool(row['status'] == 'pending_admin' and is_admin)
+            row['is_mine'] = row['requested_by'] == me
+            rows.append(row)
+        cur.close()
+        conn.close()
+        waiting = sum(1 for r in rows if r['can_pass'] or r['can_finalise'])
+        return jsonify(success=True, requests=rows, waiting=waiting)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: party request list failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/party-requests/<int:request_id>/head-approve', methods=['POST'])
+@perm('party_request.approve_head')
+def head_approve_party_request(request_id):
+    """The department head passes it on to an admin."""
+    try:
+        notes = ((request.get_json(silent=True) or {}).get('notes') or '').strip()
+        me = session.get('user_id')
+        conn, cur = connection()
+        cur.execute("""
+            SELECT p.*, u.name AS requester_name FROM party_request p
+            JOIN user u ON u.id = p.requested_by
+            WHERE p.id = %s AND p.status = 'pending_head' FOR UPDATE
+        """, (request_id,))
+        req = cur.fetchone()
+        if not req:
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False, error='Not found, or already decided'), 404
+        if not _may_pass_party_request(cur, me, req['requested_by']):
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False, error="Only that department's head may pass this"), 403
+        cur.execute("""
+            UPDATE party_request SET status = 'pending_admin', head_approved_by = %s,
+                   head_approved_at = NOW(), head_notes = %s WHERE id = %s
+        """, (me, notes or None, request_id))
+        conn.commit(); cur.close(); conn.close()
+
+        payload = _party_payload(req)
+        name = payload.get('client_name') or payload.get('supplier_name')
+        # Only the admins at this point: nobody else needs to know a supplier is
+        # halfway through being added.
+        notify_users(users_holding('party_request.approve_admin', include_root=True),
+                     'Waiting on you: %s "%s"' % (req['kind'], name),
+                     '%s passed %s. Approve it to add the %s.'
+                     % (session.get('name') or 'The head', req['request_code'], req['kind']))
+        notify_user(req['requested_by'], 'Your %s request moved on' % req['kind'],
+                    '%s passed your request for "%s". An admin decides next.'
+                    % (session.get('name') or 'Your head', name))
+        return jsonify(success=True, message='Passed to the admins')
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: head approve failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/party-requests/<int:request_id>/approve', methods=['POST'])
+@perm('party_request.approve_admin')
+def admin_approve_party_request(request_id):
+    """
+    The admin signature, which is the one that writes the record.
+
+    The row appears here and nowhere else, so a client or supplier that exists
+    always has a request behind it saying who asked and who agreed.
+    """
+    try:
+        notes = ((request.get_json(silent=True) or {}).get('notes') or '').strip()
+        me = session.get('user_id')
+        conn, cur = connection()
+        cur.execute("""
+            SELECT p.*, u.name AS requester_name FROM party_request p
+            JOIN user u ON u.id = p.requested_by
+            WHERE p.id = %s AND p.status = 'pending_admin' FOR UPDATE
+        """, (request_id,))
+        req = cur.fetchone()
+        if not req:
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False,
+                           error='Not found, or the head has not passed it yet'), 404
+
+        payload = _party_payload(req)
+        kind = req['kind']
+        fields = [f for f in PARTY_FIELDS[kind] if payload.get(f) not in (None, '')]
+        columns = fields + ['added_by']
+        values = [payload[f] for f in fields] + [req['requester_name']]
+        if kind == 'client':
+            columns.append('owner_user_id')
+            values.append(req['requested_by'])
+        cur.execute("INSERT INTO `%s` (%s) VALUES (%s)"
+                    % (kind, ', '.join(columns), ', '.join(['%s'] * len(columns))), values)
+        record_id = cur.lastrowid
+
+        cur.execute("""
+            UPDATE party_request SET status = 'approved', admin_approved_by = %s,
+                   admin_approved_at = NOW(), admin_notes = %s, created_record_id = %s
+            WHERE id = %s
+        """, (me, notes or None, record_id, request_id))
+        conn.commit(); cur.close(); conn.close()
+
+        name = payload.get('client_name') or payload.get('supplier_name')
+        notify_user(req['requested_by'], '%s added: %s' % (kind.title(), name),
+                    '%s approved your request %s. The %s is on the system now.'
+                    % (session.get('name') or 'An admin', req['request_code'], kind))
+        return jsonify(success=True, record_id=record_id, message='%s added' % kind.title())
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/party-requests/<int:request_id>/reject', methods=['POST'])
+@perm('party_request.approve_head', 'party_request.approve_admin')
+def reject_party_request(request_id):
+    """Refuse it, with a reason the requester reads."""
+    try:
+        reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()
+        if not reason:
+            return jsonify(success=False, error='A reason is required'), 400
+        me = session.get('user_id')
+        conn, cur = connection()
+        cur.execute("""
+            SELECT * FROM party_request
+            WHERE id = %s AND status IN ('pending_head', 'pending_admin') FOR UPDATE
+        """, (request_id,))
+        req = cur.fetchone()
+        if not req:
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False, error='Not found, or already decided'), 404
+        if req['status'] == 'pending_admin' and not has('party_request.approve_admin'):
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False, error='Only an admin decides at this point'), 403
+        if (req['status'] == 'pending_head' and not has('party_request.approve_admin')
+                and not _may_pass_party_request(cur, me, req['requested_by'])):
+            conn.rollback(); cur.close(); conn.close()
+            return jsonify(success=False, error="Not your department's request"), 403
+        cur.execute("""
+            UPDATE party_request SET status = 'rejected', rejected_by = %s,
+                   rejected_at = NOW(), rejection_reason = %s WHERE id = %s
+        """, (me, reason, request_id))
+        conn.commit(); cur.close(); conn.close()
+        notify_user(req['requested_by'], '%s request declined' % req['kind'].title(),
+                    'Your request %s was declined by %s. Reason: %s'
+                    % (req['request_code'], session.get('name') or 'a reviewer', reason))
+        return jsonify(success=True, message='Declined')
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: party reject failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/party-requests/<int:request_id>/cancel', methods=['POST'])
+@perm('client_request.create', 'supplier_request.create')
+def cancel_party_request(request_id):
+    """Withdraw your own, while nobody has decided it."""
+    try:
+        me = session.get('user_id')
+        if not me:
+            return jsonify(success=False, error='Not logged in'), 401
+        conn, cur = connection()
+        cur.execute("""
+            UPDATE party_request SET status = 'cancelled'
+            WHERE id = %s AND requested_by = %s AND status IN ('pending_head', 'pending_admin')
+        """, (request_id, me))
+        changed = cur.rowcount
+        conn.commit(); cur.close(); conn.close()
+        if not changed:
+            return jsonify(success=False, error='Not yours, or already decided'), 404
+        return jsonify(success=True, message='Withdrawn')
+    except HTTPException:
+        raise
+    except Exception as e:
         return jsonify(success=False, error=str(e)), 500
 
 

@@ -20,6 +20,9 @@
         </button>
     </header>
 
+    {% set party_kind = 'client' %}
+    {% include 'party_requests_section.html' %}
+
     <section class="client-summary-band" aria-label="Client summary">
         <div class="client-summary-item">
             <span class="client-summary-icon client-summary-icon--primary"><i class="fas fa-users" aria-hidden="true"></i></span>

@@ -44,6 +44,9 @@ $(document).ready(function() {
         <h1 class="h3 mb-0 text-gray-800">Supplier Management</h1>
     </div>
 
+    {% set party_kind = 'supplier' %}
+    {% include 'party_requests_section.html' %}
+
     <!-- Supplier Information Card -->
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
