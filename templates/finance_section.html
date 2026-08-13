@@ -54,6 +54,9 @@
     {% set _p = session.get('perms', {}) %}
     {% if 'finance_txn.view' in _p %}
 
+    {% set team_area = 'finance' %}
+    {% include 'team_actions_section.html' %}
+
     <!-- Hero Header -->
     <div class="section-hero">
         <div class="d-flex align-items-center justify-content-between">

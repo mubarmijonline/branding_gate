@@ -75,6 +75,9 @@
     {% set _p = session.get('perms', {}) %}
     {% if 'sales_request.view' in _p %}
 
+    {% set team_area = 'sales' %}
+    {% include 'team_actions_section.html' %}
+
     <!-- Hero -->
     <div class="section-hero">
         <div class="d-flex align-items-center justify-content-between">

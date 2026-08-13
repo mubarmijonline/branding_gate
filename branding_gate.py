@@ -7196,6 +7196,160 @@ def costing_item_log(item_id):
 # call; nothing else here is per-department.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# What a team can actually do, on the team's own page
+#
+# Every one of these was reachable only from a navbar menu, which means it was
+# reachable only by somebody who already knew it was there. A department's own
+# page should say what that department does, so this is the one list of
+# destinations and the pages render whichever of them the viewer may open.
+#
+# (label, description, icon, endpoint, permissions) -- any one permission is
+# enough, and an action nobody may open is never drawn.
+# ---------------------------------------------------------------------------
+
+TEAM_ACTIONS = {
+    'operations': [
+        ('Operation Requests', 'Cost the items on a request', 'fas fa-tools',
+         'operation_request', ('approved_item.view',)),
+        ('Costing desk', 'Assign items and decide proposals', 'fas fa-calculator',
+         'costing_page', ('costing.view',)),
+        ('Approved Items', 'Place approved items with suppliers', 'fas fa-check-circle',
+         'approved_items_page', ('approved_item.view',)),
+        ('Suppliers', 'The supplier directory, and requesting a new one',
+         'fas fa-truck', 'supplier', ('supplier.view',)),
+        ('Supplier Report', 'What each supplier owes and when', 'fas fa-file-invoice',
+         'supplier_report_page', ('supplier_report.view',)),
+        ('Inventory', 'Stock and item management', 'fas fa-warehouse',
+         'item_management_page', ('inventory.view',)),
+        ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
+         'workflow_timeline', ('sales_request.view',)),
+    ],
+    'sales': [
+        ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
+         'sales_request', ('section.sales',)),
+        ('Client Approval', 'Send items to the client and record the answer',
+         'fas fa-check-double', 'client_approval_page', ('client_approval.view',)),
+        ('Sales Head Approval', 'Decide negotiations as the Sales Head',
+         'fas fa-user-check', 'sales_head_approval_page', ('negotiation.decide_sales_head',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
+        ('Clients', 'The client directory, and requesting a new one',
+         'fas fa-handshake', 'client', ('client.view',)),
+        ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
+         'workflow_timeline', ('sales_request.view',)),
+    ],
+    'finance': [
+        ('Finance Management', 'Transactions, payment methods and categories',
+         'fas fa-wallet', 'finance_management_page', ('finance_txn.view',)),
+        ('Finance Approvals', 'Sign off transactions and عهدة requests',
+         'fas fa-check-double', 'finance_approvals', ('finance_txn.approve',)),
+        ('Expense Tracking', 'Submit a reimbursement sheet', 'fas fa-receipt',
+         'expense_tracking_page', ('expense_tracking.create',)),
+        ("Expense Approval", "Sign off your team's expenses", 'fas fa-clipboard-check',
+         'expense_tracking_approval_page', ('expense_tracking.approve_manager',)),
+        ('Finance Expense Approval', 'The finance signature on an expense sheet',
+         'fas fa-file-invoice-dollar', 'finance_expense_approval_page',
+         ('expense_tracking.approve_finance',)),
+        ('My Expenses', 'What you have spent and claimed', 'fas fa-user-tag',
+         'my_expenses_page', ('expense.view',)),
+    ],
+    'marketing': [
+        ('Clients', 'The client directory, and requesting a new one',
+         'fas fa-handshake', 'client', ('client.view',)),
+        ('Sales Requests', 'What the company is working on', 'fas fa-clipboard-list',
+         'sales_request', ('section.sales',)),
+        ('My Expenses', 'What you have spent and claimed', 'fas fa-user-tag',
+         'my_expenses_page', ('expense.view',)),
+    ],
+    'account': [
+        ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
+         'sales_request', ('section.sales',)),
+        ('Clients', 'The client directory, and requesting a new one',
+         'fas fa-handshake', 'client', ('client.view',)),
+        ('Client Approval', 'Send items to the client and record the answer',
+         'fas fa-check-double', 'client_approval_page', ('client_approval.view',)),
+        ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
+         'workflow_timeline', ('sales_request.view',)),
+    ],
+    'design_2d': [
+        ('Approved Items', 'What the client has signed off', 'fas fa-check-circle',
+         'approved_items_page', ('approved_item.view',)),
+        ('Item Catalog', 'The catalogue you design from', 'fas fa-book',
+         'item_management_page', ('inventory.view',)),
+        ('Sales Requests', 'The work behind the designs', 'fas fa-clipboard-list',
+         'sales_request', ('section.sales',)),
+    ],
+    'design_3d': [
+        ('Approved Items', 'What the client has signed off', 'fas fa-check-circle',
+         'approved_items_page', ('approved_item.view',)),
+        ('Suppliers', 'The supplier directory, and requesting a new one',
+         'fas fa-truck', 'supplier', ('supplier.view',)),
+        ('Inventory', 'Stock and item management', 'fas fa-warehouse',
+         'item_management_page', ('inventory.view',)),
+        ('Supplier Report', 'What each supplier owes and when', 'fas fa-file-invoice',
+         'supplier_report_page', ('supplier_report.view',)),
+    ],
+    'pricing': [
+        ('Pricing Dashboard', 'What is waiting to be priced', 'fas fa-tags',
+         'pricing_dashboard', ('sales_item.price',)),
+        ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
+         'workflow_timeline', ('sales_request.view',)),
+    ],
+}
+
+# Everybody's own business, whatever team they are on.
+TEAM_ACTIONS_EVERYONE = [
+    ('My Expenses', 'What you have spent and claimed', 'fas fa-user-tag',
+     'my_expenses_page', ('expense.view',)),
+    ('Expense Tracking', 'Submit a reimbursement sheet', 'fas fa-receipt',
+     'expense_tracking_page', ('expense_tracking.create',)),
+    ('Approvals', 'عهدة and expenses waiting on you', 'fas fa-clipboard-check',
+     'expense_tracking_approval_page',
+     ('expense_tracking.approve_manager', 'user_balance.approve_manager')),
+]
+
+
+def team_actions(area):
+    """
+    The destinations this viewer may open for this team, ready to draw.
+
+    Filtered by permission, so a page never offers a card that answers 403 --
+    the fault this app has had in several places. Deduplicated, because the
+    common actions overlap with a couple of the departmental ones.
+    """
+    held = session.get('perms') or {}
+    seen, out = set(), []
+    for label, desc, icon, endpoint, needed in (TEAM_ACTIONS.get(area, [])
+                                                + TEAM_ACTIONS_EVERYONE):
+        if endpoint in seen or not any(code in held for code in needed):
+            continue
+        href = url_for(endpoint)
+        seen.add(endpoint)
+        out.append({'label': label, 'desc': desc, 'icon': icon, 'href': href})
+    return out
+
+
+def _check_team_actions():
+    """
+    Every action names an endpoint that exists.
+
+    Four of them did not, and because team_actions() swallowed the error the
+    cards simply never appeared -- for people who held the permission and had
+    every right to see them. Checked on the way up now, so a typo is loud.
+    """
+    known = {rule.endpoint for rule in app.url_map.iter_rules()}
+    unknown = sorted({action[3]
+                      for actions in list(TEAM_ACTIONS.values()) + [TEAM_ACTIONS_EVERYONE]
+                      for action in actions} - known)
+    if unknown:
+        raise RuntimeError('TEAM_ACTIONS names endpoints that do not exist: %s'
+                           % ', '.join(unknown))
+
+
+app.jinja_env.globals['team_actions'] = team_actions
+
+
 _BLANK_PORTALS = {
     'marketing': {
         'perm': 'portal.marketing',
@@ -7238,6 +7392,7 @@ def _blank_portal(key):
         portal_desc=portal['desc'],
         portal_icon=portal['icon'],
         portal_team=portal['team'],
+        portal_area=key,
     )
 
 
@@ -16253,7 +16408,7 @@ def add_sales_request_comment(request_id):
             return jsonify({'success': False, 'error': 'Comment text is required'}), 400
         
         # Validate source
-        valid_sources = ['general', 'client_approval', 'costing', 'selling_price', 
+        valid_sources = ['general', 'client_approval_page', 'costing', 'selling_price', 
                         'operations', 'logistics', 'design', 'production']
         if source not in valid_sources:
             source = 'general'
@@ -25122,6 +25277,9 @@ def update_expense_tracking_items(tracking_id):
 # ============================================================================
 # END FINANCE MODULE
 # ============================================================================
+
+_check_team_actions()   # every card points at a real page
+
 
 if __name__== '__main__':
     # Run database migration on startup

@@ -1,38 +1,55 @@
 {% extends "main.html" %}
 
-{# One template for every department portal that has no tools yet. The route
-   supplies the title, the blurb and the icon; nothing here is per-department,
-   so filling one portal in later means replacing its render_template call, not
-   unpicking a copy of this page. #}
+{# One template for every department portal. The route supplies the title, the
+   blurb, the icon and which team it is; nothing here is per-department, so
+   giving one portal a page of its own later means changing its render_template
+   call, not unpicking a copy of this page.
+
+   It is not a blank page any more: the team's own destinations are on it, drawn
+   from what this viewer may actually open. #}
 
 {% block body %}
-<div class="container-fluid portal-blank">
-  <div class="portal-blank-card">
-    <i class="{{ portal_icon }} portal-blank-icon"></i>
-    <h1>{{ portal_title }}</h1>
-    <p class="portal-blank-desc">{{ portal_desc }}</p>
-    <p class="portal-blank-note">
-      This portal is reserved for the {{ portal_team }} team. It is empty for now
-      &mdash; the pages that belong here have not been built yet.
-    </p>
-    <a class="portal-blank-back" href="{{ url_for('home') }}">
-      <i class="fas fa-arrow-left mr-1"></i> Back to portals
+<div class="container-fluid portal-page">
+
+  <header class="portal-head">
+    <span class="portal-head-icon"><i class="{{ portal_icon }}"></i></span>
+    <div>
+      <h1>{{ portal_title }}</h1>
+      <p>{{ portal_desc }}</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm ml-auto" href="{{ url_for('home') }}">
+      <i class="fas fa-arrow-left mr-1"></i>All portals
     </a>
+  </header>
+
+  {% set team_area = portal_area %}
+  {% set team_actions_title = portal_team + ' — what you can do' %}
+  {% include 'team_actions_section.html' %}
+
+  {# Only says the portal is empty when it actually is. #}
+  {% if not team_actions(portal_area) %}
+  <div class="portal-note">
+    This portal is reserved for the {{ portal_team }} team. It is empty for now
+    &mdash; the pages that belong here have not been built yet.
   </div>
+  {% else %}
+  <div class="portal-note">
+    A page of its own for {{ portal_team }} has not been built yet. Everything the
+    team uses is above.
+  </div>
+  {% endif %}
 </div>
 
 <style>
-  /* Prefixed portal-blank-*: sb-admin-2 owns .card, .card-body and .icon. */
-  .portal-blank { display:flex; justify-content:center; padding:3rem 1rem; }
-  .portal-blank-card { background:#fff; border:1px solid #e3e6f0; border-radius:8px;
-            padding:3rem 2.5rem; max-width:620px; width:100%; text-align:center; }
-  .portal-blank-icon { font-size:2.6rem; color:#3a4fa0; background:#eef1fa;
-            width:88px; height:88px; line-height:88px; border-radius:50%;
-            display:inline-block; margin-bottom:1.25rem; }
-  .portal-blank h1 { font-size:1.6rem; font-weight:700; color:#2e3650; margin:0 0 .5rem; }
-  .portal-blank-desc { color:#5a6280; margin:0 0 1.25rem; }
-  .portal-blank-note { color:#8891a8; font-size:.9rem; border-top:1px solid #e3e6f0;
-            padding-top:1.25rem; margin:0 0 1.5rem; }
-  .portal-blank-back { font-weight:600; color:#3a4fa0; }
+  /* Prefixed portal-*: sb-admin-2 owns .card, .card-body and .icon. */
+  .portal-page { padding-top: 1.5rem; }
+  .portal-head { display:flex; align-items:center; gap:1rem; margin-bottom:1.75rem; }
+  .portal-head-icon { flex:0 0 56px; width:56px; height:56px; border-radius:14px;
+            background:#eef1fa; color:#3a4fa0; font-size:1.4rem;
+            display:inline-flex; align-items:center; justify-content:center; }
+  .portal-head h1 { font-size:1.6rem; font-weight:700; color:#2e3650; margin:0; }
+  .portal-head p { color:#8891a8; margin:.15rem 0 0; font-size:.9rem; }
+  .portal-note { color:#8891a8; font-size:.85rem; border-top:1px solid #e3e6f0;
+            padding-top:1rem; }
 </style>
 {% endblock %}

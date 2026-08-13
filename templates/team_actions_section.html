@@ -1,0 +1,53 @@
+{# What this team does, on the team's own page.
+
+   The page sets `team_area` before including this; team_actions() returns the
+   destinations this viewer may actually open, so a card is never drawn for a
+   page that would answer 403.
+
+   Used by the operations, sales and finance pages and by all four department
+   portals, which is why it is an include rather than six copies. #}
+{% set actions = team_actions(team_area) %}
+{% if actions %}
+<style>
+  .team-actions {
+    display: grid; gap: .9rem; margin-bottom: 1.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  .team-action {
+    display: flex; align-items: flex-start; gap: .8rem;
+    padding: 1rem 1.1rem; background: #fff;
+    border: 1px solid #e3e6f0; border-radius: 10px;
+    color: inherit; text-decoration: none;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .team-action:hover {
+    transform: translateY(-2px); text-decoration: none; color: inherit;
+    border-color: #c7d2e8; box-shadow: 0 .4rem 1.2rem rgba(58,59,69,.12);
+  }
+  .team-action-icon {
+    flex: 0 0 40px; width: 40px; height: 40px; border-radius: 10px;
+    background: #eef2fb; color: #3a4fa0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
+  .team-action-label { font-weight: 700; color: #2e3650; font-size: .95rem; }
+  .team-action-desc { font-size: .78rem; color: #8891a8; margin-top: .12rem; line-height: 1.35; }
+  .team-actions-head {
+    font-size: .72rem; letter-spacing: .09em; text-transform: uppercase;
+    font-weight: 700; color: #8891a8; margin: 0 0 .6rem;
+  }
+</style>
+
+<p class="team-actions-head">{{ team_actions_title | default('What you can do here') }}</p>
+<div class="team-actions">
+  {% for action in actions %}
+  <a class="team-action" href="{{ action.href }}">
+    <span class="team-action-icon"><i class="{{ action.icon }}"></i></span>
+    <span>
+      <span class="team-action-label">{{ action.label }}</span>
+      <span class="team-action-desc d-block">{{ action.desc }}</span>
+    </span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
