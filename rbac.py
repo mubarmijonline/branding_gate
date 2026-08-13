@@ -375,7 +375,10 @@ SEED_MATRIX = {
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
         {
-            'client.create': 'own', 'client.edit': 'team',
+            # Creating a client outright stops with the head: below that it is
+             # a request, which the head approves. client.edit stays, because
+             # correcting a client you already work with is not adding one.
+            'client.edit': 'team',
             'target.view': 'team', 'target.assign': 'team',
         },
     ),
@@ -385,7 +388,6 @@ SEED_MATRIX = {
         {
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',
-            'client.create': 'own',
             'target.view': 'own',
         },
     ),
@@ -401,12 +403,12 @@ SEED_MATRIX = {
         _sales_line('team'),
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
-        {'client.create': 'own', 'client.edit': 'team'},
+        {'client.edit': 'team'},
     ),
     'account_member': _merge(
         _sales_line('own'),
         _OWN_EXPENSES,
-        {'expense_tracking.view': 'own', 'expense_tracking.create': 'own', 'client.create': 'own'},
+        {'expense_tracking.view': 'own', 'expense_tracking.create': 'own'},
     ),
 
     # --- Pricing, a separate function under the CEO -------------------------

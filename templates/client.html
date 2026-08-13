@@ -15,9 +15,14 @@
         <div>
             <h1>Client Directory</h1>
         </div>
+        {# Same rule as the supplier page: adding one outright belongs to
+           whoever holds client.create. Everyone else uses the request card
+           above, and was being shown a button that refused them. #}
+        {% if 'client.create' in _p %}
         <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addClientModal">
             <i class="fas fa-user-plus mr-2" aria-hidden="true"></i>Add Client
         </button>
+        {% endif %}
     </header>
 
     {% set party_kind = 'client' %}
