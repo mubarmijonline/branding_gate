@@ -4,6 +4,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import fixtures
 import rbac
 
 

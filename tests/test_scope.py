@@ -15,6 +15,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import fixtures
 import rbac
 
 
@@ -53,8 +54,7 @@ class ScopeTest(unittest.TestCase):
             cur.execute("SELECT id FROM rbac_role WHERE code = %s", (code,))
             self.roles[code] = cur.fetchone()["id"]
 
-        cur.execute("SELECT id FROM client ORDER BY id LIMIT 1")
-        client_id = cur.fetchone()["id"]
+        client_id = fixtures.ensure_client(cur)
 
         # head -> leader -> two members, all in the same department.
         self.head, self.leader, self.member_a, self.member_b = (

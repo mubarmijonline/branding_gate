@@ -11,6 +11,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import fixtures
 import rbac
 
 
@@ -219,11 +220,8 @@ class CustodyFlowTest(unittest.TestCase):
         self._request_balance(self.member)
         request_id = self._latest_for(self.member)['id']
         cur = self._cursor()
-        cur.execute("SELECT id FROM payment_methods LIMIT 1")
-        payment_method = cur.fetchone()
+        payment_method = fixtures.ensure_payment_method(cur)
         cur.close()
-        if not payment_method:
-            self.skipTest('no payment method in this database')
         response = self._client_for(self.finance).post(
             '/api/finance/balance-requests/%d/approve' % request_id,
             json={'payment_method_id': payment_method['id']})
@@ -324,11 +322,8 @@ class CustodySettlementTest(CustodyFlowTest):
 
     def test_confirming_it_lowers_the_custody_and_raises_the_payment_method(self):
         cur = self._cursor()
-        cur.execute("SELECT id, current_balance FROM payment_methods LIMIT 1")
-        payment_method = cur.fetchone()
+        payment_method = fixtures.ensure_payment_method(cur)
         cur.close()
-        if not payment_method:
-            self.skipTest('no payment method in this database')
 
         self._give_balance(self.member, 400)
         self._client_for(self.member).post('/api/finance/custody/settle', json={'amount': 150})
@@ -373,10 +368,9 @@ class ExpenseSalesRequestTest(CustodyFlowTest):
 
     def _a_sales_request(self):
         cur = self._cursor()
-        cur.execute("SELECT id FROM sales_request ORDER BY id LIMIT 1")
-        row = cur.fetchone()
+        request_id = fixtures.ensure_sales_request(cur, self.head)
         cur.close()
-        return row['id'] if row else None
+        return request_id
 
     def test_a_line_without_a_sales_request_is_refused(self):
         response = self._submit(self.member, [{'description': 'taxi', 'amount': 50}])

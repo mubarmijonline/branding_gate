@@ -10,6 +10,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import fixtures
 import rbac
 
 
@@ -39,8 +40,7 @@ class AssignmentLockTest(unittest.TestCase):
         self.head = self._user('lock-head', 'operations_manager')
         self.leader = self._user('lock-leader', 'operations_team_leader')
 
-        cur.execute("SELECT id FROM client ORDER BY id LIMIT 1")
-        client_id = cur.fetchone()['id']
+        client_id = fixtures.ensure_client(cur)
         cur.execute("""INSERT INTO sales_request (client_id, title, start_date, created_by,
                                                   items_count, owner_user_id)
                        VALUES (%s, 'Assignment lock test', CURDATE(), 'test', 1, %s)""",
@@ -49,8 +49,7 @@ class AssignmentLockTest(unittest.TestCase):
         cur.execute("""INSERT INTO sales_request_items (request_id, name, qty, approval_status)
                        VALUES (%s, 'Lock test item', 1, 'approved')""", (self.request_id,))
         self.item_id = cur.lastrowid
-        cur.execute("SELECT id FROM supplier ORDER BY id LIMIT 2")
-        self.suppliers = [r['id'] for r in cur.fetchall()]
+        self.suppliers = fixtures.ensure_suppliers(cur, 2)
         cur.close()
 
     def tearDown(self):

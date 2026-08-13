@@ -12,6 +12,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import fixtures
 import costing
 import rbac
 
@@ -150,8 +151,7 @@ class CostingChainTest(unittest.TestCase):
                      "operations_member", "sales_member"):
             cur.execute("SELECT id FROM rbac_role WHERE code = %s", (code,))
             self.roles[code] = cur.fetchone()["id"]
-        cur.execute("SELECT id FROM client ORDER BY id LIMIT 1")
-        client_id = cur.fetchone()["id"]
+        client_id = fixtures.ensure_client(cur)
 
         self.head = self._make_user("cost-head", "operations_manager", None)
         self.leader = self._make_user("cost-leader", "operations_team_leader", self.head)
