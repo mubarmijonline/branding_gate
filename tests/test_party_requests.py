@@ -111,7 +111,7 @@ class PartyRequestFlowTest(unittest.TestCase):
 
     # -- passing -------------------------------------------------------------
 
-    def test_only_that_departments_head_may_pass_it(self):
+    def test_only_that_departments_head_may_approve_it(self):
         self._ask_supplier(self.ops_member)
         request_id = self._latest()['id']
         outsider = self._client_for(self.sales_head).post(
@@ -120,46 +120,44 @@ class PartyRequestFlowTest(unittest.TestCase):
         theirs = self._client_for(self.ops_head).post(
             '/api/party-requests/%d/head-approve' % request_id, json={})
         self.assertEqual(theirs.status_code, 200, theirs.get_json())
-        self.assertEqual(self._latest()['status'], 'pending_admin')
+        self.assertEqual(self._latest()['status'], 'approved')
 
-    def test_a_head_cannot_add_it_alone(self):
-        self._ask_supplier(self.ops_member)
+    def test_the_head_adds_it_without_waiting_for_an_admin(self):
+        # The admin step was removed: the head knows the supplier, and a second
+        # desk added delay without adding judgement.
+        self._ask_supplier(self.ops_member, name='Added By The Head')
         request_id = self._latest()['id']
-        self._client_for(self.ops_head).post(
-            '/api/party-requests/%d/head-approve' % request_id, json={})
-        # The head has no admin signature, so the second step refuses them.
         response = self._client_for(self.ops_head).post(
-            '/api/party-requests/%d/approve' % request_id, json={})
-        self.assertEqual(response.status_code, 403)
-
-    def test_the_admin_signature_is_what_writes_the_record(self):
-        self._ask_supplier(self.ops_member, name='Written By Approval')
-        request_id = self._latest()['id']
-
-        cur = self._cursor()
-        cur.execute("SELECT COUNT(*) AS n FROM supplier WHERE supplier_name = 'Written By Approval'")
-        self.assertEqual(cur.fetchone()['n'], 0, 'a request must not create the row')
-        cur.close()
-
-        self._client_for(self.ops_head).post(
             '/api/party-requests/%d/head-approve' % request_id, json={})
-        response = self._client_for(self.admin).post(
-            '/api/party-requests/%d/approve' % request_id, json={})
         self.assertEqual(response.status_code, 200, response.get_json())
 
         cur = self._cursor()
-        cur.execute("SELECT * FROM supplier WHERE supplier_name = 'Written By Approval'")
+        cur.execute("SELECT id FROM supplier WHERE supplier_name = 'Added By The Head'")
         row = cur.fetchone()
         cur.close()
-        self.assertIsNotNone(row)
+        self.assertIsNotNone(row, 'the head approving is what adds it')
         self.assertEqual(self._latest()['created_record_id'], row['id'])
 
-    def test_the_admin_cannot_approve_what_no_head_has_passed(self):
-        self._ask_supplier(self.ops_member)
+    def test_asking_alone_creates_nothing(self):
+        self._ask_supplier(self.ops_member, name='Only Asked For')
+        cur = self._cursor()
+        cur.execute("SELECT COUNT(*) AS n FROM supplier WHERE supplier_name = 'Only Asked For'")
+        self.assertEqual(cur.fetchone()['n'], 0, 'a request must not create the row')
+        cur.close()
+
+    def test_an_admin_may_still_finish_one_left_mid_flight(self):
+        # Nothing routes to the admin any more, but a request raised before that
+        # changed must not be stranded.
+        self._ask_supplier(self.ops_member, name='Left Mid Flight')
         request_id = self._latest()['id']
+        cur = self._cursor()
+        cur.execute("UPDATE party_request SET status = 'pending_admin' WHERE id = %s",
+                    (request_id,))
+        cur.close()
         response = self._client_for(self.admin).post(
             '/api/party-requests/%d/approve' % request_id, json={})
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(self._latest()['status'], 'approved')
 
     def test_declining_needs_a_reason_and_the_requester_can_read_it(self):
         self._ask_supplier(self.ops_member)

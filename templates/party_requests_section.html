@@ -20,7 +20,7 @@
       <span class="badge badge-warning ml-2 d-none" id="partyWaitingBadge">0</span>
     </h6>
     <span class="text-muted small ml-2">
-      Your head passes it, an admin adds it.
+      Your department head approves it and it is added.
     </span>
     {% if can_raise %}
     <button type="button" class="btn btn-primary btn-sm ml-auto" id="partyRequestNew">
@@ -89,6 +89,8 @@
 
   var STATUS = {
     pending_head: ['warning', 'with your head'],
+    // Nothing new lands here any more -- the head's approval adds the record --
+    // but a request raised before that changed can still be sitting in it.
     pending_admin: ['info', 'with the admins'],
     approved: ['success', 'added'],
     rejected: ['danger', 'declined'],
@@ -190,7 +192,7 @@
       .done(function (r) {
         if (!r.success) { Swal.fire('Not sent', r.error || 'Try again', 'error'); return; }
         $('#partyRequestModal').modal('hide');
-        Swal.fire('Sent', 'Your head decides next. ' + r.request_code, 'success');
+        Swal.fire('Sent', 'Your department head decides next. ' + r.request_code, 'success');
         load();
       })
       .fail(function (x) {
@@ -208,8 +210,8 @@
     if (q.can_pass) {
       foot += '<button class="btn btn-outline-danger party-decide" data-id=' + q.id +
               ' data-act="reject">Decline</button>' +
-              '<button class="btn btn-primary party-decide" data-id=' + q.id +
-              ' data-act="head-approve">Pass to admin</button>';
+              '<button class="btn btn-success party-decide" data-id=' + q.id +
+              ' data-act="head-approve">Approve and add</button>';
     } else if (q.can_finalise) {
       foot += '<button class="btn btn-outline-danger party-decide" data-id=' + q.id +
               ' data-act="reject">Decline</button>' +

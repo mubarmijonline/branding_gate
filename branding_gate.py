@@ -4086,10 +4086,35 @@ def list_party_requests():
         return jsonify(success=False, error=str(e)), 500
 
 
+def _create_party_record(cur, req, payload):
+    """
+    Write the client or supplier the request asked for.
+
+    The one place a row appears from a request, so anything in the books has a
+    request behind it naming who asked and who agreed. Returns the new id.
+    """
+    kind = req['kind']
+    fields = [f for f in PARTY_FIELDS[kind] if payload.get(f) not in (None, '')]
+    columns = fields + ['added_by']
+    values = [payload[f] for f in fields] + [req['requester_name']]
+    if kind == 'client':
+        columns.append('owner_user_id')
+        values.append(req['requested_by'])
+    cur.execute("INSERT INTO `%s` (%s) VALUES (%s)"
+                % (kind, ', '.join(columns), ', '.join(['%s'] * len(columns))), values)
+    return cur.lastrowid
+
+
 @app.route('/api/party-requests/<int:request_id>/head-approve', methods=['POST'])
 @perm('party_request.approve_head')
 def head_approve_party_request(request_id):
-    """The department head passes it on to an admin."""
+    """
+    The department head approves, and that is what adds it.
+
+    The admin signature used to come after this one. It does not any more: the
+    head knows the supplier or the client, and a second desk added delay
+    without adding judgement. Admins are told instead.
+    """
     try:
         notes = ((request.get_json(silent=True) or {}).get('notes') or '').strip()
         me = session.get('user_id')
@@ -4106,24 +4131,28 @@ def head_approve_party_request(request_id):
         if not _may_pass_party_request(cur, me, req['requested_by']):
             conn.rollback(); cur.close(); conn.close()
             return jsonify(success=False, error="Only that department's head may pass this"), 403
+        payload = _party_payload(req)
+        record_id = _create_party_record(cur, req, payload)
         cur.execute("""
-            UPDATE party_request SET status = 'pending_admin', head_approved_by = %s,
-                   head_approved_at = NOW(), head_notes = %s WHERE id = %s
-        """, (me, notes or None, request_id))
+            UPDATE party_request SET status = 'approved', head_approved_by = %s,
+                   head_approved_at = NOW(), head_notes = %s, created_record_id = %s
+            WHERE id = %s
+        """, (me, notes or None, record_id, request_id))
         conn.commit(); cur.close(); conn.close()
 
-        payload = _party_payload(req)
         name = payload.get('client_name') or payload.get('supplier_name')
-        # Only the admins at this point: nobody else needs to know a supplier is
-        # halfway through being added.
+        head_name = session.get('name') or 'The head'
+        # The admins are told, not asked. They hold no step in this flow any
+        # more; this is so nothing enters the books without them knowing.
         notify_users(users_holding('party_request.approve_admin', include_root=True),
-                     'Waiting on you: %s "%s"' % (req['kind'], name),
-                     '%s passed %s. Approve it to add the %s.'
-                     % (session.get('name') or 'The head', req['request_code'], req['kind']))
-        notify_user(req['requested_by'], 'Your %s request moved on' % req['kind'],
-                    '%s passed your request for "%s". An admin decides next.'
-                    % (session.get('name') or 'Your head', name))
-        return jsonify(success=True, message='Passed to the admins')
+                     'New %s added: %s' % (req['kind'], name),
+                     '%s approved %s, asked for by %s. The %s is on the system.'
+                     % (head_name, req['request_code'], req['requester_name'], req['kind']))
+        notify_user(req['requested_by'], '%s added: %s' % (req['kind'].title(), name),
+                    '%s approved your request %s. The %s is on the system now.'
+                    % (head_name, req['request_code'], req['kind']))
+        return jsonify(success=True, record_id=record_id,
+                       message='%s added' % req['kind'].title())
     except HTTPException:
         raise
     except Exception as e:
@@ -4135,10 +4164,11 @@ def head_approve_party_request(request_id):
 @perm('party_request.approve_admin')
 def admin_approve_party_request(request_id):
     """
-    The admin signature, which is the one that writes the record.
+    Finish a request that was left waiting on an admin.
 
-    The row appears here and nowhere else, so a client or supplier that exists
-    always has a request behind it saying who asked and who agreed.
+    The flow no longer routes here -- a department head's approval adds the
+    record. This stays for anything raised before that changed, so nothing is
+    stranded mid-flight, and as an admin override.
     """
     try:
         notes = ((request.get_json(silent=True) or {}).get('notes') or '').strip()
@@ -4157,15 +4187,7 @@ def admin_approve_party_request(request_id):
 
         payload = _party_payload(req)
         kind = req['kind']
-        fields = [f for f in PARTY_FIELDS[kind] if payload.get(f) not in (None, '')]
-        columns = fields + ['added_by']
-        values = [payload[f] for f in fields] + [req['requester_name']]
-        if kind == 'client':
-            columns.append('owner_user_id')
-            values.append(req['requested_by'])
-        cur.execute("INSERT INTO `%s` (%s) VALUES (%s)"
-                    % (kind, ', '.join(columns), ', '.join(['%s'] * len(columns))), values)
-        record_id = cur.lastrowid
+        record_id = _create_party_record(cur, req, payload)
 
         cur.execute("""
             UPDATE party_request SET status = 'approved', admin_approved_by = %s,
