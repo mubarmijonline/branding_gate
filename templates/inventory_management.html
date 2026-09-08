@@ -361,6 +361,7 @@ body.inventory-surface {
 {% block body %}
 <div class="inventory-shell">
     <div class="inventory-card">
+        {% set _p = session.get('perms', {}) %}
         <div class="inventory-header">
             {% if entity_info %}
             <div class="d-flex justify-content-between align-items-center">
@@ -371,9 +372,21 @@ body.inventory-surface {
                         <span class="ml-2">Managing inventory for this entity</span>
                     </p>
                 </div>
-                <a href="/inventory-selection" class="btn-pill btn-pill-outline">
-                    <i class="fas fa-arrow-left mr-2"></i>Back to Selection
-                </a>
+                <div class="d-flex" style="gap: 8px;">
+                    {# Editing the entity from the page where its stock is
+                       managed. It was only reachable from the entity list,
+                       which meant leaving the inventory to change the name of
+                       the thing whose inventory you were looking at. #}
+                    {% if 'entity.edit' in _p %}
+                    <a href="{{ url_for('entity_management_page') }}?edit={{ entity_info.id }}"
+                       class="btn-pill btn-pill-outline">
+                        <i class="fas fa-edit mr-2"></i>Edit Entity
+                    </a>
+                    {% endif %}
+                    <a href="/inventory-selection" class="btn-pill btn-pill-outline">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Selection
+                    </a>
+                </div>
             </div>
             {% elif inventory_type == 'credit' %}
             <div class="d-flex justify-content-between align-items-center">
@@ -406,6 +419,7 @@ body.inventory-surface {
                     <option value="active">Active</option>
                     <option value="low">Low Stock</option>
                     <option value="out">Out of Stock</option>
+                    <option value="discontinued">Discontinued</option>
                 </select>
                 <input id="globalSearch" type="search" placeholder="Quick search…">
             </div>
@@ -1245,7 +1259,7 @@ function loadRegularInventory() {
     if (currentEntityId) {
         url += `&entity_id=${currentEntityId}`;
     }
-    fetch(url)
+    return fetch(url)
         .then(response => response.json())
         .then(data => {
             if (!inventoryTables.regular) return;
@@ -1669,7 +1683,7 @@ function loadTransactions() {
         url += `&inventory_type=credit`;
     }
     
-    fetch(url)
+    return fetch(url)
         .then(response => response.json())
         .then(data => {
             if (!inventoryTables.transactions) return;
@@ -1700,7 +1714,7 @@ function loadAlerts() {
         url += '?inventory_type=credit';
     }
     
-    fetch(url)
+    return fetch(url)
         .then(response => response.json())
         .then(data => {
             alerts = data.alerts || [];
@@ -1884,17 +1898,37 @@ function confirmDeleteItem(itemId) {
         confirmButtonText: 'Delete'
     }).then(result => {
         if (!result.isConfirmed) return;
-        fetch(`/api/inventory/items/${itemId}`, { method: 'DELETE' })
+        // The row goes as soon as the server says it has gone, and the three
+        // reloads that follow are awaited before the table is redrawn: firing
+        // them off and reporting success straight away is what made the page
+        // sit there and then flicker between the old list and the new one.
+        Swal.fire({title: 'Deleting...', allowOutsideClick: false,
+                   didOpen: () => Swal.showLoading()});
+        fetch(`/api/inventory/items/${itemId}`, {
+            method: 'DELETE',
+            headers: {'Cache-Control': 'no-cache'}
+        })
             .then(response => response.json())
             .then(res => {
-                if (res.success) {
-                    loadRegularInventory();
-                    loadTransactions();
-                    loadAlerts();
-                    Swal.fire('Deleted', 'Item removed successfully.', 'success');
-                } else {
+                if (!res.success) {
                     Swal.fire('Error', res.message || 'Failed to delete item', 'error');
+                    return;
                 }
+                return Promise.all([
+                    loadRegularInventory(),
+                    loadTransactions(),
+                    loadAlerts()
+                ]).then(() => {
+                    // Retiring an item is not deleting it, and saying
+                    // "deleted" over a row that is still findable is what made
+                    // this look broken.
+                    if (res.outcome === 'discontinued') {
+                        Swal.fire({icon: 'info', title: 'Item retired',
+                                   text: res.message});
+                    } else {
+                        Swal.fire('Deleted', 'Item removed successfully.', 'success');
+                    }
+                });
             })
             .catch(() => Swal.fire('Error', 'Failed to delete item', 'error'));
     });
