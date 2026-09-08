@@ -39,8 +39,12 @@ class NegotiationRouteTest(unittest.TestCase):
         branding_gate.connection = self._connection
 
         cursor = self._cursor()
-        cursor.execute("SELECT id FROM client ORDER BY id LIMIT 1")
-        client_id = cursor.fetchone()["id"]
+        cursor.execute("""
+            INSERT INTO client (client_name, mobile_number, email_address, added_by)
+            VALUES ('Negotiation Test Client', '01011112222',
+                    'negotiation-test@example.com', 'Automated Test')
+        """)
+        client_id = cursor.lastrowid
         cursor.execute(
             """
             INSERT INTO sales_request
@@ -196,6 +200,7 @@ class NegotiationRouteTest(unittest.TestCase):
                 "roles": [role_code],
                 "perms": rbac.SEED_MATRIX[role_code],
                 "role_code": role_code,
+                "perms_loaded_at": "test",
             })
         return client
 
