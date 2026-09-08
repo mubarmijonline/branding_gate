@@ -214,8 +214,8 @@ $(document).ready(function() {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label for="emailAddress">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control" id="emailAddress" name="email_address" required>
+                                            <label for="emailAddress">Email Address <small class="text-muted">(optional)</small></label>
+                                            <input type="email" class="form-control" id="emailAddress" name="email_address">
                                         </div>
                                     </div>
                                     <div class="col-md-6">
@@ -395,8 +395,8 @@ $(document).ready(function() {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label for="editEmailAddress">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control" id="editEmailAddress" name="email_address" required>
+                                            <label for="editEmailAddress">Email Address <small class="text-muted">(optional)</small></label>
+                                            <input type="email" class="form-control" id="editEmailAddress" name="email_address">
                                         </div>
                                     </div>
                                     <div class="col-md-6">
@@ -506,6 +506,25 @@ $(document).ready(function() {
     });
 
     // Handle supplier type "Other" option
+    // Every type anybody has used, plus the built-in ones. Loaded once and
+    // reloaded after a save, so a type typed under "Other" is in the list the
+    // next time somebody opens the form.
+    function loadSupplierTypes(selectedAdd, selectedEdit) {
+        return $.getJSON('/api/suppliers/types').done(function (r) {
+            if (!r || !r.success) { return; }
+            var options = r.types.map(function (t) {
+                return '<option value="' + $('<div>').text(t).html() + '">' +
+                       $('<div>').text(t).html() + '</option>';
+            }).join('');
+            var tail = '<option value="Other">Other (type your own)</option>';
+            $('#supplierType').html('<option value="">Select Supplier Type</option>' +
+                                    options + tail).val(selectedAdd || '');
+            $('#editSupplierType').html('<option value="">Select Supplier Type</option>' +
+                                        options + tail).val(selectedEdit || '');
+        });
+    }
+    loadSupplierTypes();
+
     $('#supplierType, #editSupplierType').change(function() {
         var isOther = $(this).val() === 'Other';
         var targetRow = $(this).attr('id') === 'supplierType' ? '#otherSupplierTypeRow' : '#editOtherSupplierTypeRow';
@@ -568,10 +587,9 @@ $(document).ready(function() {
             return;
         }
         
-        if (!emailAddress) {
-            Swal.fire('Error!', 'Please enter the email address.', 'error');
-            return;
-        }
+        // No email is a supplier reached by phone, not a mistake. The label
+        // says optional, the column allows it and the route accepts it; this
+        // check was the last place still demanding one.
         
         if (!status) {
             Swal.fire('Error!', 'Please select a status.', 'error');
@@ -616,6 +634,8 @@ $(document).ready(function() {
                     $('#addSupplierModal').modal('hide');
                     resetSupplierForm();
                     table.ajax.reload();
+                    // A type typed under "Other" joins the list straight away.
+                    loadSupplierTypes();
                     Swal.fire('Success!', 'Supplier added successfully!', 'success');
                 } else {
                     Swal.fire('Error!', response.error, 'error');
@@ -685,7 +705,8 @@ $(document).ready(function() {
         var status = $('#editStatus').val();
         var dateAdded = $('#editDateAdded').val();
         
-        if (!supplierName || !supplierType || !contactPersonName || !primaryPhone || !emailAddress || !status || !dateAdded) {
+        // The email is not in this list: a supplier may have none.
+        if (!supplierName || !supplierType || !contactPersonName || !primaryPhone || !status || !dateAdded) {
             Swal.fire('Error!', 'Please fill in all required fields.', 'error');
             return;
         }
@@ -727,6 +748,7 @@ $(document).ready(function() {
                 if (response.success) {
                     $('#editSupplierModal').modal('hide');
                     table.ajax.reload();
+                    loadSupplierTypes();
                     Swal.fire('Success!', 'Supplier updated successfully!', 'success');
                 } else {
                     Swal.fire('Error!', response.error, 'error');
