@@ -127,13 +127,15 @@ PERMISSIONS = {
     'expense_tracking.reject':          'Reject an expense',
 
     # Master data
-    # Asking for a client or a supplier. Sales and Account meet clients,
+    # Asking for a client, company or supplier. Sales and Account meet clients
+    # and their parent companies,
     # Operations and Purchasing meet suppliers; their own head passes it and an
     # admin makes it real, so nothing enters the books unlooked at.
     'client_request.create':   'Ask for a new client to be added',
+    'company_request.create':  'Ask for a new company to be added',
     'supplier_request.create': 'Ask for a new supplier to be added',
-    'party_request.approve_head':  "Pass a client or supplier request as the department's head",
-    'party_request.approve_admin': 'Make an approved client or supplier request real',
+    'party_request.approve_head':  "Pass a client, company or supplier request as the department's head",
+    'party_request.approve_admin': 'Make an approved client, company or supplier request real',
 
     'client.view':   'View clients',
     'client.create': 'Create clients',
@@ -476,7 +478,15 @@ SEED_MATRIX = {
             'inventory.edit': 'all',
             'inventory.delete': 'all',
             'inventory.transact': 'all',
+            # The Operations Head owns the entities: they create and edit the
+            # suppliers and the inventory each one holds, so the entity itself
+            # is theirs too. Deleting one is guarded by the route rather than
+            # by the grant -- an entity holding inventory cannot be deleted at
+            # all, whoever asks.
             'entity.view': 'all',
+            'entity.create': 'all',
+            'entity.edit': 'all',
+            'entity.delete': 'all',
             'client.view': 'all',
             'company.view': 'all',
             'catalog.view': 'all',
@@ -709,13 +719,14 @@ for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
         if _role_code in SEED_MATRIX:
             SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {_section: 'all'})
 
-# Who may ask for a client or a supplier, by the department they are in rather
-# than by naming every role: Sales and Account Management meet clients,
+# Who may ask for a client, company or supplier, by the department they are in
+# rather than by naming every role: Sales and Account Management meet clients
+# and the companies those clients belong to,
 # Operations and Purchasing meet suppliers. Everybody on those teams may ask;
 # the approval is what protects the books, not the asking.
 _REQUEST_BY_DEPARTMENT = {
-    'sales':      ('client_request.create',),
-    'account':    ('client_request.create',),
+    'sales':      ('client_request.create', 'company_request.create'),
+    'account':    ('client_request.create', 'company_request.create'),
     'operations': ('supplier_request.create',),
     'design_3d':  ('supplier_request.create',),
 }
