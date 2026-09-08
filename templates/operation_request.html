@@ -258,6 +258,79 @@
                   background:linear-gradient(135deg,#f8fafc 0%,#eef2f7 100%);
                   border-bottom:1px solid #e0e6ed; }
     .op-ci-head:hover { background:linear-gradient(135deg,#eef2f7 0%,#e0e7f1 100%); }
+    /* Sales' instruction for the item, under the dimension chips, always. */
+    .op-ci-comment { display:flex; gap:8px; align-items:flex-start;
+                     padding:8px 14px; background:#fffbeb;
+                     border-bottom:1px solid #fde68a; color:#78350f;
+                     font-size:12.5px; line-height:1.45; }
+    .op-ci-comment i { color:#d97706; margin-top:2px; flex-shrink:0; }
+    /* Why a proposal was decided the way it was, next to the decision. */
+    .op-decision-note { display:flex; gap:6px; align-items:flex-start;
+                        margin-top:4px; padding:4px 7px; border-radius:4px;
+                        font-size:11.5px; line-height:1.4; max-width:280px; }
+    .op-decision-note.danger  { background:#fef2f2; color:#991b1b; }
+    .op-decision-note.success { background:#f0fdf4; color:#166534; }
+    /* Costing's second way of doing the item, beside what sales specified. */
+    .op-alt-wrap { margin-top:12px; padding:10px 12px; border:1px dashed #c7d2fe;
+                   border-radius:8px; background:#f5f7ff; }
+    .op-alt-head { display:flex; align-items:center; justify-content:space-between;
+                   gap:8px; margin-bottom:8px; font-size:12px; font-weight:700;
+                   text-transform:uppercase; letter-spacing:.4px; color:#4338ca; }
+    .op-alt-card { display:flex; align-items:flex-start; gap:10px; padding:8px;
+                   margin-bottom:8px; background:#fff; border:1px solid #e0e7ff;
+                   border-radius:6px; }
+    .op-alt-card:last-child { margin-bottom:0; }
+    .op-alt-thumb { position:relative; flex-shrink:0; }
+    .op-alt-thumb img { width:76px; height:76px; object-fit:cover; border-radius:5px;
+                        border:1px solid #e0e7ff; cursor:pointer; display:block; }
+    .op-alt-flag { position:absolute; left:0; bottom:0; right:0; padding:1px 0;
+                   background:rgba(67,56,202,.88); color:#fff; font-size:8px;
+                   font-weight:800; letter-spacing:.5px; text-align:center;
+                   border-radius:0 0 5px 5px; }
+    .op-alt-body { min-width:0; flex:1; }
+    .op-alt-label { font-weight:700; color:#312e81; font-size:13px; }
+    .op-alt-comment { color:#374151; font-size:12.5px; line-height:1.45;
+                      word-break:break-word; }
+    .op-alt-by { color:#6b7280; font-size:11px; margin-top:3px; }
+
+    /* The cost modal's toolbar: what is left, a way to see only that, and one
+       place to hand several items out at once. */
+    .op-ct { position:sticky; top:0; z-index:5; display:flex; align-items:center;
+             gap:12px; flex-wrap:wrap; padding:10px 12px; margin-bottom:12px;
+             background:#fff; border:1px solid #e0e6ed; border-radius:8px;
+             box-shadow:0 1px 3px rgba(15,23,42,.06); }
+    .op-ct-counts { font-size:12.5px; color:#5a5c69; }
+    .op-ct-counts .ok   { color:#0f7a56; font-weight:700; }
+    .op-ct-counts .warn { color:#8a6300; font-weight:700; }
+    .op-ct-counts .dim  { color:#6b7280; }
+    .op-ct-counts .me   { color:#1d4ed8; font-weight:700; }
+    .op-ct-filters { display:flex; gap:6px; flex-wrap:wrap; }
+    .op-ct-chip { padding:3px 10px; border:1px solid #d7dbe6; border-radius:14px;
+                  background:#fff; color:#5a5c69; font-size:11.5px; font-weight:600;
+                  line-height:1.6; cursor:pointer; transition:all .15s ease; }
+    .op-ct-chip:hover { border-color:#9db2d8; color:#1e3a5f; }
+    .op-ct-chip.active { background:#1e3a5f; border-color:#1e3a5f; color:#fff; }
+    .op-ct-bulk { display:flex; align-items:center; gap:10px; margin-left:auto; }
+    .op-ct-all { display:flex; align-items:center; gap:6px; margin:0;
+                 font-size:12px; color:#5a5c69; cursor:pointer; }
+    .op-ct-empty { padding:18px; text-align:center; color:#6b7280; font-size:13px;
+                   border:1px dashed #d7dbe6; border-radius:8px; }
+    .op-ci-pick { display:flex; align-items:center; margin:0; padding:0 4px;
+                  cursor:pointer; }
+    .op-ci-pick input { cursor:pointer; }
+    /* The table is showing one request out of many, and says so. */
+    .op-filter-note { display:flex; align-items:center; justify-content:space-between;
+                      gap:12px; flex-wrap:wrap; padding:9px 12px; margin-bottom:12px;
+                      background:#eaf3ff; border:1px solid #cfe0fb;
+                      border-left:4px solid #4e73df; border-radius:6px;
+                      color:#1e3a5f; font-size:13px; }
+    .op-filter-note i { color:#4e73df; }
+    /* The request's own name, so a row can be told from its neighbours. */
+    .op-req-title { display:inline-block; max-width:220px; overflow:hidden;
+                    text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom;
+                    font-weight:600; color:#1e3a5f; }
+    /* An item with work on it earns a mark; an untouched one stays quiet. */
+    .op-costing-block--busy > div { border-color:#c7d2fe !important; }
     .op-ci-head[aria-expanded="true"] .op-ci-chevron { transform: rotate(90deg); }
     .op-ci-chevron { transition: transform .2s ease; color:#6b7280; }
     .op-ci-head-main { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
@@ -929,12 +1002,27 @@ window.chartPieDemo = function() {
             </div>
         </div>
         <div class="card-body">
+            <!-- Arriving from a notification narrows the table to the one
+                 request it was about. Once the modal is closed that narrowing
+                 is invisible -- the table just looks like it has lost every
+                 other request -- so it says so, and offers the way out. -->
+            <div id="opRequestFilterNote" class="op-filter-note d-none">
+                <span>
+                    <i class="fas fa-filter"></i>
+                    Showing request <strong id="opFilterRequestId"></strong> only.
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="opClearRequestFilter">
+                    <i class="fas fa-times"></i> Show all requests
+                </button>
+            </div>
             <div class="table-responsive">
                 <table id="operations-table" class="display table table-bordered" style="width:100%">
                     <thead>
                         <tr>
                             <th>Request ID</th>
+                            <th>Title</th>
                             <th>Client Name</th>
+                            <th>Company</th>
                             <th>Status</th>
                             <th>Items Count</th>
                             <th>Total Cost</th>
@@ -987,6 +1075,28 @@ window.chartPieDemo = function() {
                                 <small class="text-muted">You can cost individual items - leave others empty to update them later</small>
                             </div>
                             <div class="card-body">
+                                <!-- The work, at the top: what is left, a way
+                                     to see only that, and one place to hand
+                                     several items out. Eleven items used to
+                                     mean eleven scrolls and eleven dialogs. -->
+                                <div id="costItemsToolbar" class="op-ct">
+                                    <div class="op-ct-counts" id="costItemsCounts"></div>
+                                    <div class="op-ct-filters" role="group" aria-label="Filter items">
+                                        <button type="button" class="op-ct-chip active" data-filter="all">All</button>
+                                        <button type="button" class="op-ct-chip" data-filter="uncosted">Not costed</button>
+                                        <button type="button" class="op-ct-chip" data-filter="unassigned">Unassigned</button>
+                                        <button type="button" class="op-ct-chip" data-filter="mine">On my desk</button>
+                                    </div>
+                                    <div class="op-ct-bulk">
+                                        <label class="op-ct-all" title="Select every item shown">
+                                            <input type="checkbox" id="costSelectAll"> Select all
+                                        </label>
+                                        <button type="button" class="btn btn-sm btn-primary" id="costAssignSelected" disabled>
+                                            <i class="fas fa-user-plus"></i>
+                                            Assign <span id="costSelectedCount">0</span>
+                                        </button>
+                                    </div>
+                                </div>
                                 <div id="costItemsContainer">
                                     <!-- Items will be loaded here dynamically -->
                                 </div>
@@ -1106,6 +1216,53 @@ function costEsc(v) {
         .replace(/"/g, '&quot;');
 }
 
+// ---- stacked modals --------------------------------------------------------
+// Bootstrap 4 does not support one modal on top of another, and the costing
+// dialogs are always opened from inside the cost modal. Three things go wrong
+// and all three are fixed here, once, for every modal on this page:
+//
+//   * the second backdrop is drawn above the second dialog;
+//   * closing the top one strips `modal-open` off <body>, so the operations
+//     table behind takes the scroll;
+//   * Bootstrap leaves the backdrop behind when modals overlap.
+//
+// The rule that matters: **only the backdrop belonging to the modal being
+// opened is raised.** Raising every backdrop puts the *lower* modal's own
+// backdrop on top of it, which leaves that modal visible, dimmed and dead to
+// every click -- the page looking open and being disabled at the same time.
+var OP_MODAL_BASE_Z = 1050;      // Bootstrap's own .modal z-index
+
+$(document).on('show.bs.modal', '.modal', function () {
+    var beneath = $('.modal.show').length;        // modals already open
+    if (!beneath) { return; }                     // the first one: defaults are right
+    var z = OP_MODAL_BASE_Z + beneath * 20;
+    $(this).css('z-index', z).addClass('op-stacked-modal');
+    // Bootstrap appends this modal's backdrop after the event, so it is raised
+    // on the next tick -- and it is the last one in the document, which is how
+    // it is told apart from the backdrops already there.
+    setTimeout(function () {
+        $('.modal-backdrop').last().css('z-index', z - 10);
+    }, 0);
+});
+
+$(document).on('hidden.bs.modal', '.modal', function () {
+    $(this).css('z-index', '').removeClass('op-stacked-modal');
+    var $stillOpen = $('.modal.show');
+    if (!$stillOpen.length) {
+        $('body').removeClass('modal-open').css('padding-right', '');
+        $('.modal-backdrop').remove();            // nothing left to dim
+        return;
+    }
+    // Something is still open underneath: Bootstrap has just taken the scroll
+    // lock off <body> on its way out, so it goes back on.
+    $('body').addClass('modal-open');
+    // And the backdrop that is left belongs to the modal underneath, so it
+    // sits below it again rather than over the top of it.
+    var $below = $stillOpen.last();
+    var belowZ = parseInt($below.css('z-index'), 10) || OP_MODAL_BASE_Z;
+    $('.modal-backdrop').last().css('z-index', belowZ - 10);
+});
+
 // ---- one Bootstrap modal for every costing action --------------------------
 // The page already speaks Bootstrap modals; costing uses the same one rather
 // than a second dialog library on top.
@@ -1134,6 +1291,28 @@ function costingModalError(message) {
 }
 
 function closeCostingModal() { $('#costingActionModal').modal('hide'); }
+
+// Redrawing the whole operations table while the cost modal is open is both
+// slow and pointless -- the rows are behind the dialog -- and it is what moved
+// the scroll under the client's hands. Mark it dirty instead and redraw once,
+// when the modal that covers it closes.
+var COSTING_TABLE_DIRTY = false;
+
+function redrawOpTable() {
+    if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
+}
+
+function refreshCostingViews(requestId) {
+    if (requestId) { loadCostingState(requestId); }
+    loadCostingSummary(function () {
+        if ($('#costItemsModal').hasClass('show')) { COSTING_TABLE_DIRTY = true; }
+        else { redrawOpTable(); }
+    });
+}
+
+$(document).on('hidden.bs.modal', '#costItemsModal', function () {
+    if (COSTING_TABLE_DIRTY) { COSTING_TABLE_DIRTY = false; redrawOpTable(); }
+});
 
 // A quiet line under the page header rather than a dialog that has to be
 // dismissed before you can carry on.
@@ -1225,12 +1404,32 @@ function proposalRowsHtml(proposals) {
             : '';
         var state = p.status === 'accepted' ? 'success'
                   : (p.status === 'rejected' ? 'danger' : 'warning');
+        // A decision without its reason is what the author was getting: the
+        // word "rejected" and nothing to act on. Shown under the state, and
+        // said plainly when the reason was that somebody else won.
+        var why = '';
+        if (p.status === 'rejected' || p.status === 'accepted') {
+            var note = p.decision_note
+                ? costEsc(p.decision_note)
+                : (p.status === 'rejected'
+                    ? '<em class="text-muted">No reason given</em>' : '');
+            if (note) {
+                why = '<div class="op-decision-note ' + state + '">' +
+                        '<i class="fas fa-' +
+                        (p.status === 'rejected' ? 'times-circle' : 'check-circle') +
+                        '"></i> <span>' + note +
+                        (p.decided_by_name
+                          ? ' <span class="text-muted">&mdash; ' +
+                            costEsc(p.decided_by_name) + '</span>' : '') +
+                      '</span></div>';
+            }
+        }
         return '<tr>' +
             '<td>' + costEsc(p.author_name) + (p.is_mine ? ' <em class="text-muted">(you)</em>' : '') + '</td>' +
             '<td class="text-right font-weight-bold">' + formatNum(p.amount) + '</td>' +
             '<td>' + (p.notes ? costEsc(p.notes) : '<span class="text-muted">&mdash;</span>') + '</td>' +
             '<td>' + (p.file_count ? p.file_count + ' file(s)' : '<span class="text-muted">none</span>') + '</td>' +
-            '<td><span class="badge badge-' + state + '">' + p.status + '</span></td>' +
+            '<td><span class="badge badge-' + state + '">' + p.status + '</span>' + why + '</td>' +
             '<td class="text-muted small">' + costEsc(p.added_date || '') + '</td>' +
             '<td class="text-right">' + decide + '</td>' +
         '</tr>';
@@ -1243,6 +1442,8 @@ function proposalRowsHtml(proposals) {
 
 function renderCostingBlocks() {
     $('.op-costing-block').each(function () {
+        // Rebuilt each time, so the marks from the last render do not stack up.
+        $(this).removeClass('op-costing-block--idle op-costing-block--out op-costing-block--busy');
         var itemId = String($(this).data('item-id'));
         var state = COSTING_STATE[itemId] || { assignments: [], proposals: [] };
         var chips = state.assignments.map(function (a) {
@@ -1267,21 +1468,145 @@ function renderCostingBlocks() {
         var hint = (!state.assignments.length && !CAN_COST_DIRECT)
             ? '<div class="text-muted small">This item has not been assigned to you for costing.</div>'
             : '';
+        // Eleven untouched items used to print eleven copies of "not assigned"
+        // and "No proposals yet", which is two lines of nothing per item. An
+        // untouched item now says so in one line and keeps its buttons.
+        var proposals = state.proposals || [];
+        var quiet = !state.assignments.length && !proposals.length && !hint;
+        $(this).addClass('op-costing-block--' +
+            (proposals.length ? 'busy' : (state.assignments.length ? 'out' : 'idle')));
         $(this).html(
             '<div class="border rounded p-2 mt-2" style="background:#f8f9fc;">' +
-              '<div class="d-flex align-items-center flex-wrap mb-2" style="gap:.4rem;">' +
+              '<div class="d-flex align-items-center flex-wrap' +
+                   (quiet ? '' : ' mb-2') + '" style="gap:.4rem;">' +
                 '<strong class="small text-uppercase text-muted mr-2">Costing</strong>' +
                 (chips || '<span class="text-muted small">not assigned</span>') +
                 '<span class="ml-auto">' + buttons + '</span>' +
-              '</div>' + hint + proposalRowsHtml(state.proposals || []) +
+              '</div>' + hint +
+              (proposals.length ? proposalRowsHtml(proposals) : '') +
             '</div>');
     });
+    // The counts and the filter read the same state these blocks were built
+    // from, so they are brought up to date here rather than by every caller.
+    if (typeof updateCostCounts === 'function') {
+        updateCostCounts();
+        applyCostFilter();
+    }
 }
 
-// Assign this item to several people at once.
+// One item, from its own card. Same dialog as the toolbar's, one item in it.
 $(document).on('click', '.op-assign-costing', function (e) {
     e.preventDefault();
-    var itemId = Number($(this).data('item'));
+    openAssignDialog([Number($(this).data('item'))]);
+});
+
+// ---- the cost modal's toolbar ----------------------------------------------
+// Eleven items in a modal is a long scroll of mostly-empty cards. The toolbar
+// says what is left, narrows the list to it, and hands several items out in
+// one go instead of one dialog per item.
+
+function costItemState(itemId) {
+    var state = COSTING_STATE[String(itemId)] || { assignments: [], proposals: [] };
+    return {
+        assigned: state.assignments.filter(function (a) { return a.status === 'open'; }),
+        mine: state.assignments.some(function (a) {
+            return a.assignee_id === COSTING_ME && a.status === 'open';
+        }),
+        proposals: state.proposals || []
+    };
+}
+
+function costItemMatches(card, filter) {
+    if (filter === 'all') { return true; }
+    var itemId = card.find('.op-costing-block').data('item-id');
+    var state = costItemState(itemId);
+    // Read through bgPlainNumber like every other reader of this field: the
+    // check is on the number, not on whatever separators are in the box.
+    var costed = !!bgPlainNumber(card.find('.item-cost-per-unit').val() || '') ||
+                 card.find('.op-ci-summary-chip.ok').length > 0;
+    if (filter === 'uncosted')   { return !costed; }
+    if (filter === 'unassigned') { return !state.assigned.length; }
+    if (filter === 'mine')       { return state.mine; }
+    return true;
+}
+
+var COST_FILTER = 'all';
+
+function applyCostFilter() {
+    var shown = 0;
+    $('.op-cost-item').each(function () {
+        var match = costItemMatches($(this), COST_FILTER);
+        $(this).toggle(match);
+        if (!match) { $(this).find('.op-ci-check').prop('checked', false); }
+        if (match) { shown++; }
+    });
+    $('#costItemsEmpty').remove();
+    if (!shown && $('.op-cost-item').length) {
+        $('#costItemsContainer').append(
+            '<div id="costItemsEmpty" class="op-ct-empty">' +
+            'Nothing here under this filter.</div>');
+    }
+    updateCostSelection();
+}
+
+function updateCostCounts() {
+    var total = $('.op-cost-item').length;
+    if (!total) { $('#costItemsToolbar').hide(); return; }
+    $('#costItemsToolbar').css('display', '');
+    var costed = 0, unassigned = 0, mine = 0;
+    $('.op-cost-item').each(function () {
+        var itemId = $(this).find('.op-costing-block').data('item-id');
+        var state = costItemState(itemId);
+        if (bgPlainNumber($(this).find('.item-cost-per-unit').val() || '') ||
+            $(this).find('.op-ci-summary-chip.ok').length) { costed++; }
+        if (!state.assigned.length) { unassigned++; }
+        if (state.mine) { mine++; }
+    });
+    $('#costItemsCounts').html(
+        '<strong>' + total + '</strong> item' + (total === 1 ? '' : 's') +
+        ' &middot; <span class="ok">' + costed + ' costed</span>' +
+        ' &middot; <span class="warn">' + (total - costed) + ' waiting</span>' +
+        (unassigned ? ' &middot; <span class="dim">' + unassigned + ' unassigned</span>' : '') +
+        (mine ? ' &middot; <span class="me">' + mine + ' on my desk</span>' : ''));
+}
+
+function selectedCostItems() {
+    return $('.op-ci-check:checked').map(function () { return Number(this.value); }).get();
+}
+
+function updateCostSelection() {
+    var picked = selectedCostItems();
+    $('#costSelectedCount').text(picked.length);
+    $('#costAssignSelected').prop('disabled', !picked.length);
+    var visible = $('.op-cost-item:visible .op-ci-check').length;
+    $('#costSelectAll').prop('checked', visible > 0 && picked.length === visible);
+}
+
+$(document).on('click', '.op-ct-chip', function () {
+    COST_FILTER = $(this).data('filter');
+    $('.op-ct-chip').removeClass('active');
+    $(this).addClass('active');
+    applyCostFilter();
+});
+
+$(document).on('change', '#costSelectAll', function () {
+    var on = $(this).is(':checked');
+    $('.op-cost-item:visible .op-ci-check').prop('checked', on);
+    updateCostSelection();
+});
+
+$(document).on('change', '.op-ci-check', updateCostSelection);
+
+// Several items, one dialog, one request.
+$(document).on('click', '#costAssignSelected', function (e) {
+    e.preventDefault();
+    var itemIds = selectedCostItems();
+    if (itemIds.length) { openAssignDialog(itemIds); }
+});
+
+// Assigning, whether it is one item from its own card or a dozen from the
+// toolbar. One implementation, so the two cannot drift.
+function openAssignDialog(itemIds) {
     $.getJSON('/api/costing/team').done(function (r) {
         if (!r || !r.success || !r.people.length) {
             costingToast('You have no team members to assign costing to.', 'warning');
@@ -1294,7 +1619,8 @@ $(document).on('click', '.op-assign-costing', function (e) {
                 costEsc(p.role_name || '') + '</small></span></label>';
         }).join('');
         openCostingModal({
-            title: 'Assign for costing',
+            title: itemIds.length === 1 ? 'Assign for costing'
+                                        : 'Assign ' + itemIds.length + ' items for costing',
             confirmText: 'Assign',
             body: boxes +
                   '<div class="form-group mt-2 mb-1">' +
@@ -1312,16 +1638,214 @@ $(document).on('click', '.op-assign-costing', function (e) {
             confirm: function (value) {
                 $.ajax({
                     url: '/api/costing/assign', method: 'POST', contentType: 'application/json',
-                    data: JSON.stringify({ item_id: itemId, assignee_ids: value.ids,
+                    data: JSON.stringify({ item_ids: itemIds, assignee_ids: value.ids,
                                            note: value.note })
                 }).done(function (r2) {
                     if (!r2.success) { costingModalError(r2.error || 'Could not assign'); return; }
                     closeCostingModal();
-                    loadCostingState(window.currentCostingRequestId);
-                    loadCostingSummary(function () {
-                        if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
-                    });
-                    costingToast('Assigned to ' + value.ids.length + ' person(s).');
+                    $('.op-ci-check').prop('checked', false);
+                    refreshCostingViews(window.currentCostingRequestId);
+                    costingToast(itemIds.length + ' item(s) assigned to ' +
+                                 value.ids.length + ' person(s).');
+                }).fail(function (xhr) {
+                    costingModalError((xhr.responseJSON || {}).error || 'Request failed');
+                });
+            }
+        });
+    });
+}
+
+// ---- alternative options ---------------------------------------------------
+// Sales say what the client asked for. Costing often knows a second way to
+// build it, and until now the only place to say so was a sentence in a proposal
+// note with the photograph buried under it. An alternative is a picture plus
+// the reason, shown against the item itself.
+function opAlternativesHtml(itemId, alternatives) {
+    var cards = (alternatives || []).map(function (alt) {
+        return '<div class="op-alt-card">' +
+            '<div class="op-alt-thumb">' +
+              '<img src="' + costEsc(alt.image_url) + '" alt="Alternative option" ' +
+                   'onclick="window.open(\'' + costEsc(alt.image_url) + '\', \'_blank\')">' +
+              '<span class="op-alt-flag">ALTERNATIVE</span>' +
+            '</div>' +
+            '<div class="op-alt-body">' +
+              (alt.label ? '<div class="op-alt-label">' + costEsc(alt.label) + '</div>' : '') +
+              '<div class="op-alt-comment">' + costEsc(alt.comment || '') + '</div>' +
+              '<div class="op-alt-by">' +
+                costEsc(alt.uploaded_by_name || 'Operations') +
+                (alt.added_on ? ' · ' + costEsc(alt.added_on) : '') +
+              '</div>' +
+            '</div>' +
+            (alt.mine || CAN_ASSIGN_COSTING
+              ? '<button type="button" class="btn btn-sm btn-link text-danger op-alt-remove" ' +
+                'data-id="' + alt.id + '" title="Remove this alternative">' +
+                '<i class="fas fa-trash"></i></button>'
+              : '') +
+        '</div>';
+    }).join('');
+
+    var addBtn = (CAN_PROPOSE_COSTING || CAN_ASSIGN_COSTING)
+        ? '<button type="button" class="btn btn-sm btn-outline-secondary op-alt-add" ' +
+          'data-item="' + itemId + '"><i class="fas fa-plus"></i> Add alternative option</button>'
+        : '';
+    if (!cards && !addBtn) { return ''; }
+
+    return '<div class="op-alt-wrap">' +
+             '<div class="op-alt-head">' +
+               '<span><i class="fas fa-random"></i> Alternative options' +
+                 (alternatives.length ? ' (' + alternatives.length + ')' : '') +
+               '</span>' + addBtn +
+             '</div>' +
+             (cards || '<div class="text-muted small">None offered yet. ' +
+                       'Add one to give pricing a second way to do this item.</div>') +
+           '</div>';
+}
+
+$(document).on('click', '.op-alt-add', function (e) {
+    e.preventDefault();
+    var itemId = Number($(this).data('item'));
+    openCostingModal({
+        title: 'Add an alternative option',
+        confirmText: 'Add option',
+        body:
+            '<p class="text-muted small mb-2">A second way of doing this item. It ' +
+            'shows against the item, marked as an alternative, so pricing and the ' +
+            'client can choose between them.</p>' +
+            '<div class="form-group mb-2">' +
+              '<label class="small text-muted mb-1" for="opAltLabel">Short name (optional)</label>' +
+              '<input id="opAltLabel" class="form-control form-control-sm" ' +
+              'placeholder="e.g. Aluminium frame">' +
+            '</div>' +
+            '<div class="form-group mb-2">' +
+              '<label class="small text-muted mb-1" for="opAltComment">What is different, and why</label>' +
+              '<textarea id="opAltComment" rows="3" class="form-control" ' +
+              'placeholder="e.g. same size, powder-coated aluminium instead of steel"></textarea>' +
+            '</div>' +
+            '<div class="form-group mb-0">' +
+              '<label class="small text-muted mb-1" for="opAltImage">Photograph</label>' +
+              '<input id="opAltImage" type="file" accept="image/*" class="form-control-file">' +
+              '<small class="text-muted">JPG, PNG, GIF, BMP or WEBP, up to 10MB.</small>' +
+            '</div>',
+        collect: function () {
+            var files = document.getElementById('opAltImage').files;
+            var comment = ($('#opAltComment').val() || '').trim();
+            if (!files || !files.length) { costingModalError('Pick a photograph.'); return false; }
+            if (!comment) {
+                costingModalError('Say what the alternative is — the picture alone ' +
+                                  'does not tell pricing why it is here.');
+                return false;
+            }
+            return { file: files[0], comment: comment, label: $('#opAltLabel').val() || '' };
+        },
+        confirm: function (value) {
+            var form = new FormData();
+            form.append('image', value.file);
+            form.append('comment', value.comment);
+            form.append('label', value.label);
+            $.ajax({
+                url: '/api/costing/items/' + itemId + '/alternatives',
+                method: 'POST', data: form, processData: false, contentType: false
+            }).done(function (r) {
+                if (!r.success) { costingModalError(r.error || 'Could not add it'); return; }
+                closeCostingModal();
+                costingToast('Alternative added.');
+                reloadCostItem(itemId);
+            }).fail(function (xhr) {
+                costingModalError((xhr.responseJSON || {}).error || 'Upload failed');
+            });
+        }
+    });
+});
+
+$(document).on('click', '.op-alt-remove', function (e) {
+    e.preventDefault();
+    var id = Number($(this).data('id'));
+    var $card = $(this).closest('.op-alt-card');
+    $.ajax({ url: '/api/costing/alternatives/' + id, method: 'DELETE' })
+        .done(function (r) {
+            if (!r.success) { costingToast(r.error || 'Could not remove it', 'danger'); return; }
+            $card.remove();
+            costingToast('Alternative removed.');
+        })
+        .fail(function (xhr) {
+            costingToast((xhr.responseJSON || {}).error || 'Request failed', 'danger');
+        });
+});
+
+// Re-read one item's alternatives without rebuilding the whole modal, which
+// would collapse every card the reader had opened.
+function reloadCostItem(itemId) {
+    $.getJSON('/api/costing/items/' + itemId + '/alternatives').done(function (r) {
+        if (!r || !r.success) { return; }
+        var $wrap = $('.op-alt-wrap').filter(function () {
+            return $(this).find('.op-alt-add').data('item') === itemId;
+        });
+        var html = opAlternativesHtml(itemId, r.alternatives);
+        if ($wrap.length) { $wrap.replaceWith(html); }
+    });
+}
+
+// Hand a whole request to a team leader. The leader then splits its items
+// among their own people with the per-item assign above, which is the same
+// endpoint and the same rules one level down.
+$(document).on('click', '.op-assign-request', function (e) {
+    e.preventDefault();
+    var requestId = Number($(this).data('id'));
+    var requestTitle = String($(this).data('title') || '');
+    // A whole request goes to a team leader. The split among their own people
+    // is the leader's job, so members are not offered here.
+    $.getJSON('/api/costing/team?leaders=1').done(function (r) {
+        if (!r || !r.success || !r.people.length) {
+            costingToast('There is no team leader to hand this request to.', 'warning');
+            return;
+        }
+        var boxes = r.people.map(function (p) {
+            return '<label class="d-flex align-items-center mb-1" style="gap:.5rem;">' +
+                '<input type="checkbox" class="op-who-req" value="' + p.id + '">' +
+                '<span>' + costEsc(p.name) + ' <small class="text-muted">' +
+                costEsc(p.role_name || '') + '</small></span></label>';
+        }).join('');
+        openCostingModal({
+            title: 'Assign request #' + requestId + ' for costing',
+            confirmText: 'Assign whole request',
+            body:
+                (requestTitle
+                  ? '<p class="text-muted small mb-2">' + costEsc(requestTitle) + '</p>'
+                  : '') +
+                boxes +
+                '<div class="form-group mt-2 mb-1">' +
+                  '<label class="small text-muted mb-1" for="opReqNote">Note (optional)</label>' +
+                  '<input id="opReqNote" class="form-control form-control-sm" ' +
+                  'placeholder="e.g. quotes needed by Thursday">' +
+                '</div>' +
+                '<label class="d-flex align-items-center small text-muted mb-2" style="gap:.4rem;">' +
+                  '<input type="checkbox" id="opReqIncludeCosted"> ' +
+                  'Include items that already have a cost' +
+                '</label>' +
+                '<p class="text-muted small mb-0">Every item still needing a cost goes to ' +
+                'the people you pick. They split it among their own team.</p>',
+            collect: function () {
+                var ids = $('.op-who-req:checked').map(function () { return Number(this.value); }).get();
+                if (!ids.length) { costingModalError('Pick at least one person.'); return false; }
+                return { ids: ids, note: $('#opReqNote').val() || '',
+                         includeCosted: $('#opReqIncludeCosted').is(':checked') };
+            },
+            confirm: function (value) {
+                $.ajax({
+                    url: '/api/costing/assign-request', method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ request_id: requestId, assignee_ids: value.ids,
+                                           note: value.note,
+                                           include_costed: value.includeCosted })
+                }).done(function (r2) {
+                    if (!r2.success) { costingModalError(r2.error || 'Could not assign'); return; }
+                    closeCostingModal();
+                    refreshCostingViews(window.currentCostingRequestId);
+                    costingToast(r2.items + ' item(s) assigned to ' + value.ids.length +
+                                 ' person(s)' +
+                                 (r2.skipped_costed
+                                   ? ' — ' + r2.skipped_costed + ' already costed, left alone.'
+                                   : '.'));
                 }).fail(function (xhr) {
                     costingModalError((xhr.responseJSON || {}).error || 'Request failed');
                 });
@@ -1340,7 +1864,7 @@ $(document).on('click', '.op-propose-costing', function (e) {
         body:
             '<div class="form-group mb-2">' +
               '<label class="small text-muted mb-1" for="opPropAmount">Cost per item</label>' +
-              '<input id="opPropAmount" class="form-control" inputmode="decimal" ' +
+              '<input id="opPropAmount" class="form-control bg-amount" inputmode="decimal" ' +
               'placeholder="0.00">' +
             '</div>' +
             '<div class="form-group mb-2">' +
@@ -1353,7 +1877,7 @@ $(document).on('click', '.op-propose-costing', function (e) {
               '<small class="text-muted">PDF, images, spreadsheets or Word, up to 10MB each.</small>' +
             '</div>',
         collect: function () {
-            var amount = ($('#opPropAmount').val() || '').trim();
+            var amount = bgPlainNumber($('#opPropAmount').val() || '').trim();
             if (!amount) { costingModalError('Enter an amount.'); return false; }
             return { amount: amount, notes: $('#opPropNotes').val() || '',
                      files: document.getElementById('opPropFiles').files };
@@ -1367,10 +1891,7 @@ $(document).on('click', '.op-propose-costing', function (e) {
                 if (!r.success) { costingModalError(r.error || 'Could not submit'); return; }
                 var done = function (warn) {
                     closeCostingModal();
-                    loadCostingState(window.currentCostingRequestId);
-                    loadCostingSummary(function () {
-                        if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
-                    });
+                    refreshCostingViews(window.currentCostingRequestId);
                     costingToast(warn || 'Proposal submitted.', warn ? 'warning' : 'success');
                 };
                 if (!value.files || !value.files.length) { done(); return; }
@@ -1414,10 +1935,7 @@ function opDecideProposal(id, decision) {
             }).done(function (r) {
                 if (!r.success) { costingModalError(r.error || 'Could not save'); return; }
                 closeCostingModal();
-                loadCostingState(window.currentCostingRequestId);
-                loadCostingSummary(function () {
-                    if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
-                });
+                refreshCostingViews(window.currentCostingRequestId);
                 costingToast(accepting
                     ? 'Accepted — item cost is now ' + formatNum(r.amount)
                     : 'Proposal rejected.');
@@ -1446,6 +1964,11 @@ $(document).ready(function() {
         if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
     });
 
+    // Arriving from a notification: ?request=123 means "this is the one", so
+    // the row is found and its cost modal opened rather than leaving the reader
+    // to search a table for the request they were just told about.
+    var wantedRequest = (new URLSearchParams(window.location.search)).get('request');
+
     // Initialize DataTable
     var table = window.opTable = $('#operations-table').DataTable({
         "ajax": {
@@ -1468,7 +1991,24 @@ $(document).ready(function() {
         },
         "columns": [
             { "data": "request_id" },
+            {
+                "data": "title",
+                "render": function (data, type, row) {
+                    if (type !== 'display') { return data || ''; }
+                    return data
+                        ? '<span class="op-req-title" title="' + costEsc(data) + '">' +
+                          costEsc(data) + '</span>'
+                        : '<span class="text-muted">Untitled</span>';
+                }
+            },
             { "data": "client_name" },
+            {
+                "data": "company_name",
+                "render": function (data, type, row) {
+                    if (type !== 'display') { return data || ''; }
+                    return data ? costEsc(data) : '<span class="text-muted">&mdash;</span>';
+                }
+            },
             { 
                 "data": "status",
                 "render": function(data, type, row) {
@@ -1562,6 +2102,15 @@ $(document).ready(function() {
                         actions += '<span class="badge badge-secondary">No Items</span> ';
                     }
                     
+                    // The Head hands out a whole request, not an item at a
+                    // time: the split among the team is the leader's job.
+                    if (CAN_ASSIGN_COSTING && row.items_count > 0) {
+                        actions += '<button class="btn btn-sm btn-outline-primary op-assign-request" ' +
+                                   'data-id="' + row.request_id + '" ' +
+                                   'data-title="' + costEsc(row.title || '') + '" ' +
+                                   'title="Assign this whole request for costing">' +
+                                   '<i class="fas fa-user-plus"></i> Assign</button> ';
+                    }
                     actions += '<button class="btn btn-sm btn-info view-btn" data-id="' + row.request_id + '">View Details</button> ';
                     actions += '<button class="btn btn-sm btn-secondary log-btn" data-id="' + row.request_id + '"><i class="fas fa-history"></i> Log</button>';
                     
@@ -1571,7 +2120,58 @@ $(document).ready(function() {
         ],
         "order": [[ 0, "desc" ]],
         "pageLength": 25,
-        "responsive": true
+        "responsive": true,
+        "initComplete": function () {
+            if (!wantedRequest) { return; }
+            // Filter to it first: on page 4 of the table the row exists but
+            // cannot be seen, and a button that is not in the DOM cannot be
+            // clicked. The click waits a tick for the redraw to put the row
+            // back in the DOM -- triggering it inside the draw finds nothing.
+            this.api().search(wantedRequest).draw();
+            // And say so, because once the modal is closed a table narrowed to
+            // one row just looks like a table that has lost everything else.
+            showRequestFilterNote(wantedRequest);
+            setTimeout(function () {
+                var button = $('.cost-btn[data-id="' + wantedRequest + '"]').first();
+                if (button.length) { button.trigger('click'); }
+            }, 0);
+        }
+    });
+
+    // ---- "you are looking at one request" --------------------------------
+    // A notification lands here with ?request=784, which narrows the table.
+    // The narrowing has to be visible and it has to be undoable, or the page
+    // looks broken to whoever reads the notification and then wonders where
+    // the rest of the work went.
+    function showRequestFilterNote(requestId) {
+        $('#opFilterRequestId').text('#' + requestId);
+        $('#opRequestFilterNote').removeClass('d-none');
+    }
+
+    function clearRequestFilter() {
+        $('#opRequestFilterNote').addClass('d-none');
+        if (window.opTable) { window.opTable.search('').draw(); }
+        // Take it out of the address too: a refresh should not put the reader
+        // back in the filter they just left, and the link is now stale anyway.
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.delete('request');
+            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+        } catch (e) { /* older browser: the filter is cleared either way */ }
+    }
+
+    $(document).on('click', '#opClearRequestFilter', function (e) {
+        e.preventDefault();
+        clearRequestFilter();
+    });
+
+    // The status cards and the status dropdown are the other ways of choosing
+    // what to look at; picking one of those means leaving the single request.
+    $(document).on('click', '.stat-filter-card', function () {
+        if (!$('#opRequestFilterNote').hasClass('d-none')) { clearRequestFilter(); }
+    });
+    $(document).on('change', '#statusFilter', function () {
+        if (!$('#opRequestFilterNote').hasClass('d-none')) { clearRequestFilter(); }
     });
 
     // How many items on this request are waiting for a new cost. The item's own
@@ -1621,16 +2221,27 @@ $(document).ready(function() {
         return (row && recostCount(row) > 0);
     });
 
+    // Which column holds the status. Found by name rather than counted, so
+    // adding a column before it cannot silently point this at the client name.
+    function statusColumnIndex() {
+        var index = 2;
+        $('#operations-table thead th').each(function (i) {
+            if ($(this).text().trim().toLowerCase() === 'status') { index = i; return false; }
+        });
+        return index;
+    }
+
     // Status filter
     $('#statusFilter').change(function() {
         var status = $(this).val();
+        var statusColumn = statusColumnIndex();
         // Reset both filters first
         recostingFilterActive = false;
-        table.column(2).search('');
+        table.column(statusColumn).search('');
         if (status === 'Recosting') {
             recostingFilterActive = true;
         } else if (status) {
-            table.column(2).search(status);
+            table.column(statusColumn).search(status);
         }
         table.draw();
         // Visual active card sync
@@ -1764,11 +2375,17 @@ $(document).ready(function() {
                         }
                         
                         // Build media section
+                        // Another way of doing this item, put up by costing.
+                        // It sits beside what sales specified, labelled, so
+                        // "this or this" is a choice somebody can actually see.
+                        var alternativesHtml = opAlternativesHtml(item.id, item.alternatives || []);
+
                         var mediaSectionHtml = `
                             <div class="enhanced-media-section">
                                 <div class="section-title"><i class="fas fa-images"></i> Item Media</div>
                                 ${imageHtml}
                                 ${attachmentsHtml}
+                                ${alternativesHtml}
                             </div>
                         `;
                         
@@ -1872,6 +2489,11 @@ $(document).ready(function() {
                                 <!-- Collapsed Summary Header -->
                                 <div class="op-ci-head" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false">
                                     <div class="op-ci-head-main">
+                                        ${CAN_ASSIGN_COSTING ? `
+                                        <label class="op-ci-pick" title="Pick this item to assign it"
+                                               onclick="event.stopPropagation();">
+                                            <input type="checkbox" class="op-ci-check" value="${item.id}">
+                                        </label>` : ''}
                                         <i class="fas fa-chevron-right op-ci-chevron"></i>
                                         <div class="item-icon"><i class="fas fa-cube"></i></div>
                                         <div class="op-ci-title">
@@ -1888,6 +2510,19 @@ $(document).ready(function() {
                                     </div>
                                 </div>
 
+                                <!-- The comment sales left on this item. It
+                                     used to sit inside the collapsed body,
+                                     where whoever is costing had to open every
+                                     item to find out whether there was one.
+                                     It is the instruction for the work, so it
+                                     reads under the dimensions, always. -->
+                                ${item.item_comment ? `
+                                <div class="op-ci-comment">
+                                    <i class="fas fa-comment-dots"></i>
+                                    <span><strong>Comment:</strong> ${costEsc(item.item_comment)}</span>
+                                </div>
+                                ` : ''}
+
                                 <!-- Always-visible quick cost input. Only for
                                      whoever may type a cost straight in; for
                                      everyone else the costing block below is
@@ -1898,7 +2533,8 @@ $(document).ready(function() {
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">EGP</span>
                                         </div>
-                                        <input type="number" class="form-control item-cost-per-unit"
+                                        <input type="text" inputmode="decimal"
+                                               class="form-control item-cost-per-unit bg-amount"
                                                name="items[${item.id}][cost_per_item]"
                                                data-item-id="${item.id}"
                                                data-quantity="${item.total_quantity}"
@@ -1907,8 +2543,8 @@ $(document).ready(function() {
                                                data-is-sell="${isSell ? 'true' : 'false'}"
                                                data-include-days="${includeDaysInCalc ? 'true' : 'false'}"
                                                data-include-qty="${includeQtyInCalc ? 'true' : 'false'}"
-                                               value="${item.unit_cost || ''}"
-                                               step="0.01" min="0" placeholder="Unit cost...">
+                                               value="${item.unit_cost ? bgGroupDigits(String(item.unit_cost)) : ''}"
+                                               placeholder="Unit cost...">
                                         <div class="input-group-append">
                                             <span class="input-group-text">= EGP <span class="item-total-cost-display ml-1" data-item-id="${item.id}">${currentTotalCost || '0.00'}</span></span>
                                         </div>
@@ -1953,7 +2589,7 @@ $(document).ready(function() {
                                         ${item.item_comment ? `
                                         <div class="enhanced-info-box mb-4" style="background: #fef3c7; border-color: #fbbf24;">
                                             <div class="info-label" style="color: #92400e;"><i class="fas fa-comment"></i> Item Comment</div>
-                                            <div class="info-value" style="font-size: 1rem; color: #78350f;">${item.item_comment}</div>
+                                            <div class="info-value" style="font-size: 1rem; color: #78350f;">${costEsc(item.item_comment)}</div>
                                         </div>
                                         ` : ''}
 
@@ -2018,7 +2654,28 @@ $(document).ready(function() {
                     calculateTotalCost();
                     // Who each item is out to, and their proposals.
                     loadCostingState(requestId);
+                } else {
+                    // A request can be raised with no items at all -- the
+                    // template's own fields filled in and nothing to build.
+                    // Saying so beats an empty box with a save button that
+                    // cannot do anything.
+                    $('#costItemsContainer').html(
+                        '<div class="op-ct-empty">' +
+                          '<div style="font-size:26px;margin-bottom:6px;">' +
+                            '<i class="fas fa-inbox"></i></div>' +
+                          '<strong>This request has no items yet.</strong>' +
+                          '<div class="mt-1">Sales raised it without any, so there is ' +
+                          'nothing to cost. It needs items adding on the sales request ' +
+                          'before costing can start.</div>' +
+                        '</div>');
                 }
+                // The toolbar and the save button belong to items. With none,
+                // they are noise: a filter over nothing and a button that
+                // would post an empty form.
+                var hasItems = !!(request.items && request.items.length);
+                $('#costItemsToolbar').toggle(hasItems);
+                $('#saveCostsBtn').toggle(hasItems && CAN_COST_DIRECT);
+                $('#costItemsForm .row.mt-3').toggle(hasItems);
 
                 $('#costItemsModal').modal('show');
             } else {
@@ -2031,7 +2688,7 @@ $(document).ready(function() {
 
     // Calculate total cost when item costs change
     $(document).on('input', '.item-cost-per-unit', function() {
-        var costPerUnit = parseFloat($(this).val()) || 0;
+        var costPerUnit = parseFloat(bgPlainNumber($(this).val())) || 0;
         var quantity = parseFloat($(this).data('quantity')) || 1;
         var rentalDays = parseFloat($(this).data('rental-days')) || 1;
         var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
@@ -2046,6 +2703,8 @@ $(document).ready(function() {
         
         // Calculate total: Unit Cost × Quantity (if included) × Days (if rent AND include_days) × Dimension Multiplier
         var totalItemCost = costPerUnit * effectiveQty * effectiveDays * dimensionMultiplier;
+        // A hidden field the form posts: it holds the plain number. Grouping
+        // belongs to what is read, never to what is sent.
         $('input[name="items[' + itemId + '][total_cost]"]').val(totalItemCost.toFixed(2));
         
         // Update the unit cost display in the info section
@@ -2083,14 +2742,14 @@ $(document).ready(function() {
         var itemsWithCost = 0;
         
         $('.item-cost-per-unit').each(function() {
-            var costValue = $(this).val();
+            var costValue = bgPlainNumber($(this).val());
             
             // Skip empty fields
             if (!costValue || costValue.trim() === '') {
                 return true; // Continue to next item
             }
             
-            var costPerUnit = parseFloat(costValue) || 0;
+            var costPerUnit = parseFloat(bgPlainNumber(costValue)) || 0;
             var quantity = parseFloat($(this).data('quantity')) || 1;
             var rentalDays = parseFloat($(this).data('rental-days')) || 1;
             var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
@@ -2129,7 +2788,7 @@ $(document).ready(function() {
         var itemsToUpdate = 0;
         
         $('.item-cost-per-unit').each(function() {
-            var costValue = $(this).val();
+            var costValue = bgPlainNumber($(this).val());
             var itemId = $(this).data('item-id');
             var quantity = parseInt($(this).data('quantity'));
             
@@ -2139,7 +2798,7 @@ $(document).ready(function() {
                 return true; // Continue to next item
             }
             
-            var cost = parseFloat(costValue);
+            var cost = parseFloat(bgPlainNumber(costValue));
             
             // Get dimension and rental day data for formula calculation
             var rentalDays = parseFloat($(this).data('rental-days')) || 1;
@@ -2606,7 +3265,7 @@ function loadItemPriceHistory(itemId) {
                 html = '<div class="mb-3 p-2 bg-light rounded border">';
                 html += '  <strong class="text-primary"><i class="fas fa-info-circle mr-1"></i>Current Prices:</strong>';
                 html += '  <div class="d-flex gap-3 mt-2">';
-                html += '    <span><strong>Cost:</strong> EGP ' + (current.cost_per_item ? parseFloat(current.cost_per_item).toFixed(2) : 'Not set') + '</span>';
+                html += '    <span><strong>Cost:</strong> EGP ' + (current.cost_per_item ? bgNumber(current.cost_per_item, 2) : 'Not set') + '</span>';
                 if (current.negotiation_count > 0) {
                     html += '    <span class="ml-3 badge badge-warning">Negotiation Count: ' + current.negotiation_count + '</span>';
                 }

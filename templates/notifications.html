@@ -424,7 +424,10 @@ function createNotificationElement(notification) {
     const kind = window.notifKind(notification);
     const esc = window.notifEscape;
 
-    div.className = `notif-card ${isUnread ? 'is-unread' : ''}`;
+    // Where it leads, decided by the same rule the bell uses.
+    const href = window.notifLink(notification);
+
+    div.className = `notif-card ${isUnread ? 'is-unread' : ''} ${href ? 'has-link' : ''}`;
     div.innerHTML = `
         <span class="notif-card-icon text-${kind.tone}"><i class="fas ${kind.icon}"></i></span>
         <div class="notif-card-body">
@@ -439,12 +442,27 @@ function createNotificationElement(notification) {
             ${notification.added_by ? `<div class="notif-card-by">from ${esc(notification.added_by)}</div>` : ''}
         </div>
         <div class="notif-card-action">
+            ${href
+                ? `<a class="btn btn-sm btn-primary mr-1" title="Open the page this is about"
+                      href="${href}" onclick="markAsRead('${notification.id}')">
+                     <i class="fas fa-arrow-right"></i></a>`
+                : ''}
             ${isUnread
                 ? `<button class="btn btn-sm btn-outline-primary" title="Mark as read"
                            onclick="markAsRead('${notification.id}')"><i class="fas fa-check"></i></button>`
                 : '<i class="fas fa-check-circle text-success" title="Read"></i>'}
         </div>
     `;
+
+    // The whole card is the target, not just the arrow: nobody aims for a
+    // 24-pixel button when the row is what they clicked.
+    if (href) {
+        div.querySelector('.notif-card-body').style.cursor = 'pointer';
+        div.querySelector('.notif-card-body').addEventListener('click', function () {
+            markAsRead(notification.id);
+            window.location.href = href;
+        });
+    }
 
     return div;
 }

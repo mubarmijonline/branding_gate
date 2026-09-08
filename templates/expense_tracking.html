@@ -361,8 +361,10 @@ function addExpenseItem() {
                     <div class="form-group mb-0">
                         <label class="small">Amount | المبلغ <span class="text-danger">*</span></label>
                         <div class="input-group input-group-sm">
-                            <input type="number" class="form-control expense-amount" 
-                                   step="0.01" min="0.01" placeholder="0.00" required onchange="updateTotalAmount()">
+                            <input type="text" inputmode="decimal"
+                                   class="form-control expense-amount bg-amount"
+                                   placeholder="0.00" required
+                                   oninput="updateTotalAmount()" onchange="updateTotalAmount()">
                             <div class="input-group-append">
                                 <span class="input-group-text">EGP</span>
                             </div>
@@ -423,7 +425,7 @@ function removeExpenseItem(id) {
 function updateTotalAmount() {
     let total = 0;
     $('.expense-amount').each(function() {
-        total += parseFloat($(this).val()) || 0;
+        total += parseFloat(bgPlainNumber($(this).val())) || 0;
     });
     $('#totalAmount').text(total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' EGP');
 }
@@ -451,7 +453,7 @@ function submitExpenseTracking() {
     
     $('.expense-item-row').each(function() {
         const desc = $(this).find('.expense-description').val();
-        const amount = parseFloat($(this).find('.expense-amount').val()) || 0;
+        const amount = parseFloat(bgPlainNumber($(this).find('.expense-amount').val())) || 0;
         const itemNotes = $(this).find('.expense-notes').val();
         const salesRequestId = $(this).find('.expense-sales-request').val();
 

@@ -648,7 +648,7 @@
                     
                     <div class="form-group-modern">
                         <label>Amount (EGP) *</label>
-                        <input type="number" class="form-control" id="expenseAmount" step="0.01" min="0.01" required placeholder="0.00" oninput="updateBalancePreview()">
+                        <input type="text" inputmode="decimal" class="form-control bg-amount" id="expenseAmount" required placeholder="0.00" oninput="updateBalancePreview()">
                     </div>
                     
                     <div class="form-group-modern">
@@ -1024,7 +1024,7 @@ function editExpense(id) {
 }
 
 function updateBalancePreview() {
-    var amount = parseFloat($('#expenseAmount').val()) || 0;
+    var amount = parseFloat(bgPlainNumber($('#expenseAmount').val())) || 0;
     var editingId = $('#expenseId').val();
     
     // If editing, we need to exclude the current expense from pending
@@ -1053,7 +1053,7 @@ function saveExpense() {
     var id = $('#expenseId').val();
     var supplierId = $('#expenseSupplier').val();
     var supplierName = $('#expenseSupplierName').val();
-    var amount = $('#expenseAmount').val();
+    var amount = bgPlainNumber($('#expenseAmount').val());
     var description = $('#expenseDescription').val();
     var expenseDate = $('#expenseDate').val();
     var salesRequestId = $('#expenseSalesRequest').val();

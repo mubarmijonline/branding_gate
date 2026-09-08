@@ -846,7 +846,7 @@ function openPersonalApprovalModal(expenseId) {
                 <label class="small text-muted">Amount (Editable)</label>
                 <div class="input-group">
                     <input type="number" class="form-control form-control-lg text-right font-weight-bold" 
-                           id="personalEditAmount" value="${amount.toFixed(2)}" step="0.01" min="0">
+                           id="personalEditAmount" value="${parseFloat(amount).toFixed(2)}" step="0.01" min="0">
                     <div class="input-group-append">
                         <span class="input-group-text">EGP</span>
                     </div>
@@ -874,7 +874,7 @@ function approvePersonalExpense() {
     
     Swal.fire({
         title: 'Approve Expense?',
-        text: `Approve ${editedAmount.toFixed(2)} EGP?`,
+        text: `Approve ${bgNumber(editedAmount, 2)} EGP?`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Yes, Approve',

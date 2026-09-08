@@ -995,10 +995,10 @@ $(document).ready(function() {
                                     <strong>Created</strong> - ${formatDateTime(item.created_at)}
                                 </div>
                                 <div class="mini-timeline-item ${item.cost_per_item ? 'active' : ''}">
-                                    <strong>Costed</strong> - ${item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : 'Not costed'}
+                                    <strong>Costed</strong> - ${item.cost_per_item ? 'EGP ' + bgNumber(item.cost_per_item, 2) : 'Not costed'}
                                 </div>
                                 <div class="mini-timeline-item ${item.sell_per_item ? 'active' : ''}">
-                                    <strong>Priced</strong> - ${item.sell_per_item ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : 'Not priced'}
+                                    <strong>Priced</strong> - ${item.sell_per_item ? 'EGP ' + bgNumber(item.sell_per_item, 2) : 'Not priced'}
                                 </div>
                                 <div class="mini-timeline-item ${decisionClass}">
                                     <i class="fas ${decisionIcon} mr-1"></i>
