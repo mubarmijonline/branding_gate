@@ -260,6 +260,30 @@
         padding: 12px 15px;
         transition: all 0.3s ease;
     }
+
+    /* A <select> keeps Bootstrap's fixed .form-control height, so the 12px of
+       padding above pushed the chosen option out of its own box: the status
+       read as a sliver of text or as nothing at all. Height follows the
+       content here, and the arrow gets room of its own rather than sitting on
+       top of the word. */
+    select.form-control {
+        height: auto;
+        min-height: 46px;
+        padding-right: 38px;
+        line-height: 1.4;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%231e3a5f'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 16px 16px;
+        cursor: pointer;
+    }
+
+    select.form-control:focus {
+        background-color: #fff;
+    }
     
     .form-control:focus {
         border-color: #1e3a5f;
@@ -359,9 +383,11 @@
     <div class="entity-table-card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5><i class="fas fa-list mr-2"></i>All Entities</h5>
+            {% if 'entity.create' in _p %}
             <button class="btn btn-add-entity" onclick="openAddEntityModal()">
                 <i class="fas fa-plus mr-2"></i>Add Entity
             </button>
+            {% endif %}
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -490,9 +516,17 @@
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
+// What this account may do here, from the same grants the routes check.
+var CAN_EDIT_ENTITY   = {{ 'true' if 'entity.edit' in _p else 'false' }};
+var CAN_DELETE_ENTITY = {{ 'true' if 'entity.delete' in _p else 'false' }};
+
 $(document).ready(function() {
     console.log('Entity Management page loaded');
     
+    // Arriving from an entity's inventory with ?edit=<id>: open that entity
+    // rather than making the reader find it in the list they just came from.
+    var wantedEntity = (new URLSearchParams(window.location.search)).get('edit');
+
     // Initialize DataTable
     var table = $('#entitiesTable').DataTable({
         "ajax": {
@@ -501,6 +535,11 @@ $(document).ready(function() {
             "dataSrc": function(json) {
                 if (json.success) {
                     updateStatistics(json.stats);
+                    if (wantedEntity) {
+                        var open = wantedEntity;
+                        wantedEntity = null;          // once, not on every reload
+                        setTimeout(function () { editEntity(Number(open)); }, 0);
+                    }
                     return json.entities;
                 }
                 return [];
@@ -570,16 +609,19 @@ $(document).ready(function() {
                 "data": null,
                 "orderable": false,
                 "render": function(data, type, row) {
+                    // Each button only where the route behind it would say yes.
                     return `
                         <button class="btn-action btn-view" onclick="viewEntity(${row.id})" title="View Inventory">
                             <i class="fas fa-boxes"></i>
                         </button>
+                        ${CAN_EDIT_ENTITY ? `
                         <button class="btn-action btn-edit" onclick="editEntity(${row.id})" title="Edit">
                             <i class="fas fa-edit"></i>
-                        </button>
+                        </button>` : ''}
+                        ${CAN_DELETE_ENTITY ? `
                         <button class="btn-action btn-delete" onclick="deleteEntity(${row.id}, '${row.entity_name}')" title="Delete">
                             <i class="fas fa-trash"></i>
-                        </button>
+                        </button>` : ''}
                     `;
                 }
             }

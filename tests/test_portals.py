@@ -88,7 +88,7 @@ class PortalRouteTest(unittest.TestCase):
             response = self._client_for(user_id).get(path)
             self.assertEqual(response.status_code, 200, path)
             # A 200 that rendered the login page would not be the portal.
-            self.assertIn(b'portal-blank-card', response.data, path)
+            self.assertIn(b'portal-page', response.data, path)
 
     def test_a_portal_is_refused_to_another_department(self):
         outsider = _a_user_holding('sales_member')

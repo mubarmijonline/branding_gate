@@ -70,6 +70,119 @@
             width: 98%;
         }
     }
+
+    @media (max-width: 768px) {
+        #addRequestModal .modal-dialog,
+        #editRequestModal .modal-dialog {
+            max-width: 100%;
+            width: 100%;
+            max-height: 100%;
+            margin: 0;
+        }
+
+        #addRequestModal .modal-content,
+        #editRequestModal .modal-content {
+            min-height: 100vh;
+            max-height: 100vh;
+            border: 0;
+            border-radius: 0;
+        }
+
+        #addRequestModal .modal-body,
+        #editRequestModal .modal-body {
+            flex: 1 1 auto;
+            max-height: none;
+            padding: 0.75rem;
+        }
+
+        #addRequestModal .modal-header,
+        #editRequestModal .modal-header {
+            padding: 0.75rem 1rem;
+        }
+
+        /* The two buttons that finish the job stay on screen while the form
+           above them scrolls. */
+        #addRequestModal .modal-footer,
+        #editRequestModal .modal-footer {
+            position: sticky;
+            bottom: 0;
+            gap: 0.5rem;
+            padding: 0.6rem 0.75rem;
+            background: #fff;
+            box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.08);
+        }
+
+        #addRequestModal .modal-footer .btn,
+        #editRequestModal .modal-footer .btn {
+            flex: 1 1 0;
+            min-height: 46px;
+            margin: 0;
+        }
+
+        .item-fields {
+            padding: 12px;
+        }
+
+        /* Sell / Rent / Days / Calc: one strip on a desktop, stacked rows on a
+           phone, where it used to squeeze into an unusable line. */
+        .sell-rent-section {
+            padding: 12px;
+        }
+
+        .sell-rent-section > .d-flex {
+            align-items: stretch !important;
+            flex-direction: column;
+        }
+
+        .sell-rent-section > .d-flex > .mr-3 {
+            margin-right: 0 !important;
+        }
+
+        .sell-rent-toggle {
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .sell-rent-toggle .btn-group {
+            width: 100%;
+        }
+
+        .sell-rent-toggle .btn-group .btn {
+            flex: 1 1 0;
+            min-height: 44px;
+        }
+
+        .rental-days-input {
+            width: 100%;
+            gap: 8px;
+        }
+
+        .rental-days-input .form-control {
+            min-height: 44px;
+        }
+
+        /* Fingers, not cursors. */
+        #addRequestModal .form-control,
+        #editRequestModal .form-control,
+        #addRequestModal .custom-select,
+        #editRequestModal .custom-select {
+            min-height: 44px;
+            font-size: 16px;   /* stops iOS zooming the page on focus */
+        }
+
+        #addRequestModal .select2-selection,
+        #editRequestModal .select2-selection {
+            min-height: 46px !important;
+        }
+
+        .select2-results__options {
+            max-height: 50vh !important;
+        }
+
+        .item-header {
+            flex-wrap: wrap;
+        }
+    }
     
     /* ========================================
        ENHANCED ITEM STYLING - Modern Professional Design
@@ -561,6 +674,70 @@
     .select2-search--dropdown .select2-search__field:focus {
         border-color: #4285f4 !important;
         outline: none !important;
+    }
+
+    /* Nothing select2 draws may be wider than what it hangs from -- the panel
+       used to spill past the right edge of the dialog. */
+    /* The table is showing one request out of many, and says so. */
+    .sr-filter-note { display:flex; align-items:center; justify-content:space-between;
+                      gap:12px; flex-wrap:wrap; padding:9px 12px; margin-bottom:12px;
+                      background:#eaf3ff; border:1px solid #cfe0fb;
+                      border-left:4px solid #4e73df; border-radius:6px;
+                      color:#1e3a5f; font-size:13px; }
+    .sr-filter-note i { color:#4e73df; }
+
+    /* An item whose numbers are already set: shown, not typed into. */
+    .item-field-locked { background:#f4f5f7 !important; color:#6b7280 !important;
+                         cursor:not-allowed; }
+    .item-locked-note { padding:8px 10px; margin-bottom:12px; border-radius:6px;
+                        background:#fff8e1; border:1px solid #ffe0a3;
+                        color:#7a5200; font-size:12.5px; line-height:1.5; }
+    .item-locked-note i { color:#ff8f00; }
+
+    /* What a price is worth, beside the field that sets it. */
+    .price-margin-strip { display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+                          margin-top:6px; padding:6px 10px; border-radius:6px;
+                          background:#f1f5f9; border:1px solid #e2e8f0;
+                          font-size:11.5px; line-height:1.4; }
+    .price-margin-strip.ok    { background:#f0fdf4; border-color:#bbf7d0; }
+    .price-margin-strip.thin  { background:#fffbeb; border-color:#fde68a; }
+    .price-margin-strip.loss  { background:#fef2f2; border-color:#fecaca; }
+    .price-margin-strip .pm-part { display:flex; align-items:baseline; gap:5px; }
+    .price-margin-strip .pm-k { color:#6b7280; font-size:10px; font-weight:700;
+                                text-transform:uppercase; letter-spacing:.4px; }
+    .price-margin-strip .pm-v { color:#1e293b; font-weight:800;
+                                font-variant-numeric:tabular-nums; }
+    .price-margin-strip.ok   .pm-v { color:#166534; }
+    .price-margin-strip.thin .pm-v { color:#8a6300; }
+    .price-margin-strip.loss .pm-v { color:#b91c1c; }
+    .price-margin-strip .pm-flag { margin-left:auto; padding:1px 8px; border-radius:10px;
+                                   font-weight:700; text-transform:uppercase;
+                                   font-size:10px; letter-spacing:.4px; }
+    .price-margin-strip.thin .pm-flag { background:#fde68a; color:#7a5200; }
+    .price-margin-strip.loss .pm-flag { background:#fecaca; color:#991b1b; }
+    .price-margin-strip .pm-idle { color:#6b7280; }
+
+    .select2-container {
+        max-width: 100%;
+    }
+
+    .select2-dropdown {
+        max-width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .select2-search--dropdown {
+        padding: 6px !important;
+    }
+
+    .select2-search--dropdown .select2-search__field {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .select2-results__option {
+        word-break: break-word;
     }
     
     /* Enhanced form text (helper text) */
@@ -3510,6 +3687,20 @@ window.chartPieDemo = function() {
                 </div>
             </div>
             
+            <!-- Arriving from a notification narrows this table to the one
+                 request it was about. Invisible narrowing reads as a table
+                 that has lost everything else, so it says so and offers a
+                 way back. -->
+            <div id="srRequestFilterNote" class="sr-filter-note d-none">
+                <span>
+                    <i class="fas fa-filter"></i>
+                    Showing request <strong id="srFilterRequestId"></strong> only.
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="srClearRequestFilter">
+                    <i class="fas fa-times"></i> Show all requests
+                </button>
+            </div>
+
             <div class="table-responsive sales-request-table-wrap">
                 <table id="requests-table" class="display table table-bordered sales-request-data-table {% if 'sales_item.cost' in _p %}sales-request-table-admin{% else %}sales-request-table-standard{% endif %}">
                     <colgroup>
@@ -4387,7 +4578,11 @@ window.chartPieDemo = function() {
                         <!-- Items with pricing will be loaded here -->
                     </div>
                     <div class="pricing-total-summary" aria-label="Pricing totals">
-                            {% if is_admin %}
+                            {# Whoever sets a price already sees every item's cost in this
+                               modal, so the totals of those costs are theirs to see too --
+                               it is the number they are pricing against. Same test as the
+                               page's own data-admin-privileges flag. #}
+                            {% if 'sales_item.cost' in _p or 'sales_item.price' in _p %}
                             <div class="pricing-total-summary__metric pricing-total-summary__metric--cost">
                                 <span class="pricing-total-summary__label"><i class="fas fa-coins"></i>Total Cost</span>
                                 <strong id="totalCostDisplay">EGP 0.00</strong>
@@ -4398,15 +4593,10 @@ window.chartPieDemo = function() {
                                 <strong id="totalSellDisplay">EGP 0.00</strong>
                                 <small>Net margin <span id="netMarginDisplay">0%</span></small>
                             </div>
-                            <div class="pricing-total-summary__metric pricing-total-summary__metric--revenue">
-                                <span class="pricing-total-summary__label"><i class="fas fa-chart-line"></i>Gross Revenue</span>
-                                <strong id="totalGrossProfitDisplay">EGP 0.00</strong>
-                                <small id="grossProfitPercentBadge" title="Profit / Cost">Gross 0%</small>
-                            </div>
                             <div class="pricing-total-summary__metric pricing-total-summary__metric--profit">
-                                <span class="pricing-total-summary__label"><i class="fas fa-money-bill-wave"></i>Net Profit</span>
-                                <strong id="netProfitDisplay">EGP 0.00</strong>
-                                <small id="netProfitPercentBadge">0% of Revenue</small>
+                                <span class="pricing-total-summary__label"><i class="fas fa-money-bill-wave"></i>Difference</span>
+                                <strong id="totalDifferenceDisplay">EGP 0.00</strong>
+                                <small id="netProfitPercentBadge" title="Markup is against cost, net is against the selling price">Markup 0% &middot; Net 0%</small>
                             </div>
                             <span id="profitDisplay" style="display:none;">EGP 0.00</span>
                             {% else %}
@@ -4676,7 +4866,8 @@ window.chartPieDemo = function() {
             "width": "150px",
             "className": "text-right",
             "render": function(data, type, row) {
-                return data ? 'EGP ' + parseFloat(data).toFixed(0) : '-';
+                if (type !== 'display') { return data === null ? 0 : Number(data); }
+                return data ? bgMoney(data) : '-';
             }
         });
     }
@@ -4688,7 +4879,8 @@ window.chartPieDemo = function() {
             "width": "150px",
             "className": "text-right",
             "render": function(data, type, row) {
-                return data ? 'EGP ' + parseFloat(data).toFixed(0) : '-';
+                if (type !== 'display') { return data === null ? 0 : Number(data); }
+                return data ? bgMoney(data) : '-';
             }
         },
         {
@@ -4717,11 +4909,40 @@ window.chartPieDemo = function() {
                 var hasIssues = stats.not_costed > 0 || stats.not_priced > 0;
                 var hasPending = stats.pending > 0 || stats.negotiation > 0 || stats.repricing > 0;
                 
+                // Which desk the request is sitting on, and how far that desk
+                // has got. Sales asked for this: the badges below say what is
+                // left, never what is done, so a request halfway through
+                // costing looked the same as one nobody had touched.
+                if (totalItems > 0) {
+                    var costed = totalItems - (stats.not_costed || 0);
+                    var priced = costed - (stats.not_priced || 0);
+                    var stage;
+                    if ((stats.not_costed || 0) > 0) {
+                        stage = {label: 'Pending Costing', icon: 'fa-calculator', css: 'background:#6c757d;color:#fff;'};
+                    } else if ((stats.not_priced || 0) > 0 || (stats.repricing || 0) > 0) {
+                        stage = {label: 'Pending Pricing', icon: 'fa-tag', css: 'background:#ffc107;color:#212529;'};
+                    } else if ((stats.negotiation || 0) > 0) {
+                        stage = {label: 'In Negotiation', icon: 'fa-handshake', css: 'background:#fd7e14;color:#fff;'};
+                    } else if ((stats.pending || 0) > 0) {
+                        stage = {label: 'Pending Client Approval', icon: 'fa-clock', css: 'background:#17a2b8;color:#fff;'};
+                    } else if (allApproved) {
+                        stage = {label: 'All Approved', icon: 'fa-check-circle', css: 'background:#28a745;color:#fff;'};
+                    } else {
+                        stage = {label: 'Closed', icon: 'fa-flag-checkered', css: 'background:#6c757d;color:#fff;'};
+                    }
+                    html += '<span class="badge request-stage-badge" style="' + stage.css + '">' +
+                            '<i class="fas ' + stage.icon + ' mr-1"></i>' + stage.label + '</span><br>' +
+                            '<span class="request-stage-progress" title="Items costed, then priced, out of the whole request">' +
+                              'Costed <strong>' + costed + '/' + totalItems + '</strong>' +
+                              ' &middot; Priced <strong>' + priced + '/' + totalItems + '</strong>' +
+                            '</span><br>';
+                }
+                
                 // Show appropriate status badges
+                // The stage badge above already says "All Approved"; below it is
+                // the breakdown, whatever the stage.
                 if (totalItems === 0) {
                     html += '<span class="badge badge-light" style="color:#6c757d;">No Items</span>';
-                } else if (allApproved) {
-                    html += '<span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>All Approved</span>';
                 } else {
                     // Show individual status counts
                     if (stats.not_costed > 0) {
@@ -4756,7 +4977,19 @@ window.chartPieDemo = function() {
             "data": "sales_added_by",
             "width": "160px",
             "render": function(data, type, row) {
-                return data || '-';
+                // The column stores a mobile number. A mobile number is not a
+                // name: the person is shown, with the number they are reached
+                // on underneath.
+                if (type !== 'display') { return row.sales_added_by_name || data || ''; }
+                var name = row.sales_added_by_name || data;
+                if (!name) { return '-'; }
+                var mobile = row.sales_added_by_mobile;
+                return '<div class="bg-person" data-user-id="' +
+                       (row.sales_added_by_user_id || '') + '">' +
+                         '<span class="bg-person-name">' + escapeHtml(name) + '</span>' +
+                         (mobile ? '<small class="bg-person-handle">' +
+                                   escapeHtml(mobile) + '</small>' : '') +
+                       '</div>';
             }
         },
         {
@@ -4983,6 +5216,15 @@ window.chartPieDemo = function() {
                         updatePricingDashboard(json.requests);
                     }
                     updatePricingBanner(json.requests);
+                    // On the pricing desk the rows that are waiting on a price
+                    // come first, most items waiting at the top: the newest
+                    // request is rarely the one that needs the work.
+                    if (window.PRICING_MODE) {
+                        json.requests.sort(function(a, b) {
+                            return pricingWorkCount(b) - pricingWorkCount(a) ||
+                                   (b.request_id - a.request_id);
+                        });
+                    }
                     return json.requests;
                 } else {
                     console.error('Error loading requests:', json.error);
@@ -4994,7 +5236,9 @@ window.chartPieDemo = function() {
             }
         },
         "columns": tableColumns,
-        "order": [[ 0, "desc" ]], // Order by Request ID descending (newest first)
+        // Newest first everywhere except the pricing desk, which keeps the
+        // order dataSrc put the rows in: whatever is waiting on a price first.
+        "order": window.PRICING_MODE ? [] : [[ 0, "desc" ]],
         "pageLength": 25,
         "lengthMenu": [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
         "dom": '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
@@ -5079,12 +5323,40 @@ window.chartPieDemo = function() {
             attachSalesRequestTopScroller(this.api());
             // Load mention users after table is ready
             loadMentionUsers();
+            // Arriving from a notification: ?request=123 names the one it was
+            // about, so the table opens on that row instead of on everything.
+            var wanted = (new URLSearchParams(window.location.search)).get('request');
+            if (wanted) {
+                this.api().search(wanted).draw();
+                $('#srFilterRequestId').text('#' + wanted);
+                $('#srRequestFilterNote').removeClass('d-none');
+            }
         }
+    });
+
+    // The way back out of that filter, and out of the address bar with it.
+    $(document).on('click', '#srClearRequestFilter', function (e) {
+        e.preventDefault();
+        $('#srRequestFilterNote').addClass('d-none');
+        if (window.requestsTable) { window.requestsTable.search('').draw(); }
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.delete('request');
+            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+        } catch (e2) { /* older browser: the filter is cleared either way */ }
     });
     
     // Make table globally accessible for CRUD operations
     window.requestsTable = table;
     console.log('DataTable initialized and assigned to window.requestsTable');
+
+    // Items on one request that Pricing still has to touch: costed with no
+    // price yet, plus anything sent back to be re-priced. One definition, used
+    // by the row mark, the ordering and the banner.
+    function pricingWorkCount(request) {
+        var stats = (request || {}).approval_stats || {};
+        return (stats.not_priced || 0) + (stats.repricing || 0);
+    }
 
     // What is waiting for a price, counted from the rows already loaded rather
     // than from a second endpoint. Silent when the banner is not on the page.
@@ -5260,12 +5532,15 @@ window.chartPieDemo = function() {
             
             var finalOptions = $.extend({}, defaultOptions, options);
 
-            // Auto-detect modal parent and use it as dropdownParent (fixes
-            // dropdown rendering inline/broken inside Bootstrap modals).
+            // Auto-detect the modal and use its content box as dropdownParent
+            // (fixes dropdowns rendering inline, or escaping the dialog, inside
+            // Bootstrap modals). .modal-content establishes the containing
+            // block the field is measured against; .modal does not.
             if (!finalOptions.dropdownParent) {
-                var $modal = $element.closest('.modal');
-                if ($modal.length) {
-                    finalOptions.dropdownParent = $modal;
+                var $host = $element.closest('.modal-content');
+                if (!$host.length) { $host = $element.closest('.modal'); }
+                if ($host.length) {
+                    finalOptions.dropdownParent = $host;
                 }
             }
 
@@ -8014,16 +8289,21 @@ window.chartPieDemo = function() {
                 
                 // Initialize Select2 with search
                 try {
-                    // Get the closest modal or use body as dropdown parent
+                    // .modal-content, not .modal: the modal element is a
+                    // full-viewport fixed box, so a dropdown parented to it is
+                    // positioned against the viewport and runs off the side of
+                    // the dialog.
+                    const $host = $select.closest('.modal-content');
                     const $modal = $select.closest('.modal');
-                    const dropdownParent = $modal.length ? $modal : $(document.body);
+                    const dropdownParent = $host.length ? $host
+                                         : ($modal.length ? $modal : $(document.body));
                     
                     safeInitializeSelect2($select, {
                         placeholder: '🔍 Search catalog items...',
                         allowClear: true,
                         width: '100%',
                         dropdownParent: dropdownParent, // Prevents modal freeze
-                        dropdownAutoWidth: true,
+                        dropdownAutoWidth: false,
                         templateResult: formatInventoryItem,
                         templateSelection: formatInventoryItemSelection
                     });
@@ -9161,7 +9441,7 @@ window.chartPieDemo = function() {
                                             <div class="input-group-prepend">
                                                 <span class="input-group-text">EGP</span>
                                             </div>
-                                            <input type="number" step="0.01" class="form-control item-sell-price" 
+                                            <input type="text" inputmode="decimal" class="form-control item-sell-price bg-amount" 
                                                    name="items[${itemCounter}][sell_per_item]" placeholder="0.00">
                                             <div class="input-group-append">
                                                 <span class="input-group-text">per item</span>
@@ -9700,6 +9980,36 @@ window.chartPieDemo = function() {
         });
     });
 
+    // ---- a locked item ------------------------------------------------------
+    // Once an item is costed, priced or with the client, its name, quantity and
+    // dimensions are what those numbers were worked out from. The server
+    // refuses to change them; the form says so first, rather than letting
+    // somebody type into a field whose value will be quietly discarded.
+    function lockItemRow($row, reason) {
+        $row.find('input, select, textarea').each(function () {
+            var $field = $(this);
+            if ($field.attr('type') === 'hidden') { return; }
+            if ($field.is(':checkbox') || $field.is('select')) {
+                $field.prop('disabled', true);
+            } else {
+                $field.prop('readonly', true);
+            }
+            $field.addClass('item-field-locked')
+                  .attr('title', 'Locked: this item is ' + (reason || 'costed'));
+        });
+        $row.find('.btn-remove-item').prop('disabled', true);
+        if (!$row.find('.item-locked-note').length) {
+            $row.find('.item-fields').first().prepend(
+                '<div class="item-locked-note">' +
+                  '<i class="fas fa-lock mr-1"></i>' +
+                  'This item is <strong>' + escapeHtml(reason || 'costed') + '</strong>, so its ' +
+                  'name, quantity and dimensions can no longer be changed &mdash; the ' +
+                  'numbers were worked out from them. Ask operations to withdraw the ' +
+                  'cost if it has to change.' +
+                '</div>');
+        }
+    }
+
     // Live update of item-summary text from name/quantity/unit inputs
     $(document).on('input change', '.item-row .item-name, .item-row .item-quantity, .item-row .item-unit', function() {
         const $row = $(this).closest('.item-row');
@@ -10146,7 +10456,7 @@ window.chartPieDemo = function() {
     // Auto-calculate total sell price when sell per item or quantity changes
     $(document).on('input', '.item-sell-price, .item-quantity', function() {
         const itemRow = $(this).closest('.item-row');
-        const sellPerItem = parseFloat(itemRow.find('.item-sell-price').val()) || 0;
+        const sellPerItem = parseFloat(bgPlainNumber(itemRow.find('.item-sell-price').val())) || 0;
         const quantity = parseFloat(itemRow.find('.item-quantity').val()) || 0;
         const totalSell = sellPerItem * quantity;
         
@@ -11524,8 +11834,13 @@ window.chartPieDemo = function() {
                                                 // Get description (could be in 'description' or 'comment' field)
                                                 const itemDescription = item.description || item.comment || '';
                                                 
-                                                // Check if item is costed (has cost data from operations)
-                                                const isCosted = item.cost_per_item && parseFloat(item.cost_per_item) > 0;
+                                                // Whether this item is past editing, decided by the
+                                                // server so the form and the route cannot disagree:
+                                                // costed, priced, or already with the client.
+                                                const isCosted = item.is_locked !== undefined
+                                                    ? !!item.is_locked
+                                                    : !!(item.cost_per_item && parseFloat(item.cost_per_item) > 0);
+                                                const lockReason = item.lock_reason || 'costed';
                                                 
                                                 // Build item HTML with all fields
                                                 const itemHtml = `
@@ -11538,8 +11853,8 @@ window.chartPieDemo = function() {
                                                         ${isCosted ? `
                                                         <div class="costed-lock-banner" style="background: linear-gradient(135deg, #ff8f00, #ffa000); color: white; padding: 8px 15px; margin: -15px -15px 15px -15px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
                                                             <i class="fas fa-lock"></i>
-                                                            <strong>Costed by Operations</strong>
-                                                            <span style="opacity: 0.9; margin-left: auto;">Cost: EGP ${parseFloat(item.cost_per_item).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                                                            <strong>Locked &mdash; this item is ${lockReason}</strong>
+                                                            <span style="opacity: 0.9; margin-left: auto;">${item.cost_per_item ? 'Cost: ' + bgMoney(item.cost_per_item) : ''}</span>
                                                         </div>
                                                         ` : ''}
                                                         <div class="item-header" style="margin-bottom: 15px;">
@@ -11713,6 +12028,12 @@ window.chartPieDemo = function() {
                                                 console.log(`About to append item with dimensions: W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
                                                 
                                                 itemsContainer.append(itemHtml);
+                                                // A locked item's fields are read-only, because typing
+                                                // into them and being told "saved" while the server
+                                                // keeps the old values is the worst of both.
+                                                if (isCosted) {
+                                                    lockItemRow(itemsContainer.find('.item-row').last(), lockReason);
+                                                }
                                                 
                                                 // VERIFICATION: Check if values actually exist in DOM after append
                                                 // Use IIFE to capture itemIdx in closure for correct item targeting
@@ -11996,19 +12317,46 @@ window.chartPieDemo = function() {
                         window.requestsTable.ajax.reload();
                     }
                     
-                    // Check if this was a partial update (costed items were preserved)
+                    // Some items on this request are past editing. Say which
+                    // ones, and say whether the edit actually tried to change
+                    // them -- "your changes were not saved" and "there was
+                    // nothing to change" are very different messages.
                     if (response.costed_items_preserved) {
+                        var locked = response.locked_items || [];
+                        var refused = response.refused_changes || [];
+                        var listOf = function (rows) {
+                            return rows.map(function (row) {
+                                var what = (row.changes || []).filter(function (f) { return f !== 'removed'; });
+                                var detail = (row.changes || []).indexOf('removed') >= 0
+                                    ? 'you removed it'
+                                    : (what.length ? 'you changed ' + what.join(', ') : '');
+                                return '<li><strong>' + escapeHtml(row.name) + '</strong> — ' +
+                                       escapeHtml(row.reason) +
+                                       (detail ? ' <span class="text-muted">(' + escapeHtml(detail) + ')</span>' : '') +
+                                       '</li>';
+                            }).join('');
+                        };
                         Swal.fire({
-                            icon: 'info',
-                            title: 'General Info Updated',
-                            html: `<p>${response.message}</p>
-                                   <div class="alert alert-warning mb-0 mt-2" style="border-left: 4px solid #ff8f00; text-align: left;">
-                                       <i class="fas fa-lock mr-2" style="color: #ff8f00;"></i>
-                                       <strong>Costed items were not modified.</strong><br>
-                                       <small class="text-muted">Items with operations costing are protected and cannot be changed through edit.</small>
-                                   </div>`,
-                            confirmButtonText: 'OK',
-                            confirmButtonColor: '#ff8f00'
+                            icon: refused.length ? 'warning' : 'success',
+                            title: refused.length ? 'Saved, with some items left as they were'
+                                                  : 'Request updated',
+                            html: '<p class="mb-2">' + escapeHtml(response.message || '') + '</p>' +
+                                  (refused.length
+                                    ? '<div class="alert alert-warning mb-0 text-left">' +
+                                        '<i class="fas fa-lock mr-2"></i>' +
+                                        '<strong>These items could not be changed:</strong>' +
+                                        '<ul class="mb-1 mt-2 pl-4">' + listOf(refused) + '</ul>' +
+                                        '<small class="text-muted">An item keeps the name, quantity ' +
+                                        'and dimensions its cost was worked out from. To change one, ' +
+                                        'ask operations to withdraw its cost first.</small>' +
+                                      '</div>'
+                                    : (locked.length
+                                        ? '<div class="alert alert-info mb-0 text-left">' +
+                                            '<i class="fas fa-lock mr-2"></i>' +
+                                            locked.length + ' item(s) are locked and were left as they are.' +
+                                          '</div>'
+                                        : '')),
+                            confirmButtonText: 'OK'
                         });
                     } else {
                         // Normal update - everything updated successfully
@@ -12469,6 +12817,13 @@ window.chartPieDemo = function() {
                                                            value="${sellPerItem || ''}"
                                                            placeholder="Enter price...">
                                                 </div>
+                                                <!-- What this price is worth, against the
+                                                     field that sets it. The numbers already
+                                                     existed further down the card; whoever is
+                                                     typing needs them here, where a price that
+                                                     loses money is obvious as it is typed. -->
+                                                <div class="price-margin-strip" id="marginStrip_${item.id}"
+                                                     data-item-id="${item.id}"></div>
                                             </div>
                                             <div>
                                                 <label style="font-size: 0.7rem; font-weight: 600; color: #166534; margin-bottom: 4px; display: block;">
@@ -12555,6 +12910,11 @@ window.chartPieDemo = function() {
         }
         
         $('#priceItemsContainer').html(itemsHtml);
+        // An item that already has a price shows its margin before anybody
+        // types, so opening the modal answers "is this one healthy?" on sight.
+        $('#priceItemsContainer .item-sell-price-input').each(function () {
+            $(this).trigger('input');
+        });
         var accordionCount = $('#priceItemsContainer .price-item-accordion').length;
         if (accordionCount > 0) {
             $('#priceItemsCount').text(accordionCount);
@@ -12573,6 +12933,47 @@ window.chartPieDemo = function() {
     });
 
     // Auto-calculate total sell when price changes (using formula: price × qty × days × dimensions)
+    // Gross, markup and net for one line, in the words the sales team use:
+    //   gross  = what is left after the cost
+    //   markup = that, as a share of the cost      (what was added)
+    //   net    = that, as a share of the sell price (what is kept)
+    // A price under cost is the thing this is for, so it is said plainly.
+    function renderMarginStrip(itemId, totalSell, totalCost) {
+        var $strip = $('#marginStrip_' + itemId);
+        if (!$strip.length) { return; }
+        // The tone is reset on every path, or clearing the field leaves the
+        // strip still red from the price that was there a moment ago.
+        if (!totalSell) {
+            $strip.attr('class', 'price-margin-strip').html(
+                '<span class="pm-idle">Enter a price to see the margin</span>');
+            return;
+        }
+        if (!totalCost) {
+            $strip.attr('class', 'price-margin-strip').html(
+                '<span class="pm-idle">' +
+                '<i class="fas fa-info-circle mr-1"></i>Not costed yet, ' +
+                'so there is no margin to show</span>');
+            return;
+        }
+        var gross = totalSell - totalCost;
+        var markup = totalCost > 0 ? (gross / totalCost * 100) : 0;
+        var net = totalSell > 0 ? (gross / totalSell * 100) : 0;
+        var tone = gross < 0 ? 'loss' : (net < 10 ? 'thin' : 'ok');
+        $strip.attr('class', 'price-margin-strip ' + tone).html(
+            '<span class="pm-part"><span class="pm-k">Gross</span>' +
+              '<span class="pm-v">' + (gross < 0 ? '-' : '') + 'EGP ' +
+              bgNumber(Math.abs(gross), 2) + '</span></span>' +
+            '<span class="pm-part"><span class="pm-k">Markup</span>' +
+              '<span class="pm-v">' + bgNumber(markup, 1) + '%</span></span>' +
+            '<span class="pm-part"><span class="pm-k">Net</span>' +
+              '<span class="pm-v">' + bgNumber(net, 1) + '%</span></span>' +
+            (gross < 0
+              ? '<span class="pm-flag"><i class="fas fa-exclamation-triangle"></i> below cost</span>'
+              : (net < 10
+                  ? '<span class="pm-flag"><i class="fas fa-exclamation-circle"></i> thin margin</span>'
+                  : '')));
+    }
+
     $(document).on('input', '.item-sell-price-input', function() {
         var sellPerItem = parseFloat($(this).val()) || 0;
         var quantity = parseFloat($(this).data('quantity')) || 0;
@@ -12620,6 +13021,9 @@ window.chartPieDemo = function() {
         }
         $('#formulaDetailSell_' + itemId).html(formulaText);
         
+        // The strip beside the field this keystroke came from.
+        renderMarginStrip(itemId, totalSell, totalCost);
+
         // Update all total sell displays (banner + input section)
         $(`.item-total-sell-display[data-item-id="${itemId}"]`).text(fmtNum(totalSell));
         $(`.item-total-sell-display-input[data-item-id="${itemId}"]`).text(fmtNum(totalSell));
@@ -12713,18 +13117,18 @@ window.chartPieDemo = function() {
             // Apply formula: Total Sell = sell_per_item × effectiveQty × effective_days × dimension_multiplier
             totalSell += sellPerItem * effectiveQty * effectiveDays * dimensionMultiplier;
             
-            // Calculate total cost for admin users from data attributes
-            if (window.isAdminUser || isAdminUser) {
-                var itemTotalCost = parseFloat($(this).data('total-cost')) || 0;
-                totalCost += itemTotalCost;
-            }
+            // The cost behind this line, read from the card. Gathered whenever
+            // the summary exists, not only for admins.
+            var itemTotalCost = parseFloat($(this).data('total-cost')) || 0;
+            totalCost += itemTotalCost;
         });
         
         // Update total sell display
         $('#totalSellDisplay').text('EGP ' + fmtNum(totalSell));
         
-        // Update admin-specific displays
-        if (window.isAdminUser || isAdminUser) {
+        // The rest of the summary is only on the page for whoever may see a
+        // cost; when it is there, it is filled in.
+        if ($('#totalCostDisplay').length) {
             $('#totalCostDisplay').text('EGP ' + fmtNum(totalCost));
 
             // New definitions:
@@ -12740,19 +13144,19 @@ window.chartPieDemo = function() {
             // Hidden compatibility field still receives the profit value
             $('#profitDisplay').text('EGP ' + fmtNum(net));
 
-            // Gross box now shows full revenue
-            $('#totalGrossProfitDisplay').text('EGP ' + fmtNum(gross));
-            $('#grossProfitPercentBadge').text('Gross ' + markupPct.toFixed(1) + '%');
+            // Selling minus cost: the number the summary is really about, said
+            // once rather than in two boxes with two names.
+            $('#totalDifferenceDisplay').text((net < 0 ? '-EGP ' : 'EGP ') +
+                                              fmtNum(Math.abs(net)));
+            $('#netProfitPercentBadge').html(
+                'Markup ' + markupPct.toFixed(1) + '% &middot; Net ' + netPct.toFixed(1) + '%');
 
-            // Top stats row
-            $('#profitMarginDisplay').text(markupPct.toFixed(1) + '%'); // Markup % (Profit / Cost)
-            $('#netMarginDisplay').text(netPct.toFixed(1) + '%');       // Net Margin (Profit / Revenue)
+            // The two percentages also sit under the totals they belong to.
+            $('#profitMarginDisplay').text(markupPct.toFixed(1) + '%'); // against cost
+            $('#netMarginDisplay').text(netPct.toFixed(1) + '%');       // against revenue
 
-            // Net (profit) box
-            $('#netProfitDisplay').text('EGP ' + fmtNum(net));
-            $('#netProfitPercentBadge').text(netPct.toFixed(1) + '% of Revenue');
-
-            // Color code Net badge based on health
+            // A request that sells for less than it costs should not read the
+            // same as a healthy one.
             var netBadge = $('#netProfitPercentBadge');
             if (net < 0) {
                 netBadge.css('background', 'rgba(220, 53, 69, 0.5)');
@@ -13045,7 +13449,7 @@ window.chartPieDemo = function() {
                                         </div>
                                         <div class="mb-1">
                                             <span class="text-muted">Total Cost:</span>
-                                            <strong class="text-primary ml-2">${record.total_cost ? 'EGP ' + parseFloat(record.total_cost).toFixed(2) : 'N/A'}</strong>
+                                            <strong class="text-primary ml-2">${record.total_cost ? bgMoney(record.total_cost) : 'N/A'}</strong>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
@@ -13055,7 +13459,7 @@ window.chartPieDemo = function() {
                                         </div>
                                         <div class="mb-1">
                                             <span class="text-muted">Total Sell:</span>
-                                            <strong class="text-success ml-2">${record.total_sell ? 'EGP ' + parseFloat(record.total_sell).toFixed(2) : 'N/A'}</strong>
+                                            <strong class="text-success ml-2">${record.total_sell ? bgMoney(record.total_sell) : 'N/A'}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -13321,7 +13725,7 @@ window.chartPieDemo = function() {
         console.log('Loading users for modal panel...');
         
         $.ajax({
-            url: '/api/users',
+            url: '/api/mention-users',
             type: 'GET',
             success: function(response) {
                 console.log('Users loaded for modal:', response);
@@ -13486,7 +13890,7 @@ window.chartPieDemo = function() {
     // Load users for mentions
     function loadMentionUsers() {
         $.ajax({
-            url: '/api/users',
+            url: '/api/mention-users',
             type: 'GET',
             success: function(response) {
                 if (response.success) {
@@ -14230,7 +14634,7 @@ window.chartPieDemo = function() {
         var url = '/sales_request_details/' + reqId;
         $('#srdDrawerTitle').text('Sales Request #' + reqId);
         $('#srdDrawerOpenTab').attr('href', url);
-        $('#srdDrawerFrame').attr('src', url);
+        $('#srdDrawerFrame').attr('src', url + '?embed=1');
         $('#srdDrawerBackdrop').addClass('show');
         $('#srdDrawer').addClass('show');
         $('body').addClass('srd-drawer-open');
@@ -14415,11 +14819,13 @@ window.chartPieDemo = function() {
                 $('#detailEndDate').text(request.end_date || 'Not set');
                 
                 if (isAdminUser) {
-                    $('#detailTotalCost').text(request.total_cost ? 'EGP ' + parseFloat(request.total_cost).toFixed(2) : 'Not set');
+                    $('#detailTotalCost').text(request.total_cost ? bgMoney(request.total_cost) : 'Not set');
                 }
-                $('#detailTotalSell').text(request.total_sell ? 'EGP ' + parseFloat(request.total_sell).toFixed(2) : 'Not set');
+                $('#detailTotalSell').text(request.total_sell ? bgMoney(request.total_sell) : 'Not set');
                 $('#detailItemsCount').text(request.items ? request.items.length : 0);
-                $('#detailSalesAdded').text(request.sales_added_by || 'Unknown');
+                $('#detailSalesAdded').text(request.sales_added_by_name ||
+                                            request.sales_added_by || 'Unknown')
+                    .attr('title', request.sales_added_by_mobile || '');
                 $('#detailCreatedDate').text(request.sales_added_date || 'Unknown');
                 $('#detailLastModified').text(request.last_modified || 'Never modified');
                 
@@ -14487,7 +14893,7 @@ window.chartPieDemo = function() {
                         </div>
                         <div class="col-md-4">
                             <p><strong>Sell per Item:</strong> ${item.sell_per_item ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : 'Not set'}</p>
-                            <p><strong>Total Cost:</strong> ${item.total_cost ? 'EGP ' + parseFloat(item.total_cost).toFixed(2) : 'Not set'}</p>
+                            <p><strong>Total Cost:</strong> ${item.total_cost ? bgMoney(item.total_cost) : 'Not set'}</p>
                         </div>
                     `;
                 } else {
@@ -14607,7 +15013,7 @@ function loadItemPriceHistory(itemId) {
                     html += '    </div>';
                     html += '    <div class="value-box">';
                     html += '      <label><i class="fas fa-coins mr-1"></i>Total Cost</label>';
-                    html += '      <div class="value">EGP ' + (record.total_cost ? parseFloat(record.total_cost).toFixed(2) : '0.00') + '</div>';
+                    html += '      <div class="value">' + bgMoney(record.total_cost || 0) + '</div>';
                     html += '    </div>';
                     html += '    <div class="value-box">';
                     html += '      <label><i class="fas fa-chart-line mr-1"></i>Profit</label>';

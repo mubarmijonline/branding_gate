@@ -1,15 +1,14 @@
--- Asking for a client or a supplier, rather than creating one.
+-- Asking for a client, company or supplier, rather than creating one.
 --
--- Sales and Account Management meet clients; Operations and Purchasing meet
--- suppliers. Both now raise a request that their own department head passes and
--- an admin makes real, so nothing enters the books that two people have not
--- looked at.
+-- Sales and Account Management meet clients and companies; Operations and
+-- Purchasing meet suppliers. Both now raise a request that their own department
+-- head passes and admins are notified.
 --
--- One table for both, because the shape is identical -- somebody proposes a
+-- One table for all three, because the shape is identical -- somebody proposes a
 -- record, two people sign, a row appears -- and one table means one queue, one
 -- set of routes and one screen rather than two of everything. What differs is
 -- the payload, which is the proposed record itself, kept as JSON so this table
--- never has to grow a column every time client or supplier does.
+-- never has to grow a column every time client, company or supplier does.
 --
 -- One-shot. Re-running fails on the existing table, which is safe. DDL commits
 -- implicitly in MySQL, so this file is outside any transaction.
@@ -17,7 +16,7 @@
 CREATE TABLE party_request (
     id                INT NOT NULL AUTO_INCREMENT,
     request_code      VARCHAR(20) NOT NULL,
-    kind              ENUM('client', 'supplier') NOT NULL,
+    kind              ENUM('client', 'company', 'supplier') NOT NULL,
     -- The proposed record, exactly as it would be written. The approver sees
     -- all of it, not a name and a shrug.
     payload           JSON NOT NULL,

@@ -57,7 +57,11 @@ def test_global_tables_inherit_scroll_drag_system():
 
 
 def test_full_pages_extend_the_shared_shell():
-    standalone = {"main.html", "login.html", "register.html", "comments_widget.html"}
+    standalone = {
+        "main.html", "login.html", "register.html",
+        "comments_widget.html", "party_requests_section.html",
+        "team_actions_section.html",
+    }
     for template in (ROOT / "templates").glob("*.html"):
         if template.name in standalone:
             continue
@@ -219,6 +223,61 @@ def test_client_add_and_edit_forms_share_correct_field_mapping():
     assert 'type="text" class="form-control" id="editEmailAddress"' in source
 
 
+def test_global_quick_add_buttons_match_create_and_request_permissions():
+    source = read("templates/main.html")
+
+    assert "{% set can_create_clients    = 'client.create'   in _p %}" in source
+    assert "{% set can_request_clients   = 'client_request.create'   in _p %}" in source
+    assert "{% set can_request_companies = 'company_request.create'  in _p %}" in source
+    assert "{% if can_create_clients %}\n      <button class=\"fab-item\" data-toggle=\"modal\" data-target=\"#quickAddClientModal\"" in source
+    assert "{% elif can_request_clients %}\n      <button class=\"fab-item\" onclick=\"window.location.href='{{ url_for('client') }}?new_request=1'\"" in source
+    assert "{% elif can_request_companies %}\n      <button class=\"fab-item\" onclick=\"window.location.href='{{ url_for('company') }}?new_request=1'\"" in source
+    assert "{% if can_create_clients %}\n  <div class=\"modal fade\" id=\"quickAddClientModal\"" in source
+    assert "{% if can_create_suppliers %}\n      <button class=\"fab-item\" data-toggle=\"modal\" data-target=\"#quickAddSupplierModal\"" in source
+    assert "{% if can_create_suppliers %}\n  <div class=\"modal fade\" id=\"quickAddSupplierModal\"" in source
+
+
+def test_company_page_uses_request_flow_and_gates_direct_actions():
+    source = read("templates/company.html")
+
+    assert "{% set party_kind = 'company' %}" in source
+    assert "{% include 'party_requests_section.html' %}" in source
+    # The button moved out of the card header and into the page header when the
+    # company directory was rebuilt on the client-directory shell. What is being
+    # pinned is that it is still gated, not where it sits.
+    assert "{% if can_create_company %}\n        <button class=\"btn btn-primary\" data-toggle=\"modal\" data-target=\"#addCompanyModal\">" in source
+    assert "const CAN_EDIT_COMPANY = {{ can_edit_company | tojson }};" in source
+    assert "const CAN_DELETE_COMPANY = {{ can_delete_company | tojson }};" in source
+
+
+def test_party_request_component_supports_company_requests():
+    source = read("templates/party_requests_section.html")
+
+    assert "party_kind == 'company' and 'company_request.create' in _pp" in source
+    assert "company: [" in source
+    assert "['company_name', 'Company name', true]" in source
+    assert "q.payload.client_name || q.payload.company_name || q.payload.supplier_name" in source
+    assert "new URLSearchParams(window.location.search).get('new_request') === '1'" in source
+
+
+def test_party_request_approvals_have_mobile_cards_with_visible_actions():
+    source = read("templates/party_requests_section.html")
+    css = read("static/css/branding-gate-system.css")
+    shell = read("templates/main.html")
+
+    assert "branding-gate-system.css') }}?v=20260906-person-numbers" in shell
+    assert 'class="table-responsive party-request-table-wrap d-none d-md-block"' in source
+    assert 'class="party-request-mobile-list d-md-none"' in source
+    assert 'id="partyRequestCards"' in source
+    assert "function partyActionButtons" in source
+    assert "party-request-mobile-card" in source
+    assert "party-request-mobile-actions" in source
+    assert ".party-request-table-wrap" in css
+    assert ".party-request-mobile-list" in css
+    assert ".party-request-mobile-actions" in css
+    assert "@media (max-width: 768px)" in css
+
+
 if __name__ == "__main__":
     test_design_system_assets_are_wired_into_shared_templates()
     test_main_design_system_css_loads_after_inline_shell_styles()
@@ -236,3 +295,7 @@ if __name__ == "__main__":
     test_client_management_page_uses_operational_design_system()
     test_client_table_has_compact_columns_and_icon_actions()
     test_client_add_and_edit_forms_share_correct_field_mapping()
+    test_global_quick_add_buttons_match_create_and_request_permissions()
+    test_company_page_uses_request_flow_and_gates_direct_actions()
+    test_party_request_component_supports_company_requests()
+    test_party_request_approvals_have_mobile_cards_with_visible_actions()

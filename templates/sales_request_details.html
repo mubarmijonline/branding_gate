@@ -21,26 +21,85 @@
   .srd-badge.prio-normal { background: #d1ecf1; color: #0c5460; }
   .srd-badge.prio-low    { background: #d4edda; color: #155724; }
 
-  /* Items */
-  .srd-item { border: 1px solid #eef0f5; border-radius: 8px; padding: 14px;
-              margin-bottom: 12px; background: #fff; }
-  .srd-item-head { display: flex; gap: 14px; align-items: flex-start; }
-  .srd-item-thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 6px;
-                     border: 1px solid #e3e6f0; background: #f8f9fc; flex: 0 0 84px; }
+  /* Items -- one card each: who it is on top, what it costs underneath. The
+     facts used to be strung across the full width of the drawer, one label per
+     column, so a three-item request read as a wall of dashes. */
+  .srd-items-wrap { display: flex; flex-direction: column; gap: 16px; }
+  .srd-item { position: relative; border: 1px solid #d7dbe6; border-radius: 12px;
+              padding: 0; background: #fff; overflow: hidden;
+              box-shadow: 0 2px 6px rgba(15,23,42,0.06);
+              border-left: 5px solid #b9bdc7;
+              transition: box-shadow .18s ease, border-color .18s ease; }
+  .srd-item:hover { box-shadow: 0 6px 16px rgba(15,23,42,0.10); border-color: #b9c3d8; }
+  /* The edge says where the item stands without reading a single word. */
+  .srd-item.state-approved { border-left-color: #1cc88a; }
+  .srd-item.state-rejected { border-left-color: #e74a3b; }
+  .srd-item.state-pending  { border-left-color: #f6c23e; }
+  .srd-item-head { display: flex; gap: 14px; align-items: flex-start;
+                   padding: 14px 16px; background: #f6f8fc;
+                   border-bottom: 1px solid #e3e6f0; }
+  .srd-item-no { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%;
+                 display: flex; align-items: center; justify-content: center;
+                 background: #4e73df; color: #fff; font-size: 13px; font-weight: 700; }
+  .srd-item-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
+                     border: 1px solid #e3e6f0; background: #fff; flex: 0 0 72px; }
   .srd-item-thumb.placeholder { display: flex; align-items: center; justify-content: center;
-                                  color: #b9bdc7; font-size: 22px; }
-  .srd-item-title { font-weight: 600; color: #2c3e50; font-size: 15px; }
-  .srd-item-sub   { color: #858796; font-size: 12px; margin-top: 2px; }
-  .srd-item-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                    gap: 10px 16px; margin-top: 12px; padding-top: 10px;
-                    border-top: 1px dashed #f0f1f5; font-size: 13px; }
-  .srd-item-grid .k { color: #858796; font-size: 11px; text-transform: uppercase; }
-  .srd-item-grid .v { color: #2c3e50; font-weight: 500; }
+                                  color: #b9bdc7; font-size: 20px; }
+  .srd-item-id { flex: 1; min-width: 0; }
+  .srd-item-title { font-weight: 700; color: #2c3e50; font-size: 15px; }
+  .srd-item-sub   { color: #858796; font-size: 12px; margin-top: 3px; }
+  .srd-item-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+                    margin-top: 8px; }
+  .srd-item-chips .k { color: #858796; font-size: 10px; font-weight: 700;
+                       text-transform: uppercase; letter-spacing: .4px; }
+  .srd-item-body { padding: 14px 16px; }
+  .srd-item-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+                    gap: 10px; font-size: 13px; }
+  .srd-item-grid > div { padding: 8px 10px; border: 1px solid #eef0f5;
+                         border-radius: 6px; background: #fcfcfe; min-width: 0; }
+  .srd-item-grid .k { color: #858796; font-size: 10px; font-weight: 700;
+                      text-transform: uppercase; letter-spacing: .4px; }
+  .srd-item-grid .v { color: #2c3e50; font-weight: 600; margin-top: 3px;
+                      font-size: 13.5px; word-break: break-word; }
+  .srd-item-grid .v.is-empty { color: #b9bdc7; font-weight: 500; }
+  .srd-item-grid .money .v { font-variant-numeric: tabular-nums; }
+  .srd-item-grid .money-sell .v { color: #1c7c54; }
+  @media (max-width: 576px) {
+    .srd-item-head { flex-wrap: wrap; }
+    .srd-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* Embedded in the drawer: no shell, and the page uses the width it is given. */
+  body[data-embed] #main_nav_bar,
+  body[data-embed] .quick-add-fab { display: none !important; }
+  body[data-embed] .srd-wrap { max-width: none; padding: 14px 16px 28px; }
   .srd-item-thumbs { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
   .srd-item-thumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: 4px;
                          border: 1px solid #e3e6f0; cursor: pointer; }
   .srd-item-attachments a { display: inline-flex; align-items: center; gap: 6px;
                             font-size: 12px; margin-right: 10px; }
+  /* An alternative is not the item: it is marked, and it says who offered it. */
+  .srd-alts { margin-top: 12px; padding: 10px 12px; border: 1px dashed #c7d2fe;
+              border-radius: 8px; background: #f5f7ff; }
+  .srd-alts-head { font-size: 11px; font-weight: 800; letter-spacing: .4px;
+                   text-transform: uppercase; color: #4338ca; margin-bottom: 8px; }
+  .srd-alt { display: flex; gap: 10px; align-items: flex-start; padding: 8px;
+             margin-bottom: 8px; background: #fff; border: 1px solid #e0e7ff;
+             border-radius: 6px; }
+  .srd-alt:last-child { margin-bottom: 0; }
+  .srd-alt-thumb { position: relative; flex-shrink: 0; }
+  .srd-alt-thumb img { width: 76px; height: 76px; object-fit: cover; display: block;
+                       border-radius: 5px; border: 1px solid #e0e7ff; cursor: pointer; }
+  .srd-alt-flag { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 0;
+                  background: rgba(67,56,202,.88); color: #fff; font-size: 8px;
+                  font-weight: 800; letter-spacing: .5px; text-align: center;
+                  border-radius: 0 0 5px 5px; }
+  .srd-alt-body { min-width: 0; flex: 1; }
+  .srd-alt-label { font-weight: 700; color: #312e81; font-size: 13px; }
+  .srd-alt-comment { color: #374151; font-size: 12.5px; line-height: 1.45;
+                     word-break: break-word; }
+  .srd-alt-by { color: #6b7280; font-size: 11px; margin-top: 3px; }
+
   .srd-item-notes { margin-top: 10px; padding: 8px 10px; background: #fffbe6;
                      border-left: 3px solid #ffc107; border-radius: 4px;
                      font-size: 12px; color: #5a5c69; }
@@ -57,15 +116,29 @@
   .srd-tpl-fields .v { color: #2c3e50; font-weight: 500; word-break: break-word; }
   .srd-tpl-fields .full { grid-column: 1 / -1; }
 
-  /* Flow timeline */
+  /* Flow timeline -- one card per event, hung off a rail, grouped by day. */
   .srd-flow { position: relative; padding-left: 28px; }
   .srd-flow::before { content: ''; position: absolute; left: 10px; top: 4px; bottom: 4px;
                        width: 2px; background: #e3e6f0; }
-  .srd-flow-item { position: relative; padding: 8px 0 14px 0; }
-  .srd-flow-item::before { content: ''; position: absolute; left: -23px; top: 14px;
+  .srd-flow-day { position: relative; margin: 4px 0 10px -28px; padding-left: 28px; }
+  .srd-flow-day span { display: inline-block; padding: 3px 10px; border-radius: 12px;
+                       background: #eef1f8; color: #5a5c69; font-size: 11px;
+                       font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+  .srd-flow-item { position: relative; margin-bottom: 10px; padding: 10px 12px;
+                   background: #fff; border: 1px solid #e3e6f0; border-radius: 8px;
+                   box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+  .srd-flow-item::before { content: ''; position: absolute; left: -23px; top: 16px;
                             width: 12px; height: 12px; border-radius: 50%;
                             background: #4e73df; border: 2px solid #fff;
                             box-shadow: 0 0 0 2px #e3e6f0; }
+  .srd-flow-kind { display: inline-block; margin-right: 6px; padding: 1px 7px;
+                   border-radius: 10px; font-size: 10px; font-weight: 700;
+                   text-transform: uppercase; letter-spacing: .3px;
+                   background: #eef1f8; color: #4e73df; }
+  .srd-flow-item.status .srd-flow-kind { background: #e2f7ef; color: #0f7a56; }
+  .srd-flow-item.change .srd-flow-kind { background: #fdf3d8; color: #8a6300; }
+  .srd-flow-item.create .srd-flow-kind { background: #ddf3f7; color: #14707d; }
+  .srd-flow-item.delete .srd-flow-kind { background: #fdecea; color: #b32d1f; }
   .srd-flow-item.status::before { background: #1cc88a; }
   .srd-flow-item.change::before { background: #f6c23e; }
   .srd-flow-item.create::before { background: #36b9cc; }
@@ -94,6 +167,32 @@
   .srd-flow-kv .k { color:#858796; font-weight:600; }
   .srd-flow-kv .v { color:#2c3e50; }
   .srd-flow-list { margin:0; padding-left:18px; }
+
+  /* Stored values are JSON. Nobody reads JSON off a screen, so it is unpacked
+     into rows, lists and numbered entries instead of printed as one string. */
+  .srd-val-kv { display: grid; gap: 3px; }
+  .srd-val-row { display: grid; grid-template-columns: minmax(90px, 34%) 1fr;
+                 gap: 8px; font-size: 12px; line-height: 1.45;
+                 padding: 2px 0; border-bottom: 1px dotted #eef0f5; }
+  .srd-val-row:last-child { border-bottom: 0; }
+  .srd-val-row > .k { color: #858796; font-weight: 700; text-transform: capitalize;
+                      word-break: break-word; }
+  .srd-val-row > .v { color: #2c3e50; word-break: break-word; }
+  .srd-val-list { margin: 0; padding-left: 16px; font-size: 12px; }
+  .srd-val-group { display: grid; gap: 6px; }
+  .srd-val-entry { position: relative; padding: 6px 8px 6px 26px;
+                   background: #fff; border: 1px solid #eef0f5; border-radius: 5px; }
+  .srd-val-index { position: absolute; left: 6px; top: 6px; width: 15px; height: 15px;
+                   border-radius: 50%; background: #dbe3f5; color: #33478c;
+                   font-size: 9px; font-weight: 800; line-height: 15px; text-align: center; }
+  .srd-val-num { color: #1f2d3d; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .srd-dim { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+             padding: 2px 8px; border: 1px solid #cfe0fb; border-radius: 12px;
+             background: #f2f7ff; font-size: 12px; }
+  .srd-dim-part { display: inline-flex; align-items: baseline; gap: 4px; }
+  .srd-dim-axis { color: #4e73df; font-size: 10px; font-weight: 800;
+                  text-transform: uppercase; letter-spacing: .4px; }
+  .srd-dim-x { color: #b9bdc7; font-size: 11px; }
 
   /* Template first-container summary */
   .srd-tpl-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr));
@@ -262,9 +361,7 @@
   function fmtVal(v){
     if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
     if (Array.isArray(v)) return esc(v.join(', '));
-    if (typeof v === 'object') {
-      try { return '<code>' + esc(JSON.stringify(v)) + '</code>'; } catch(e) { return ''; }
-    }
+    if (typeof v === 'object') return readableValue(v, 1);
     var s = String(v);
     if (/^https?:\/\//i.test(s)) return '<a href="' + esc(s) + '" target="_blank">' + esc(s) + '</a>';
     return esc(s);
@@ -278,33 +375,100 @@
     if (!(t.charAt(0) === '{' || t.charAt(0) === '[')) return null;
     try { return JSON.parse(t); } catch(e) { return null; }
   }
-  function renderInline(v){
+  // A stored value, read out loud instead of printed as JSON. Objects become
+  // labelled rows, lists of plain values become bullets, lists of objects
+  // become numbered entries, and a JSON string nested inside a string is
+  // unpacked too. Depth is capped so a deep blob summarises rather than
+  // filling the drawer.
+  var VALUE_MAX_DEPTH = 3;
+
+  // Dimensions arrive as their own little object -- {width, height, depth} --
+  // and printing them as three separate labelled rows buried what they are.
+  // One line, in the order a person says it out loud.
+  var DIM_AXES = {width: 'W', height: 'H', depth: 'D', length: 'L', diameter: '\u00d8'};
+  var DIM_ORDER = ['width', 'height', 'depth', 'length', 'diameter'];
+
+  // 410.0 -> 410, 4.50 -> 4.5. Trailing zeros are noise on a measurement.
+  function trimNumber(n){
+    var num = Number(n);
+    if (isNaN(num)) return String(n);
+    return String(parseFloat(num.toFixed(4)));
+  }
+  function isNumeric(v){
+    if (typeof v === 'number') return isFinite(v);
+    if (typeof v !== 'string') return false;
+    var t = v.trim();
+    return t !== '' && !isNaN(Number(t));
+  }
+  function boldNumber(v){
+    return '<strong class="srd-val-num">' + esc(trimNumber(v)) + '</strong>';
+  }
+
+  // Returns the one-line form when every key is an axis, else null.
+  function dimensionLine(obj){
+    var keys = Object.keys(obj);
+    if (!keys.length) return null;
+    var known = keys.every(function(k){ return DIM_AXES[String(k).toLowerCase()]; });
+    if (!known) return null;
+    var ordered = DIM_ORDER.filter(function(axis){
+      return keys.some(function(k){ return String(k).toLowerCase() === axis; });
+    });
+    return '<span class="srd-dim">' + ordered.map(function(axis){
+      var key = keys.filter(function(k){ return String(k).toLowerCase() === axis; })[0];
+      return '<span class="srd-dim-part"><span class="srd-dim-axis">' + DIM_AXES[axis] + '</span>' +
+             boldNumber(obj[key]) + '</span>';
+    }).join('<span class="srd-dim-x">\u00d7</span>') + '</span>';
+  }
+
+  function readableValue(v, depth){
+    depth = depth || 0;
     if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
-    if (Array.isArray(v)) return v.length ? esc(v.join(', ')) : '<span class="text-muted">(empty)</span>';
-    if (typeof v === 'object') {
-      var k = Object.keys(v);
-      return k.length ? esc(JSON.stringify(v)) : '<span class="text-muted">(empty)</span>';
+    if (typeof v === 'string') {
+      var nested = parseMaybeJson(v);
+      if (nested !== null) return readableValue(nested, depth);
+      if (/^https?:\/\//i.test(v)) return '<a href="' + esc(v) + '" target="_blank">' + esc(v) + '</a>';
+      return isNumeric(v) ? boldNumber(v) : esc(v);
     }
-    return esc(String(v));
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    if (typeof v === 'number') return boldNumber(v);
+    if (typeof v !== 'object') return esc(String(v));
+
+    if (Array.isArray(v)) {
+      if (!v.length) return '<span class="text-muted">(none)</span>';
+      if (depth >= VALUE_MAX_DEPTH)
+        return '<span class="text-muted">' + v.length + ' entr' + (v.length === 1 ? 'y' : 'ies') + '</span>';
+      var flat = v.every(function(x){ return x === null || typeof x !== 'object'; });
+      if (flat) {
+        return '<ul class="srd-val-list">' + v.map(function(x){
+          return '<li>' + readableValue(x, depth + 1) + '</li>';
+        }).join('') + '</ul>';
+      }
+      return '<div class="srd-val-group">' + v.map(function(x, i){
+        return '<div class="srd-val-entry"><span class="srd-val-index">' + (i + 1) + '</span>' +
+               readableValue(x, depth + 1) + '</div>';
+      }).join('') + '</div>';
+    }
+
+    var dims = dimensionLine(v);
+    if (dims) return dims;
+
+    var keys = Object.keys(v);
+    if (!keys.length) return '<span class="text-muted">(empty)</span>';
+    if (depth >= VALUE_MAX_DEPTH)
+      return '<span class="text-muted">' + keys.length + ' field' + (keys.length === 1 ? '' : 's') + '</span>';
+    return '<div class="srd-val-kv">' + keys.map(function(k){
+      var child = v[k];
+      // `attributes: {width, depth}` is a dimension by any other name.
+      var label = (child && typeof child === 'object' && !Array.isArray(child) && dimensionLine(child))
+        ? 'Dimensions' : fmtKey(k);
+      return '<div class="srd-val-row">' +
+               '<span class="k">' + esc(label) + '</span>' +
+               '<span class="v">' + readableValue(child, depth + 1) + '</span>' +
+             '</div>';
+    }).join('') + '</div>';
   }
   function renderLogValue(raw){
-    var obj = parseMaybeJson(raw);
-    if (obj === null) {
-      if (raw === null || raw === undefined || raw === '') return '<span class="text-muted">—</span>';
-      return esc(String(raw));
-    }
-    if (Array.isArray(obj)) {
-      if (!obj.length) return '<span class="text-muted">(empty)</span>';
-      return '<ul class="srd-flow-list">' + obj.map(function(x){
-        return '<li>' + renderInline(x) + '</li>';
-      }).join('') + '</ul>';
-    }
-    var keys = Object.keys(obj);
-    if (!keys.length) return '<span class="text-muted">(empty)</span>';
-    return '<div class="srd-flow-kv">' + keys.map(function(k){
-      return '<div><span class="k">' + esc(fmtKey(k)) + ':</span> '
-           + '<span class="v">' + renderInline(obj[k]) + '</span></div>';
-    }).join('') + '</div>';
+    return readableValue(raw, 0);
   }
   function prettyFieldName(field){
     if (!field) return '';
@@ -345,28 +509,67 @@
       if (dims.length) subBits.push(dims.join(' · '));
       if (it.dimension_calc) subBits.push('calc: ' + esc(it.dimension_calc));
 
+      // The numbers, each in its own tile. A price nobody has set yet says so
+      // rather than showing a bare dash in the middle of the row.
       var facts = [];
-      facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || '')]);
+      facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || ''), '']);
       if (it.sell_type === 'rent' || it.rental_days)
-        facts.push(['Rental Days', esc(it.rental_days || 1)]);
-      facts.push(['Unit Cost', money(it.cost_per_item)]);
-      facts.push(['Unit Sell', money(it.sell_per_item)]);
-      facts.push(['Total Cost', money(it.total_cost)]);
-      facts.push(['Total Sell', money(it.total_sell)]);
-      facts.push(['Approval', statusBadge(it.approval_status || 'pending')]);
-      if (it.negotiation_status)
-        facts.push(['Negotiation', statusBadge(it.negotiation_status)
-          + (it.negotiation_count ? ' <span class="text-muted">×' + it.negotiation_count + '</span>' : '')]);
+        facts.push(['Rental Days', esc(it.rental_days || 1), '']);
+      facts.push(['Unit Cost', money(it.cost_per_item), 'money']);
+      facts.push(['Unit Sell', money(it.sell_per_item), 'money money-sell']);
+      facts.push(['Total Cost', money(it.total_cost), 'money']);
+      facts.push(['Total Sell', money(it.total_sell), 'money money-sell']);
 
       var factsHtml = facts.map(function(f){
-        return '<div><div class="k">' + esc(f[0]) + '</div><div class="v">' + f[1] + '</div></div>';
+        var value = f[1];
+        var empty = (value === '-' || value === '' || value === ' ');
+        return '<div class="' + f[2] + '">' +
+                 '<div class="k">' + esc(f[0]) + '</div>' +
+                 '<div class="v' + (empty ? ' is-empty' : '') + '">' +
+                   (empty ? 'Not set yet' : value) +
+                 '</div>' +
+               '</div>';
       }).join('');
+
+      // Where the item stands belongs beside its name, not buried between two
+      // money tiles.
+      var chips = '<span class="k">Approval</span>' +
+                  statusBadge(it.approval_status || 'pending');
+      if (it.negotiation_status && String(it.negotiation_status).toLowerCase() !== 'none') {
+        chips += '<span class="k ml-2">Negotiation</span>' + statusBadge(it.negotiation_status) +
+                 (it.negotiation_count ? ' <span class="text-muted">&times;' + it.negotiation_count + '</span>' : '');
+      }
 
       var thumbs = '';
       if (it.images && it.images.length > 1) {
         thumbs = '<div class="srd-item-thumbs">' + it.images.map(function(im){
           return '<img src="/' + esc(String(im.path).replace(/^\//,'')) + '" title="' + esc(im.name||'') + '" onclick="window.open(this.src, \'_blank\')">';
         }).join('') + '</div>';
+      }
+
+      // What operations offered as another way to do this item. Sales asked
+      // for one thing; costing may know a second, and the choice is only a
+      // choice if both are on the page together.
+      var alts = '';
+      if (it.alternatives && it.alternatives.length) {
+        alts = '<div class="srd-alts">' +
+          '<div class="srd-alts-head"><i class="fas fa-random"></i> Alternative option' +
+          (it.alternatives.length === 1 ? '' : 's') + ' from operations</div>' +
+          it.alternatives.map(function (alt) {
+            return '<div class="srd-alt">' +
+              '<div class="srd-alt-thumb">' +
+                '<img src="' + esc(alt.image_url) + '" alt="Alternative option" ' +
+                     'onclick="window.open(this.src, \'_blank\')">' +
+                '<span class="srd-alt-flag">ALTERNATIVE</span>' +
+              '</div>' +
+              '<div class="srd-alt-body">' +
+                (alt.label ? '<div class="srd-alt-label">' + esc(alt.label) + '</div>' : '') +
+                '<div class="srd-alt-comment">' + esc(alt.comment || '') + '</div>' +
+                '<div class="srd-alt-by">' + esc(alt.uploaded_by_name || 'Operations') +
+                  (alt.added_on ? ' &middot; ' + esc(alt.added_on) : '') + '</div>' +
+              '</div>' +
+            '</div>';
+          }).join('') + '</div>';
       }
 
       var atts = '';
@@ -388,21 +591,33 @@
         notes += '<div class="srd-item-notes" style="background:#eaf3ff;border-left-color:#4e73df;"><b>Client feedback:</b> ' + esc(it.client_feedback) + '</div>';
       }
 
-      return '<div class="srd-item">' +
+      // The card's edge carries the item's own state, so a request with one
+      // rejected line does not read as a uniform block.
+      var state = String(it.approval_status || 'pending').toLowerCase();
+      var stateClass = state.indexOf('approve') >= 0 ? 'state-approved'
+                     : state.indexOf('reject')  >= 0 ? 'state-rejected'
+                     : 'state-pending';
+
+      return '<article class="srd-item ' + stateClass + '">' +
         '<div class="srd-item-head">' +
+          '<div class="srd-item-no">' + (idx + 1) + '</div>' +
           thumbHtml +
-          '<div style="flex:1;">' +
-            '<div class="srd-item-title">#' + (idx + 1) + ' · ' + esc(name) + '</div>' +
+          '<div class="srd-item-id">' +
+            '<div class="srd-item-title">' + esc(name) + '</div>' +
             (subBits.length ? '<div class="srd-item-sub">' + subBits.join(' · ') + '</div>' : '') +
-            thumbs +
-            atts +
+            '<div class="srd-item-chips">' + chips + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="srd-item-grid">' + factsHtml + '</div>' +
-        notes +
-      '</div>';
+        '<div class="srd-item-body">' +
+          '<div class="srd-item-grid">' + factsHtml + '</div>' +
+          thumbs +
+          alts +
+          atts +
+          notes +
+        '</div>' +
+      '</article>';
     }).join('');
-    $('#srdItemsBody').html(html);
+    $('#srdItemsBody').html('<div class="srd-items-wrap">' + html + '</div>');
   }
 
   // ===== Template instances (with field values) =====
@@ -427,7 +642,7 @@
     addS('End Date',   sr.end_date);
     addS('Duration',   sr.duration || (sr.duration_days ? sr.duration_days + ' days' : ''));
     addS('Created',    sr.sales_added_date);
-    addS('Created By', sr.sales_added_by);
+    addS('Created By', sr.sales_added_by_name || sr.sales_added_by);
     var summaryHtml = summaryParts.length
       ? '<div class="srd-tpl-summary">' + summaryParts.join('') + '</div>' : '';
 
@@ -530,6 +745,26 @@
     return events;
   }
 
+  var KIND_LABEL = {status: 'Status', change: 'Edit', create: 'Added', delete: 'Removed'};
+
+  // "2026-08-31" -> "Today" / "Yesterday" / "31 Aug 2026". Falls back to the
+  // raw string rather than printing "Invalid Date".
+  function dayLabel(ymd){
+    var d = new Date(ymd + 'T00:00:00');
+    if (isNaN(d.getTime())) return ymd;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var diff = Math.round((today - d) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return d.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+  }
+
+  // The date is already on the day header; the row only needs the clock.
+  function clockOf(stamp){
+    var m = String(stamp).match(/(\d{2}):(\d{2})/);
+    return m ? m[1] + ':' + m[2] : String(stamp || '');
+  }
+
   function renderFlow(filter){
     filter = filter || 'all';
     var rows = flowEvents.filter(function(e){
@@ -543,18 +778,31 @@
       $('#srdFlowEmpty').show();
       return;
     }
+    // Newest first, cut into days: "what happened today" is the question the
+    // flow is usually asked, and a wall of identical timestamps did not answer
+    // it.
+    var day = '';
     var html = rows.map(function(e){
-      return '<div class="srd-flow-item ' + esc(e.kind) + '">' +
-        '<div class="srd-flow-head">' +
-          '<div class="srd-flow-title">' +
-            (e.actor ? '<span class="srd-flow-actor">' + esc(e.actor) + '</span>' : '') +
-            e.title +
+      var stamp = String(e.when || '');
+      var thisDay = stamp.slice(0, 10);
+      var header = '';
+      if (thisDay && thisDay !== day) {
+        day = thisDay;
+        header = '<div class="srd-flow-day"><span>' + esc(dayLabel(thisDay)) + '</span></div>';
+      }
+      return header +
+        '<div class="srd-flow-item ' + esc(e.kind) + '">' +
+          '<div class="srd-flow-head">' +
+            '<div class="srd-flow-title">' +
+              '<span class="srd-flow-kind">' + esc(KIND_LABEL[e.kind] || e.kind) + '</span>' +
+              (e.actor ? '<span class="srd-flow-actor">' + esc(e.actor) + '</span>' : '') +
+              e.title +
+            '</div>' +
+            '<div class="srd-flow-when" title="' + esc(stamp) + '">' + esc(clockOf(stamp)) + '</div>' +
           '</div>' +
-          '<div class="srd-flow-when">' + esc(e.when || '') + '</div>' +
-        '</div>' +
-        (e.body ? '<div class="srd-flow-body">' + esc(e.body) + '</div>' : '') +
-        (e.extra || '') +
-      '</div>';
+          (e.body ? '<div class="srd-flow-body">' + esc(e.body) + '</div>' : '') +
+          (e.extra || '') +
+        '</div>';
     }).join('');
     $('#srdFlowEmpty').hide();
     $('#srdFlow').html(html).show();
@@ -594,7 +842,9 @@
     $('#srdEnd').text(sr.end_date || '-');
     $('#srdDuration').text(sr.duration || (sr.duration_days ? sr.duration_days + ' days' : '-'));
     $('#srdCreated').text(sr.sales_added_date || '-');
-    $('#srdCreatedBy').text(sr.sales_added_by || '-');
+    // The name, with the mobile it was stored as underneath.
+    $('#srdCreatedBy').text(sr.sales_added_by_name || sr.sales_added_by || '-')
+        .attr('title', sr.sales_added_by_mobile || '');
     $('#srdModified').text(sr.last_modified || '-');
     $('#srdTotalCost').text(money(sr.total_cost));
     $('#srdTotalSell').text(money(sr.total_sell));

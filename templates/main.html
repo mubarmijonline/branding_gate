@@ -679,11 +679,11 @@
 
   {% block head %}{% endblock %}
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260811-full-width">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260906-person-numbers">
 
 </head>
 
-<body class="bg-shell" style="background-color:#f4f6f9;">
+<body class="bg-shell"{% if embed %} data-embed="1"{% endif %} style="background-color:#f4f6f9;">
   {# ---------- Reusable permission shortcuts (used across navbar & FAB) ----------
      Driven by session['perms'], the permission set loaded at login and refreshed
      by /api/refresh-roles. The variable names are kept so the twenty-odd places
@@ -694,6 +694,18 @@
   {% set can_manage_clients    = 'client.edit'   in _p %}
   {% set can_manage_companies  = 'company.edit'  in _p %}
   {% set can_manage_suppliers  = 'supplier.edit' in _p %}
+  {# Reaching the directory is not editing it: whoever may see clients or
+     companies, or ask for one, needs the menu entry -- the request and its
+     approval live on those pages. #}
+  {% set can_open_clients      = 'client.view'  in _p or 'client_request.create'  in _p %}
+  {% set can_open_companies    = 'company.view' in _p or 'company_request.create' in _p %}
+  {% set can_open_suppliers    = 'supplier.view' in _p or 'supplier_request.create' in _p %}
+  {% set can_create_clients    = 'client.create'   in _p %}
+  {% set can_create_companies  = 'company.create'  in _p %}
+  {% set can_create_suppliers  = 'supplier.create' in _p %}
+  {% set can_request_clients   = 'client_request.create'   in _p %}
+  {% set can_request_companies = 'company_request.create'  in _p %}
+  {% set can_request_suppliers = 'supplier_request.create' in _p %}
   {% set can_manage_entities   = 'entity.edit'   in _p %}
   {% set can_set_prices        = 'sales_item.price' in _p %}
   {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
@@ -813,10 +825,15 @@
               <a class="dropdown-item" href="{{ url_for('sales_request') }}">
                 <i class="fas fa-shopping-cart"></i> Sales Request
               </a>
-              {% if can_manage_clients %}
+              {% if can_open_clients %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="{{ url_for('client') }}">
                 <i class="fas fa-handshake"></i> Client
+              </a>
+              {% endif %}
+              {% if can_open_companies %}
+              <a class="dropdown-item" href="{{ url_for('company') }}">
+                <i class="fas fa-building"></i> Company
               </a>
               {% endif %}
               {% if can_view_targets %}
@@ -880,15 +897,45 @@
 
           {% endif %}
 
-          {# Approvals. Its own menu because the page it opens used to live only
+          {# Approvals. Its own menu because what it opens used to live only
              inside the Finance menu, which the people who actually approve --
-             team leaders and heads outside Finance -- cannot see at all. #}
-          {% if can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('expense_tracking_approval_page') }}">
+             team leaders and heads outside Finance -- cannot see at all. Client
+             and company requests are decided on their own directory pages, so
+             they hang here too: approving is what the person opening this menu
+             came to do. #}
+          {% set can_approve_expenses = can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
+          {% if can_approve_expenses or can_open_clients or can_open_companies
+                or can_open_suppliers %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="approvalsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-clipboard-check mr-1"></i> Approvals
               <span class="badge badge-danger ml-1 d-none" id="navApprovalsBadge"></span>
             </a>
+            <div class="dropdown-menu" aria-labelledby="approvalsDropdown">
+              {% if can_approve_expenses %}
+              <a class="dropdown-item" href="{{ url_for('expense_tracking_approval_page') }}">
+                <i class="fas fa-receipt"></i> Expense Approvals
+              </a>
+              {% endif %}
+              {% if can_open_clients or can_open_companies or can_open_suppliers %}
+              {% if can_approve_expenses %}<div class="dropdown-divider"></div>{% endif %}
+              {% if can_open_clients %}
+              <a class="dropdown-item" href="{{ url_for('client') }}#partyRequestCard">
+                <i class="fas fa-handshake"></i> Client Requests
+              </a>
+              {% endif %}
+              {% if can_open_companies %}
+              <a class="dropdown-item" href="{{ url_for('company') }}#partyRequestCard">
+                <i class="fas fa-building"></i> Company Requests
+              </a>
+              {% endif %}
+              {% if can_open_suppliers %}
+              <a class="dropdown-item" href="{{ url_for('supplier') }}#partyRequestCard">
+                <i class="fas fa-truck"></i> Supplier Requests
+              </a>
+              {% endif %}
+              {% endif %}
+            </div>
           </li>
           {% endif %}
 
@@ -1067,29 +1114,45 @@
     </div>
   </nav>
 
-  <!-- Quick Add Floating Button (any admin/management permission) -->
-  {% if can_manage_clients or can_manage_companies or can_manage_suppliers %}
+  <!-- Quick Add Floating Button -->
+  {% if can_create_clients or can_create_companies or can_create_suppliers
+        or can_request_clients or can_request_companies or can_request_suppliers %}
   <div class="quick-add-fab" id="quickAddFab">
     <button class="fab-main-btn" id="fabMainBtn" title="Quick Actions">
       <i class="fas fa-plus"></i>
     </button>
     <div class="fab-menu" id="fabMenu">
-      {% if can_manage_suppliers %}
+      {% if can_create_suppliers %}
       <button class="fab-item" data-toggle="modal" data-target="#quickAddSupplierModal" title="Add Supplier">
         <i class="fas fa-truck"></i>
         <span>Supplier</span>
       </button>
+      {% elif can_request_suppliers %}
+      <button class="fab-item" onclick="window.location.href='{{ url_for('supplier') }}?new_request=1'" title="Request Supplier">
+        <i class="fas fa-truck-loading"></i>
+        <span>Supplier Request</span>
+      </button>
       {% endif %}
-      {% if can_manage_clients %}
+      {% if can_create_clients %}
       <button class="fab-item" data-toggle="modal" data-target="#quickAddClientModal" title="Add Client">
         <i class="fas fa-user-tie"></i>
         <span>Client</span>
       </button>
+      {% elif can_request_clients %}
+      <button class="fab-item" onclick="window.location.href='{{ url_for('client') }}?new_request=1'" title="Request Client">
+        <i class="fas fa-user-plus"></i>
+        <span>Client Request</span>
+      </button>
       {% endif %}
-      {% if can_manage_companies %}
+      {% if can_create_companies %}
       <button class="fab-item" onclick="window.location.href='{{ url_for('company') }}'" title="Add Company">
         <i class="fas fa-building"></i>
         <span>Company</span>
+      </button>
+      {% elif can_request_companies %}
+      <button class="fab-item" onclick="window.location.href='{{ url_for('company') }}?new_request=1'" title="Request Company">
+        <i class="fas fa-building"></i>
+        <span>Company Request</span>
       </button>
       {% endif %}
     </div>
@@ -1229,7 +1292,7 @@
   {% endif %}
 
   <!-- Quick Add Supplier Modal -->
-  {% if can_manage_suppliers %}
+  {% if can_create_suppliers %}
   <div class="modal fade" id="quickAddSupplierModal" tabindex="-1" role="dialog" aria-labelledby="quickAddSupplierModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
@@ -1330,8 +1393,8 @@
                   </div>
                   <div class="col-md-6">
                     <div class="form-group">
-                      <label for="quickEmailAddress">Email Address <span class="text-danger">*</span></label>
-                      <input type="email" class="form-control" id="quickEmailAddress" name="email_address" required placeholder="Enter email address">
+                      <label for="quickEmailAddress">Email Address <small class="text-muted">(optional)</small></label>
+                      <input type="email" class="form-control" id="quickEmailAddress" name="email_address" placeholder="Enter email address">
                     </div>
                   </div>
                 </div>
@@ -1380,7 +1443,7 @@
   {% endif %}
 
   <!-- Quick Add Client Modal -->
-  {% if can_manage_clients %}
+  {% if can_create_clients %}
   <div class="modal fade" id="quickAddClientModal" tabindex="-1" role="dialog" aria-labelledby="quickAddClientModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
@@ -1541,6 +1604,10 @@
   <!-- Bootstrap core JavaScript-->
   <!-- jQuery with CDN fallback for reliability -->
   <script src="{{ url_for('static', filename='vendor/jquery/jquery.min.js') }}"></script>
+  <!-- How every number on the site is read and typed: grouped for reading,
+       stripped of its separators on the way to a route. Loaded here so no page
+       has to carry its own copy, which is how four of them came to disagree. -->
+  <script src="{{ url_for('static', filename='js/bg-numbers.js') }}?v=20260906"></script>
   <script>
     // Fallback to CDN if local jQuery failed to load - use proper async loading
     if (typeof jQuery === 'undefined') {
@@ -2059,7 +2126,7 @@ function showToast(title, body) {
 
     function ensureMentionUsers() {
       if (mentionUsers.length) return;
-      $.get('/api/users', function(r){
+      $.get('/api/mention-users', function(r){
         if (r && r.success) mentionUsers = r.users || [];
       });
     }
@@ -2607,6 +2674,37 @@ window.notifKind = function (notification) {
   return {icon: 'fa-bell', tone: 'secondary', label: 'General'};
 };
 
+// ---- where a notification leads --------------------------------------------
+// A notification that says something needs doing and then leaves you on the
+// page you were already on is half a notification. New ones carry `link` from
+// the sender; everything already in the tray -- and any sender not yet passing
+// one -- is read the same way notifKind() reads it, from the words.
+window.notifLink = function (notification) {
+  if (notification && notification.link) { return notification.link; }
+  var title = (notification.title || '') + ' ' + (notification.content || '');
+  var text = title.toLowerCase();
+  // "#000123" or "request #123": take the request with us where we can.
+  var match = title.match(/#\s*0*(\d{1,7})/);
+  var query = match ? ('?request=' + match[1]) : '';
+
+  // Order matters: "costing completed, ready for pricing" is addressed to
+  // pricing, and the word "costing" in it must not send them to operations.
+  if (/costing completed|ready for (re-?)?pricing|re-?pricing (needed|can now)/.test(text)) {
+    return '/pricing' + query;
+  }
+  if (/re-?costing|costing|cost\b|تكلفة/.test(text))   return '/operation_request' + query;
+  if (/re-?pricing|pricing|price|سعر/.test(text))       return '/pricing' + query;
+  if (/negotiat|تفاوض/.test(text))                      return '/pricing' + query;
+  if (/عهدة|custody|balance|تسوية/.test(text))          return '/my_expenses';
+  if (/expense|مصروف/.test(text))                       return '/expense_tracking';
+  if (/client|company|supplier/.test(text) && /request|added|declined/.test(text)) {
+    return /company/.test(text) ? '/company'
+         : (/supplier/.test(text) ? '/supplier' : '/client');
+  }
+  if (/sales request|new request|request #/.test(text)) return '/sales_request' + query;
+  return null;      // nothing sensible to open: the row just marks itself read
+};
+
 // Function to display notifications in dropdown
 function displayNotifications(notifications) {
   const container = document.getElementById('notificationList');
@@ -2643,8 +2741,10 @@ function displayNotifications(notifications) {
   container.innerHTML = ordered.map(function (notif) {
     const isUnread = !notif.read;
     const kind = window.notifKind(notif);
+    const href = window.notifLink(notif);
     return '' +
-      '<a class="notif-row ' + (isUnread ? 'is-unread' : '') + '" href="#" ' +
+      '<a class="notif-row ' + (isUnread ? 'is-unread' : '') +
+         (href ? ' has-link' : '') + '" href="' + (href || '#') + '" ' +
          'onclick="markNotificationAsRead(\'' + notif.id + '\', event)">' +
         '<span class="notif-icon text-' + kind.tone + '">' +
           '<i class="fas ' + kind.icon + '"></i></span>' +
@@ -2702,7 +2802,11 @@ $(function () {
 async function markNotificationAsRead(notificationId, event) {
   event.preventDefault();
   event.stopPropagation();
-  
+
+  // Where this row leads, read off the anchor the row was built with.
+  const href = event.currentTarget && event.currentTarget.getAttribute('href');
+  const goes = href && href !== '#' ? href : null;
+
   try {
     const response = await fetch('/mark_notifications_read', {
       method: 'POST',
@@ -2715,13 +2819,16 @@ async function markNotificationAsRead(notificationId, event) {
     });
     
     const data = await response.json();
-    if (data.success) {
-      // Refresh notifications to update the display
+    if (data.success && !goes) {
+      // Staying put: repaint so the row stops looking unread.
       refreshNotifications();
     }
   } catch (error) {
     console.error('Error marking notification as read:', error);
   }
+
+  // Marked first, then away -- so the badge is right when the next page loads.
+  if (goes) { window.location.href = goes; }
 }
 
 // Function to mark all notifications as read
@@ -2959,10 +3066,8 @@ function initQuickAddFAB() {
       return;
     }
     
-    if (!emailAddress) {
-      Swal.fire('Error!', 'Please enter the email address.', 'error');
-      return;
-    }
+    // A supplier may have no email -- reached on a phone number and nothing
+    // else. Clients still need one, which is why only this copy went.
     
     // Disable button and show loading
     btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>Saving...');

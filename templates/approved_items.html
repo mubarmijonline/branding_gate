@@ -1677,7 +1677,7 @@ $(document).ready(function() {
                     }, 0);
                     return $('<tr class="table-primary"/>')
                         .append('<td colspan="7"><strong><i class="fas fa-file-alt mr-2"></i>Request #' + group + '</strong> (' + rows.count() + ' items)</td>')
-                        .append('<td><strong>EGP ' + totalCost.toFixed(2) + '</strong></td>')
+                        .append('<td><strong>EGP ' + bgNumber(totalCost, 2) + '</strong></td>')
                         .append('<td colspan="2"></td>');
                 }
             }

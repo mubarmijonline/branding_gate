@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, url_for, redirect, flash, session, app,jsonify,make_response,send_file,send_from_directory,abort, current_app
+from flask import Flask, render_template, request, url_for, redirect, flash, session, app,jsonify,make_response,send_file,send_from_directory,abort, current_app, g, has_request_context
 from functools import wraps
 #from dbconnection import connection
 import MySQLdb
@@ -57,6 +57,16 @@ from reportlab.pdfgen import canvas
 from io import BytesIO
 
 def connection():
+    """
+    A database connection, closed when the request ends whatever happens.
+
+    Handlers close their own on the way out, but an error path that returns a
+    500 without closing leaks one -- and 228 routes had exactly that shape. A
+    few hundred errors and MySQL's connection limit is reached, at which point
+    every page on the site hangs waiting for a connection that is never coming
+    back. So each connection is remembered against the request and closed with
+    it; a handler that closes its own simply finds nothing left to do.
+    """
     conn = MySQLdb.connect(
         host="localhost",
         user="ps",
@@ -68,7 +78,12 @@ def connection():
         init_command='SET NAMES UTF8',
     )
     cur = conn.cursor(MySQLdb.cursors.DictCursor)
+    if has_request_context():
+        if not hasattr(g, '_open_connections'):
+            g._open_connections = []
+        g._open_connections.append(conn)
     return conn, cur
+
 
 def initialize_default_templates():
     """
@@ -840,6 +855,205 @@ def get_user_roles(user_id):
 # RBAC: database and request-scoped wrappers around the pure policy in rbac.py
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Who did it
+#
+# Every table carries a "created by" of some kind, and over the years the
+# routes writing them disagreed about what to put there: some wrote
+# session['username'], which on this system is a mobile number; some wrote
+# session['name']; a few wrote a user id; `user.added_by` holds login names
+# like `a.diab`. So one screen shows "Sarah Gaber" and the next shows
+# "01017780012" for the same person, and a mobile number is not a name anybody
+# reads.
+#
+# Rather than migrate five kinds of history into one, the value is resolved on
+# the way out. Whatever a column holds -- id, username, mobile or name -- it
+# maps back to the person, and every list can then show the name while keeping
+# the id and the mobile beside it.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# A costed item is finished
+#
+# Once operations have costed an item -- or pricing has priced it, or the
+# client has approved it -- its name, quantity and dimensions are what those
+# numbers were worked out from. Changing them afterwards would leave a cost
+# that no longer belongs to anything.
+#
+# The rule was already being enforced, but silently: an edit to a request
+# holding one costed item dropped the edits to every other item on it and
+# returned "updated successfully". So the change is refused where it has to be,
+# the rest of the edit is applied, and the caller is told exactly which items
+# were locked and why.
+# ---------------------------------------------------------------------------
+
+# What the cost was worked out from. Changing any of these invalidates it.
+COSTED_ITEM_FIELDS = ('name', 'qty', 'unit', 'sell_type', 'rental_days',
+                      'dimension_calc', 'width', 'height', 'depth')
+
+
+def item_lock_reason(row):
+    """
+    Why this item cannot be edited any more, or None if it still can.
+
+    Read in the order the work happens, so the reason names the furthest the
+    item has got rather than the first test that matched.
+    """
+    if row.get('sell_per_item') not in (None, '') and float(row.get('sell_per_item') or 0) > 0:
+        return 'priced'
+    if row.get('cost_per_item') not in (None, '') and float(row.get('cost_per_item') or 0) > 0:
+        return 'costed'
+    if row.get('approval_status') in ('approved', 'pending_negotiation'):
+        return 'with the client'
+    return None
+
+
+def locked_items_for(cur, request_id):
+    """Every item on this request that is past editing, by name."""
+    cur.execute("""
+        SELECT id, name, request_type, qty, unit, attributes, sell_type, rental_days,
+               dimension_calc, cost_per_item, sell_per_item, approval_status
+        FROM sales_request_items
+        WHERE request_id = %s
+    """, (request_id,))
+    locked = {}
+    for row in cur.fetchall():
+        reason = item_lock_reason(row)
+        if reason:
+            row['lock_reason'] = reason
+            locked[(row['name'] or '').strip()] = row
+    return locked
+
+
+def submitted_items(data):
+    """
+    The items in an edit payload, whichever shape it arrived in.
+
+    Template instances are the current form; `items` is the older one. Both are
+    still posted by different pages, so both are read here rather than in each
+    caller.
+    """
+    out = []
+    for instance in (data.get('template_instances') or []):
+        for item in (instance.get('items') or []):
+            out.append(item)
+    if not out:
+        raw = data.get('items') or []
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                raw = []
+        out.extend(raw or [])
+    return out
+
+
+def _as_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def locked_item_changes(locked_row, submitted):
+    """Which of the cost-bearing fields this payload would change."""
+    attributes = {}
+    if locked_row.get('attributes'):
+        try:
+            attributes = json.loads(locked_row['attributes']) \
+                if isinstance(locked_row['attributes'], str) else locked_row['attributes']
+        except ValueError:
+            attributes = {}
+    current = {
+        'name': (locked_row.get('name') or '').strip(),
+        'qty': _as_number(locked_row.get('qty')),
+        'unit': locked_row.get('unit') or '',
+        'sell_type': locked_row.get('sell_type') or '',
+        'rental_days': _as_number(locked_row.get('rental_days')),
+        'dimension_calc': locked_row.get('dimension_calc') or '',
+        'width': _as_number((attributes or {}).get('width')),
+        'height': _as_number((attributes or {}).get('height')),
+        'depth': _as_number((attributes or {}).get('depth')),
+    }
+    incoming = {
+        'name': (submitted.get('name') or submitted.get('item_name') or '').strip(),
+        'qty': _as_number(submitted.get('quantity', submitted.get('qty'))),
+        'unit': submitted.get('unit') or '',
+        'sell_type': submitted.get('sell_type') or '',
+        'rental_days': _as_number(submitted.get('rental_days')),
+        'dimension_calc': submitted.get('dimension_calc') or '',
+        'width': _as_number(submitted.get('width')),
+        'height': _as_number(submitted.get('height')),
+        'depth': _as_number(submitted.get('depth')),
+    }
+    changed = []
+    for field in COSTED_ITEM_FIELDS:
+        was, now = current.get(field), incoming.get(field)
+        # A field the payload does not carry is not a change: some forms post a
+        # subset, and silence is not an instruction to clear it.
+        if now in (None, '') and was not in (None, ''):
+            continue
+        if was != now:
+            changed.append(field)
+    return changed
+
+
+def people_index(cur):
+    """
+    Everyone, indexed by every handle a "created by" column might hold.
+
+    One query per request that needs it. The staff list is small; this is
+    cheaper than a join per column on tables that store a name as text.
+    """
+    cur.execute("SELECT id, name, username, mobile FROM user")
+    index = {}
+    for row in cur.fetchall():
+        person = {'user_id': row['id'], 'name': row['name'],
+                  'username': row['username'], 'mobile': row['mobile']}
+        for handle in (row['id'], str(row['id']), row['username'],
+                       row['mobile'], row['name']):
+            if handle not in (None, ''):
+                # First writer wins: two people cannot share a username or a
+                # mobile, and if a name collides the id form still resolves.
+                index.setdefault(handle, person)
+    return index
+
+
+def person_of(index, raw):
+    """
+    The person behind one stored value, or a best effort at one.
+
+    Returns the same shape whether it resolved or not, so a caller never has to
+    branch: an unresolved value keeps its text as the name, which is what the
+    page used to show anyway.
+    """
+    if raw in (None, ''):
+        return {'user_id': None, 'name': None, 'username': None, 'mobile': None}
+    person = index.get(raw)
+    if person is None and not isinstance(raw, str):
+        person = index.get(str(raw))
+    if person is None and isinstance(raw, str):
+        person = index.get(raw.strip())
+    if person is None:
+        return {'user_id': None, 'name': str(raw), 'username': None, 'mobile': None}
+    return person
+
+
+def stamp_person(row, column, index, prefix=None):
+    """
+    Add `<prefix>_name`, `<prefix>_user_id` and `<prefix>_mobile` to a row.
+
+    The original column is left alone: something downstream may still be
+    matching on it, and this is about what gets shown, not what gets stored.
+    """
+    prefix = prefix or column
+    person = person_of(index, row.get(column))
+    row[prefix + '_name'] = person['name']
+    row[prefix + '_user_id'] = person['user_id']
+    row[prefix + '_mobile'] = person['mobile']
+    return row
+
+
 def load_permissions(user_id):
     """
     Return (permissions, role_code) for a user, where permissions maps a
@@ -871,6 +1085,30 @@ def load_permissions(user_id):
         perms = rbac.apply_pricing_flag(perms)
 
     return perms, role_code
+
+
+def refresh_session_permissions(user_id=None):
+    """Reload RBAC grants for the signed-in user into the Flask session."""
+    user_id = user_id or session.get('user_id')
+    if not user_id:
+        return {}
+    fresh_perms, role_code = load_permissions(user_id)
+    session['perms'] = fresh_perms
+    session['role_code'] = role_code
+    session['roles'] = [role_code] if role_code else []
+    session['perms_loaded_at'] = datetime.now().isoformat()
+    return fresh_perms
+
+
+def session_permissions_are_stale(max_age_seconds=60):
+    loaded_at = session.get('perms_loaded_at')
+    if not loaded_at:
+        return True
+    try:
+        loaded_at = datetime.fromisoformat(loaded_at)
+    except (TypeError, ValueError):
+        return False
+    return datetime.now() - loaded_at > timedelta(seconds=max_age_seconds)
 
 
 def has(code):
@@ -956,6 +1194,36 @@ def scope_clause(code, column):
     return " AND %s IN (%s)" % (column, placeholders), list(ids)
 
 
+def claim_sales_request(cur, request_id, owner_username=None):
+    """
+    Stamp the owner on a newly created sales request.
+
+    Every list of requests is scoped on `sr.owner_user_id`. A request written
+    without one is invisible to everybody whose scope is not 'all' -- which is
+    how a request raised by Sales vanished from Sales the moment it was saved.
+    The inserts only ever wrote `created_by`, a username, which no scope reads.
+
+    Takes the creator's username so the admin-approval path can name whoever
+    asked rather than whoever approved. Writes inside the caller's transaction
+    and does not commit.
+    """
+    owner_id = None
+    if owner_username:
+        # username or display name: the approvals table holds whichever the
+        # creating route wrote, the same way notify_username() reads it.
+        cur.execute("SELECT id FROM user WHERE username = %s OR name = %s LIMIT 1",
+                    (owner_username, owner_username))
+        row = cur.fetchone()
+        owner_id = row['id'] if row else None
+    if not owner_id:
+        owner_id = session.get('user_id')
+    if not owner_id:
+        return None
+    cur.execute("""UPDATE sales_request SET owner_user_id = %s
+                   WHERE id = %s AND owner_user_id IS NULL""", (owner_id, request_id))
+    return owner_id
+
+
 def assert_scope(code, owner_user_id):
     """Abort 403 unless the caller's scope covers this record's owner."""
     ids = visible_user_ids(code)
@@ -980,6 +1248,9 @@ def perm(*codes):
                     return jsonify(error='Not authenticated'), 401
                 return redirect(url_for('login'))
             if any(has(code) for code in codes):
+                return f(*args, **kwargs)
+            fresh_perms = refresh_session_permissions()
+            if any(rbac.resolve(fresh_perms, code) is not None for code in codes):
                 return f(*args, **kwargs)
             if request.path.startswith('/api/'):
                 return jsonify(error='Forbidden'), 403
@@ -1040,13 +1311,19 @@ def notifications_disabled():
     return bool(os.environ.get('BG_NO_NOTIFICATIONS')) or 'unittest' in sys.modules
 
 
-def notify_users(user_ids, title, content):
+def notify_users(user_ids, title, content, link=None):
     """
     Send one notification to each of these people.
 
     The one place a notification is written. A notification is a hint: it must
     never take down the work that earned it, so every failure here is swallowed
     and counted as nothing sent.
+
+    `link` is where the work is. A notification that says something needs doing
+    and then leaves the reader to find the page is half a notification, so the
+    destination travels with it. Senders that do not pass one still work: the
+    tray falls back to guessing from the words, which is all it could ever do
+    for the notifications already in the database.
     """
     if notifications_disabled():
         return 0
@@ -1062,6 +1339,7 @@ def notify_users(user_ids, title, content):
             'uid': user_id,
             'title': title,
             'content': content,
+            'link': link or None,
             'added_by': added_by,
             'added_uid': int(added_uid),
             'added_date': now,
@@ -1076,9 +1354,9 @@ def notify_users(user_ids, title, content):
         return 0
 
 
-def notify_user(user_id, title, content):
+def notify_user(user_id, title, content, link=None):
     """Tell one person. Named so a caller cannot mistake it for a role."""
-    return notify_users([user_id], title, content)
+    return notify_users([user_id], title, content, link=link)
 
 
 def notify_username(username, title, content):
@@ -1101,12 +1379,12 @@ def notify_username(username, title, content):
     return notify_user(row['id'], title, content) if row else 0
 
 
-def send_notification_to_role(role_name, title, content):
+def send_notification_to_role(role_name, title, content, link=None):
     """
     Send notification to all users with the specified role.
     """
     try:
-        return notify_users(get_users_by_role(role_name), title, content)
+        return notify_users(get_users_by_role(role_name), title, content, link=link)
     except Exception as e:
         print(f"Error sending notifications to role {role_name}: {e}")
         return 0
@@ -1348,6 +1626,62 @@ def log_item_change(request_id, item_id, item_name, request_type, action_type, a
         # Don't fail the main operation if logging fails
 
 PASSWORD_HASH_PREFIXES = ('scrypt:', 'pbkdf2:', 'argon2')
+EGYPT_MOBILE_RE = re.compile(r'^01[0125]\d{8}$')
+CONTACT_PHONE_FIELDS = frozenset((
+    'mobile', 'mobile_number', 'secondary_mobile_number', 'primary_phone',
+    'secondary_phone', 'whatsapp_number', 'phone_number', 'contact_phone',
+))
+CONTACT_EMAIL_FIELDS = frozenset(('email', 'email_address', 'contact_email'))
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def normalize_egypt_mobile(value, label='Mobile', required=True):
+    text = '' if value is None else str(value).strip()
+    text = re.sub(r'[\s\-\(\)\.]', '', text)
+    if text.startswith('+'):
+        text = text[1:]
+    if text.startswith('0020'):
+        text = '0' + text[4:]
+    elif text.startswith('20') and len(text) == 12:
+        text = '0' + text[2:]
+    elif text.startswith('1') and len(text) == 10:
+        text = '0' + text
+    if not text:
+        if required:
+            raise ValueError('%s is required' % label)
+        return ''
+    if not EGYPT_MOBILE_RE.match(text):
+        raise ValueError('%s must be a valid Egyptian mobile number' % label)
+    return text
+
+
+def normalize_email(value, label='Email', required=True):
+    text = '' if value is None else str(value).strip().lower()
+    if not text:
+        if required:
+            raise ValueError('%s is required' % label)
+        return ''
+    if not EMAIL_RE.match(text):
+        raise ValueError('%s must be a valid email address' % label)
+    return text
+
+
+def _normalize_contact_fields(data, phone_fields=(), email_fields=(),
+                              required_phone_fields=(), required_email_fields=()):
+    normalized = dict(data or {})
+    required_phone_fields = set(required_phone_fields)
+    required_email_fields = set(required_email_fields)
+    for field in set(phone_fields) | required_phone_fields:
+        if field in normalized or field in required_phone_fields:
+            normalized[field] = normalize_egypt_mobile(
+                normalized.get(field), field.replace('_', ' ').title(),
+                field in required_phone_fields)
+    for field in set(email_fields) | required_email_fields:
+        if field in normalized or field in required_email_fields:
+            normalized[field] = normalize_email(
+                normalized.get(field), field.replace('_', ' ').title(),
+                field in required_email_fields)
+    return normalized
 
 
 def verify_password(user, password, conn, cur):
@@ -1375,6 +1709,13 @@ def login():
     if request.method == "POST" and "add_login" in request.args:
         mobile     = request.form.get("mobile")      # we treat username as phone
         password  = request.form.get("password")
+        try:
+            mobile = normalize_egypt_mobile(mobile)
+        except ValueError:
+            return jsonify(
+                state   = "error",
+                message = "Invalid username or password"
+            )
         # — 1) Verify your own MySQL user/password —
         # mobile is UNIQUE on user, so this returns at most one row.
         conn, cur = connection()
@@ -1411,8 +1752,9 @@ def login():
         session['roles'] = get_user_roles(user['id'])
         # RBAC: permission set and role code, refreshed by /api/refresh-roles.
         session['perms'], session['role_code'] = load_permissions(user['id'])
+        session['perms_loaded_at'] = datetime.now().isoformat()
         # — 2) Ensure a Firebase Auth user exists for this phone number —
-        fb_mobile = "+20" + str(mobile).lstrip('0')  # Ensure all leading zeros are stripped
+        fb_mobile = "+20" + user['mobile'].lstrip('0')  # Ensure all leading zeros are stripped
         # Validate Egyptian phone number (E.164: +20XXXXXXXXXX)
         def is_valid_egyptian_phone(phone):
             return re.match(r'^\+201[0-9]{9}$', phone) is not None
@@ -1591,17 +1933,11 @@ def refresh_user_roles():
         
         user_id = session['user_id']
         
-        # Get fresh roles from database
-        fresh_roles = get_user_roles(user_id)
-
-        # Update session with fresh roles
-        session['roles'] = fresh_roles
-
         # RBAC: refresh the permission set too, so a role change takes effect
         # on the next poll rather than at the next login.
-        fresh_perms, role_code = load_permissions(user_id)
-        session['perms'] = fresh_perms
-        session['role_code'] = role_code
+        fresh_perms = refresh_session_permissions(user_id)
+        role_code = session.get('role_code')
+        fresh_roles = session.get('roles') or []
 
         return jsonify({
             'success': True,
@@ -1902,7 +2238,15 @@ def add_user():
         return jsonify(error="Not authenticated"), 401
     
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                required_phone_fields=('mobile',),
+                required_email_fields=('email',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         
         # Validate required fields
         required_fields = ['name', 'mobile', 'email', 'password', 'username', 'title']
@@ -2089,7 +2433,15 @@ def edit_user(user_id):
         return jsonify(error="Not authenticated"), 401
 
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                required_phone_fields=('mobile',),
+                required_email_fields=('email',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
         # Validate required fields
         required_fields = ['name', 'mobile', 'email', 'username', 'title']
@@ -3010,6 +3362,46 @@ PUBLIC_ENDPOINTS = {
 }
 
 
+@app.teardown_request
+def close_open_connections(exception=None):
+    """
+    Close any database connection the handler left open, however it left.
+
+    Handlers close their own on the way out, but 228 routes had an error path
+    that returned a 500 without closing -- and a few hundred of those exhausts
+    MySQL's connection limit, at which point every page hangs waiting for a
+    connection that is never coming back.
+    """
+    for conn in getattr(g, '_open_connections', ()):
+        try:
+            conn.close()
+        except Exception:
+            # Already closed by the handler, which is the normal case.
+            pass
+    if hasattr(g, '_open_connections'):
+        g._open_connections = []
+
+
+@app.after_request
+def no_stale_api_reads(response):
+    """
+    A JSON read is never served from the browser cache.
+
+    Every list on the site is a GET that some page reloads after a write --
+    delete an inventory item, then reload the table. With no cache headers the
+    browser is free to answer that reload out of its own cache, so the row that
+    was just deleted comes back, and the next reload shows it gone: the page
+    looked like it was flickering between two versions of the truth.
+
+    Only /api/ and only GET: pages and static files keep their own caching.
+    """
+    if request.method == 'GET' and request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+
 @app.before_request
 def require_login():
     """
@@ -3039,6 +3431,9 @@ def require_login():
                 return jsonify({'error': 'Not authenticated'}), 401
             # For normal requests, redirect to login
             return redirect(url_for('login'))
+
+    if session_permissions_are_stale():
+        refresh_session_permissions()
 
     # Default deny. A route that carries no permission gate and is not on the
     # public list is refused outright, so a handler added without a decorator
@@ -3896,12 +4291,12 @@ def approved_items_pipeline():
 
 
 # ---------------------------------------------------------------------------
-# Asking for a client or a supplier
+# Asking for a client, company or supplier
 #
-# Sales and Account Management meet clients; Operations and Purchasing meet
-# suppliers. Neither creates one outright: they propose the record, their own
-# department head passes it, and an admin makes it real. Two people look at
-# anything that enters the books, and whoever has to act next is told.
+# Sales and Account Management meet clients and companies; Operations and
+# Purchasing meet suppliers. Neither creates one outright: they propose the
+# record, their own department head passes it, and whoever needs to know is
+# told.
 # ---------------------------------------------------------------------------
 
 # What may be written into each table from a payload. A closed list, so a
@@ -3911,6 +4306,10 @@ PARTY_FIELDS = {
     'client': ('client_name', 'mobile_number', 'secondary_mobile_number',
                'email_address', 'job_title', 'preferred_contact_channel',
                'additional_notes', 'parent_company_id'),
+    'company': ('company_name', 'industry_sector', 'address', 'tax_number',
+                'vat_number', 'phone_number', 'email_address',
+                'website_social_media', 'primary_contact_person',
+                'additional_notes'),
     'supplier': ('supplier_name', 'supplier_type', 'other_supplier_type',
                  'company_name', 'business_registration_number', 'address',
                  'contact_person_name', 'primary_phone', 'secondary_phone',
@@ -3919,18 +4318,21 @@ PARTY_FIELDS = {
 }
 PARTY_REQUIRED = {
     'client': ('client_name', 'mobile_number', 'email_address'),
-    'supplier': ('supplier_name', 'email_address'),
+    'company': ('company_name', 'industry_sector', 'address',
+                'phone_number', 'email_address', 'primary_contact_person'),
+    # A supplier is often reached on a phone number and nothing else, so the
+    # email is optional: requiring it only ever produced placeholder addresses.
+    'supplier': ('supplier_name',),
 }
 PARTY_CREATE_PERMISSION = {
     'client': 'client_request.create',
+    'company': 'company_request.create',
     'supplier': 'supplier_request.create',
 }
-
-
 def _party_request_code(cur, kind):
     """A free code. The column is unique, so it is looked up, not hoped for."""
     import random
-    prefix = 'CLR' if kind == 'client' else 'SUP'
+    prefix = {'client': 'CLR', 'company': 'COM', 'supplier': 'SUP'}[kind]
     for _ in range(50):
         code = '%s-%d' % (prefix, random.randint(10000, 99999))
         cur.execute("SELECT id FROM party_request WHERE request_code = %s", (code,))
@@ -3954,6 +4356,112 @@ def _party_heads(cur, requester_id):
     return [row['id'] for row in cur.fetchall()]
 
 
+def sales_request_audience(cur, request_id, exclude=None):
+    """
+    Everyone with a part in this request, for telling them a comment landed.
+
+    A comment on a request is addressed to whoever is working it, not only to
+    whoever was named with an @. That is: the person who raised it, anybody it
+    has been assigned to for costing and whoever assigned them, and anybody who
+    has already said something on the thread -- the people who would want to
+    know, and nobody else. The author is left out; they know.
+    """
+    people = set()
+
+    cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (request_id,))
+    row = cur.fetchone()
+    if row and row.get('owner_user_id'):
+        people.add(row['owner_user_id'])
+
+    cur.execute("""
+        SELECT DISTINCT assignee_id, assigned_by FROM costing_assignment
+        WHERE request_id = %s AND status <> 'withdrawn'
+    """, (request_id,))
+    for row in cur.fetchall():
+        people.add(row['assignee_id'])
+        people.add(row['assigned_by'])
+
+    cur.execute("""
+        SELECT DISTINCT user_id FROM sales_request_comments
+        WHERE request_id = %s AND is_deleted = 0
+    """, (request_id,))
+    for row in cur.fetchall():
+        people.add(row['user_id'])
+
+    people.discard(None)
+    for user_id in (exclude or ()):
+        people.discard(user_id)
+    return sorted(people)
+
+
+# The types offered before anybody had typed one of their own.
+SUPPLIER_TYPE_SEED = ('Raw Materials', 'Equipment', 'Services',
+                      'Technology', 'Logistics', 'Production')
+
+
+def resolve_supplier_type(data):
+    """
+    What to store as the supplier's type.
+
+    Picking "Other" and typing "Production" used to store the word **Other**,
+    with "Production" parked in a second column that no list, filter or report
+    reads. So every such supplier showed as "Other" and the real answer was
+    invisible. The typed value is the type; there is nothing "other" about it
+    once it has a name.
+
+    Returns (supplier_type, other_supplier_type).
+    """
+    chosen = (data.get('supplier_type') or '').strip()
+    typed = (data.get('other_supplier_type') or '').strip()
+    if chosen.lower() == 'other' and typed:
+        # Kept in the second column as a note of how it arrived; the type
+        # itself is the word the user chose for it.
+        return typed, typed
+    return chosen, typed
+
+
+def supplier_types_in_use(cur):
+    """
+    Every type a supplier may be given: the built-in list plus every one
+    anybody has typed. A type used once is offered from then on, which is what
+    "save it for future use" means here -- no table to administer, and nothing
+    to keep in step with the data.
+    """
+    cur.execute("""
+        SELECT DISTINCT supplier_type AS name FROM supplier
+        WHERE supplier_type IS NOT NULL AND TRIM(supplier_type) <> ''
+        UNION
+        SELECT DISTINCT other_supplier_type FROM supplier
+        WHERE other_supplier_type IS NOT NULL AND TRIM(other_supplier_type) <> ''
+    """)
+    found = {row['name'].strip() for row in cur.fetchall() if row['name']}
+    found.discard('Other')
+    return sorted(set(SUPPLIER_TYPE_SEED) | found, key=str.lower)
+
+
+@app.route('/api/suppliers/types', methods=['GET'])
+@perm('supplier.view')
+def supplier_types():
+    """The list the supplier form's dropdown is built from."""
+    try:
+        conn, cur = connection()
+        types = supplier_types_in_use(cur)
+        cur.close()
+        conn.close()
+        return jsonify(success=True, types=types)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: supplier types failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+def _party_page(kind):
+    """The page a request of this kind is raised and decided on."""
+    return {'client': '/client', 'company': '/company',
+            'supplier': '/supplier'}.get(kind, '/client')
+
+
 def _may_pass_party_request(cur, actor_id, requester_id):
     """A head passes their own department's requests; admin passes anything."""
     if rbac.resolve(session.get('perms') or {}, 'party_request.approve_head') == 'all':
@@ -3970,22 +4478,44 @@ def _party_payload(row):
     payload = row['payload']
     if isinstance(payload, (bytes, bytearray)):
         payload = payload.decode('utf-8')
-    return json.loads(payload) if isinstance(payload, str) else payload
+    payload = json.loads(payload) if isinstance(payload, str) else payload
+    if isinstance(payload, dict) and row.get('kind') in PARTY_FIELDS:
+        payload = dict(payload)
+        for field in PARTY_FIELDS[row['kind']]:
+            if field in payload:
+                payload[field] = _party_field_value(field, payload[field])
+    return payload
+
+
+def _party_field_value(field, value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if field in CONTACT_PHONE_FIELDS:
+            value = normalize_egypt_mobile(value, field.replace('_', ' ').title(), required=False)
+        elif field in CONTACT_EMAIL_FIELDS:
+            value = normalize_email(value, field.replace('_', ' ').title(), required=False)
+        else:
+            value = value.strip()
+        return value or None
+    return value
 
 
 @app.route('/api/party-requests', methods=['POST'])
-@perm('client_request.create', 'supplier_request.create')
+@perm('client_request.create', 'company_request.create', 'supplier_request.create')
 def create_party_request():
-    """Propose a client or a supplier. It is a request, not a record."""
+    """Propose a client, company or supplier. It is a request, not a record."""
     try:
         data = request.get_json(silent=True) or {}
         kind = (data.get('kind') or '').strip().lower()
         if kind not in PARTY_FIELDS:
-            return jsonify(success=False, error='Say whether this is a client or a supplier'), 400
+            return jsonify(success=False,
+                           error='Say whether this is a client, company or supplier'), 400
         if not has(PARTY_CREATE_PERMISSION[kind]):
             return jsonify(success=False, error='Your team does not raise %s requests' % kind), 403
 
-        payload = {field: (data.get(field) or None) for field in PARTY_FIELDS[kind]}
+        payload = {field: _party_field_value(field, data.get(field))
+                   for field in PARTY_FIELDS[kind]}
         missing = [f for f in PARTY_REQUIRED[kind] if not payload.get(f)]
         if missing:
             return jsonify(success=False,
@@ -4004,22 +4534,26 @@ def create_party_request():
         cur.close()
         conn.close()
 
-        name = payload.get('client_name') or payload.get('supplier_name')
+        name = (payload.get('client_name') or payload.get('company_name')
+                or payload.get('supplier_name'))
         notify_users(heads or users_holding('party_request.approve_admin', include_root=True),
                      'New %s request: %s' % (kind, name),
                      '%s asks to add the %s "%s" (%s). It needs your approval.'
-                     % (session.get('name') or 'A colleague', kind, name, code))
+                     % (session.get('name') or 'A colleague', kind, name, code),
+                     link=_party_page(kind))
         return jsonify(success=True, request_code=code,
                        message='Sent to your department head for approval')
     except HTTPException:
         raise
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         print("DEBUG: party request failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
 @app.route('/api/party-requests', methods=['GET'])
-@perm('client_request.create', 'supplier_request.create',
+@perm('client_request.create', 'company_request.create', 'supplier_request.create',
       'party_request.approve_head', 'party_request.approve_admin')
 def list_party_requests():
     """
@@ -4088,7 +4622,7 @@ def list_party_requests():
 
 def _create_party_record(cur, req, payload):
     """
-    Write the client or supplier the request asked for.
+    Write the client, company or supplier the request asked for.
 
     The one place a row appears from a request, so anything in the books has a
     request behind it naming who asked and who agreed. Returns the new id.
@@ -4140,17 +4674,20 @@ def head_approve_party_request(request_id):
         """, (me, notes or None, record_id, request_id))
         conn.commit(); cur.close(); conn.close()
 
-        name = payload.get('client_name') or payload.get('supplier_name')
+        name = (payload.get('client_name') or payload.get('company_name')
+                or payload.get('supplier_name'))
         head_name = session.get('name') or 'The head'
         # The admins are told, not asked. They hold no step in this flow any
         # more; this is so nothing enters the books without them knowing.
         notify_users(users_holding('party_request.approve_admin', include_root=True),
                      'New %s added: %s' % (req['kind'], name),
                      '%s approved %s, asked for by %s. The %s is on the system.'
-                     % (head_name, req['request_code'], req['requester_name'], req['kind']))
+                     % (head_name, req['request_code'], req['requester_name'], req['kind']),
+                     link=_party_page(req['kind']))
         notify_user(req['requested_by'], '%s added: %s' % (req['kind'].title(), name),
                     '%s approved your request %s. The %s is on the system now.'
-                    % (head_name, req['request_code'], req['kind']))
+                    % (head_name, req['request_code'], req['kind']),
+                    link=_party_page(req['kind']))
         return jsonify(success=True, record_id=record_id,
                        message='%s added' % req['kind'].title())
     except HTTPException:
@@ -4196,10 +4733,12 @@ def admin_approve_party_request(request_id):
         """, (me, notes or None, record_id, request_id))
         conn.commit(); cur.close(); conn.close()
 
-        name = payload.get('client_name') or payload.get('supplier_name')
+        name = (payload.get('client_name') or payload.get('company_name')
+                or payload.get('supplier_name'))
         notify_user(req['requested_by'], '%s added: %s' % (kind.title(), name),
                     '%s approved your request %s. The %s is on the system now.'
-                    % (session.get('name') or 'An admin', req['request_code'], kind))
+                    % (session.get('name') or 'An admin', req['request_code'], kind),
+                    link=_party_page(kind))
         return jsonify(success=True, record_id=record_id, message='%s added' % kind.title())
     except HTTPException:
         raise
@@ -4241,7 +4780,8 @@ def reject_party_request(request_id):
         conn.commit(); cur.close(); conn.close()
         notify_user(req['requested_by'], '%s request declined' % req['kind'].title(),
                     'Your request %s was declined by %s. Reason: %s'
-                    % (req['request_code'], session.get('name') or 'a reviewer', reason))
+                    % (req['request_code'], session.get('name') or 'a reviewer', reason),
+                    link=_party_page(req['kind']))
         return jsonify(success=True, message='Declined')
     except HTTPException:
         raise
@@ -4251,7 +4791,7 @@ def reject_party_request(request_id):
 
 
 @app.route('/api/party-requests/<int:request_id>/cancel', methods=['POST'])
-@perm('client_request.create', 'supplier_request.create')
+@perm('client_request.create', 'company_request.create', 'supplier_request.create')
 def cancel_party_request(request_id):
     """Withdraw your own, while nobody has decided it."""
     try:
@@ -4875,6 +5415,15 @@ def add_company():
         except Exception as link_err:
             print(f"DEBUG: Failed to parse document_links: {link_err}")
 
+        try:
+            data = _normalize_contact_fields(
+                data,
+                required_phone_fields=('phone_number',),
+                required_email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
         # Validate required fields
         required_fields = ['company_name', 'industry_sector', 'address', 
                           'phone_number', 'email_address', 'primary_contact_person']
@@ -5044,6 +5593,15 @@ def edit_company(company_id):
                         document_links.append({'label': label, 'url': url})
         except Exception as link_err:
             print(f"DEBUG: Failed to parse document_links (edit): {link_err}")
+
+        try:
+            data = _normalize_contact_fields(
+                data,
+                required_phone_fields=('phone_number',),
+                required_email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
         # Validate required fields
         required_fields = ['company_name', 'industry_sector', 'address', 
@@ -5493,7 +6051,16 @@ def add_client():
         return jsonify(error="Not authenticated"), 401
     
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('secondary_mobile_number',),
+                required_phone_fields=('mobile_number',),
+                required_email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         
         # Validate required fields
         required_fields = ['client_name', 'mobile_number', 'email_address']
@@ -5579,7 +6146,16 @@ def edit_client(client_id):
         return jsonify(error="Not authenticated"), 401
 
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('secondary_mobile_number',),
+                required_phone_fields=('mobile_number',),
+                required_email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
         # Validate required fields
         required_fields = ['client_name', 'mobile_number', 'email_address']
@@ -5866,11 +6442,22 @@ def add_supplier():
         return jsonify(error="Not authenticated"), 401
     
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            # The email is still checked for shape when one is given; it is
+            # simply no longer demanded.
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('secondary_phone', 'whatsapp_number'),
+                required_phone_fields=('primary_phone',),
+                email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         
         # Validate required fields
         required_fields = ['supplier_name', 'supplier_type', 'status', 'date_added', 
-                          'contact_person_name', 'primary_phone', 'email_address', 'preferred_contact_method']
+                          'contact_person_name', 'primary_phone', 'preferred_contact_method']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({
@@ -5888,14 +6475,20 @@ def add_supplier():
                 'error': 'Primary phone number already exists'
             }), 400
         
-        # Check if email already exists
-        cur.execute("SELECT id FROM supplier WHERE email_address = %s", (data['email_address'],))
-        if cur.fetchone():
-            return jsonify({
-                'success': False,
-                'error': 'Email address already exists'
-            }), 400
+        # Check if email already exists. Only when one was given: two suppliers
+        # with no email are not duplicates of each other.
+        supplier_email = (data.get('email_address') or '').strip() or None
+        if supplier_email:
+            cur.execute("SELECT id FROM supplier WHERE email_address = %s", (supplier_email,))
+            if cur.fetchone():
+                return jsonify({
+                    'success': False,
+                    'error': 'Email address already exists'
+                }), 400
         
+        # "Other" plus a typed word is that word, not the word "Other".
+        supplier_type, other_supplier_type = resolve_supplier_type(data)
+
         # Insert new supplier
         cur.execute("""
             INSERT INTO supplier (supplier_name, supplier_type, other_supplier_type, company_name, 
@@ -5906,8 +6499,8 @@ def add_supplier():
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """, (
             data['supplier_name'],
-            data['supplier_type'],
-            data.get('other_supplier_type', ''),
+            supplier_type,
+            other_supplier_type,
             data.get('company_name', ''),
             data.get('business_registration_number', ''),
             data['status'],
@@ -5917,7 +6510,7 @@ def add_supplier():
             data.get('job_title', ''),
             data['primary_phone'],
             data.get('secondary_phone', ''),
-            data['email_address'],
+            supplier_email,
             data.get('whatsapp_number', ''),
             data['preferred_contact_method'],
             data.get('website', ''),
@@ -5954,11 +6547,21 @@ def edit_supplier(supplier_id):
         return jsonify(error="Not authenticated"), 401
 
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('secondary_phone', 'whatsapp_number'),
+                required_phone_fields=('primary_phone',),
+                # Checked for shape when given, never demanded.
+                email_fields=('email_address',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
         # Validate required fields
         required_fields = ['supplier_name', 'supplier_type', 'status', 'date_added', 
-                          'contact_person_name', 'primary_phone', 'email_address', 'preferred_contact_method']
+                          'contact_person_name', 'primary_phone', 'preferred_contact_method']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({
@@ -5991,9 +6594,12 @@ def edit_supplier(supplier_id):
                     'error': 'Primary phone number already exists'
                 }), 400
 
-        # Only check for duplicate email if it's different from current
-        if data['email_address'] != current_supplier['email_address']:
-            cur.execute("SELECT id FROM supplier WHERE email_address = %s", (data['email_address'],))
+        # Only check for a duplicate email when one was given and it changed.
+        # Clearing the field, or leaving it empty, is not a collision.
+        supplier_email = (data.get('email_address') or '').strip() or None
+        data['email_address'] = supplier_email
+        if supplier_email and supplier_email != current_supplier['email_address']:
+            cur.execute("SELECT id FROM supplier WHERE email_address = %s", (supplier_email,))
             duplicate_email = cur.fetchone()
             if duplicate_email:
                 cur.close()
@@ -6002,6 +6608,9 @@ def edit_supplier(supplier_id):
                     'success': False,
                     'error': 'Email address already exists'
                 }), 400
+
+        # "Other" plus a typed word is that word, not the word "Other".
+        supplier_type, other_supplier_type = resolve_supplier_type(data)
 
         # Update supplier details
         cur.execute("""
@@ -6014,8 +6623,8 @@ def edit_supplier(supplier_id):
             WHERE id = %s
         """, (
             data['supplier_name'],
-            data['supplier_type'],
-            data.get('other_supplier_type', ''),
+            supplier_type,
+            other_supplier_type,
             data.get('company_name', ''),
             data.get('business_registration_number', ''),
             data['status'],
@@ -6121,7 +6730,11 @@ def sales_request_details_page(request_id):
     """
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template("sales_request_details.html", request_id=request_id)
+    # Opened inside the drawer on the sales and pricing pages, the page used to
+    # bring the whole shell -- navbar and all -- with it, so the drawer looked
+    # like a second browser window. embed=1 drops the chrome.
+    return render_template("sales_request_details.html", request_id=request_id,
+                           embed=request.args.get('embed') == '1')
 
 
 @app.route('/pricing', methods=['GET'])
@@ -6196,7 +6809,16 @@ def pricing_summary():
 # Every step writes to costing_log, including the ones that undo a previous step.
 # ---------------------------------------------------------------------------
 
-def notify_negotiation(audience, title, content):
+# Where each desk does its work, so a notification can carry the page with it.
+_DESK_PAGE = {
+    'pricing': '/pricing',
+    'operation': '/operation_request',
+    'operations': '/operation_request',
+    'sales': '/sales_request',
+}
+
+
+def notify_negotiation(audience, title, content, request_id=None):
     """
     Tell the next desk a negotiation has landed on it.
 
@@ -6204,9 +6826,15 @@ def notify_negotiation(audience, title, content):
     and whoever had to act next found out by opening the right page. The three
     hand-offs that matter -- to Pricing to re-price, to Operations to re-cost,
     and back to Pricing once the new cost is in -- all come through here.
+
+    The audience already names the desk, so the destination follows from it
+    rather than being repeated at every call.
     """
+    link = _DESK_PAGE.get(str(audience).lower())
+    if link and request_id:
+        link = '%s?request=%s' % (link, request_id)
     try:
-        return send_notification_to_role(audience, title, content)
+        return send_notification_to_role(audience, title, content, link=link)
     except Exception as e:
         # A notification is a hint. It must never lose the transaction that
         # earned it.
@@ -6267,6 +6895,7 @@ def complete_recosting(cur, item_id, new_cost, old_cost, actor_name, item_name=N
         'Re-costing done: %s' % name,
         'Operations re-costed "%s" on request #%s at EGP %s. It is waiting for '
         'your new selling price.' % (name, negotiation['request_id'], new_cost),
+        request_id=negotiation['request_id'],
     )
     return negotiation['id']
 
@@ -6334,6 +6963,30 @@ def _costing_log(cur, item_id, request_id, action, actor_id,
         VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (item_id, request_id, proposal_id, actor_id, action,
           (detail or None) and str(detail)[:1000], amount))
+
+
+def _alternative_rows(rows, me=None):
+    """
+    One shape for an alternative option, wherever it is read.
+
+    Three pages show these and they must agree, so the row is built here rather
+    than three times. `mine` is what the delete button is gated on in the UI;
+    the route checks it again.
+    """
+    out = []
+    for row in rows:
+        path = row['image_path'] or ''
+        out.append({
+            'id': row['id'],
+            'image_url': path if path.startswith('/') else '/' + path,
+            'comment': row.get('alt_comment'),
+            'label': row.get('alt_label'),
+            'uploaded_by_name': row.get('uploaded_by_name'),
+            'mine': bool(me and row.get('uploaded_by') == me),
+            'added_on': (row['uploaded_at'].strftime('%d %b %Y')
+                         if row.get('uploaded_at') else None),
+        })
+    return out
 
 
 def _costing_item(cur, item_id):
@@ -6506,29 +7159,42 @@ def costing_queue():
 @app.route('/api/costing/team', methods=['GET'])
 @perm('costing.assign')
 def costing_team():
-    """Who this person may hand costing to: their own direct reports."""
+    """
+    Who this person may hand costing to: their own direct reports.
+
+    `?leaders=1` narrows that to team leaders. A whole request goes to a leader
+    and the leader splits its items among their own people, so offering members
+    in that dialog invites the Head to skip a rung and take the split away from
+    the person whose job it is.
+    """
     try:
         me = session.get('user_id')
+        leaders_only = request.args.get('leaders') == '1'
         conn, cur = connection()
+        level_clause = " AND r.level = %s" if leaders_only else ""
+        level_params = [rbac.LEVEL_TEAM_LEADER] if leaders_only else []
         if _costing_unrestricted('costing.assign'):
             # The Head may reach past their own reports, but the list stays
             # inside Operations rather than offering the whole company.
             cur.execute("""
-                SELECT u.id, u.name, r.name AS role_name
+                SELECT u.id, u.name, r.name AS role_name, r.level
                 FROM user u
                 LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
                 WHERE u.id != %s AND u.department_id = (
                     SELECT department_id FROM user WHERE id = %s)
+                  AND u.is_active = 1
+            """ + level_clause + """
                 ORDER BY r.level, u.name
-            """, (me, me))
+            """, [me, me] + level_params)
         else:
             cur.execute("""
-                SELECT u.id, u.name, r.name AS role_name
+                SELECT u.id, u.name, r.name AS role_name, r.level
                 FROM user u
                 LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
-                WHERE u.manager_id = %s
+                WHERE u.manager_id = %s AND u.is_active = 1
+            """ + level_clause + """
                 ORDER BY u.name
-            """, (me,))
+            """, [me] + level_params)
         people = list(cur.fetchall())
         cur.close()
         conn.close()
@@ -6680,6 +7346,10 @@ def costing_for_request(request_id):
                 'notes': row['notes'], 'status': row['status'],
                 'file_count': row['file_count'],
                 'decided_by_name': row['decided_by_name'],
+                # The reason was already being read out of the database and
+                # then dropped here, so a rejected author saw the word
+                # "rejected" and nothing that told them what to change.
+                'decision_note': row['decision_note'],
                 'is_mine': row['author_id'] == me,
                 'can_decide': bool(row['status'] == costing.PROPOSAL_SUBMITTED
                                    and (unrestricted or row['assigned_by'] == me)),
@@ -6761,9 +7431,18 @@ def costing_items():
 def costing_assign():
     """Put one item on one or more people's desks. Re-asking reopens the row."""
     data = request.get_json(silent=True) or request.form or {}
-    try:
-        item_id = int(data.get('item_id'))
-    except (TypeError, ValueError):
+    # One item or several: picking eleven items in the modal should be one
+    # dialog and one round trip, not eleven of each.
+    raw_items = data.get('item_ids')
+    if raw_items is None and data.get('item_id') is not None:
+        raw_items = [data.get('item_id')]
+    item_ids = []
+    for raw in (raw_items or []):
+        try:
+            item_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not item_ids:
         return jsonify(success=False, error='Pick an item'), 400
     assignee_ids = data.get('assignee_ids') or []
     if not isinstance(assignee_ids, list) or not assignee_ids:
@@ -6773,11 +7452,14 @@ def costing_assign():
     me = session.get('user_id')
     try:
         conn, cur = connection()
-        item = _costing_item(cur, item_id)
-        if not item:
-            cur.close()
-            conn.close()
-            return jsonify(success=False, error='No such item'), 404
+        items = []
+        for item_id in item_ids:
+            item = _costing_item(cur, item_id)
+            if not item:
+                cur.close()
+                conn.close()
+                return jsonify(success=False, error='No such item'), 404
+            items.append(item)
 
         reports = _direct_report_ids(cur, me)
         unrestricted = _costing_unrestricted('costing.assign')
@@ -6788,28 +7470,150 @@ def costing_assign():
             except (TypeError, ValueError):
                 continue
             costing.check_assignment(me, assignee_id, reports, unrestricted)
-            cur.execute("""
-                INSERT INTO costing_assignment (item_id, request_id, assignee_id,
-                                                assigned_by, status, note)
-                VALUES (%s, %s, %s, %s, 'open', %s)
-                ON DUPLICATE KEY UPDATE status = 'open',
-                                        assigned_by = VALUES(assigned_by),
-                                        note = VALUES(note)
-            """, (item_id, item['request_id'], assignee_id, me, note))
-            _costing_log(cur, item_id, item['request_id'], 'assigned', me,
-                         detail='assigned to user %d' % assignee_id)
+            for item in items:
+                cur.execute("""
+                    INSERT INTO costing_assignment (item_id, request_id, assignee_id,
+                                                    assigned_by, status, note)
+                    VALUES (%s, %s, %s, %s, 'open', %s)
+                    ON DUPLICATE KEY UPDATE status = 'open',
+                                            assigned_by = VALUES(assigned_by),
+                                            note = VALUES(note)
+                """, (item['id'], item['request_id'], assignee_id, me, note))
+                _costing_log(cur, item['id'], item['request_id'], 'assigned', me,
+                             detail='assigned to user %d' % assignee_id)
             assigned.append(assignee_id)
 
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify(success=True, item_id=item_id, assigned=assigned)
+        if assigned and items:
+            notify_users(
+                assigned,
+                'Costing assigned: %d item(s)' % len(items),
+                '%s on request #%d %s with you for costing.'
+                % (', '.join(i['name'] or 'an item' for i in items[:3]) +
+                   ('' if len(items) <= 3 else ' and %d more' % (len(items) - 3)),
+                   items[0]['request_id'],
+                   'is' if len(items) == 1 else 'are'),
+                link='/operation_request?request=%d' % items[0]['request_id'])
+        return jsonify(success=True, item_id=item_ids[0], item_ids=item_ids,
+                       items=len(items), assigned=assigned)
     except costing.CostingError as e:
         return jsonify(success=False, error=str(e)), 403
     except HTTPException:
         raise
     except Exception as e:
         print("DEBUG: costing assign failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/assign-request', methods=['POST'])
+@perm('costing.assign')
+def costing_assign_request():
+    """
+    Hand a whole sales request to one or more team leaders.
+
+    The Operations Head does not pick items: a request arrives, it goes to a
+    leader, and the leader splits it among their own people. That split is the
+    per-item assignment that already exists, so this fans out to one row per
+    item and every rule below it -- direct reports only, the asker decides --
+    keeps working untouched.
+
+    Items that already carry a cost are left alone unless Pricing has sent them
+    back, so re-assigning a part-costed request does not reopen finished work.
+    """
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        request_id = int(data.get('request_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick a request'), 400
+    assignee_ids = data.get('assignee_ids') or []
+    if not isinstance(assignee_ids, list) or not assignee_ids:
+        return jsonify(success=False, error='Pick at least one person'), 400
+    note = (data.get('note') or '').strip()[:500] or None
+    # The Head may want the lot, including what is already costed.
+    include_costed = bool(data.get('include_costed'))
+
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        cur.execute("SELECT id, title FROM sales_request WHERE id = %s", (request_id,))
+        sales_request = cur.fetchone()
+        if not sales_request:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such request'), 404
+
+        cur.execute("""
+            SELECT i.id, i.name, i.cost_per_item,
+                   (SELECT COUNT(*) FROM negotiation_requests nr
+                    WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
+                       AS awaiting_recost
+            FROM sales_request_items i
+            WHERE i.request_id = %s
+            ORDER BY i.id
+        """, (request_id,))
+        all_items = list(cur.fetchall())
+        if not all_items:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='That request has no items'), 400
+
+        wanted = [row for row in all_items
+                  if include_costed
+                  or row['awaiting_recost']
+                  or row['cost_per_item'] is None
+                  or float(row['cost_per_item']) == 0]
+        skipped = len(all_items) - len(wanted)
+        if not wanted:
+            cur.close()
+            conn.close()
+            return jsonify(success=False,
+                           error='Every item on this request is already costed.'), 400
+
+        reports = _direct_report_ids(cur, me)
+        unrestricted = _costing_unrestricted('costing.assign')
+        assigned = []
+        for raw in assignee_ids:
+            try:
+                assignee_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            costing.check_assignment(me, assignee_id, reports, unrestricted)
+            for item in wanted:
+                cur.execute("""
+                    INSERT INTO costing_assignment (item_id, request_id, assignee_id,
+                                                    assigned_by, status, note)
+                    VALUES (%s, %s, %s, %s, 'open', %s)
+                    ON DUPLICATE KEY UPDATE status = 'open',
+                                            assigned_by = VALUES(assigned_by),
+                                            note = VALUES(note)
+                """, (item['id'], request_id, assignee_id, me, note))
+                _costing_log(cur, item['id'], request_id, 'assigned', me,
+                             detail='whole request assigned to user %d' % assignee_id)
+            assigned.append(assignee_id)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # Tell them, and say where the work is. Without the link the tray sends
+        # people hunting for the request that landed on them.
+        notify_users(
+            assigned,
+            'Costing assigned: request #%d' % request_id,
+            '%d item(s) on "%s" are with you for costing.'
+            % (len(wanted), sales_request['title'] or ('Request #%d' % request_id)),
+            link='/operation_request?request=%d' % request_id)
+
+        return jsonify(success=True, request_id=request_id, assigned=assigned,
+                       items=len(wanted), skipped_costed=skipped)
+    except costing.CostingError as e:
+        return jsonify(success=False, error=str(e)), 403
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: costing assign-request failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -6874,6 +7678,14 @@ def costing_propose():
             return jsonify(success=False, error='That item is not assigned to you.'), 403
         costing.check_proposal(assignment['status'])
 
+        # Is this their first go at this item, or another one after a
+        # decision? The person deciding should be told which.
+        cur.execute("""
+            SELECT COUNT(*) AS n FROM costing_proposal
+            WHERE item_id = %s AND author_id = %s
+        """, (assignment['item_id'], me))
+        previous = cur.fetchone()['n']
+
         cur.execute("""
             INSERT INTO costing_proposal (item_id, request_id, assignment_id,
                                           author_id, amount, notes)
@@ -6884,10 +7696,35 @@ def costing_propose():
         _costing_log(cur, assignment['item_id'], assignment['request_id'],
                      'proposal_submitted', me, proposal_id=proposal_id,
                      amount=amount, detail=notes)
+
+        cur.execute("""
+            SELECT i.name AS item_name, u.name AS author_name
+            FROM sales_request_items i, user u
+            WHERE i.id = %s AND u.id = %s
+        """, (assignment['item_id'], me))
+        about = cur.fetchone() or {}
+
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify(success=True, proposal_id=proposal_id, amount=float(amount))
+
+        # The person who asked for this costing decides it, and had no way of
+        # knowing it had arrived: they found out by opening the page.
+        notify_user(
+            assignment['assigned_by'],
+            ('New costing to decide: %s' if not previous
+             else 'Costing re-submitted: %s') % (about.get('item_name') or 'an item'),
+            '%s %s EGP %s for "%s" on request #%s.%s'
+            % (about.get('author_name') or 'Somebody',
+               'proposed' if not previous else 'sent a new price of',
+               amount, about.get('item_name') or 'an item',
+               assignment['request_id'],
+               ' It is waiting for your decision.' if not previous
+               else ' Their earlier one was decided; this replaces it.'),
+            link='/operation_request?request=%d' % assignment['request_id'])
+
+        return jsonify(success=True, proposal_id=proposal_id, amount=float(amount),
+                       resubmission=bool(previous))
     except costing.CostingError as e:
         return jsonify(success=False, error=str(e)), 403
     except HTTPException:
@@ -7023,6 +7860,148 @@ def costing_proposal_file_list(proposal_id):
         return jsonify(success=False, error=str(e)), 500
 
 
+@app.route('/api/costing/items/<int:item_id>/alternatives', methods=['GET'])
+@perm('costing.view', 'sales_request.view')
+def costing_alternatives(item_id):
+    """Every alternative option somebody in costing has put on this item."""
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT a.id, a.image_path, a.image_type, a.file_size, a.alt_comment,
+                   a.alt_label, a.uploaded_at, a.uploaded_by, u.name AS uploaded_by_name
+            FROM item_images a
+            LEFT JOIN user u ON u.id = a.uploaded_by
+            WHERE a.item_id = %s AND a.is_alternative = 1
+            ORDER BY a.uploaded_at
+        """, (item_id,))
+        rows = _alternative_rows(cur.fetchall(), session.get('user_id'))
+        cur.close()
+        conn.close()
+        return jsonify(success=True, item_id=item_id, alternatives=rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: alternatives list failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/items/<int:item_id>/alternatives', methods=['POST'])
+@perm('costing.propose', 'costing.assign')
+def costing_add_alternative(item_id):
+    """
+    Put up a second way of doing this item: a picture and why.
+
+    Sales say what the client asked for; costing often knows another way to
+    build it. Said here it travels with the item, so pricing and the client are
+    choosing between two options rather than reading about one in a note.
+
+    Same allowlist and cap as every other upload on this page -- an upload path
+    is a trust boundary and gets the same treatment wherever it appears.
+    """
+    me = session.get('user_id')
+    allowed = {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'}
+    max_size = 10 * 1024 * 1024
+    comment = (request.form.get('comment') or '').strip()[:1000] or None
+    label = (request.form.get('label') or '').strip()[:120] or None
+
+    try:
+        handle = request.files.get('image')
+        if not handle or not handle.filename or '.' not in handle.filename:
+            return jsonify(success=False, error='Pick an image of the alternative.'), 400
+        extension = handle.filename.rsplit('.', 1)[1].lower()
+        if extension not in allowed:
+            return jsonify(success=False,
+                           error='Images only: JPG, PNG, GIF, BMP or WEBP.'), 400
+        handle.seek(0, 2)
+        size = handle.tell()
+        handle.seek(0)
+        if size > max_size:
+            return jsonify(success=False, error='That image is over 10MB.'), 400
+        if not comment:
+            return jsonify(success=False,
+                           error='Say what the alternative is: the picture alone '
+                                 'does not tell pricing why it is here.'), 400
+
+        conn, cur = connection()
+        item = _costing_item(cur, item_id)
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such item'), 404
+
+        folder = 'uploads/alternatives/%d' % item_id
+        os.makedirs(folder, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        path = os.path.join(folder, '%s_%s' % (stamp, secure_filename(handle.filename)))
+        handle.save(path)
+
+        cur.execute("""
+            INSERT INTO item_images (item_id, image_path, image_type, file_size,
+                                     uploaded_by, is_alternative, alt_comment,
+                                     alt_label)
+            VALUES (%s, %s, %s, %s, %s, 1, %s, %s)
+        """, (item_id, path, extension, size, me, comment, label))
+        new_id = cur.lastrowid
+        _costing_log(cur, item_id, item['request_id'], 'file_attached', me,
+                     detail='alternative option: %s' % (label or comment)[:200])
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify(success=True, id=new_id, image_url='/' + path,
+                       comment=comment, label=label)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: add alternative failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/costing/alternatives/<int:alternative_id>', methods=['DELETE'])
+@perm('costing.propose', 'costing.assign')
+def costing_delete_alternative(alternative_id):
+    """Take back an alternative. Whoever put it up, or the Head."""
+    me = session.get('user_id')
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT id, item_id, uploaded_by, image_path, alt_label, alt_comment
+            FROM item_images WHERE id = %s AND is_alternative = 1
+        """, (alternative_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such alternative'), 404
+        if row['uploaded_by'] != me and not _costing_unrestricted('costing.assign'):
+            cur.close()
+            conn.close()
+            return jsonify(success=False,
+                           error='Only whoever added it can remove it.'), 403
+
+        item = _costing_item(cur, row['item_id'])
+        cur.execute("DELETE FROM item_images WHERE id = %s", (alternative_id,))
+        if item:
+            _costing_log(cur, row['item_id'], item['request_id'], 'file_removed', me,
+                         detail='alternative option removed: %s'
+                                % (row['alt_label'] or row['alt_comment'] or '')[:200])
+        conn.commit()
+        cur.close()
+        conn.close()
+        # The row is gone whatever happens to the file; a leftover image is
+        # tidier than a dangling record.
+        try:
+            if row['image_path'] and os.path.exists(row['image_path']):
+                os.remove(row['image_path'])
+        except OSError as e:
+            print("DEBUG: alternative file not removed: %s" % e)
+        return jsonify(success=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: delete alternative failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/api/costing/proposals/<int:proposal_id>/decide', methods=['POST'])
 @perm('costing.decide')
 def costing_decide(proposal_id):
@@ -7067,9 +8046,26 @@ def costing_decide(proposal_id):
             _costing_log(cur, proposal['item_id'], proposal['request_id'],
                          'proposal_rejected', me, proposal_id=proposal_id,
                          amount=proposal['amount'], detail=note)
+            cur.execute("SELECT name FROM sales_request_items WHERE id = %s",
+                        (proposal['item_id'],))
+            item_row = cur.fetchone() or {}
             conn.commit()
             cur.close()
             conn.close()
+
+            # A decision the author is not told about is a decision they find
+            # out about by chance. The reason travels with it, because "no"
+            # without a reason is not something anybody can act on.
+            notify_user(
+                proposal['author_id'],
+                'Costing declined: %s' % (item_row.get('name') or 'an item'),
+                'Your price of EGP %s for "%s" on request #%s was declined by %s.%s '
+                'The item is still with you: put up another one.'
+                % (proposal['amount'], item_row.get('name') or 'an item',
+                   proposal['request_id'], session.get('name') or 'your team leader',
+                   (' Reason: %s.' % note) if note else ' No reason was given.'),
+                link='/operation_request?request=%d' % proposal['request_id'])
+
             return jsonify(success=True, status='rejected')
 
         item = _costing_item(cur, proposal['item_id'])
@@ -7142,6 +8138,27 @@ def costing_decide(proposal_id):
         conn.commit()
         cur.close()
         conn.close()
+
+        # Everybody who put a price up on this item hears what happened to it.
+        notify_user(
+            proposal['author_id'],
+            'Costing accepted: %s' % (item['name'] or 'an item'),
+            'Your price of EGP %s for "%s" on request #%s was accepted by %s. '
+            'It is now the item cost.'
+            % (amount, item['name'] or 'an item', proposal['request_id'],
+               session.get('name') or 'your team leader'),
+            link='/operation_request?request=%d' % proposal['request_id'])
+        losing_authors = sorted({row['author_id'] for row in losers
+                                 if row['author_id'] != proposal['author_id']})
+        if losing_authors:
+            notify_users(
+                losing_authors,
+                'Costing closed: %s' % (item['name'] or 'an item'),
+                'Another price was accepted for "%s" on request #%s, so yours '
+                'was not taken forward.'
+                % (item['name'] or 'an item', proposal['request_id']),
+                link='/operation_request?request=%d' % proposal['request_id'])
+
         return jsonify(success=True, status='accepted', amount=float(amount),
                        total_cost=total, rejected=len(losers),
                        recosted_negotiation=recosted)
@@ -7744,6 +8761,9 @@ def get_sales_requests():
         """)
         table_check = cur.fetchone()
         
+        # One lookup for the whole page: every "created by" on it resolves
+        # through this rather than joining user on a text column.
+        people = people_index(cur)
         requests_list = []
         
         if table_check and table_check['table_exists'] > 0:
@@ -7777,7 +8797,8 @@ def get_sales_requests():
                            c.client_name, comp.company_name,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
-                           COUNT(CASE WHEN i.cost_per_item IS NULL THEN 1 END) as approval_stats_not_costed,
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                                      THEN 1 END) as approval_stats_not_costed,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL THEN 1 END) as approval_stats_not_priced,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
@@ -7810,7 +8831,8 @@ def get_sales_requests():
                            comp.company_name,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
-                           COUNT(CASE WHEN i.cost_per_item IS NULL THEN 1 END) as approval_stats_not_costed,
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                                      THEN 1 END) as approval_stats_not_costed,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL THEN 1 END) as approval_stats_not_priced,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
@@ -7863,7 +8885,14 @@ def get_sales_requests():
                         'rejected': req.get('approval_stats_rejected', 0)
                     },
                     'sales_added_date': req['created_at'].strftime('%Y-%m-%d %H:%M:%S') if req.get('created_at') else '',
+                    # Who raised it. `created_by` holds whatever the route that
+                    # wrote it happened to put there -- a mobile on this table
+                    # -- so the name is resolved beside it and the column keeps
+                    # its old value for anything still matching on it.
                     'sales_added_by': req.get('created_by', ''),
+                    'sales_added_by_name': person_of(people, req.get('created_by'))['name'],
+                    'sales_added_by_user_id': person_of(people, req.get('created_by'))['user_id'],
+                    'sales_added_by_mobile': person_of(people, req.get('created_by'))['mobile'],
                     'request_type': req.get('request_type', 'General'),
                     'title': req.get('title', ''),
                     'priority': req.get('priority', 'normal'),
@@ -7944,6 +8973,33 @@ def get_operations_requests():
             AND column_name = 'company_id'
         """)
         company_id_exists = cur.fetchone()['column_exists'] > 0
+
+        # Whose work is on this page.
+        #
+        # The Operations Head sees the whole board; so does anybody outside the
+        # costing ladder, whose reason for opening this page was never an
+        # assignment in the first place. Everyone inside it -- a team leader
+        # with `costing.view: team`, a member with `own` -- sees only what has
+        # been put on their desk, or what they put on somebody else's.
+        # Withdrawn assignments do not count: taking an item back should remove
+        # it from view rather than leave a ghost.
+        #
+        # The counts and the total then cover those items alone, so a member
+        # costing one item of nine does not read "9 items, 2 costed" and have
+        # to work out which two were theirs.
+        me = session.get('user_id')
+        costing_scope = rbac.resolve(session.get('perms') or {}, 'costing.view')
+        restricted = costing_scope in ('own', 'team', 'department')
+        mine_only = ""
+        item_params = []
+        if restricted:
+            mine_only = """ AND EXISTS (SELECT 1 FROM costing_assignment ca
+                                        WHERE ca.item_id = i.id
+                                          AND ca.status <> 'withdrawn'
+                                          AND (ca.assignee_id = %s OR ca.assigned_by = %s))"""
+            item_params = [me, me]
+        # A request nothing of mine hangs off is not a request I am part of.
+        having = " HAVING COUNT(i.id) > 0" if restricted else ""
         
         # Fetch all requests with items and cost status (using correct table names)
         if company_id_exists:
@@ -7959,6 +9015,8 @@ def get_operations_requests():
                        sr.created_by as sales_added_by, 
                        sr.modified_at as modified_date,
                        sr.items_count as item_count,
+                       COUNT(i.id) as visible_item_count,
+                       SUM(i.total_cost) as visible_total_cost,
                        SUM(i.qty) as total_quantity,
                        COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                   AND NOT (i.approval_status = 'pending_negotiation' 
@@ -7972,14 +9030,18 @@ def get_operations_requests():
                              SELECT 1 FROM negotiation_requests nr
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
                              THEN i.id END) as recost_items_count,
-                       COUNT(CASE WHEN (i.cost_per_item IS NULL OR i.cost_per_item = 0) THEN 1 END) as pending_items_count
+                       COUNT(CASE WHEN i.id IS NOT NULL
+                                       AND (i.cost_per_item IS NULL OR i.cost_per_item = 0)
+                                  THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
                 LEFT JOIN company comp ON sr.company_id = comp.id
                 LEFT JOIN sales_request_items i ON sr.id = i.request_id
+            """ + mine_only + """
                 GROUP BY sr.id, sr.items_count
+            """ + having + """
                 ORDER BY sr.id DESC
-            """)
+            """, item_params)
         else:
             cur.execute("""
                 SELECT sr.id as request_id, 
@@ -7993,6 +9055,8 @@ def get_operations_requests():
                        sr.created_by as sales_added_by, 
                        sr.modified_at as modified_date,
                        sr.items_count as item_count,
+                       COUNT(i.id) as visible_item_count,
+                       SUM(i.total_cost) as visible_total_cost,
                        SUM(i.qty) as total_quantity,
                        COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                   AND NOT (i.approval_status = 'pending_negotiation' 
@@ -8006,23 +9070,32 @@ def get_operations_requests():
                              SELECT 1 FROM negotiation_requests nr
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
                              THEN i.id END) as recost_items_count,
-                       COUNT(CASE WHEN (i.cost_per_item IS NULL OR i.cost_per_item = 0) THEN 1 END) as pending_items_count
+                       COUNT(CASE WHEN i.id IS NOT NULL
+                                       AND (i.cost_per_item IS NULL OR i.cost_per_item = 0)
+                                  THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
                 LEFT JOIN company comp ON c.parent_company_id = comp.id
                 LEFT JOIN sales_request_items i ON sr.id = i.request_id
+            """ + mine_only + """
                 GROUP BY sr.id, sr.items_count
+            """ + having + """
                 ORDER BY sr.id DESC
-            """)
+            """, item_params)
         requests_data = cur.fetchall()
         
         print(f"DEBUG: Found {len(requests_data)} requests")
         
         # Convert to list of dictionaries for JSON response
+        people = people_index(cur)
         requests_list = []
         for req in requests_data:
-            # Determine status based on cost completion
-            total_items = req.get('item_count', 0)
+            # Determine status based on cost completion.
+            # When the list is scoped, "the items" means my items: the stored
+            # items_count is the whole request and would contradict every
+            # count beside it.
+            total_items = (req.get('visible_item_count', 0) if restricted
+                           else req.get('item_count', 0))
             costed_items = req.get('costed_items_count', 0)
             renegotiation_items = req.get('renegotiation_items_count', 0)
             recost_items = req.get('recost_items_count', 0)
@@ -8057,14 +9130,22 @@ def get_operations_requests():
                 'request_type': req.get('request_type', ''),
                 'status': status,
                 'items_count': total_items,
+                'request_items_count': req.get('item_count', 0),
+                'scoped_to_me': bool(restricted),
                 'costed_items_count': costed_items,
                 'renegotiation_items_count': renegotiation_items,
                 'recost_items_count': recost_items,
                 'pending_items_count': pending_items,
-                'total_cost': float(req.get('total_cost', 0)) if req.get('total_cost') else 0,
+                'total_cost': float(
+                    (req.get('visible_total_cost') if restricted
+                     else req.get('total_cost')) or 0),
                 'total_sell': float(req.get('total_sell', 0)) if req.get('total_sell') else 0,
                 'sales_added_date': req['sales_added_date'].strftime('%Y-%m-%d %H:%M:%S') if req.get('sales_added_date') else '',
-                'sales_added_by': req.get('sales_added_by', '')
+                'sales_added_by': req.get('sales_added_by', ''),
+                # The mobile that was being shown as a name.
+                'sales_added_by_name': person_of(people, req.get('sales_added_by'))['name'],
+                'sales_added_by_user_id': person_of(people, req.get('sales_added_by'))['user_id'],
+                'sales_added_by_mobile': person_of(people, req.get('sales_added_by'))['mobile']
             })
         
         cur.close()
@@ -8228,6 +9309,10 @@ def get_single_sales_request(request_id):
         items_data = cur.fetchall()
         
         # Build response
+        # Who raised it: the column holds a mobile, the page wants the person.
+        _raised_by = person_of(people_index(cur),
+                               request_data.get('created_by',
+                                                request_data.get('sales_added_by')))
         request_info = {
             'request_id': request_data.get('id', request_data.get('request_id', 0)),
             'company_id': request_data.get('company_id') if company_id_exists else request_data.get('parent_company_id'),
@@ -8252,6 +9337,9 @@ def get_single_sales_request(request_id):
             'status': request_data.get('status', 'Pending'),
             'sales_added_date': request_data.get('created_at', request_data.get('sales_added_date', '')).strftime('%Y-%m-%d %H:%M:%S') if request_data.get('created_at') or request_data.get('sales_added_date') else '',
             'sales_added_by': request_data.get('created_by', request_data.get('sales_added_by', '')),
+            'sales_added_by_name': _raised_by['name'],
+            'sales_added_by_mobile': _raised_by['mobile'],
+            'sales_added_by_user_id': _raised_by['user_id'],
             'last_modified': request_data.get('modified_at', request_data.get('modified_date', '')).strftime('%Y-%m-%d %H:%M:%S') if request_data.get('modified_at') or request_data.get('modified_date') else 'Not modified',
             'items': []
         }
@@ -8352,15 +9440,34 @@ def get_single_sales_request(request_id):
             elif attributes.get('image_url'):
                 item_dict['image_url'] = attributes['image_url']
             
-            # Get attachments from item_images table (includes both images and PDFs)
+            # Get attachments from item_images table (includes both images and PDFs).
+            # Alternatives live in the same table but are not attachments: they
+            # are a second option for the item and are read out separately below.
             cur.execute("""
                 SELECT id, image_path, image_type, file_size
                 FROM item_images
-                WHERE item_id = %s
+                WHERE item_id = %s AND is_alternative = 0
                 ORDER BY uploaded_at
             """, (item.get('id'),))
             attachments_data = cur.fetchall()
-            
+
+            # What costing offered as another way to do this item.
+            cur.execute("""
+                SELECT a.id, a.image_path, a.alt_comment, a.alt_label,
+                       a.uploaded_at, a.uploaded_by, u.name AS uploaded_by_name
+                FROM item_images a
+                LEFT JOIN user u ON u.id = a.uploaded_by
+                WHERE a.item_id = %s AND a.is_alternative = 1
+                ORDER BY a.uploaded_at
+            """, (item.get('id'),))
+            item_dict['alternatives'] = _alternative_rows(
+                cur.fetchall(), session.get('user_id'))
+
+            # Whether this item can still be edited, so the form can say so
+            # rather than accepting a change it is going to refuse.
+            item_dict['lock_reason'] = item_lock_reason(item)
+            item_dict['is_locked'] = bool(item_dict['lock_reason'])
+
             item_dict['attachments'] = []
             for att in attachments_data:
                 file_path = att['image_path']
@@ -8519,6 +9626,8 @@ def get_single_operations_request(request_id):
             status = 'Pending'  # Partially costed - still pending
         
         # Convert to response format (matching frontend expectations)
+        # Who raised it: the column holds a mobile, the page wants the person.
+        _raised_by = person_of(people_index(cur), request_data.get('sales_added_by'))
         request_info = {
             'request_id': request_data.get('request_id', 0),
             'client_name': request_data.get('client_name', ''),
@@ -8532,6 +9641,9 @@ def get_single_operations_request(request_id):
             'total_sell': float(request_data.get('total_sell', 0)) if request_data.get('total_sell') else 0,
             'sales_added_date': request_data['sales_added_date'].strftime('%Y-%m-%d %H:%M:%S') if request_data.get('sales_added_date') else '',
             'sales_added_by': request_data.get('sales_added_by', ''),
+            'sales_added_by_name': _raised_by['name'],
+            'sales_added_by_mobile': _raised_by['mobile'],
+            'sales_added_by_user_id': _raised_by['user_id'],
             'items': []
         }
         
@@ -8583,14 +9695,27 @@ def get_single_operations_request(request_id):
             item_dict['include_days_in_calc'] = bool(item.get('include_days_in_calc', 1))
             item_dict['include_qty_in_calc'] = bool(item.get('include_qty_in_calc', 1))
             
-            # Get attachments for this item from item_images table
+            # Get attachments for this item from item_images table. Costing's
+            # alternative options share the table and are read out on their own
+            # below, so they cannot be mistaken for what sales attached.
             cur.execute("""
                 SELECT id, image_path, image_type, file_size
                 FROM item_images
-                WHERE item_id = %s
+                WHERE item_id = %s AND is_alternative = 0
                 ORDER BY uploaded_at
             """, (item.get('id'),))
             attachments = cur.fetchall()
+
+            cur.execute("""
+                SELECT a.id, a.image_path, a.alt_comment, a.alt_label,
+                       a.uploaded_at, a.uploaded_by, u.name AS uploaded_by_name
+                FROM item_images a
+                LEFT JOIN user u ON u.id = a.uploaded_by
+                WHERE a.item_id = %s AND a.is_alternative = 1
+                ORDER BY a.uploaded_at
+            """, (item.get('id'),))
+            item_dict['alternatives'] = _alternative_rows(
+                cur.fetchall(), session.get('user_id'))
             
             item_dict['attachments'] = []
             item_dict['image_url'] = None
@@ -8946,6 +10071,7 @@ def add_sales_request():
                 raise e
         
         request_id = cur.lastrowid
+        claim_sales_request(cur, request_id)
         
         # NEW: Insert template instances into the database
         items_count = 0  # Initialize here to track all items
@@ -9213,7 +10339,9 @@ def add_sales_request():
         try:
             notification_title = f"New Sales Request #{request_id:06d}"
             notification_content = f"A new request has been created by {session.get('username', 'Unknown')} for client '{client_name}'. Duration: {duration_days} days. Please review and add costing."
-            notifications_sent = send_notification_to_role('operation', notification_title, notification_content)
+            notifications_sent = send_notification_to_role(
+                'operation', notification_title, notification_content,
+                link=f'/operation_request?request={request_id}')
             print(f"DEBUG: Sent {notifications_sent} notifications to operations team")
         except Exception as e:
             print(f"DEBUG: Error sending notifications: {e}")
@@ -9540,7 +10668,8 @@ def add_operation_request():
             notifications_sent = notify_users(
                 ([owner_row['owner_user_id']] if owner_row else [])
                 + users_holding('sales_item.price'),
-                notification_title, notification_content)
+                notification_title, notification_content,
+                link=f"/pricing?request={data['request_id']}")
             print(f"DEBUG: Sent {notifications_sent} costing-completed notifications")
         except Exception as e:
             print(f"DEBUG: Error sending costing completion notifications: {e}")
@@ -9831,7 +10960,8 @@ def add_operation_request_costs():
                 send_notification_to_role(
                     'pricing',
                     f"Request #{data['request_id']:06d} Re-Costing Completed",
-                    f"Operations completed re-costing for {len(recosted_negotiations)} negotiated item(s). Re-Pricing can now set the new selling price."
+                    f"Operations completed re-costing for {len(recosted_negotiations)} negotiated item(s). Re-Pricing can now set the new selling price.",
+                    link=f"/pricing?request={data['request_id']}"
                 )
             except Exception as notification_error:
                 print(f"WARNING: Failed to notify Pricing: {notification_error}")
@@ -9870,7 +11000,8 @@ def add_operation_request_costs():
                 notifications_sent = notify_users(
                     ([owner_row['owner_user_id']] if owner_row else [])
                     + users_holding('sales_item.price'),
-                    notification_title, notification_content)
+                    notification_title, notification_content,
+                    link=f"/pricing?request={data['request_id']}")
                 print(f"DEBUG: Sent {notifications_sent} costing-completed notifications")
             except Exception as e:
                 print(f"DEBUG: Error sending costing completion notifications: {e}")
@@ -10652,7 +11783,8 @@ def edit_sales_request(request_id):
             try:
                 notification_title = f"Sales Request #{request_id:06d} Updated"
                 notification_content = f"Request updated with {duration_days} days duration. Please review changes."
-                send_notification_to_role('operation', notification_title, notification_content)
+                send_notification_to_role('operation', notification_title, notification_content,
+                                          link=f'/operation_request?request={request_id}')
             except:
                 pass
         
@@ -10994,6 +12126,8 @@ def approve_request(approval_id):
         ))
         
         sales_request_id = cur.lastrowid
+        # The person who asked owns it, not the admin who let it through.
+        claim_sales_request(cur, sales_request_id, approval['requested_by'])
         
         # Insert items if any
         items_count = 0
@@ -12532,7 +13666,7 @@ def get_item_attachments(item_id):
         cursor.execute("""
             SELECT id, image_path, image_type, file_size, uploaded_at, uploaded_by
             FROM item_images
-            WHERE item_id = %s
+            WHERE item_id = %s AND is_alternative = 0
             ORDER BY uploaded_at DESC
         """, (item_id,))
         
@@ -13137,6 +14271,7 @@ def create_request_with_template():
                 raise e
         
         request_id = cur.lastrowid
+        claim_sales_request(cur, request_id)
         
         # Template field values are stored in the request_data JSON column above
         # No need for separate field value table - keeping it simple
@@ -13491,7 +14626,29 @@ def update_request_with_template(request_id):
         # Now execute the update query
         cur.execute(update_query, update_values)
         
-        # CHECK: Are there any costed items? If so, protect them - only update general fields
+        # Which items are past editing, and what the payload would have done to
+        # them. Everything else on the request is still editable: one costed
+        # item used to freeze the other ten and say nothing about it.
+        locked_rows = locked_items_for(cur, request_id)
+        incoming = submitted_items(data)
+        incoming_by_name = {}
+        for item in incoming:
+            key = (item.get('name') or item.get('item_name') or '').strip()
+            if key:
+                incoming_by_name.setdefault(key, item)
+
+        locked_report = []
+        for name, row in locked_rows.items():
+            entry = {'name': name, 'reason': row['lock_reason'], 'changes': []}
+            match = incoming_by_name.get(name)
+            if match is None:
+                entry['changes'] = ['removed']
+            else:
+                entry['changes'] = locked_item_changes(row, match)
+            locked_report.append(entry)
+
+        refused = [e for e in locked_report if e['changes']]
+
         cur.execute("""
             SELECT id, name, cost_per_item, sell_per_item, total_cost, total_sell,
                    approval_status, negotiation_status, negotiation_reason, negotiation_count, client_feedback
@@ -13501,13 +14658,26 @@ def update_request_with_template(request_id):
         """, (request_id,))
         costed_items_in_db = cur.fetchall()
         
-        has_costed_items = len(costed_items_in_db) > 0
+        has_costed_items = len(locked_rows) > 0
         
         if has_costed_items:
-            # Items are costed - DO NOT delete/re-insert items. Only general fields were updated above.
-            print(f"DEBUG UPDATE-TEMPLATE: {len(costed_items_in_db)} costed items found - SKIPPING item deletion/re-insertion to preserve costs")
-            
-            # Still update template instances data (metadata only, not items)
+            # A locked item keeps its row exactly as it is. Everything else on
+            # the request is deleted and re-inserted as usual, so an edit to
+            # the items that are still open is not thrown away because one of
+            # their neighbours has been costed.
+            print(f"DEBUG UPDATE-TEMPLATE: {len(locked_rows)} locked item(s); "
+                  f"{len(refused)} would have been changed")
+
+            # Refusing outright is the wrong answer when the rest of the edit
+            # is legitimate, so the locked items are left alone and the caller
+            # is told precisely which ones and why.
+            locked_ids = [row['id'] for row in locked_rows.values()]
+            placeholders = ','.join(['%s'] * len(locked_ids))
+            cur.execute(
+                "DELETE FROM sales_request_items WHERE request_id = %%s "
+                "AND id NOT IN (%s)" % placeholders,
+                [request_id] + locked_ids)
+
             try:
                 cur.execute("DELETE FROM sales_request_template_instances WHERE request_id = %s", (request_id,))
                 if template_instances:
@@ -13525,18 +14695,70 @@ def update_request_with_template(request_id):
                         ))
             except Exception as inst_err:
                 print(f"DEBUG UPDATE-TEMPLATE: Template instance update skipped: {inst_err}")
-            
-            items_count = len(costed_items_in_db)
-            
+
+            # Re-insert the items that are still open, skipping any name that
+            # belongs to a locked row -- that row is still there.
+            reinserted = 0
+            for item in incoming:
+                name = (item.get('name') or item.get('item_name') or '').strip()
+                if not name or name in locked_rows:
+                    continue
+                attributes = {}
+                for axis in ('width', 'height', 'depth'):
+                    if item.get(axis):
+                        try:
+                            attributes[axis] = float(item.get(axis))
+                        except (TypeError, ValueError):
+                            pass
+                try:
+                    cur.execute("""
+                        INSERT INTO sales_request_items
+                            (request_id, request_type, name, description, qty, unit,
+                             sell_type, rental_days, dimension_calc,
+                             include_days_in_calc, include_qty_in_calc, attributes)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        request_id,
+                        item.get('request_type') or existing_request.get('request_type'),
+                        name,
+                        item.get('description') or item.get('notes') or '',
+                        item.get('quantity', item.get('qty', 1)) or 1,
+                        item.get('unit') or 'pcs',
+                        item.get('sell_type') or 'rent',
+                        int(item.get('rental_days') or 1),
+                        item.get('dimension_calc') or None,
+                        1 if item.get('include_days_in_calc', True) else 0,
+                        1 if item.get('include_qty_in_calc', True) else 0,
+                        json.dumps(attributes) if attributes else None,
+                    ))
+                    reinserted += 1
+                except Exception as item_error:
+                    print(f"DEBUG UPDATE-TEMPLATE: could not re-insert '{name}': {item_error}")
+
+            items_count = len(locked_ids) + reinserted
+            cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s",
+                        (items_count, request_id))
+
             conn.commit()
             cur.close()
             conn.close()
-            
+
+            # What the reader needs to know, in the order they need it: what was
+            # refused, then what was kept.
+            if refused:
+                headline = 'Saved, but %d item(s) could not be changed: %s.' % (
+                    len(refused),
+                    '; '.join('%s is %s' % (e['name'], e['reason']) for e in refused))
+            else:
+                headline = 'Request updated. %d item(s) are locked and were left as they are.' % len(locked_rows)
+
             return jsonify({
                 'success': True,
-                'message': f'General request info updated. {len(costed_items_in_db)} costed item(s) preserved unchanged.',
+                'message': headline,
                 'items_count': items_count,
-                'costed_items_preserved': True
+                'costed_items_preserved': True,
+                'locked_items': locked_report,
+                'refused_changes': refused,
             })
         
         # NO costed items - safe to delete and re-insert
@@ -15788,6 +17010,7 @@ def approve_sales_head_negotiation(negotiation_id):
             'client expects EGP %s. It is waiting for your decision.'
             % (negotiation['item_name'], negotiation['request_id'],
                float(negotiation['client_expected_price'])),
+            request_id=negotiation['request_id'],
         )
         cur.close()
         conn.close()
@@ -15889,6 +17112,7 @@ def pricing_send_negotiation_to_costing(negotiation_id):
             'Re-Pricing sent "%s" (request #%s) back for a new cost. Assign it '
             'on the costing desk, or cost it directly.'
             % (negotiation['item_name'], negotiation['request_id']),
+            request_id=negotiation['request_id'],
         )
         return jsonify({
             'success': True,
@@ -16310,6 +17534,43 @@ def update_request_approval_stage(request_id, conn=None, cur=None):
 # SALES REQUEST COMMENTS & NOTES SYSTEM WITH @MENTIONS
 # ============================================================================
 
+@app.route('/api/mention-users', methods=['GET'])
+@perm('sales_request.comment')
+def mention_users():
+    """
+    Who can be tagged in a comment.
+
+    The comment box was reading `/api/users`, which is the account-management
+    list and is gated on `user.view` -- an admin permission. Everyone else got
+    a 403, the list stayed empty, and typing `@` did nothing at all. Tagging a
+    colleague is not administering them, so it has its own endpoint: names,
+    roles and departments, and nothing else. No mobile, no email, no password
+    state.
+    """
+    try:
+        conn, cur = connection()
+        cur.execute("""
+            SELECT u.id, u.name, r.name AS role_name, d.name AS department_name
+            FROM user u
+            LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+            LEFT JOIN department d ON d.id = u.department_id
+            WHERE u.is_active = 1
+            ORDER BY d.name, r.level, u.name
+        """)
+        people = [{'id': row['id'], 'name': row['name'],
+                   'role_name': row['role_name'] or '',
+                   'department_name': row['department_name'] or ''}
+                  for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return jsonify(success=True, users=people)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: mention users failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/api/sales/requests/<int:request_id>/comments', methods=['GET'])
 @perm('sales_request.comment')
 def get_sales_request_comments(request_id):
@@ -16435,52 +17696,54 @@ def add_sales_request_comment(request_id):
         
         comment_id = cur.lastrowid
         
-        # Process mentions
+        # Process mentions.
+        #
+        # This used to INSERT INTO `notifications`, a MySQL table that does not
+        # exist on this system -- notifications live in Mongo and are written
+        # by notify_users(). The insert raised, the except swallowed it, and
+        # nobody was ever told they had been mentioned.
         notification_sent_to = []
-        if mentioned_user_ids:
-            for mentioned_user_id in mentioned_user_ids:
-                try:
-                    # Insert mention
-                    cur.execute("""
-                        INSERT INTO sales_request_comment_mentions 
-                        (comment_id, mentioned_user_id)
-                        VALUES (%s, %s)
-                        ON DUPLICATE KEY UPDATE comment_id = comment_id
-                    """, (comment_id, mentioned_user_id))
-                    
-                    # Get mentioned user info
-                    cur.execute("""
-                        SELECT name, mobile FROM user WHERE id = %s
-                    """, (mentioned_user_id,))
-                    
-                    mentioned_user = cur.fetchone()
-                    
-                    if mentioned_user:
-                        # Send notification
-                        notification_title = f"{user_name} mentioned you in a comment"
-                        notification_body = f"Request #{request_id}: {comment_text[:100]}{'...' if len(comment_text) > 100 else ''}"
-                        
-                        # Add to notifications table
-                        cur.execute("""
-                            INSERT INTO notifications 
-                            (user_id, title, content, notification_type, reference_id, reference_type)
-                            VALUES (%s, %s, %s, 'mention', %s, 'sales_request')
-                        """, (mentioned_user_id, notification_title, notification_body, request_id))
-                        
-                        # Try to send push notification
-                        try:
-                            if mentioned_user['mobile']:
-                                push_send_notification(
-                                    mentioned_user['mobile'],
-                                    notification_title,
-                                    notification_body
-                                )
-                                notification_sent_to.append(mentioned_user['name'])
-                        except Exception as push_error:
-                            print(f"Push notification error: {str(push_error)}")
-                    
-                except Exception as mention_error:
-                    print(f"Error processing mention for user {mentioned_user_id}: {str(mention_error)}")
+        mentioned = []
+        for mentioned_user_id in (mentioned_user_ids or []):
+            try:
+                mentioned_user_id = int(mentioned_user_id)
+            except (TypeError, ValueError):
+                continue
+            try:
+                cur.execute("""
+                    INSERT INTO sales_request_comment_mentions 
+                    (comment_id, mentioned_user_id)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE comment_id = comment_id
+                """, (comment_id, mentioned_user_id))
+                cur.execute("SELECT name, mobile FROM user WHERE id = %s",
+                            (mentioned_user_id,))
+                mentioned_user = cur.fetchone()
+                if mentioned_user:
+                    mentioned.append(mentioned_user_id)
+                    notification_sent_to.append(mentioned_user['name'])
+            except Exception as mention_error:
+                print(f"Error processing mention for user {mentioned_user_id}: {str(mention_error)}")
+
+        # Everyone with a part in this request hears about it, not only the
+        # people named with an @: a comment on a request nobody is told about
+        # is a comment nobody reads.
+        audience = sales_request_audience(cur, request_id, exclude=[user_id] + mentioned)
+        excerpt = comment_text[:120] + ('...' if len(comment_text) > 120 else '')
+        deep_link = '/sales_request?request=%d' % request_id
+        if mentioned:
+            notify_users(
+                mentioned,
+                '%s mentioned you: request #%d' % (user_name, request_id),
+                '%s &mdash; "%s"' % (request_info.get('title') or 'Sales request', excerpt),
+                link=deep_link)
+        if audience:
+            notify_users(
+                audience,
+                'New %s on request #%d' % ('note' if is_note else 'comment', request_id),
+                '%s on "%s": "%s"'
+                % (user_name, request_info.get('title') or 'a sales request', excerpt),
+                link=deep_link)
         
         # Log the comment in change log
         source_labels = {
@@ -17014,7 +18277,15 @@ def create_entity():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('contact_phone',),
+                email_fields=('contact_email',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         
         entity_name = data.get('entity_name', '').strip()
         entity_code = data.get('entity_code', '').strip().upper()
@@ -17102,7 +18373,15 @@ def update_entity(entity_id):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            data = _normalize_contact_fields(
+                data,
+                phone_fields=('contact_phone',),
+                email_fields=('contact_email',),
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         
         conn, cur = connection()
         
@@ -17370,7 +18649,30 @@ def get_inventory_items():
         if entity_id and inventory_type != 'credit':
             where_conditions.append("i.entity_id = %s")
             params.append(entity_id)
-        
+
+        # The status the page asked for. It was being sent by the front end
+        # and ignored here, which is why an item retired by "delete" came
+        # straight back into the list, and why the low-stock and out-of-stock
+        # filters did nothing at all.
+        #
+        # "All" means every item somebody still has: a retired one is found
+        # by asking for it, not by looking at the shelf.
+        status = (request.args.get('status') or 'all').strip().lower()
+        if status == 'discontinued':
+            where_conditions.append("i.status = 'discontinued'")
+        elif status == 'active':
+            where_conditions.append("i.status = 'active'")
+        elif status == 'low':
+            where_conditions.append("i.status <> 'discontinued'")
+            where_conditions.append(
+                "i.quantity_in_stock > 0 AND i.quantity_in_stock <= "
+                "COALESCE(NULLIF(i.reorder_level, 0), i.minimum_stock_level, 0)")
+        elif status == 'out':
+            where_conditions.append("i.status <> 'discontinued'")
+            where_conditions.append("COALESCE(i.quantity_in_stock, 0) <= 0")
+        else:
+            where_conditions.append("i.status <> 'discontinued'")
+
         where_clause = ""
         if where_conditions:
             where_clause = "WHERE " + " AND ".join(where_conditions)
@@ -17794,29 +19096,48 @@ def delete_inventory_item(item_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
+    conn = cur = None
     try:
         conn, cur = connection()
-        
-        # Check if item has transactions
+
+        # An item with movements behind it cannot be removed -- the
+        # transactions refer to it -- so it is retired instead. That is a
+        # different outcome from being deleted and the caller is told which,
+        # because "deleted successfully" over an item that is still on the
+        # page is how this looked like a bug that came back.
         cur.execute("SELECT COUNT(*) as count FROM inventory_transactions WHERE item_id = %s", (item_id,))
         has_transactions = cur.fetchone()['count'] > 0
-        
+
         if has_transactions:
-            # Soft delete - mark as inactive
             cur.execute("UPDATE inventory_items SET status = 'discontinued' WHERE id = %s", (item_id,))
+            outcome, message = 'discontinued', (
+                'This item has movements recorded against it, so it was retired '
+                'rather than deleted. It no longer appears in the stock list; '
+                'choose "Discontinued" to find it.')
         else:
-            # Hard delete
             cur.execute("DELETE FROM inventory_items WHERE id = %s", (item_id,))
-        
+            outcome, message = 'deleted', 'Item deleted successfully'
+
         conn.commit()
-        cur.close()
-        conn.close()
-        
-        return jsonify({'success': True, 'message': 'Item deleted successfully'})
-        
+        return jsonify({'success': True, 'outcome': outcome, 'message': message})
+
     except Exception as e:
         print(f"Error deleting inventory item: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        # The error path used to return without closing either, so every
+        # failed delete leaked a connection until the pool ran out and every
+        # page on the site hung waiting for one.
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 @app.route('/api/inventory/transactions', methods=['GET'])
 @perm('inventory.view')

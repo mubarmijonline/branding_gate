@@ -93,3 +93,13 @@ gunicorn.ctl
 
 # The venv is a symlink in worktrees; the trailing-slash rule above misses it.
 branding_gate_VENV
+
+# ============================================
+# NEVER IN A PUBLIC REPO
+# ============================================
+# Rotated nginx logs: they carry visitors' IP addresses.
+*.log.[0-9]*
+*.log.gz
+nginx_*.log*
+# Claude Code session state and worktrees (hundreds of MB of working copies).
+.claude/

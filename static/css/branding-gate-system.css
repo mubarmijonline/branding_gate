@@ -192,6 +192,68 @@
   background: #ffe39a;
 }
 
+.party-request-mobile-list {
+  display: none;
+}
+
+.party-request-mobile-card {
+  padding: 1rem;
+  border: 1px solid var(--bg-border);
+  border-radius: var(--bg-radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--bg-shadow-sm);
+}
+
+.party-request-mobile-card + .party-request-mobile-card {
+  margin-top: 0.75rem;
+}
+
+.party-request-mobile-main {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.party-request-mobile-main code,
+.party-request-mobile-main strong {
+  display: block;
+}
+
+.party-request-mobile-main strong {
+  margin-top: 0.25rem;
+  color: var(--bg-text);
+  font-size: 1rem;
+}
+
+.party-request-mobile-meta {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.75rem;
+  color: var(--bg-text-muted);
+  font-size: 0.82rem;
+}
+
+.party-request-mobile-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.party-request-mobile-actions .btn {
+  min-height: 42px;
+  flex: 1 1 8rem;
+}
+
+.party-request-mobile-empty {
+  padding: 1rem;
+  border: 1px dashed var(--bg-border-strong);
+  border-radius: var(--bg-radius-md);
+  color: var(--bg-text-muted);
+  text-align: center;
+}
+
 @media (max-width: 768px) {
   .sales-party-field .select2-selection--single {
     min-height: 48px !important;
@@ -208,6 +270,29 @@
 
   .sales-party-select-dropdown .select2-results__options {
     max-height: 48vh !important;
+  }
+
+  #partyRequestCard .card-header {
+    align-items: stretch !important;
+  }
+
+  #partyRequestCard .card-header > * {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  #partyRequestNew {
+    min-height: 44px;
+    margin-top: 0.25rem;
+  }
+
+  .party-request-table-wrap {
+    display: none;
+  }
+
+  .party-request-mobile-list {
+    display: block;
+    padding: 1rem;
   }
 }
 
@@ -1497,6 +1582,64 @@ table.dataTable.display tbody tr:hover {
   width: 36px;
   height: 34px;
   padding: 0;
+}
+
+/* Companies carry a third action -- their documents -- so the group is three
+   wide there. Below the phone breakpoint both fall back to the stretched
+   buttons the media query sets. */
+.client-action-group--three {
+  grid-template-columns: repeat(3, 36px);
+}
+
+/* A directory with one search box and the refresh button, no filters. */
+.client-toolbar--slim {
+  grid-template-columns: minmax(260px, 1fr) 44px;
+}
+
+/* Which desk a sales request is sitting on, and how far it has got there. */
+.request-stage-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: normal;
+}
+
+.request-stage-progress {
+  display: inline-block;
+  margin: 0.2rem 0 0.35rem;
+  color: var(--bg-text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
+
+.request-stage-progress strong {
+  color: var(--bg-text);
+}
+
+/* Who did something: the person, with the handle they were stored under.
+   The columns hold a mobile number, a login name or an id depending on which
+   route wrote them, and none of those is a name anybody reads. */
+.bg-person {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.bg-person-name {
+  color: var(--bg-text);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bg-person-handle {
+  color: var(--bg-text-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .client-table-footer {

@@ -29,47 +29,58 @@ window.chartPieDemo = function() {};
 {% endblock %}
 
 {% block body %}
-<div class="container-fluid">
+<div class="container-fluid client-management-page">
     {% set user_roles = session.get('roles', []) %}
     {% set _p = session.get('perms', {}) %}
+    {% set can_create_company = 'company.create' in _p %}
+    {% set can_edit_company = 'company.edit' in _p %}
+    {% set can_delete_company = 'company.delete' in _p %}
     {% if 'company.view' in _p %}
     
-    <!-- Company Management Header -->
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-gray-800">Parent Company Management</h1>
-    </div>
+    <header class="client-page-header">
+        <div>
+            <h1>Parent Company Management</h1>
+        </div>
+        {% if can_create_company %}
+        <button class="btn btn-primary" data-toggle="modal" data-target="#addCompanyModal">
+            <i class="fas fa-plus mr-2" aria-hidden="true"></i>Add Company
+        </button>
+        {% endif %}
+    </header>
 
-    <!-- Company Information Card -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h2 class="m-0 font-weight-bold text-primary">Company Information</h2>
-            <button class="btn btn-primary" data-toggle="modal" data-target="#addCompanyModal">
-                <i class="fas fa-plus"></i> Add Company
+    {% set party_kind = 'company' %}
+    {% include 'party_requests_section.html' %}
+
+    {# The same table shell the client directory uses: one row per company on a
+       wide screen, the same row as a labelled card on a phone. Sharing the
+       classes means the two directories cannot drift apart again. #}
+    <section class="client-workspace" aria-label="Companies">
+        <div class="client-toolbar client-toolbar--slim">
+            <label class="client-search-field" for="companySearch">
+                <span class="sr-only">Search companies</span>
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="search" id="companySearch" class="form-control" placeholder="Search name, industry, contact or email" autocomplete="off">
+            </label>
+            <button type="button" class="btn btn-outline-secondary client-refresh-btn" id="refreshCompaniesBtn" title="Refresh companies" aria-label="Refresh companies">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i>
             </button>
         </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="companies-table" class="display table table-bordered" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Company Name</th>
-                            <th>Industry/Sector</th>
-                            <th>Phone Number</th>
-                            <th>Email</th>
-                            <th>Primary Contact</th>
-                            <th>Added By</th>
-                            <th>Added Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Data will be inserted here by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
+
+        <div class="table-responsive client-table-viewport">
+            <table id="companies-table" class="table client-data-table" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Company</th>
+                        <th>Contact</th>
+                        <th>Primary Contact</th>
+                        <th>Added</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
-    </div>
+    </section>
 
     <!-- Add Company Modal -->
     <div class="modal fade" id="addCompanyModal" tabindex="-1" role="dialog" aria-labelledby="addCompanyModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
@@ -315,6 +326,8 @@ window.chartPieDemo = function() {};
 
 <script>
 let companiesTable;
+const CAN_EDIT_COMPANY = {{ can_edit_company | tojson }};
+const CAN_DELETE_COMPANY = {{ can_delete_company | tojson }};
 
 $(document).ready(function() {
     console.log('Document ready, jQuery version:', $.fn.jquery);
@@ -328,7 +341,7 @@ $(document).ready(function() {
             if (typeof $.fn.DataTable !== 'undefined') {
                 initializeDataTable();
             } else {
-                $('#companies-table tbody').html('<tr><td colspan="9">DataTable failed to load. Please refresh the page.</td></tr>');
+                $('#companies-table tbody').html('<tr><td colspan="5">DataTable failed to load. Please refresh the page.</td></tr>');
             }
         }, 2000);
         return;
@@ -444,22 +457,123 @@ function validateFileSize(fileInput, formType) {
     return true;
 }
 
+// Escaped once, here, rather than trusted anywhere a company name is drawn.
+function companyText(value) {
+    return $('<div>').text(value === null || value === undefined ? '' : value).html();
+}
+
+// The header cell each body cell belongs to, carried on the cell itself so the
+// phone layout can print it as the card's label.
+function applyCompanyMobileLabels(row) {
+    $('#companies-table thead th').each(function(index) {
+        $('td', row).eq(index).attr('data-label', $(this).text().trim());
+    });
+    $(row).addClass('client-table-mobile-card');
+}
+
+function companyActionButtons(company) {
+    var name = companyText(company.company_name || 'this company');
+    return '<div class="client-action-group client-action-group--three">' +
+        (CAN_EDIT_COMPANY
+            ? '<button type="button" class="btn btn-sm btn-primary" onclick="editCompany(' + company.id + ')" title="Edit company" aria-label="Edit ' + name + '"><i class="fas fa-pen" aria-hidden="true"></i></button>'
+            : '') +
+        '<button type="button" class="btn btn-sm btn-outline-info" onclick="viewDocuments(' + company.id + ')" title="Documents" aria-label="Documents for ' + name + '"><i class="fas fa-file-alt" aria-hidden="true"></i></button>' +
+        (CAN_DELETE_COMPANY
+            ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCompany(' + company.id + ')" title="Delete company" aria-label="Delete ' + name + '"><i class="fas fa-trash" aria-hidden="true"></i></button>'
+            : '') +
+    '</div>';
+}
+
 function initializeDataTable() {
     try {
         // Initialize DataTable
         companiesTable = $('#companies-table').DataTable({
-            responsive: true,
-            order: [[0, 'desc']],
-            columnDefs: [
-                { targets: [8], orderable: false } // Actions column
+            columns: [
+                {
+                    data: null,
+                    width: '30%',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return [row.company_name, row.industry_sector, row.id].join(' ');
+                        return '<div class="client-identity">' +
+                            '<span class="client-identity-copy">' +
+                                '<strong>' + companyText(row.company_name || 'Unnamed Company') + '</strong>' +
+                                '<small>' + companyText(row.industry_sector || 'No industry') + ' <span class="client-record-id">#' + companyText(row.id) + '</span></small>' +
+                            '</span>' +
+                        '</div>';
+                    }
+                },
+                {
+                    data: null,
+                    width: '24%',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return [row.phone_number, row.email_address].join(' ');
+                        var email = row.email_address
+                            ? '<a href="mailto:' + companyText(row.email_address) + '">' + companyText(row.email_address) + '</a>'
+                            : '<span class="client-contact-empty">No email</span>';
+                        return '<div class="client-contact-cell">' +
+                            '<a href="tel:' + companyText(row.phone_number || '') + '"><i class="fas fa-phone-alt" aria-hidden="true"></i>' + companyText(row.phone_number || 'No phone') + '</a>' +
+                            email +
+                        '</div>';
+                    }
+                },
+                {
+                    data: 'primary_contact_person',
+                    width: '18%',
+                    render: function(data, type) {
+                        if (type !== 'display') return data || '';
+                        return companyText(data || 'Not assigned');
+                    }
+                },
+                {
+                    data: null,
+                    width: '18%',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return [row.added_by_name, row.added_date].join(' ');
+                        return '<div class="client-added-cell"><strong>' + companyText(row.added_by_name || 'Unknown') + '</strong>' +
+                            '<small>' + companyText(row.added_date || '') + '</small></div>';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    width: '10%',
+                    className: 'client-actions-column',
+                    render: function(data, type, row) {
+                        return companyActionButtons(row);
+                    }
+                }
             ],
+            order: [],
+            pageLength: 25,
+            autoWidth: false,
+            deferRender: true,
+            dom: 'rt<"client-table-footer"lip>',
             language: {
-                processing: "Loading...",
+                processing: "Loading companies...",
                 emptyTable: "No companies found",
-                loadingRecords: "Loading...",
-                zeroRecords: "No matching companies found"
+                loadingRecords: "Loading companies...",
+                zeroRecords: "No companies match the current search",
+                info: "Showing _START_ to _END_ of _TOTAL_ companies",
+                infoEmpty: "No companies to show",
+                lengthMenu: "Rows per page _MENU_"
             },
-            processing: true
+            processing: true,
+            rowCallback: function(row) {
+                applyCompanyMobileLabels(row);
+            }
+        });
+
+        $('#companySearch').on('input', function() {
+            companiesTable.search(this.value).draw();
+        });
+
+        $('#refreshCompaniesBtn').on('click', function() {
+            var $button = $(this).prop('disabled', true);
+            $button.find('i').addClass('fa-spin');
+            loadCompanies(function() {
+                $button.prop('disabled', false).find('i').removeClass('fa-spin');
+            });
         });
         
         console.log('DataTable initialized successfully');
@@ -468,13 +582,14 @@ function initializeDataTable() {
         loadCompanies();
     } catch (error) {
         console.error('Error initializing DataTable:', error);
-        $('#companies-table tbody').html('<tr><td colspan="9">Failed to initialize table: ' + error.message + '</td></tr>');
+        $('#companies-table tbody').html('<tr><td colspan="5">Failed to initialize table: ' + error.message + '</td></tr>');
     }
 }
 
-function loadCompanies() {
+function loadCompanies(done) {
     if (!companiesTable) {
         console.error('DataTable is not initialized');
+        if (done) { done(); }
         return;
     }
     
@@ -497,37 +612,12 @@ function loadCompanies() {
             
             if (response.success) {
                 companiesTable.clear();
-                if (response.companies && response.companies.length > 0) {
-                    console.log('Adding', response.companies.length, 'companies to table');
-                    response.companies.forEach(function(company) {
-                        companiesTable.row.add([
-                            company.id,
-                            company.company_name || '',
-                            company.industry_sector || '',
-                            company.phone_number || '',
-                            company.email_address || '',
-                            company.primary_contact_person || '',
-                            company.added_by_name || 'N/A',
-                            company.added_date || '',
-                            `<button class="btn btn-sm btn-primary me-1" onclick="editCompany(${company.id})" title="Edit Company">
-                                <i class="fas fa-edit"></i> Edit
-                            </button>
-                            <button class="btn btn-sm btn-info me-1" onclick="viewDocuments(${company.id})" title="View Documents">
-                                <i class="fas fa-file-alt"></i> Docs
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteCompany(${company.id})" title="Delete Company">
-                                <i class="fas fa-trash"></i> Delete
-                            </button>`
-                        ]);
-                    });
-                } else {
-                    console.log('No companies found');
-                }
-                companiesTable.draw();
+                companiesTable.rows.add(response.companies || []).draw();
             } else {
                 console.error('API Error:', response.error);
                 Swal.fire('Error', response.error || 'Failed to load companies', 'error');
             }
+            if (done) { done(); }
         },
         error: function(xhr, status, error) {
             if (companiesTable && companiesTable.processing) {
@@ -540,6 +630,7 @@ function loadCompanies() {
                 xhr: xhr
             });
             Swal.fire('Error', 'Failed to load companies: ' + error, 'error');
+            if (done) { done(); }
         }
     });
 }
@@ -637,15 +728,6 @@ function submitCompanyForm() {
 }
 
 function editCompany(companyId) {
-    // Find company data from the table
-    const companies = companiesTable.data().toArray();
-    const companyRow = companies.find(row => row[0] == companyId);
-    
-    if (!companyRow) {
-        Swal.fire('Error', 'Company not found', 'error');
-        return;
-    }
-    
     // Load company data for editing
     $.ajax({
         url: '/api/companies',

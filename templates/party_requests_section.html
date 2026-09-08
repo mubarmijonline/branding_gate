@@ -1,35 +1,51 @@
-{# Asking for a client or a supplier.
+{# Asking for a client, company or supplier.
 
-   One include, used by both /client and /supplier. The page sets `party_kind`
+   One include, used by /client, /company and /supplier. The page sets `party_kind`
    before including it; everything else -- the fields, the wording, the queue --
-   follows from that, so the two pages cannot drift apart.
+   follows from that, so the pages cannot drift apart.
 
    Shown to whoever may raise one, and to whoever may decide one. Somebody with
    neither never sees it. #}
 {% set _pp = session.get('perms', {}) %}
-{% set can_raise = (party_kind == 'client' and 'client_request.create' in _pp)
-                or (party_kind == 'supplier' and 'supplier_request.create' in _pp) %}
+{# Whoever may add one outright has no use for the request flow: they would be
+   raising a request for themselves to approve. They still see the card,
+   because deciding other people's requests is the other half of it. #}
+{% set can_add_directly = (party_kind == 'client' and 'client.create' in _pp)
+                       or (party_kind == 'company' and 'company.create' in _pp)
+                       or (party_kind == 'supplier' and 'supplier.create' in _pp) %}
+{% set may_ask = (party_kind == 'client' and 'client_request.create' in _pp)
+              or (party_kind == 'company' and 'company_request.create' in _pp)
+              or (party_kind == 'supplier' and 'supplier_request.create' in _pp) %}
+{% set can_raise = may_ask and not can_add_directly %}
 {% set can_decide = 'party_request.approve_head' in _pp or 'party_request.approve_admin' in _pp %}
+{% set party_label = 'Client' if party_kind == 'client' else ('Company' if party_kind == 'company' else 'Supplier') %}
 
 {% if can_raise or can_decide %}
 <div class="card shadow mb-4" id="partyRequestCard">
   <div class="card-header py-3 d-flex align-items-center flex-wrap" style="gap:.5rem;">
-    <h6 class="m-0 font-weight-bold text-primary">
-      <i class="fas fa-user-plus mr-2"></i>
-      {{ 'Client' if party_kind == 'client' else 'Supplier' }} requests
-      <span class="badge badge-warning ml-2 d-none" id="partyWaitingBadge">0</span>
-    </h6>
-    <span class="text-muted small ml-2">
-      Your department head approves it and it is added.
-    </span>
+    <div class="mr-auto">
+      <h6 class="m-0 font-weight-bold text-primary">
+        <i class="fas fa-user-plus mr-2"></i>
+        {{ party_label }} requests
+        <span class="badge badge-warning ml-2 d-none" id="partyWaitingBadge">0</span>
+      </h6>
+      <span class="text-muted small">
+        {% if can_add_directly %}
+        You add these yourself &mdash; the button is on the card below. This is
+        where you decide what other people ask for.
+        {% else %}
+        Your department head approves it and it is added.
+        {% endif %}
+      </span>
+    </div>
     {% if can_raise %}
-    <button type="button" class="btn btn-primary btn-sm ml-auto" id="partyRequestNew">
+    <button type="button" class="btn btn-primary btn-sm" id="partyRequestNew">
       <i class="fas fa-plus mr-1"></i>Request a new {{ party_kind }}
     </button>
     {% endif %}
   </div>
   <div class="card-body p-0">
-    <div class="table-responsive">
+    <div class="table-responsive party-request-table-wrap d-none d-md-block">
       <table class="table table-sm mb-0" id="partyRequestTable">
         <thead class="thead-light">
           <tr>
@@ -39,6 +55,7 @@
         <tbody></tbody>
       </table>
     </div>
+    <div class="party-request-mobile-list d-md-none" id="partyRequestCards"></div>
   </div>
 </div>
 
@@ -72,9 +89,21 @@
       ['preferred_contact_channel', 'Preferred contact', false],
       ['additional_notes', 'Notes', false]
     ],
+    company: [
+      ['company_name', 'Company name', true],
+      ['industry_sector', 'Industry / Sector', true],
+      ['address', 'Address', true],
+      ['phone_number', 'Phone', true],
+      ['email_address', 'Email', true],
+      ['primary_contact_person', 'Primary contact person', true],
+      ['tax_number', 'Tax number', false],
+      ['vat_number', 'VAT number', false],
+      ['website_social_media', 'Website / Social media', false],
+      ['additional_notes', 'Notes', false]
+    ],
     supplier: [
       ['supplier_name', 'Supplier name', true],
-      ['email_address', 'Email', true],
+      ['email_address', 'Email', false],
       ['company_name', 'Company', false],
       ['supplier_type', 'Type', false],
       ['contact_person_name', 'Contact person', false],
@@ -99,6 +128,42 @@
 
   function esc(v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); }
 
+  function partyActionButtons(q) {
+    var buttons = '<button class="btn btn-sm btn-outline-secondary party-view" data-id=' +
+                  q.id + '>Open</button>';
+    if (q.can_pass || q.can_finalise) {
+      buttons = '<button class="btn btn-sm btn-primary party-view" data-id=' + q.id +
+                '>Review</button>';
+    } else if (q.is_mine && (q.status === 'pending_head' || q.status === 'pending_admin')) {
+      buttons += ' <button class="btn btn-sm btn-outline-danger party-cancel" data-id=' +
+                 q.id + '>Withdraw</button>';
+    }
+    return buttons;
+  }
+
+  function partyRequestCards(requests) {
+    return requests.map(function (q) {
+      var shown = STATUS[q.status] || ['secondary', q.status];
+      var name = q.payload.client_name || q.payload.company_name || q.payload.supplier_name || '-';
+      var rejected = q.status === 'rejected' && q.rejection_reason
+        ? '<div class="small text-danger">' + esc(q.rejection_reason) + '</div>' : '';
+      return '<article class="party-request-mobile-card">' +
+        '<div class="party-request-mobile-main">' +
+          '<div><code>' + esc(q.request_code) + '</code>' +
+            '<strong>' + esc(name) + '</strong></div>' +
+          '<span class="badge badge-' + shown[0] + '">' + shown[1] + '</span>' +
+        '</div>' +
+        '<div class="party-request-mobile-meta">' +
+          '<span>' + esc(q.requested_by_name) + '</span>' +
+          '<span>' + esc(q.department_name || '') + '</span>' +
+          '<span>' + esc(q.requested_at || '') + '</span>' +
+        '</div>' +
+        rejected +
+        '<div class="party-request-mobile-actions">' + partyActionButtons(q) + '</div>' +
+      '</article>';
+    }).join('');
+  }
+
   function load() {
     $.getJSON('/api/party-requests?kind=' + KIND).done(function (r) {
       if (!r || !r.success) { return; }
@@ -110,20 +175,13 @@
         $('#partyRequestTable tbody').html(
           '<tr><td colspan="6" class="text-center text-muted py-4">' +
           'No ' + KIND + ' requests yet.</td></tr>');
+        $('#partyRequestCards').html(
+          '<div class="party-request-mobile-empty">No ' + KIND + ' requests yet.</div>');
         return;
       }
       $('#partyRequestTable tbody').html(r.requests.map(function (q) {
         var shown = STATUS[q.status] || ['secondary', q.status];
-        var name = q.payload.client_name || q.payload.supplier_name || '-';
-        var buttons = '<button class="btn btn-sm btn-outline-secondary party-view" data-id=' +
-                      q.id + '>Open</button>';
-        if (q.can_pass || q.can_finalise) {
-          buttons = '<button class="btn btn-sm btn-primary party-view" data-id=' + q.id +
-                    '>Review</button>';
-        } else if (q.is_mine && (q.status === 'pending_head' || q.status === 'pending_admin')) {
-          buttons += ' <button class="btn btn-sm btn-outline-danger party-cancel" data-id=' +
-                     q.id + '>Withdraw</button>';
-        }
+        var name = q.payload.client_name || q.payload.company_name || q.payload.supplier_name || '-';
         return '<tr>' +
           '<td><code>' + esc(q.request_code) + '</code></td>' +
           '<td>' + esc(name) + '</td>' +
@@ -134,9 +192,10 @@
               ? '<div class="small text-danger">' + esc(q.rejection_reason) + '</div>' : '') +
           '</td>' +
           '<td class="small">' + esc(q.requested_at || '') + '</td>' +
-          '<td class="text-right text-nowrap">' + buttons + '</td>' +
+          '<td class="text-right text-nowrap">' + partyActionButtons(q) + '</td>' +
         '</tr>';
       }).join(''));
+      $('#partyRequestCards').html(partyRequestCards(r.requests));
       window.PARTY_REQUESTS = r.requests;
     });
   }
@@ -251,7 +310,12 @@
       .done(function () { load(); });
   });
 
-  $(load);
+  $(function () {
+    load();
+    if (CAN_RAISE && new URLSearchParams(window.location.search).get('new_request') === '1') {
+      $('#partyRequestNew').trigger('click');
+    }
+  });
 }());
 </script>
 {% endif %}
