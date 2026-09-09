@@ -279,6 +279,20 @@ retires it (`discontinued`) rather than removing it; the route returns
 honours `status`, where `all` means every live item -- a retired one is found
 by asking for it.
 
+**A form posts its field names verbatim.** `Object.fromEntries(new FormData(f))`
+sends what the inputs are called, so a `name=` the route does not read is a
+value silently discarded -- the add-item form lost its minimum and its unit
+that way for months. Check the two names against each other when adding a
+field.
+
+**No menus inside table rows.** A Bootstrap dropdown in a cell is drawn
+downward and flipped up by Popper on the next frame, visibly jumping. Use the
+`.row-actions` buttons.
+
+**A figure nobody has counted yet is not zero.** Stat tiles start `stat-pending`
+and are revealed by `setStat()` when the data lands; a hard-coded `0` is a claim
+the page is about to contradict.
+
 **A JSON read is never cacheable.** `no_stale_api_reads` marks every `/api/`
 GET `no-store`. Without it the browser answers a post-write table reload out of
 its own cache, so a just-deleted row comes back and the next reload drops it --

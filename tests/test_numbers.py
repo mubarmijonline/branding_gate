@@ -282,3 +282,93 @@ class ConnectionsAreClosedTest(unittest.TestCase):
         after = threads()
         self.assertLessEqual(after - before, 3,
                              'connections accumulated: %d -> %d' % (before, after))
+
+
+class InventoryFormFieldsTest(unittest.TestCase):
+    """
+    A form field the route does not read is a value silently thrown away.
+
+    The add-item form posted "Minimum Quantity" as `min_quantity` and the route
+    reads `minimum_stock_level`, so a minimum typed while adding vanished and
+    only stuck once somebody went back and edited the item. The unit had the
+    same shape of bug -- posted as `unit_type`, read as `unit_of_measure` --
+    so every item created here became PCS whatever was chosen.
+
+    The form posts its field names verbatim
+    (`Object.fromEntries(new FormData(form))`), so the names have to match.
+    """
+
+    def setUp(self):
+        with open('templates/inventory_management.html', encoding='utf-8') as handle:
+            self.page = handle.read()
+        with open('branding_gate.py', encoding='utf-8') as handle:
+            self.source = handle.read()
+
+    def _add_form(self):
+        start = self.page.index('<form id="addItemForm">')
+        return self.page[start:self.page.index('</form>', start)]
+
+    def test_the_add_form_posts_the_names_the_route_reads(self):
+        form = self._add_form()
+        self.assertIn('name="minimum_stock_level"', form)
+        self.assertIn('name="unit_of_measure"', form)
+        # The names that went nowhere.
+        self.assertNotIn('name="min_quantity"', form)
+        self.assertNotIn('name="unit_type"', form)
+
+    def test_the_route_still_reads_those_names(self):
+        self.assertIn("data.get('minimum_stock_level', 0)", self.source)
+        self.assertIn("data.get('unit_of_measure', 'PCS')", self.source)
+
+
+class InventoryRowActionsTest(unittest.TestCase):
+    """
+    A menu in a table cell is drawn below its button and then flipped above it.
+
+    Bootstrap positions a dropdown downward and Popper re-places it on the next
+    frame when the row is near the bottom of the scroll box -- visibly jumping.
+    Three actions do not need a menu, and the entity table has always used
+    plain buttons.
+    """
+
+    def setUp(self):
+        with open('templates/inventory_management.html', encoding='utf-8') as handle:
+            self.page = handle.read()
+
+    def test_no_row_renders_a_dropdown(self):
+        for fn in ('renderItemActions', 'renderCreditActions'):
+            start = self.page.index('function %s(' % fn)
+            body = self.page[start:self.page.index('\n}', start)]
+            self.assertNotIn('dropdown-toggle', body, fn)
+            self.assertNotIn('dropdown-menu', body, fn)
+            self.assertIn('row-actions', body, fn)
+
+    def test_the_buttons_have_somewhere_to_get_their_look(self):
+        self.assertIn('.row-actions .btn-action', self.page)
+
+
+class InventoryStatsTest(unittest.TestCase):
+    """
+    A figure nobody has counted yet must not read as zero.
+
+    The tiles were hard-coded to 0 and EGP 0, so every load showed a confident
+    "you have none" until the fetch landed and the numbers jumped -- which is
+    what looked like the page lagging. They were then set and immediately
+    "animated" from the value to itself over 600ms, thirty frames of nothing.
+    """
+
+    def setUp(self):
+        with open('templates/inventory_management.html', encoding='utf-8') as handle:
+            self.page = handle.read()
+
+    def test_the_tiles_start_blank_not_at_zero(self):
+        for stat in ('stat-regular', 'stat-value', 'stat-low', 'stat-extra'):
+            marker = 'id="%s" class="stat-pending"' % stat
+            self.assertIn(marker, self.page, stat)
+        self.assertNotIn('<strong id="stat-regular">0</strong>', self.page)
+        self.assertNotIn('<strong id="stat-value">EGP 0</strong>', self.page)
+
+    def test_a_figure_is_written_and_revealed_together(self):
+        self.assertIn("element.classList.remove('stat-pending')", self.page)
+        # And the count-up that animated a number to itself is gone.
+        self.assertNotIn('updateStatAnimation', self.page)

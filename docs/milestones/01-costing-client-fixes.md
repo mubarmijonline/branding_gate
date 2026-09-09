@@ -357,3 +357,26 @@ Measured: 50 requests, no change in `Threads_connected`.
 the entity list, so changing the name of the thing whose stock you were looking
 at meant leaving the page. There is an "Edit Entity" button on the inventory
 header now, and `/entity-management?edit=<id>` opens that entity directly.
+
+## Fifteenth round, 9 September 2026
+
+**The Actions menu jumped from below the button to above it.** Bootstrap draws
+a dropdown downward and Popper re-places it on the next frame when the row is
+near the bottom of the scroll box, which reads as the menu flickering into
+place. Three actions do not need a menu: the inventory rows now carry plain
+buttons, the same shape the entity table has always used. The credit rows had
+the same menu and got the same treatment.
+
+**A minimum typed while adding an item was thrown away.** The form posts its
+field names verbatim, and it posted `min_quantity` while the route reads
+`minimum_stock_level` -- so the value vanished and only stuck once somebody
+went back and edited the item, which is exactly how it was reported. The unit
+had the identical bug (`unit_type` posted, `unit_of_measure` read), so every
+item created here became PCS whatever was chosen. Both names now match.
+
+**The tiles announced zero before they had counted.** They were hard-coded to
+`0` and `EGP 0`, so every load showed a confident "you have none" until the
+fetch landed and all four figures jumped -- the flash that reads as lag. They
+now start blank and are revealed together the moment they are known. The
+count-up "animation" that ran afterwards is gone: it read the value it had just
+been given and spent 600ms in thirty frames counting from that value to itself.
