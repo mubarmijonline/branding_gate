@@ -451,3 +451,43 @@ word of it -- lists every movement
 in and out of it, with the running balance, alongside its stock, minimum,
 average cost and stock value, and offers the two things somebody opens that to
 do next: Stock In / Out, and Edit Item.
+
+## Eighteenth round, 10 September 2026
+
+**Who may do what to an item.** Delete is the Operations Head's alone (and the
+owner's): it takes a row and its history with it. The team leader holds every
+other inventory permission the Head does. A member moves stock -- in and out --
+and nothing else; until now members held `inventory.view` only, so the stock
+they physically move could not be recorded by them at all. The page draws only
+the buttons the account may use, and every route still checks for itself.
+
+**Who did it, by name and number.** An item carried `created_by` as a bare
+username and nothing about later edits. It now has `updated_by` beside the
+`updated_at` it already had, and every read -- the list, the item, each
+movement -- resolves those handles to a name and a mobile number.
+
+**What happened to it.** `inventory_item_events` records the item's own
+timeline: created, each edited field with its old and new value, retired,
+restored. The item view shows it as an Item History tab beside Stock In / Out,
+under a line naming who added the item and who last modified it, and when.
+An edit that changes nothing leaves no line.
+
+**A minimum somebody watches.** A movement that takes an item to or under its
+minimum now notifies the whole Operations department, with a link to that
+entity's inventory. Once, on the crossing -- the fifth stock-out from an item
+everyone has already been told about is noise -- and again if it runs out.
+
+**The inventory pages on a phone.** Three causes, none of them the obvious one.
+The tables all asked DataTables for `responsive: true`, but the Responsive
+extension was never loaded, so the option did nothing. Loading it did nothing
+either, because every table sat inside Bootstrap's `.table-responsive`, whose
+scrolling tells Responsive there is room for every column. And under both, the
+design system gave every DataTable a `min-width` of 780px. With the extension
+loaded, the wrapper gone and responsive tables exempt from that floor, a phone
+shows the item, its stock and its buttons, with the rest folded into an
+expandable row. Around the tables: the header stacks above full-width buttons,
+the filters stack, the four figures sit two across, and dialogs fit the
+screen. Entity Management had no phone rules at all and now has them.
+
+`/item_management` is a redirect to `/inventory-selection`; its template is not
+served, so the phone rules added to it affect nothing rendered today.

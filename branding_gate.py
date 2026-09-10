@@ -4394,6 +4394,121 @@ def sales_request_audience(cur, request_id, exclude=None):
     return sorted(people)
 
 
+def record_item_event(cur, item_id, event_type, field=None,
+                      old=None, new=None, note=None):
+    """
+    One line on an item's timeline.
+
+    `created_by` was the only trace an item carried, so a minimum changed
+    yesterday had nobody's name on it. Every change goes here instead: what
+    changed, from what, to what, who did it, when. Stock movements have their
+    own table and their own history; this is the item's own data.
+    """
+    def _text(value):
+        if value is None:
+            return None
+        return str(value)[:255]
+
+    cur.execute("""
+        INSERT INTO inventory_item_events
+            (item_id, event_type, field_name, old_value, new_value, note, performed_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (item_id, event_type, field, _text(old), _text(new), _text(note),
+          session.get('username')))
+
+
+# The fields worth a line on the timeline, in the words the page uses.
+ITEM_TRACKED_FIELDS = {
+    'item_name': 'Name',
+    'category': 'Category',
+    'description': 'Description',
+    'unit_of_measure': 'Unit',
+    'minimum_stock_level': 'Minimum quantity',
+    'reorder_level': 'Reorder level',
+    'preferred_supplier_id': 'Preferred supplier',
+    'status': 'Status',
+    'width': 'Width',
+    'height': 'Height',
+    'depth': 'Depth',
+}
+
+
+def operations_team_ids(cur, exclude=None):
+    """
+    The whole Operations team, for telling them an item has run low.
+
+    Stock falling to its minimum is not one person's problem -- whoever buys,
+    whoever costs from it and whoever runs the department all need to know --
+    so this is the department, not a single owner.
+    """
+    cur.execute("""
+        SELECT u.id
+        FROM user u
+        JOIN department d ON d.id = u.department_id
+        WHERE d.code = 'operations'
+    """)
+    people = {row['id'] for row in cur.fetchall()}
+    people.discard(None)
+    for user_id in (exclude or ()):
+        people.discard(user_id)
+    return sorted(people)
+
+
+def notify_low_stock(cur, item_id, new_stock, previous_stock=None):
+    """
+    Tell Operations when a movement takes an item down to its minimum.
+
+    The alert row the trigger writes is only visible to somebody already
+    looking at the Alerts tab of that entity's inventory, which is nobody at
+    the moment it happens.
+
+    Sent on the crossing, not on every movement below it: the fifth stock-out
+    from an item everyone has already been told about is noise, and noise is
+    how a real warning gets ignored. Running out is always worth saying,
+    because nothing else moves after that.
+    """
+    cur.execute("""
+        SELECT i.item_code, i.item_name, i.unit_of_measure, i.minimum_stock_level,
+               i.entity_id, e.entity_name
+        FROM inventory_items i
+        LEFT JOIN entities e ON e.id = i.entity_id
+        WHERE i.id = %s
+    """, (item_id,))
+    item = cur.fetchone()
+    if not item:
+        return 0
+    minimum = float(item['minimum_stock_level'] or 0)
+    if minimum <= 0 and new_stock > 0:
+        # No minimum set and something still on the shelf: nothing to say.
+        return 0
+    if new_stock > minimum:
+        return 0
+    if previous_stock is not None:
+        was_already_low = previous_stock <= minimum
+        just_ran_out = new_stock <= 0 < previous_stock
+        if was_already_low and not just_ran_out:
+            return 0
+
+    audience = operations_team_ids(cur)
+    if not audience:
+        return 0
+    where = ' at %s' % item['entity_name'] if item['entity_name'] else ''
+    unit = (' ' + item['unit_of_measure']) if item['unit_of_measure'] else ''
+    if new_stock <= 0:
+        title = 'Out of stock: %s' % item['item_name']
+        body = ('%s (%s)%s has run out. Minimum is %s%s.'
+                % (item['item_name'], item['item_code'], where,
+                   '{:,.0f}'.format(minimum), unit))
+    else:
+        title = 'Below minimum: %s' % item['item_name']
+        body = ('%s (%s)%s is down to %s%s, at or under its minimum of %s%s.'
+                % (item['item_name'], item['item_code'], where,
+                   '{:,.0f}'.format(new_stock), unit,
+                   '{:,.0f}'.format(minimum), unit))
+    link = '/inventory?entity_id=%s' % item['entity_id'] if item['entity_id'] else '/inventory-selection'
+    return notify_users(audience, title, body, link)
+
+
 # The types offered before anybody had typed one of their own.
 SUPPLIER_TYPE_SEED = ('Raw Materials', 'Equipment', 'Services',
                       'Technology', 'Logistics', 'Production')
@@ -18684,7 +18799,8 @@ def get_inventory_items():
                 i.description, i.unit_of_measure, i.quantity_in_stock,
                 i.minimum_stock_level, i.reorder_level, i.average_cost,
                 i.last_purchase_cost, i.preferred_supplier_id, i.source_type,
-                i.source_id, i.status, i.created_by, i.created_at, i.updated_at,
+                i.source_id, i.status, i.created_by, i.updated_by,
+                i.created_at, i.updated_at,
                 i.width, i.height, i.depth, i.specifications, i.request_type,
                 i.is_credit_item, i.credit_supplier_id, i.entity_id,
                 s.supplier_name,
@@ -18699,7 +18815,12 @@ def get_inventory_items():
         """
         cur.execute(query, params)
         items = cur.fetchall()
-        
+
+        # "Created by" was a bare username, so a row said `01050172555` and the
+        # reader had to know who that is. One query resolves every handle a
+        # column might hold into a name, a mobile and a user id.
+        people = people_index(cur)
+
         items_list = []
         for item in items:
             # For credit items, get credit details
@@ -18759,7 +18880,13 @@ def get_inventory_items():
                 'source_type': item['source_type'],
                 'status': item['status'],
                 'created_by': item['created_by'],
+                'created_by_name': person_of(people, item['created_by'])['name'],
+                'created_by_mobile': person_of(people, item['created_by'])['mobile'],
+                'updated_by': item['updated_by'],
+                'updated_by_name': person_of(people, item['updated_by'])['name'],
+                'updated_by_mobile': person_of(people, item['updated_by'])['mobile'],
                 'created_at': item['created_at'].strftime('%Y-%m-%d %H:%M:%S') if item['created_at'] else '',
+                'updated_at': item['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if item['updated_at'] else '',
                 # Include dimensions and specifications
                 'width': float(item['width']) if item['width'] else None,
                 'height': float(item['height']) if item['height'] else None,
@@ -18945,11 +19072,12 @@ def add_inventory_item():
                     reorder_level = %s,
                     preferred_supplier_id = %s,
                     description = COALESCE(%s, description),
+                    updated_by = %s,
                     updated_at = NOW()
                 WHERE id = %s
             """, (minimum_stock_level, data.get('reorder_level', 10),
                   preferred_supplier_id, data.get('description'),
-                  retired_item['id']))
+                  session.get('username'), retired_item['id']))
             # average_cost is deliberately not in that UPDATE: the row's own
             # purchase history decides it, and the stock transaction below
             # moves it if this add brings more in.
@@ -18959,6 +19087,9 @@ def add_inventory_item():
             # would double it, which is how a re-added item ended up with twice
             # the stock nobody had bought. More stock is a movement, like any
             # other movement.
+            record_item_event(cur, retired_item['id'], 'restored', field='status',
+                              old='discontinued', new='active',
+                              note='Added again, so the retired item was restored')
             held = float(retired_item['quantity_in_stock'] or 0)
             revived_quantity = int(data.get('quantity_in_stock', 0) or 0) if held <= 0 else 0
             if revived_quantity > 0:
@@ -18998,11 +19129,11 @@ def add_inventory_item():
             INSERT INTO inventory_items 
             (item_code, item_name, item_type, category, description, unit_of_measure,
              quantity_in_stock, minimum_stock_level, reorder_level, average_cost,
-             preferred_supplier_id, source_type, status, created_by,
+             preferred_supplier_id, source_type, status, created_by, updated_by,
              sales_request_item_id, unit_selling_price, expected_profit_per_unit,
              is_credit_item, credit_supplier_id,
              width, height, depth, specifications, request_type, entity_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             item_code,  # Use generated/validated item_code
             data.get('item_name'),
@@ -19019,6 +19150,7 @@ def add_inventory_item():
             data.get('source_type', 'manual'),
             data.get('status', 'active'),
             session.get('username'),
+            session.get('username'),
             sales_request_item_id,
             unit_selling_price,
             expected_profit_per_unit,
@@ -19033,7 +19165,9 @@ def add_inventory_item():
         ))
         
         item_id = cur.lastrowid
-        
+        record_item_event(cur, item_id, 'created',
+                          note='Item %s added with a minimum of %s' % (item_code, minimum_stock_level))
+
         # Create initial transaction if quantity > 0 - trigger will update stock and set balance_after
         if initial_quantity > 0:
             cur.execute("""
@@ -19098,20 +19232,102 @@ def get_inventory_item(item_id):
         """, (item_id,))
         
         item = cur.fetchone()
+
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Item not found'}), 404
+
+        item = dict(item)
+        # Serialised raw, a timestamp reaches the page as "Wed, 09 Sep 2026
+        # 09:04:42 GMT", which is not how any other date on the site reads.
+        for column in ('created_at', 'updated_at'):
+            if item.get(column) is not None and hasattr(item[column], 'strftime'):
+                item[column] = item[column].strftime('%Y-%m-%d %H:%M:%S')
+        people = people_index(cur)
+        stamp_person(item, 'created_by', people)
+        stamp_person(item, 'updated_by', people)
         cur.close()
         conn.close()
-        
-        if not item:
-            return jsonify({'success': False, 'error': 'Item not found'}), 404
-        
-        return jsonify({
-            'success': True,
-            'item': dict(item)
-        })
+
+        return jsonify({'success': True, 'item': item})
         
     except Exception as e:
         print(f"Error fetching inventory item: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/inventory/items/<int:item_id>/timeline', methods=['GET'])
+@perm('inventory.view')
+def get_inventory_item_timeline(item_id):
+    """
+    Everything that has happened to one item, newest first.
+
+    Its own data changing -- who changed the minimum, from what, to what -- and
+    its stock moving, in one list, because "what happened to this item" is one
+    question however the answer is stored.
+    """
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    try:
+        conn, cur = connection()
+        people = people_index(cur)
+
+        cur.execute("""
+            SELECT event_type, field_name, old_value, new_value, note,
+                   performed_by, performed_at
+            FROM inventory_item_events
+            WHERE item_id = %s
+            ORDER BY performed_at DESC, id DESC
+        """, (item_id,))
+        entries = []
+        for row in cur.fetchall():
+            person = person_of(people, row['performed_by'])
+            entries.append({
+                'kind': 'item',
+                'event_type': row['event_type'],
+                'field_name': row['field_name'],
+                'field_label': ITEM_TRACKED_FIELDS.get(row['field_name'], row['field_name']),
+                'old_value': row['old_value'],
+                'new_value': row['new_value'],
+                'note': row['note'],
+                'by_name': person['name'],
+                'by_mobile': person['mobile'],
+                'by_user_id': person['user_id'],
+                'at': row['performed_at'].strftime('%Y-%m-%d %H:%M:%S') if row['performed_at'] else '',
+            })
+
+        cur.execute("""
+            SELECT transaction_type, quantity, unit_cost, balance_after,
+                   reference_type, notes, performed_by, transaction_date
+            FROM inventory_transactions
+            WHERE item_id = %s
+            ORDER BY transaction_date DESC, id DESC
+        """, (item_id,))
+        for row in cur.fetchall():
+            person = person_of(people, row['performed_by'])
+            entries.append({
+                'kind': 'stock',
+                'event_type': row['transaction_type'],
+                'quantity': float(row['quantity'] or 0),
+                'unit_cost': float(row['unit_cost'] or 0),
+                'balance_after': float(row['balance_after'] or 0),
+                'note': row['notes'] or row['reference_type'] or '',
+                'by_name': person['name'],
+                'by_mobile': person['mobile'],
+                'by_user_id': person['user_id'],
+                'at': row['transaction_date'].strftime('%Y-%m-%d %H:%M:%S') if row['transaction_date'] else '',
+            })
+
+        cur.close()
+        conn.close()
+        entries.sort(key=lambda entry: entry['at'], reverse=True)
+        return jsonify({'success': True, 'timeline': entries})
+
+    except Exception as e:
+        print(f"Error reading item timeline: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/inventory/items/<int:item_id>', methods=['PUT'])
 @perm('inventory.edit')
@@ -19124,9 +19340,7 @@ def update_inventory_item(item_id):
         data = request.get_json()
         conn, cur = connection()
 
-        cur.execute("""SELECT item_code, item_name, unit_of_measure, width, height, depth,
-                              entity_id, is_credit_item
-                       FROM inventory_items WHERE id = %s""", (item_id,))
+        cur.execute("SELECT * FROM inventory_items WHERE id = %s", (item_id,))
         current = cur.fetchone()
         if not current:
             cur.close()
@@ -19223,6 +19437,30 @@ def update_inventory_item(item_id):
             conn.close()
             return jsonify({'success': False, 'error': 'No fields to update'}), 400
         
+        # What actually changed, recorded before the write so the old value is
+        # still readable. An edit that changes nothing leaves no line.
+        changes = []
+        for form_field, db_field in field_mapping.items():
+            if form_field not in data or data[form_field] is None:
+                continue
+            if db_field not in ITEM_TRACKED_FIELDS:
+                continue
+            was = current.get(db_field)
+            now = data[form_field]
+            if db_field in ('minimum_stock_level', 'reorder_level', 'width', 'height', 'depth'):
+                was_cmp = float(was) if was is not None else None
+                now_cmp = float(now) if now not in (None, '') else None
+            elif db_field == 'preferred_supplier_id':
+                was_cmp = int(was) if was is not None else None
+                now_cmp = int(now) if now not in (None, '') else None
+            else:
+                was_cmp = None if was is None else str(was)
+                now_cmp = None if now in (None, '') else str(now)
+            if was_cmp != now_cmp:
+                changes.append((db_field, was_cmp, now_cmp))
+
+        update_fields.append("updated_by = %s")
+        update_values.append(session.get('username'))
         update_values.append(item_id)
         
         cur.execute(f"""
@@ -19230,6 +19468,11 @@ def update_inventory_item(item_id):
             SET {', '.join(update_fields)}
             WHERE id = %s
         """, tuple(update_values))
+
+        for db_field, was, now in changes:
+            record_item_event(cur, item_id, 'edited', field=db_field,
+                              old=was, new=now,
+                              note='%s changed' % ITEM_TRACKED_FIELDS[db_field])
         
         # Update components if composite
         if data.get('item_type') == 'composite':
@@ -19254,7 +19497,8 @@ def update_inventory_item(item_id):
         cur.close()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Item updated successfully'})
+        return jsonify({'success': True, 'message': 'Item updated successfully',
+                        'changed': [field for field, _old, _new in changes]})
         
     except Exception as e:
         print(f"Error updating inventory item: {str(e)}")
@@ -19280,12 +19524,19 @@ def delete_inventory_item(item_id):
         has_transactions = cur.fetchone()['count'] > 0
 
         if has_transactions:
-            cur.execute("UPDATE inventory_items SET status = 'discontinued' WHERE id = %s", (item_id,))
+            cur.execute("""UPDATE inventory_items
+                           SET status = 'discontinued', updated_by = %s
+                           WHERE id = %s""", (session.get('username'), item_id))
+            record_item_event(cur, item_id, 'retired', field='status',
+                              new='discontinued',
+                              note='Retired: movements are recorded against it')
             outcome, message = 'discontinued', (
                 'This item has movements recorded against it, so it was retired '
                 'rather than deleted. It no longer appears in the stock list; '
                 'choose "Discontinued" to find it.')
         else:
+            # The events go with it: the foreign key cascades, and a timeline
+            # for a row that no longer exists is nobody's history.
             cur.execute("DELETE FROM inventory_items WHERE id = %s", (item_id,))
             outcome, message = 'deleted', 'Item deleted successfully'
 
@@ -19384,6 +19635,8 @@ def get_inventory_transactions():
         cur.execute(query, params)
         transactions = cur.fetchall()
         
+        people = people_index(cur)
+
         transactions_list = []
         for trans in transactions:
             # Build reference info string
@@ -19415,6 +19668,8 @@ def get_inventory_transactions():
                 'transaction_date': trans['transaction_date'].strftime('%Y-%m-%d %H:%M:%S') if trans['transaction_date'] else '',
                 'notes': trans['notes'],
                 'performed_by': trans['performed_by'],
+                'performed_by_name': person_of(people, trans['performed_by'])['name'],
+                'performed_by_mobile': person_of(people, trans['performed_by'])['mobile'],
                 'balance_after': float(trans['balance_after']) if trans['balance_after'] else 0,
                 'supplier_name': trans['supplier_name'] if trans['supplier_name'] else '',
                 'client_name': trans['client_name'] if trans['client_name'] else ''
@@ -19511,14 +19766,25 @@ def add_inventory_transaction():
         cur.execute("SELECT quantity_in_stock FROM inventory_items WHERE id = %s", (item_id,))
         new_stock = float(cur.fetchone()['quantity_in_stock'] or 0)
         
+        # A movement that leaves the item at or under its minimum is the whole
+        # point of having a minimum, and the alert row the trigger writes is
+        # only seen by somebody already on the Alerts tab. Read on the cursor
+        # that is already open, and never let it cost the movement.
+        told = 0
+        try:
+            told = notify_low_stock(cur, item_id, new_stock, current_stock) or 0
+        except Exception as alert_error:
+            print(f"Low-stock notification failed: {alert_error}")
+
         cur.close()
         conn.close()
-        
+
         stock_change = new_stock - current_stock
         direction = "reduced by" if stock_change < 0 else "increased by"
         return jsonify({
             'success': True, 
             'transaction_id': transaction_id, 
+            'low_stock_notified': told,
             'message': f'Transaction recorded. Stock {direction} {abs(stock_change)}. New balance: {new_stock}'
         })
         

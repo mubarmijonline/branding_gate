@@ -3,6 +3,11 @@
 {% block head %}
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<!-- Responsive. Every table here already asked for `responsive: true`; the
+     extension that does the work was never loaded, so on a phone the tables
+     simply ran off the right edge with Stock, Minimum and Status out of
+     sight. -->
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <style>
@@ -298,6 +303,24 @@ tr.row-openable .row-actions { cursor: default; }
 .ledger-meta span { display: block; font-size: 11px; letter-spacing: .04em;
                     text-transform: uppercase; color: var(--muted); }
 .ledger-meta strong { font-size: 16px; }
+.ledger-stamp { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px;
+                color: var(--muted); margin: -6px 0 16px; }
+.person-mobile { color: var(--muted); font-size: 11px; }
+.ledger-tabs .nav-link { font-size: 13px; font-weight: 600; padding: 8px 14px; }
+.item-timeline { list-style: none; margin: 0; padding: 0 0 0 6px; }
+.item-timeline li { display: flex; gap: 12px; padding: 10px 0 10px 10px;
+                    border-left: 2px solid var(--border, #e6e6ef); }
+.item-timeline li:last-child { border-left-color: transparent; }
+.tl-mark { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%;
+           display: inline-flex; align-items: center; justify-content: center;
+           font-size: 11px; margin-left: -23px; background: #ececf5; color: var(--muted); }
+.tl-new .tl-mark { background: rgba(48,196,141,0.18); color: var(--success); }
+.tl-edit .tl-mark { background: rgba(109,93,252,0.15); color: var(--primary); }
+.tl-gone .tl-mark { background: rgba(240,101,72,0.18); color: var(--danger); }
+.tl-body { flex: 1; }
+.tl-what { font-size: 13px; }
+.tl-who { font-size: 11px; color: var(--muted); }
+.tl-when { margin-left: 8px; }
 .ledger-in { color: var(--success); font-weight: 700; }
 .ledger-out { color: var(--danger); font-weight: 700; }
 .ledger-table { font-size: 13px; }
@@ -398,6 +421,85 @@ tr.row-openable .row-actions { cursor: default; }
     .inventory-toolbar .actions { width: 100%; justify-content: flex-start; }
     .inventory-tabs { flex-wrap: wrap; }
 }
+
+/* A phone. The desktop padding alone took a third of a 390px screen, the
+   filters each held a 160px floor so they overflowed rather than stacked, the
+   tiles sat one per row down a page nobody scrolls that far on, and the action
+   buttons were 30px squares -- under every touch-target guideline there is. */
+@media (max-width: 768px) {
+    .inventory-shell { padding: 10px; min-height: auto; }
+    .inventory-card { border-radius: 14px; }
+
+    .inventory-header { padding: 16px 14px 12px; }
+    .inventory-header h1 { font-size: 19px; line-height: 1.3; }
+    .inventory-header h1 .badge-dot { width: 30px; height: 30px; }
+    .inventory-header > .d-flex { flex-direction: column; align-items: stretch !important; gap: 12px; }
+    .inventory-header > .d-flex > .d-flex { width: 100%; }
+    .inventory-header .btn-pill { flex: 1; justify-content: center; padding: 10px 12px; font-size: 13px; }
+
+    .inventory-toolbar { padding: 12px 14px; gap: 10px; }
+    .inventory-toolbar .filters { width: 100%; flex-direction: column; gap: 8px; }
+    .inventory-toolbar .filters select,
+    .inventory-toolbar .filters input { width: 100%; min-width: 0; padding: 10px 14px; }
+    .inventory-toolbar .filters input { padding-left: 36px; }
+    .inventory-toolbar .actions { width: 100%; }
+    .inventory-toolbar .actions .btn-pill { flex: 1; justify-content: center; }
+
+    /* Two across: four figures stay on one screen instead of four scrolls. */
+    .stat-grid { padding: 12px 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .stat-card { padding: 12px; border-radius: 14px; flex-direction: column;
+                 align-items: flex-start; gap: 6px; }
+    .stat-card strong { font-size: 19px; }
+    .stat-card span { font-size: 11px; }
+    .stat-card .badge-dot { width: 30px; height: 30px; }
+
+    .inventory-tabs { padding: 0 10px 6px; gap: 4px; -webkit-overflow-scrolling: touch; }
+    .inventory-tab { padding: 10px 12px; font-size: 13px; white-space: nowrap; }
+    .inventory-panel { padding: 16px 12px 28px; }
+
+    .section-header { flex-direction: column; align-items: flex-start; gap: 10px;
+                      margin-bottom: 16px; padding-bottom: 12px; }
+    .section-header h5 { font-size: 16px; margin: 0; }
+    .section-header .btn-group { width: 100%; }
+    .section-header .btn-group .btn { flex: 1; }
+
+    .table-card { border-radius: 14px; }
+    .table-card table { font-size: 13px; }
+    .table-card table td, .table-card table th { padding: 10px 8px; }
+    /* The folded-away columns, shown when a row is expanded. */
+    table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control { padding-left: 28px; }
+    .dtr-details { width: 100%; }
+    .dtr-details li { padding: 4px 0 !important; border-bottom: 1px solid var(--border); }
+    .dtr-title { font-weight: 600; color: var(--muted); min-width: 96px; }
+    .row-actions { justify-content: flex-start; }
+    .row-actions { gap: 4px; }
+    .row-actions .btn-action { width: 34px; height: 34px; font-size: 13px; }
+
+    /* DataTables' own furniture, which is laid out for a wide screen. */
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter,
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_paginate { text-align: left; float: none; width: 100%; }
+    .dataTables_wrapper .dataTables_paginate { padding-top: 10px; }
+    .dataTables_wrapper .paginate_button { padding: 6px 10px; }
+    table.dataTable > tbody > tr > td.dtr-control::before { top: 50%; }
+
+    /* Modals: a dialog with desktop margins is a dialog you cannot read. */
+    .modal-dialog { margin: 8px; max-width: none; }
+    .modal-body { padding: 14px; }
+    .modal-header, .modal-footer { padding: 12px 14px; }
+    .modal-title { font-size: 16px; }
+    .modal-footer { flex-wrap: wrap; gap: 8px; }
+    .modal-footer .btn { flex: 1 1 auto; margin: 0; }
+    .form-row > [class*="col-"] { margin-bottom: 4px; }
+
+    .ledger-meta { gap: 10px; }
+    .ledger-meta div { min-width: 46%; }
+    .ledger-meta strong { font-size: 15px; }
+    .ledger-stamp { flex-direction: column; gap: 4px; }
+    .ledger-tabs .nav-link { padding: 8px 10px; font-size: 12px; }
+    .item-timeline li { padding: 8px 0 8px 10px; }
+}
 </style>
 {% endblock %}
 {% block body %}
@@ -467,10 +569,12 @@ tr.row-openable .row-actions { cursor: default; }
             </div>
             <div class="actions">
                 <button class="btn-pill btn-pill-outline" id="refreshAll"><i class="fas fa-sync mr-1"></i>Refresh</button>
+                {% if 'inventory.create' in _p %}
                 {% if inventory_type != 'credit' %}
                 <button class="btn-pill btn-pill-primary" onclick="showAddItemModal()"><i class="fas fa-plus mr-1"></i>New Item</button>
                 {% else %}
                 <button class="btn-pill btn-pill-primary" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);" onclick="showAddCreditModal()"><i class="fas fa-plus mr-1"></i>Receive Credit</button>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -513,11 +617,13 @@ tr.row-openable .row-actions { cursor: default; }
                 <h5>Regular Inventory Items</h5>
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-light" onclick="loadRegularInventory()"><i class="fas fa-sync"></i></button>
+                    {% if 'inventory.create' in _p %}
                     <button class="btn btn-primary" onclick="showAddItemModal()"><i class="fas fa-plus mr-1"></i>Add Item</button>
+                    {% endif %}
                 </div>
             </div>
             <div class="table-card">
-                <div class="table-responsive">
+                <div class="table-holder">
                     <table class="table table-hover" id="regularTable" style="width:100%">
                         <thead>
                             <tr>
@@ -542,17 +648,21 @@ tr.row-openable .row-actions { cursor: default; }
                 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
                 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
                 <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+                <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+                <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
 
         <div class="inventory-panel" id="credit-panel">
             <div class="section-header">
                 <h5>Credit / Consignment Inventory</h5>
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-light" onclick="loadCreditInventory()"><i class="fas fa-sync"></i></button>
+                    {% if 'inventory.create' in _p %}
                     <button class="btn btn-success text-white" onclick="showAddCreditModal()"><i class="fas fa-plus mr-1"></i>Receive Credit</button>
+                    {% endif %}
                 </div>
             </div>
             <div class="table-card">
-                <div class="table-responsive">
+                <div class="table-holder">
                     <table class="table table-hover" id="creditTable" style="width:100%">
                         <thead>
                             <tr>
@@ -578,7 +688,9 @@ tr.row-openable .row-actions { cursor: default; }
             <div class="section-header">
                 <h5>{% if inventory_type == 'credit' %}Credit Inventory{% else %}Entity{% endif %} Transaction Ledger</h5>
                 <div class="btn-group btn-group-sm">
-                    <button class="btn btn-info text-white" onclick="showAddTransactionModal()"><i class="fas fa-plus mr-1"></i>Add Transaction</button>
+                    {% if 'inventory.transact' in _p %}
+                    <button class="btn btn-info text-white" onclick="showAddTransactionModal()"><i class="fas fa-plus mr-1"></i>Stock In / Out</button>
+                    {% endif %}
                 </div>
             </div>
             
@@ -627,7 +739,7 @@ tr.row-openable .row-actions { cursor: default; }
             </div>
             
             <div class="table-card">
-                <div class="table-responsive">
+                <div class="table-holder">
                     <table class="table table-hover" id="transTable" style="width:100%">
                         <thead>
                             <tr>
@@ -754,6 +866,19 @@ tr.row-openable .row-actions { cursor: default; }
             </div>
             <div class="modal-body">
                 <div class="ledger-meta" id="ledger_meta"></div>
+                <div class="ledger-stamp" id="ledger_stamp"></div>
+                <ul class="nav nav-tabs ledger-tabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-toggle="tab" href="#ledger-movements">
+                            <i class="fas fa-exchange-alt mr-1"></i>Stock In / Out</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#ledger-history">
+                            <i class="fas fa-history mr-1"></i>Item History</a>
+                    </li>
+                </ul>
+                <div class="tab-content pt-3">
+                <div class="tab-pane fade show active" id="ledger-movements">
                 <div class="table-responsive">
                     <table class="table table-sm ledger-table" id="ledgerTable">
                         <thead>
@@ -774,13 +899,25 @@ tr.row-openable .row-actions { cursor: default; }
                 <div class="ledger-empty" id="ledger_empty" style="display:none;">
                     Nothing has moved in or out of this item yet.
                 </div>
+                </div>
+                <div class="tab-pane fade" id="ledger-history">
+                    <ol class="item-timeline" id="ledger_timeline"></ol>
+                    <div class="ledger-empty" id="ledger_timeline_empty" style="display:none;">
+                        Nothing has changed on this item yet.
+                    </div>
+                </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                {% if 'inventory.transact' in _p %}
                 <button type="button" class="btn btn-info text-white" id="ledger_move">
                     <i class="fas fa-exchange-alt mr-1"></i>Stock In / Out</button>
+                {% endif %}
+                {% if 'inventory.edit' in _p %}
                 <button type="button" class="btn btn-primary" id="ledger_edit">
                     <i class="fas fa-edit mr-1"></i>Edit Item</button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1161,6 +1298,15 @@ const currentEntityId = JSON.parse('{{ entity_id|default("null")|tojson }}');
 const currentInventoryType = '{{ inventory_type|default("") }}';
 const isCredit = currentInventoryType === 'credit';
 
+// What this account may do, decided by the server and only repeated here so a
+// button nobody can use is not drawn. Every route checks for itself.
+const CAN = {
+    create:   {{ ('inventory.create' in _p)|tojson }},
+    edit:     {{ ('inventory.edit' in _p)|tojson }},
+    remove:   {{ ('inventory.delete' in _p)|tojson }},
+    transact: {{ ('inventory.transact' in _p)|tojson }}
+};
+
 const inventoryTables = { regular: null, credit: null, transactions: null };
 let approvedItems = [];
 let alerts = [];
@@ -1315,7 +1461,17 @@ function initTables() {
         ],
         columnDefs: [
             { targets: 8, orderable: false, searchable: false, render: data => data },
-            { targets: 9, orderable: false, searchable: false, render: data => data }
+            { targets: 9, orderable: false, searchable: false, render: data => data },
+            // What a phone keeps, in order: the item, its stock, its status,
+            // the buttons, then the code. Type, unit and dimensions fold into
+            // the expandable row -- they are reference, not the answer to
+            // "how much of this do we have".
+            { responsivePriority: 1, targets: 1 },
+            { responsivePriority: 2, targets: 5 },
+            { responsivePriority: 3, targets: 9 },
+            { responsivePriority: 4, targets: 8 },
+            { responsivePriority: 5, targets: 0 },
+            { responsivePriority: 6, targets: 6 }
         ]
     });
 
@@ -1343,6 +1499,23 @@ function initTables() {
 // The row is the target, not the name in it: the thing somebody wants when
 // they look at a line of stock is that line's history, and aiming at one word
 // of it is a worse way to ask for it.
+// Responsive decides which columns fit when the table is drawn, and on a cold
+// load that happens before the web font lands -- so it measures the table
+// wider than it ends up and leaves a column overflowing. One recalculation
+// after the rows are in, and again once the fonts are ready, settles it.
+function fitColumns(tableKey) {
+    const table = inventoryTables[tableKey];
+    if (!table || !table.responsive) return;
+    table.responsive.recalc();
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+            if (inventoryTables[tableKey] && inventoryTables[tableKey].responsive) {
+                inventoryTables[tableKey].responsive.recalc();
+            }
+        });
+    }
+}
+
 function attachRowOpensItem(tableKey, selector) {
     $(selector + ' tbody')
         .on('click', 'tr', function (event) {
@@ -1402,6 +1575,7 @@ function loadRegularInventory() {
                 actions: renderItemActions(item)
             }));
             inventoryTables.regular.clear().rows.add(rows).draw();
+            fitColumns('regular');
             
             // Calculate statistics from actual data
             const regularCount = items.length;
@@ -1431,7 +1605,7 @@ function loadRegularInventory() {
                 setStat('stat-regular', regularCount);
                 setStat('stat-value', `EGP ${totalValue.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`);
                 setStat('stat-low', lowStockCount);
-                setStat('stat-extra', totalStock);
+                setStat('stat-extra', bgNumber(totalStock));
             }
         })
         .catch(error => console.error('Failed to load inventory', error));
@@ -1510,15 +1684,22 @@ function renderItemActions(item) {
     // when the row is near the bottom -- the menu visibly jumping from below
     // the button to above it. Three actions do not need a menu at all, and
     // this matches the entity table, which has always used plain buttons.
-    return `
-        <div class="row-actions">
-            <button type="button" class="btn-action btn-edit" title="Edit item"
-                    onclick="openEditItem(${item.id})"><i class="fas fa-edit"></i></button>
-            <button type="button" class="btn-action btn-move" title="Stock movements"
-                    onclick="showAddTransactionModal(${item.id})"><i class="fas fa-exchange-alt"></i></button>
-            <button type="button" class="btn-action btn-delete" title="Delete item"
-                    onclick="confirmDeleteItem(${item.id})"><i class="fas fa-trash"></i></button>
-        </div>`;
+    const buttons = [];
+    if (CAN.edit) {
+        buttons.push(`<button type="button" class="btn-action btn-edit" title="Edit item"
+                    onclick="openEditItem(${item.id})"><i class="fas fa-edit"></i></button>`);
+    }
+    if (CAN.transact) {
+        buttons.push(`<button type="button" class="btn-action btn-move" title="Stock in / out"
+                    onclick="showAddTransactionModal(${item.id})"><i class="fas fa-exchange-alt"></i></button>`);
+    }
+    // Only the Operations Head holds inventory.delete, so for everybody else
+    // the button is not drawn rather than drawn and refused.
+    if (CAN.remove) {
+        buttons.push(`<button type="button" class="btn-action btn-delete" title="Delete item"
+                    onclick="confirmDeleteItem(${item.id})"><i class="fas fa-trash"></i></button>`);
+    }
+    return `<div class="row-actions">${buttons.join('')}</div>`;
 }
 
 
@@ -1553,6 +1734,7 @@ function loadCreditInventory() {
                 ];
             });
             inventoryTables.credit.clear().rows.add(rows).draw();
+            fitColumns('credit');
             
             // Calculate credit statistics
             const creditCount = items.length;
@@ -1852,6 +2034,7 @@ function loadTransactions() {
                 ];
             });
             inventoryTables.transactions.clear().rows.add(rows).draw();
+            fitColumns('transactions');
         })
         .catch(error => console.error('Failed to load transactions', error));
 }
@@ -2027,11 +2210,20 @@ function openEditItem(itemId) {
 // came from.
 const LEDGER_IN = ['purchase', 'credit_in', 'adjustment'];
 
+// A person, as a row should name them: who they are and the number to reach
+// them on. A username on its own told the reader nothing.
+function personLabel(name, mobile) {
+    if (!name && !mobile) return 'Unknown';
+    if (!mobile) return name;
+    return `${name} <span class="person-mobile">${mobile}</span>`;
+}
+
 function openItemLedger(itemId) {
     Promise.all([
         fetch(`/api/inventory/items/${itemId}`).then(r => r.json()),
-        fetch(`/api/inventory/transactions?item_id=${itemId}`).then(r => r.json())
-    ]).then(([itemData, transData]) => {
+        fetch(`/api/inventory/transactions?item_id=${itemId}`).then(r => r.json()),
+        fetch(`/api/inventory/items/${itemId}/timeline`).then(r => r.json())
+    ]).then(([itemData, transData, timelineData]) => {
         const item = itemData.item;
         if (!item) {
             Swal.fire('Error', 'Item not found', 'error');
@@ -2046,6 +2238,17 @@ function openItemLedger(itemId) {
             <div><span>Status</span><strong>${renderStatusBadge(item)}</strong></div>
             <div><span>Average Cost</span><strong>${bgMoney(item.average_cost || 0)}</strong></div>
             <div><span>Stock Value</span><strong>${bgMoney((Number(item.quantity_in_stock) || 0) * (Number(item.average_cost) || 0))}</strong></div>`;
+
+        // Who made it and who last touched it, with the number to ask them.
+        document.getElementById('ledger_stamp').innerHTML = `
+            <span><i class="fas fa-user-plus mr-1"></i>Added by
+                ${personLabel(item.created_by_name, item.created_by_mobile)}
+                ${item.created_at ? 'on ' + item.created_at : ''}</span>
+            <span><i class="fas fa-user-edit mr-1"></i>Last modified by
+                ${personLabel(item.updated_by_name, item.updated_by_mobile)}
+                ${item.updated_at ? 'on ' + item.updated_at : ''}</span>`;
+
+        renderItemTimeline(timelineData.timeline || []);
 
         const rows = (transData.transactions || []).slice().sort(
             (a, b) => String(b.transaction_date).localeCompare(String(a.transaction_date)));
@@ -2062,21 +2265,56 @@ function openItemLedger(itemId) {
                 <td class="text-right">${bgMoney(row.unit_cost || 0)}</td>
                 <td class="text-right">${bgNumber(row.balance_after || 0)}</td>
                 <td>${row.reference_info || row.notes || ''}</td>
-                <td>${row.performed_by || ''}</td>
+                <td>${personLabel(row.performed_by_name || row.performed_by, row.performed_by_mobile)}</td>
             </tr>`;
         }).join('');
 
         // The two things somebody opens this to do next.
-        document.getElementById('ledger_move').onclick = () => {
+        const moveButton = document.getElementById('ledger_move');
+        if (moveButton) moveButton.onclick = () => {
             $('#itemLedgerModal').modal('hide');
             showAddTransactionModal(item.id);
         };
-        document.getElementById('ledger_edit').onclick = () => {
+        const editButton = document.getElementById('ledger_edit');
+        if (editButton) editButton.onclick = () => {
             $('#itemLedgerModal').modal('hide');
             openEditItem(item.id);
         };
         $('#itemLedgerModal').modal('show');
     }).catch(() => Swal.fire('Error', 'Failed to load the item history', 'error'));
+}
+
+// Everything that has happened to the item's own data, newest first. The
+// movements have their own tab; this is who changed what, from what, to what.
+const TIMELINE_LOOK = {
+    created:  { icon: 'fa-plus',    tone: 'tl-new'  },
+    edited:   { icon: 'fa-pen',     tone: 'tl-edit' },
+    retired:  { icon: 'fa-archive', tone: 'tl-gone' },
+    restored: { icon: 'fa-undo',    tone: 'tl-new'  },
+    deleted:  { icon: 'fa-trash',   tone: 'tl-gone' }
+};
+
+function renderItemTimeline(entries) {
+    const history = entries.filter(entry => entry.kind === 'item');
+    document.getElementById('ledger_timeline_empty').style.display =
+        history.length ? 'none' : 'block';
+    document.getElementById('ledger_timeline').innerHTML = history.map(entry => {
+        const look = TIMELINE_LOOK[entry.event_type] || { icon: 'fa-circle', tone: '' };
+        let what = entry.note || entry.event_type;
+        if (entry.event_type === 'edited' && entry.field_label) {
+            const was = (entry.old_value === null || entry.old_value === '') ? 'empty' : entry.old_value;
+            const now = (entry.new_value === null || entry.new_value === '') ? 'empty' : entry.new_value;
+            what = `<strong>${entry.field_label}</strong>: ${was} &rarr; <strong>${now}</strong>`;
+        }
+        return `<li class="${look.tone}">
+            <span class="tl-mark"><i class="fas ${look.icon}"></i></span>
+            <div class="tl-body">
+                <div class="tl-what">${what}</div>
+                <div class="tl-who">${personLabel(entry.by_name, entry.by_mobile)}
+                    <span class="tl-when">${entry.at}</span></div>
+            </div>
+        </li>`;
+    }).join('');
 }
 
 function submitEditItem() {

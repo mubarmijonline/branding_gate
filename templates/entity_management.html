@@ -3,6 +3,7 @@
 {% block head %}
 <!-- DataTables CSS -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 <!-- SweetAlert2 -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
@@ -333,6 +334,46 @@
     .entity-name-cell .entity-info small {
         color: #6c757d;
     }
+
+    /* A phone. This page had no mobile rules at all: a 30px gradient header
+       with its button pushed off the right edge, four stat cards one per
+       screenful, and a table wider than the screen with no way to scroll it. */
+    @media (max-width: 768px) {
+        .container-fluid { padding: 0.75rem; }
+
+        .entity-header { padding: 18px 16px; border-radius: 12px; margin-bottom: 18px; }
+        .entity-header h1 { font-size: 1.2rem; margin-bottom: 6px; }
+        .entity-header h1 i { margin-right: 0.5rem !important; }
+        .entity-header p { font-size: 0.8rem; }
+        .entity-header > .d-flex { flex-direction: column; align-items: stretch !important; gap: 12px; }
+        .entity-header .btn-lg { width: 100%; font-size: 0.9rem; padding: 0.5rem 0.75rem; }
+
+        /* Two across, so all four are on one screen. */
+        .entity-stats-row { grid-template-columns: repeat(2, minmax(0, 1fr));
+                            gap: 10px; margin-bottom: 18px; }
+        .entity-stat-card { padding: 14px; border-radius: 10px; }
+        .entity-stat-card .stat-icon { width: 34px; height: 34px; font-size: 0.9rem; }
+        .entity-stat-card .stat-value { font-size: 1.35rem; }
+        .entity-stat-card .stat-label { font-size: 0.7rem; }
+
+        .entity-table-card .card-header { padding: 0.75rem; }
+        .entity-table-card .card-header h5 { font-size: 0.95rem; }
+        .entity-table-card .card-body { padding: 0.75rem; }
+        .table-holder > .table { font-size: 0.8rem; }
+        .table-holder > .table td, .table-holder > .table th { padding: 0.5rem; }
+
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter,
+        .dataTables_wrapper .dataTables_info,
+        .dataTables_wrapper .dataTables_paginate { float: none; width: 100%; text-align: left; }
+        .dataTables_wrapper .dataTables_filter input { width: 100%; margin-left: 0; }
+
+        .modal-dialog { margin: 8px; max-width: none; }
+        .modal-body { padding: 0.85rem; }
+        .modal-header, .modal-footer { padding: 0.75rem 0.85rem; }
+        .modal-footer { flex-wrap: wrap; gap: 0.5rem; }
+        .modal-footer .btn { flex: 1 1 auto; margin: 0; }
+    }
 </style>
 {% endblock %}
 
@@ -390,7 +431,7 @@
             {% endif %}
         </div>
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-holder">
                 <table class="table table-hover" id="entitiesTable" style="width: 100%;">
                     <thead>
                         <tr>
@@ -514,6 +555,8 @@
 <!-- DataTables JS -->
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
 
 <script>
 // What this account may do here, from the same grants the routes check.
@@ -627,6 +670,16 @@ $(document).ready(function() {
             }
         ],
         "order": [[6, "desc"]],
+        // On a phone the entity, its stock count and its buttons stay; the
+        // code, the contact and the dates fold into the expandable row rather
+        // than running off the right edge.
+        "responsive": true,
+        "columnDefs": [
+            { "responsivePriority": 1, "targets": 0 },
+            { "responsivePriority": 2, "targets": -1 },
+            { "responsivePriority": 3, "targets": 4 },
+            { "responsivePriority": 4, "targets": 5 }
+        ],
         "pageLength": 10,
         "language": {
             "emptyTable": "No entities found. Click 'Add Entity' to create one.",

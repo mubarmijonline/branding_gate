@@ -538,6 +538,10 @@ SEED_MATRIX = {
             'approved_item.view': 'all',
             'supplier.view': 'all',
             'inventory.view': 'all',
+            # Stock in and stock out, and nothing else on the item itself: a
+            # member moves what is on the shelf, the leader maintains the item,
+            # and only the Head deletes one.
+            'inventory.transact': 'all',
             'catalog.view': 'all',
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',

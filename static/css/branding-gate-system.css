@@ -586,6 +586,15 @@ table.dataTable {
   min-width: max(780px, 100%);
 }
 
+/* ...unless the table folds its own columns. DataTables Responsive hides what
+   does not fit and shows it in an expandable row, and a 780px floor means
+   nothing ever fits: on a phone the table simply ran off the right edge with
+   the stock and status columns out of sight. */
+table.dataTable.dtr-inline,
+table.dataTable.collapsed {
+  min-width: 0;
+}
+
 table.finance-table,
 table.balances-table,
 table.expense-table,

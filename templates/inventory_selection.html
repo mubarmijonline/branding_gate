@@ -439,10 +439,31 @@
     
     /* Responsive */
     @media (max-width: 768px) {
-        .hero-content h1 { font-size: 1.8rem; }
-        .hero-stats { flex-wrap: wrap; gap: 15px; }
-        .hero-stat { min-width: 100px; padding: 15px 20px; }
-        .entity-cards-grid { grid-template-columns: 1fr; }
+        .hero-content h1 { font-size: 1.45rem; }
+        .hero-content p { font-size: 0.85rem; }
+        .hero-stats { flex-wrap: wrap; gap: 10px; }
+        /* Two across: four figures on one screen instead of four scrolls. */
+        .hero-stat { min-width: 0; flex: 1 1 calc(50% - 10px); padding: 12px 14px; }
+        .entity-cards-grid { grid-template-columns: 1fr; gap: 16px; margin-bottom: 28px; }
+
+        .container-fluid, .selection-shell { padding: 0.75rem !important; }
+        .section-header { flex-direction: column; align-items: flex-start;
+                          gap: 10px; margin-bottom: 18px; }
+        .section-header h2 { font-size: 1.1rem; gap: 8px; }
+        .section-header h2 i { width: 34px; height: 34px; font-size: 0.9rem; }
+        .section-header .btn-manage { width: 100%; padding: 9px 14px; font-size: 0.85rem; }
+
+        .entity-card { border-radius: 14px; }
+        .entity-card-body { padding: 20px 14px 14px; }
+        .entity-stats-grid { gap: 10px; margin-bottom: 14px; }
+        .entity-stat-box { padding: 10px; border-radius: 10px; }
+        /* A 10px lift under a finger is a card that looks broken, not alive. */
+        .entity-card:hover { transform: none; }
+
+        .modal-dialog { margin: 8px; max-width: none; }
+        .modal-body { padding: 0.85rem; }
+        .modal-footer { flex-wrap: wrap; gap: 0.5rem; }
+        .modal-footer .btn { flex: 1 1 auto; margin: 0; }
     }
 </style>
 {% endblock %}
