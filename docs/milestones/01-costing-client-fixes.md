@@ -491,3 +491,26 @@ screen. Entity Management had no phone rules at all and now has them.
 
 `/item_management` is a redirect to `/inventory-selection`; its template is not
 served, so the phone rules added to it affect nothing rendered today.
+
+## Nineteenth round, 10 September 2026
+
+**An item is a page now, not a pop-up.** Tapping anywhere on a stock row opens
+`/inventory/item/<id>`: the figures (stock, minimum, average cost, stock value,
+last movement), the item's details including who added and who last modified
+it with their mobile numbers, every movement in and out, and its history.
+Ctrl / Cmd-click opens it in a new tab and leaves the list where it was.
+
+Stock in and stock out are on the same screen, one toggle and a quantity. Before
+anything is recorded the form shows what the stock will be afterwards, and
+warns when that is at or under the minimum -- the point at which Operations is
+notified. A stock-out larger than what is on the shelf is stopped before it is
+sent (the route refuses it too). After a movement the page asks the server
+again rather than doing its own sums, so the stock, the recomputed average cost
+and the new movement at the top of the list are what the database now holds.
+
+What is drawn follows the role: a member gets the stock form only; a team
+leader also gets Edit; only the Head gets Delete. The routes check regardless.
+
+The pop-up it replaces is removed, not left unused. "Where does this item stand
+against its minimum" now lives in one file, `static/js/bg-stock.js`, shared by
+the list and the page, so a row and the page it opens cannot disagree.

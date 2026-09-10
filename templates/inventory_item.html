@@ -1,0 +1,575 @@
+{% extends "main.html" %}
+
+{% block head %}
+<title>{{ item.item_name }} ({{ item.item_code }}) - Inventory</title>
+<style>
+:root {
+    --ii-card: #ffffff;
+    --ii-primary: #6366f1;
+    --ii-primary-soft: rgba(99,102,241,0.1);
+    --ii-success: #10b981;
+    --ii-success-soft: rgba(16,185,129,0.12);
+    --ii-warning: #f59e0b;
+    --ii-warning-soft: rgba(245,158,11,0.14);
+    --ii-danger: #ef4444;
+    --ii-danger-soft: rgba(239,68,68,0.12);
+    --ii-text: #0f172a;
+    --ii-muted: #64748b;
+    --ii-border: #e2e8f0;
+}
+.ii-shell { padding: 24px; max-width: 1280px; margin: 0 auto; }
+.ii-back { display: inline-flex; align-items: center; gap: 8px; color: var(--ii-muted);
+           font-weight: 600; font-size: 14px; margin-bottom: 14px; text-decoration: none; }
+.ii-back:hover { color: var(--ii-primary); text-decoration: none; }
+.ii-card { background: var(--ii-card); border: 1px solid var(--ii-border); border-radius: 18px;
+           box-shadow: 0 4px 14px rgba(15,23,42,0.05); margin-bottom: 18px; }
+.ii-head { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px;
+           justify-content: space-between; align-items: flex-start; }
+.ii-head h1 { font-size: 24px; font-weight: 700; color: var(--ii-text); margin: 0 0 6px; }
+.ii-code { font-family: monospace; font-size: 13px; background: var(--ii-primary-soft);
+           color: var(--ii-primary); padding: 3px 10px; border-radius: 6px; font-weight: 700; }
+.ii-entity { color: var(--ii-muted); font-size: 13px; margin-left: 8px; }
+.ii-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ii-figures { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;
+              padding: 0 24px 22px; }
+.ii-figure { border: 1px solid var(--ii-border); border-radius: 14px; padding: 14px; }
+.ii-figure span { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+                  color: var(--ii-muted); margin-bottom: 4px; }
+.ii-figure strong { font-size: 22px; color: var(--ii-text); transition: color .3s; }
+.ii-figure small { color: var(--ii-muted); font-size: 12px; margin-left: 4px; }
+.ii-figure.stock-near strong { color: var(--ii-warning); }
+.ii-figure.stock-below strong, .ii-figure.stock-out strong { color: var(--ii-danger); }
+/* The figure that just changed, so the eye lands on it. */
+@keyframes ii-flash { 0% { background: var(--ii-primary-soft); } 100% { background: transparent; } }
+.ii-flash { animation: ii-flash 1.4s ease-out; }
+
+.status-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+                display: inline-flex; align-items: center; gap: 5px; }
+.status-success { background: var(--ii-success-soft); color: var(--ii-success); }
+.status-warning { background: var(--ii-warning-soft); color: var(--ii-warning); }
+.status-danger  { background: var(--ii-danger-soft); color: var(--ii-danger); }
+.status-neutral { background: var(--ii-primary-soft); color: var(--ii-primary); }
+
+.ii-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+.ii-section-title { font-size: 15px; font-weight: 700; color: var(--ii-text); margin: 0;
+                    display: flex; align-items: center; gap: 8px; }
+.ii-card-head { padding: 16px 20px; border-bottom: 1px solid var(--ii-border);
+                display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ii-card-body { padding: 16px 20px; }
+
+/* Stock in / out */
+.ii-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.ii-toggle button { border: 2px solid var(--ii-border); background: #fff; border-radius: 12px;
+                    padding: 12px; font-weight: 700; color: var(--ii-muted); cursor: pointer; }
+.ii-toggle button.active.in  { border-color: var(--ii-success); background: var(--ii-success-soft); color: var(--ii-success); }
+.ii-toggle button.active.out { border-color: var(--ii-danger);  background: var(--ii-danger-soft);  color: var(--ii-danger); }
+.ii-form label { font-size: 12px; font-weight: 600; color: var(--ii-muted); margin-bottom: 4px; }
+.ii-form .form-control { border-radius: 10px; }
+.ii-qty { font-size: 22px; font-weight: 700; text-align: center; }
+.ii-after { font-size: 13px; color: var(--ii-muted); margin: 6px 0 12px; }
+.ii-after strong { color: var(--ii-text); }
+.ii-after.warn strong { color: var(--ii-danger); }
+.ii-submit { width: 100%; border-radius: 12px; padding: 12px; font-weight: 700; font-size: 15px; }
+
+/* Details */
+.ii-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin: 0; }
+.ii-details dt { font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+                 color: var(--ii-muted); font-weight: 600; }
+.ii-details dd { margin: 2px 0 0; font-size: 14px; color: var(--ii-text); word-break: break-word; }
+.ii-details .wide { grid-column: 1 / -1; }
+.person-mobile { color: var(--ii-muted); font-size: 12px; margin-left: 4px; }
+
+/* Movements */
+.ii-tabs .nav-link { font-weight: 600; font-size: 14px; }
+.ii-moves { width: 100%; font-size: 13px; }
+.ii-moves th { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ii-muted);
+               font-weight: 700; padding: 8px 10px; border-bottom: 1px solid var(--ii-border); white-space: nowrap; }
+.ii-moves td { padding: 10px; border-bottom: 1px solid var(--ii-border); vertical-align: top; }
+.ii-in  { color: var(--ii-success); font-weight: 700; }
+.ii-out { color: var(--ii-danger);  font-weight: 700; }
+.ii-type { text-transform: capitalize; }
+.ii-empty { color: var(--ii-muted); padding: 28px; text-align: center; }
+.ii-moves tr.ii-new td { animation: ii-flash 1.6s ease-out; }
+
+/* History */
+.item-timeline { list-style: none; margin: 0; padding: 0 0 0 6px; }
+.item-timeline li { display: flex; gap: 12px; padding: 10px 0 10px 10px;
+                    border-left: 2px solid var(--ii-border); }
+.item-timeline li:last-child { border-left-color: transparent; }
+.tl-mark { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; display: inline-flex;
+           align-items: center; justify-content: center; font-size: 11px; margin-left: -23px;
+           background: #ececf5; color: var(--ii-muted); }
+.tl-new  .tl-mark { background: var(--ii-success-soft); color: var(--ii-success); }
+.tl-edit .tl-mark { background: var(--ii-primary-soft); color: var(--ii-primary); }
+.tl-gone .tl-mark { background: var(--ii-danger-soft);  color: var(--ii-danger); }
+.tl-what { font-size: 13px; }
+.tl-who { font-size: 12px; color: var(--ii-muted); }
+.tl-when { margin-left: 8px; }
+
+@media (max-width: 992px) {
+    .ii-grid { grid-template-columns: 1fr; }
+    /* On a narrower screen the stock form comes first: it is what the page is
+       opened for most often. */
+    .ii-side { order: -1; }
+    .ii-figures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+    .ii-shell { padding: 10px; }
+    .ii-card { border-radius: 14px; }
+    .ii-head { padding: 16px 14px; flex-direction: column; }
+    .ii-head h1 { font-size: 19px; }
+    .ii-head-actions { width: 100%; }
+    .ii-head-actions .btn { flex: 1; }
+    .ii-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 14px 14px; }
+    .ii-figure { padding: 10px 12px; }
+    .ii-figure strong { font-size: 18px; }
+    .ii-card-head, .ii-card-body { padding: 12px 14px; }
+    .ii-details { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+    /* A ledger has eight columns; on a phone each movement becomes a card. */
+    .ii-moves thead { display: none; }
+    .ii-moves, .ii-moves tbody, .ii-moves tr, .ii-moves td { display: block; width: 100%; }
+    .ii-moves tr { border-bottom: 1px solid var(--ii-border); padding: 10px 0; }
+    .ii-moves td { border: none; padding: 2px 0; }
+    .ii-moves td[data-label]::before { content: attr(data-label) ': '; color: var(--ii-muted);
+                                       font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .ii-moves td.ii-when { font-size: 12px; color: var(--ii-muted); }
+    .ii-moves td.ii-qty-cell { font-size: 16px; }
+    .modal-dialog { margin: 8px; max-width: none; }
+    .modal-footer { flex-wrap: wrap; gap: 8px; }
+    .modal-footer .btn { flex: 1 1 auto; margin: 0; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+{% set _p = session.get('perms', {}) %}
+<div class="ii-shell">
+    <a class="ii-back" href="{{ back_url }}"><i class="fas fa-arrow-left"></i>
+        {% if item.entity_name %}{{ item.entity_name }} inventory{% else %}Inventory{% endif %}</a>
+
+    <div class="ii-card">
+        <div class="ii-head">
+            <div>
+                <h1 id="ii_name">{{ item.item_name }}</h1>
+                <span class="ii-code">{{ item.item_code }}</span>
+                {% if item.entity_name %}<span class="ii-entity"><i class="fas fa-warehouse mr-1"></i>{{ item.entity_name }}</span>{% endif %}
+                <span id="ii_status_badge" class="ml-2"></span>
+            </div>
+            <div class="ii-head-actions">
+                {% if 'inventory.edit' in _p %}
+                <button type="button" class="btn btn-outline-primary" id="ii_edit_btn"><i class="fas fa-edit mr-1"></i>Edit Item</button>
+                {% endif %}
+                {% if 'inventory.delete' in _p %}
+                <button type="button" class="btn btn-outline-danger" id="ii_delete_btn"><i class="fas fa-trash mr-1"></i>Delete</button>
+                {% endif %}
+            </div>
+        </div>
+        <div class="ii-figures">
+            <div class="ii-figure" id="fig_stock"><span>In Stock</span><strong id="ii_stock">&mdash;</strong><small id="ii_unit"></small></div>
+            <div class="ii-figure"><span>Minimum</span><strong id="ii_min">&mdash;</strong></div>
+            <div class="ii-figure"><span>Average Cost</span><strong id="ii_avg">&mdash;</strong></div>
+            <div class="ii-figure"><span>Stock Value</span><strong id="ii_value">&mdash;</strong></div>
+            <div class="ii-figure"><span>Last Movement</span><strong id="ii_last" style="font-size:15px;">&mdash;</strong></div>
+        </div>
+    </div>
+
+    <div class="ii-grid">
+        <div>
+            <div class="ii-card">
+                <div class="ii-card-head">
+                    <ul class="nav nav-tabs ii-tabs border-0" role="tablist">
+                        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#ii-moves-pane">
+                            <i class="fas fa-exchange-alt mr-1"></i>Movements <span class="badge badge-light" id="ii_moves_count">0</span></a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#ii-history-pane">
+                            <i class="fas fa-history mr-1"></i>Item History</a></li>
+                    </ul>
+                </div>
+                <div class="ii-card-body tab-content">
+                    <div class="tab-pane fade show active" id="ii-moves-pane">
+                        <table class="ii-moves">
+                            <thead>
+                                <tr><th>Date</th><th>Movement</th><th class="text-right">In</th><th class="text-right">Out</th>
+                                    <th class="text-right">Unit Cost</th><th class="text-right">Balance</th><th>Note</th><th>By</th></tr>
+                            </thead>
+                            <tbody id="ii_moves"></tbody>
+                        </table>
+                        <div class="ii-empty" id="ii_moves_empty" hidden>Nothing has moved in or out of this item yet.</div>
+                    </div>
+                    <div class="tab-pane fade" id="ii-history-pane">
+                        <ol class="item-timeline" id="ii_history"></ol>
+                        <div class="ii-empty" id="ii_history_empty" hidden>Nothing has changed on this item yet.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ii-side">
+            {% if 'inventory.transact' in _p %}
+            <div class="ii-card">
+                <div class="ii-card-head"><h2 class="ii-section-title"><i class="fas fa-dolly"></i>Stock In / Out</h2></div>
+                <div class="ii-card-body">
+                    <form class="ii-form" id="ii_stock_form" autocomplete="off">
+                        <div class="ii-toggle">
+                            <button type="button" class="in active" data-kind="in"><i class="fas fa-arrow-down mr-1"></i>Stock In</button>
+                            <button type="button" class="out" data-kind="out"><i class="fas fa-arrow-up mr-1"></i>Stock Out</button>
+                        </div>
+                        <div class="form-group mb-1">
+                            <label for="ii_qty">Quantity</label>
+                            <input type="number" min="0.01" step="0.01" class="form-control ii-qty" id="ii_qty" required inputmode="decimal" placeholder="0">
+                        </div>
+                        <div class="ii-after" id="ii_after"></div>
+                        <div class="form-group" data-only="in">
+                            <label for="ii_cost">Unit cost (EGP)</label>
+                            <input type="number" min="0" step="0.01" class="form-control" id="ii_cost" inputmode="decimal" placeholder="0.00">
+                        </div>
+                        <div class="form-group" data-only="in">
+                            <label for="ii_supplier">Supplier</label>
+                            <select class="form-control" id="ii_supplier"><option value="">No supplier</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="ii_note" id="ii_note_label">Reference / note</label>
+                            <input type="text" class="form-control" id="ii_note" maxlength="250" placeholder="PO number, order, reason...">
+                        </div>
+                        <button type="submit" class="btn btn-success ii-submit" id="ii_submit"><i class="fas fa-arrow-down mr-1"></i>Record Stock In</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="ii-card">
+                <div class="ii-card-head"><h2 class="ii-section-title"><i class="fas fa-info-circle"></i>Details</h2></div>
+                <div class="ii-card-body"><dl class="ii-details" id="ii_details"></dl></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if 'inventory.edit' in _p %}
+<div class="modal fade" id="iiEditModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit mr-1"></i>Edit {{ item.item_code }}</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="ii_edit_form" class="ii-form">
+                    <div class="form-row">
+                        <div class="form-group col-md-8"><label>Item name</label><input class="form-control" name="item_name" required></div>
+                        <div class="form-group col-md-4"><label>Status</label>
+                            <select class="form-control" name="status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4"><label>Category</label><input class="form-control" name="category"></div>
+                        <div class="form-group col-md-4"><label>Unit</label><input class="form-control" name="unit_of_measure"></div>
+                        <div class="form-group col-md-4"><label>Minimum quantity</label><input type="number" min="0" step="0.01" class="form-control" name="minimum_stock_level" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-3"><label>Reorder level</label><input type="number" min="0" step="0.01" class="form-control" name="reorder_level"></div>
+                        <div class="form-group col-md-3"><label>Width (cm)</label><input type="number" step="0.01" class="form-control" name="width"></div>
+                        <div class="form-group col-md-3"><label>Height (cm)</label><input type="number" step="0.01" class="form-control" name="height"></div>
+                        <div class="form-group col-md-3"><label>Depth (cm)</label><input type="number" step="0.01" class="form-control" name="depth"></div>
+                    </div>
+                    <div class="form-group"><label>Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
+                    <small class="text-muted">Stock and average cost are not edited here: they come from the movements.</small>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="ii_edit_save"><i class="fas fa-save mr-1"></i>Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/bg-stock.js') }}?v=20260910"></script>
+<script>
+(function () {
+    const ITEM_ID = {{ item.id|tojson }};
+    const BACK_URL = {{ back_url|tojson }};
+    // Repeated from the server only to decide what to draw; every route checks.
+    const CAN = {
+        edit:     {{ ('inventory.edit' in _p)|tojson }},
+        remove:   {{ ('inventory.delete' in _p)|tojson }},
+        transact: {{ ('inventory.transact' in _p)|tojson }}
+    };
+    const INCOMING = ['purchase', 'credit_in', 'adjustment'];
+    const TIMELINE_LOOK = {
+        created:  { icon: 'fa-plus',    tone: 'tl-new'  },
+        edited:   { icon: 'fa-pen',     tone: 'tl-edit' },
+        retired:  { icon: 'fa-archive', tone: 'tl-gone' },
+        restored: { icon: 'fa-undo',    tone: 'tl-new'  },
+        deleted:  { icon: 'fa-trash',   tone: 'tl-gone' }
+    };
+
+    let item = null;
+    let kind = 'in';
+
+    const $ = id => document.getElementById(id);
+    const esc = value => String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    function personLabel(name, mobile) {
+        if (!name && !mobile) return 'Unknown';
+        return mobile ? `${esc(name)}<span class="person-mobile">${esc(mobile)}</span>` : esc(name);
+    }
+
+    function flash(element) {
+        if (!element) return;
+        element.classList.remove('ii-flash');
+        void element.offsetWidth;          // restart the animation
+        element.classList.add('ii-flash');
+    }
+
+    // --- the item -------------------------------------------------------
+    function renderItem(previousStock) {
+        const state = bgStockState(item);
+        const stock = Number(item.quantity_in_stock || 0);
+        const avg = Number(item.average_cost || 0);
+        $('ii_name').textContent = item.item_name;
+        document.title = `${item.item_name} (${item.item_code}) - Inventory`;
+        $('ii_status_badge').innerHTML = `<span class="status-badge ${state.badge}">` +
+            (state.icon ? `<i class="fas ${state.icon}"></i>` : '') + `${state.label}</span>`;
+        $('ii_stock').textContent = bgNumber(stock);
+        $('ii_unit').textContent = item.unit_of_measure || '';
+        $('fig_stock').className = 'ii-figure stock-' + state.key;
+        $('ii_min').textContent = bgNumber(item.minimum_stock_level || 0);
+        $('ii_avg').textContent = bgMoney(avg);
+        $('ii_value').textContent = bgMoney(stock * avg);
+        if (previousStock !== undefined && previousStock !== stock) flash($('fig_stock'));
+
+        const dims = ['width', 'height', 'depth']
+            .map(field => item[field] ? `${bgNumber(item[field])}` : null).filter(Boolean);
+        const rows = [
+            ['Category', item.category || '—'],
+            ['Unit', item.unit_of_measure || '—'],
+            ['Reorder level', bgNumber(item.reorder_level || 0)],
+            ['Dimensions (cm)', dims.length ? dims.join(' × ') : '—'],
+            ['Preferred supplier', item.supplier_name || '—'],
+            ['Status', item.status || '—'],
+            ['Added by', personLabel(item.created_by_name, item.created_by_mobile) +
+                (item.created_at ? `<br><small class="text-muted">${esc(item.created_at)}</small>` : ''), true],
+            ['Last modified by', personLabel(item.updated_by_name, item.updated_by_mobile) +
+                (item.updated_at ? `<br><small class="text-muted">${esc(item.updated_at)}</small>` : ''), true],
+        ];
+        if (item.description) rows.push(['Description', esc(item.description), false, true]);
+        $('ii_details').innerHTML = rows.map(([label, value, raw, wide]) =>
+            `<div class="${wide ? 'wide' : ''}"><dt>${label}</dt><dd>${raw || typeof value !== 'string' || value === '—' ? value : esc(value)}</dd></div>`
+        ).join('');
+        updateAfter();
+    }
+
+    // --- movements and history ------------------------------------------
+    function renderTimeline(entries, newestAt) {
+        const moves = entries.filter(entry => entry.kind === 'stock');
+        const history = entries.filter(entry => entry.kind === 'item');
+
+        $('ii_moves_count').textContent = moves.length;
+        $('ii_moves_empty').hidden = moves.length > 0;
+        $('ii_last').textContent = moves.length ? moves[0].at : '—';
+        $('ii_moves').innerHTML = moves.map((move, index) => {
+            const incoming = INCOMING.includes(move.event_type);
+            const qty = bgNumber(move.quantity || 0);
+            const fresh = newestAt && index === 0 && move.at >= newestAt ? 'ii-new' : '';
+            return `<tr class="${fresh}">
+                <td class="ii-when">${esc(move.at)}</td>
+                <td class="ii-type" data-label="Movement">${esc(String(move.event_type).replace(/_/g, ' '))}</td>
+                <td class="text-right ii-in ii-qty-cell">${incoming ? '+' + qty : ''}</td>
+                <td class="text-right ii-out ii-qty-cell">${incoming ? '' : '-' + qty}</td>
+                <td class="text-right" data-label="Unit cost">${move.unit_cost ? bgMoney(move.unit_cost) : '—'}</td>
+                <td class="text-right" data-label="Balance">${bgNumber(move.balance_after || 0)}</td>
+                <td data-label="Note">${esc(move.note || '')}</td>
+                <td data-label="By">${personLabel(move.by_name, move.by_mobile)}</td>
+            </tr>`;
+        }).join('');
+
+        $('ii_history_empty').hidden = history.length > 0;
+        $('ii_history').innerHTML = history.map(entry => {
+            const look = TIMELINE_LOOK[entry.event_type] || { icon: 'fa-circle', tone: '' };
+            let what = esc(entry.note || entry.event_type);
+            if (entry.event_type === 'edited' && entry.field_label) {
+                const was = entry.old_value === null || entry.old_value === '' ? 'empty' : entry.old_value;
+                const now = entry.new_value === null || entry.new_value === '' ? 'empty' : entry.new_value;
+                what = `<strong>${esc(entry.field_label)}</strong>: ${esc(was)} &rarr; <strong>${esc(now)}</strong>`;
+            }
+            return `<li class="${look.tone}"><span class="tl-mark"><i class="fas ${look.icon}"></i></span>
+                <div><div class="tl-what">${what}</div>
+                <div class="tl-who">${personLabel(entry.by_name, entry.by_mobile)}<span class="tl-when">${esc(entry.at)}</span></div></div></li>`;
+        }).join('');
+    }
+
+    // Everything on the page comes from the server, every time: after a
+    // movement the figures shown are the ones the database now holds,
+    // including an average cost the trigger has just recomputed.
+    function load(options = {}) {
+        const previousStock = item ? Number(item.quantity_in_stock || 0) : undefined;
+        return Promise.all([
+            fetch(`/api/inventory/items/${ITEM_ID}`).then(r => r.json()),
+            fetch(`/api/inventory/items/${ITEM_ID}/timeline`).then(r => r.json())
+        ]).then(([itemData, timelineData]) => {
+            if (!itemData.item) {
+                Swal.fire('Not found', 'This item no longer exists.', 'error').then(() => { location.href = BACK_URL; });
+                return;
+            }
+            item = itemData.item;
+            renderItem(previousStock);
+            renderTimeline(timelineData.timeline || [], options.newestAt);
+        }).catch(() => Swal.fire('Error', 'Could not load this item. Please refresh.', 'error'));
+    }
+
+    // --- stock in / out -------------------------------------------------
+    function setKind(next) {
+        kind = next;
+        document.querySelectorAll('.ii-toggle button').forEach(button =>
+            button.classList.toggle('active', button.dataset.kind === kind));
+        document.querySelectorAll('[data-only="in"]').forEach(el => { el.hidden = kind !== 'in'; });
+        const submit = $('ii_submit');
+        submit.className = 'btn ii-submit ' + (kind === 'in' ? 'btn-success' : 'btn-danger');
+        submit.innerHTML = kind === 'in'
+            ? '<i class="fas fa-arrow-down mr-1"></i>Record Stock In'
+            : '<i class="fas fa-arrow-up mr-1"></i>Record Stock Out';
+        $('ii_note_label').textContent = kind === 'in' ? 'Reference / note' : 'Reason / where it went';
+        updateAfter();
+    }
+
+    // What the stock will be after this movement, before it is recorded -- so
+    // taking an item under its minimum is seen, not discovered.
+    function updateAfter() {
+        const after = $('ii_after');
+        if (!after || !item) return;
+        const qty = Number($('ii_qty').value || 0);
+        const stock = Number(item.quantity_in_stock || 0);
+        const min = Number(item.minimum_stock_level || 0);
+        if (!qty) { after.innerHTML = `Now in stock: <strong>${bgNumber(stock)}</strong>`; after.className = 'ii-after'; return; }
+        const result = kind === 'in' ? stock + qty : stock - qty;
+        let warning = '';
+        if (result < 0) warning = ' &mdash; more than is in stock';
+        else if (min > 0 && result <= min) warning = ' &mdash; at or under the minimum; Operations will be notified';
+        after.innerHTML = `After this: <strong>${bgNumber(result)}</strong>${warning}`;
+        after.className = 'ii-after' + (warning ? ' warn' : '');
+    }
+
+    function loadSuppliers() {
+        const select = $('ii_supplier');
+        if (!select) return;
+        fetch('/api/suppliers/simple').then(r => r.json()).then(data => {
+            (data.suppliers || data || []).forEach(supplier => {
+                if (!supplier || !supplier.id) return;
+                const option = document.createElement('option');
+                option.value = supplier.id;
+                option.textContent = supplier.display_name || supplier.name;
+                if (item && Number(item.preferred_supplier_id) === Number(supplier.id)) option.selected = true;
+                select.appendChild(option);
+            });
+        }).catch(() => {});
+    }
+
+    function submitStock(event) {
+        event.preventDefault();
+        const qty = Number($('ii_qty').value || 0);
+        if (!(qty > 0)) { Swal.fire('Quantity needed', 'Enter how many units moved.', 'warning'); return; }
+        const stock = Number(item.quantity_in_stock || 0);
+        if (kind === 'out' && qty > stock) {
+            Swal.fire('Not enough stock', `Only ${bgNumber(stock)} in stock.`, 'warning');
+            return;
+        }
+        const payload = {
+            item_id: ITEM_ID,
+            transaction_type: kind === 'in' ? 'purchase' : 'stock_out',
+            quantity: qty,
+            unit_cost: kind === 'in' ? Number($('ii_cost').value || 0) : Number(item.average_cost || 0),
+            notes: $('ii_note').value.trim() || null
+        };
+        if (kind === 'in' && $('ii_supplier').value) payload.supplier_id = Number($('ii_supplier').value);
+
+        const submit = $('ii_submit');
+        submit.disabled = true;
+        const startedAt = new Date(Date.now() - 5000).toISOString().replace('T', ' ').slice(0, 19);
+        fetch('/api/inventory/transactions/add', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(r => r.json()).then(result => {
+            if (!result.success) {
+                Swal.fire('Not recorded', result.error || result.message || 'The movement was not saved.', 'error');
+                return;
+            }
+            $('ii_qty').value = '';
+            $('ii_note').value = '';
+            if ($('ii_cost')) $('ii_cost').value = '';
+            Swal.fire({
+                toast: true, position: 'top-end', timer: 2600, showConfirmButton: false, icon: 'success',
+                title: kind === 'in' ? 'Stock in recorded' : 'Stock out recorded',
+                text: result.low_stock_notified ? 'Now at or under the minimum. Operations has been told.' : ''
+            });
+            return load({ newestAt: startedAt });
+        }).catch(() => Swal.fire('Error', 'The movement was not saved. Please try again.', 'error'))
+          .finally(() => { submit.disabled = false; });
+    }
+
+    // --- edit and delete ------------------------------------------------
+    function openEdit() {
+        const form = $('ii_edit_form');
+        ['item_name', 'status', 'category', 'unit_of_measure', 'minimum_stock_level',
+         'reorder_level', 'width', 'height', 'depth', 'description'].forEach(field => {
+            if (form.elements[field]) form.elements[field].value = item[field] === null || item[field] === undefined ? '' : item[field];
+        });
+        window.jQuery('#iiEditModal').modal('show');
+    }
+
+    function saveEdit() {
+        const form = $('ii_edit_form');
+        if (!form.reportValidity()) return;
+        const data = Object.fromEntries(new FormData(form).entries());
+        const save = $('ii_edit_save');
+        save.disabled = true;
+        fetch(`/api/inventory/items/${ITEM_ID}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        }).then(r => r.json()).then(result => {
+            if (!result.success) {
+                Swal.fire('Not saved', result.error || result.message || 'The item was not updated.', 'error');
+                return;
+            }
+            window.jQuery('#iiEditModal').modal('hide');
+            Swal.fire({ toast: true, position: 'top-end', timer: 2200, showConfirmButton: false,
+                        icon: 'success', title: result.changed && result.changed.length ? 'Item updated' : 'Nothing changed' });
+            return load();
+        }).catch(() => Swal.fire('Error', 'The item was not updated.', 'error'))
+          .finally(() => { save.disabled = false; });
+    }
+
+    function confirmDelete() {
+        Swal.fire({
+            title: `Delete ${item.item_code}?`,
+            text: 'An item with movements is retired rather than deleted, and keeps its history.',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Delete'
+        }).then(answer => {
+            if (!answer.isConfirmed) return;
+            fetch(`/api/inventory/items/${ITEM_ID}`, { method: 'DELETE' }).then(r => r.json()).then(result => {
+                if (!result.success) {
+                    Swal.fire('Not deleted', result.error || 'The item was not deleted.', 'error');
+                    return;
+                }
+                Swal.fire(result.outcome === 'discontinued' ? 'Item retired' : 'Deleted', result.message, 'success')
+                    .then(() => { location.href = BACK_URL; });
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = $('ii_stock_form');
+        if (form) {
+            form.addEventListener('submit', submitStock);
+            document.querySelectorAll('.ii-toggle button').forEach(button =>
+                button.addEventListener('click', () => setKind(button.dataset.kind)));
+            $('ii_qty').addEventListener('input', updateAfter);
+            setKind('in');
+        }
+        if ($('ii_edit_btn')) $('ii_edit_btn').addEventListener('click', openEdit);
+        if ($('ii_edit_save')) $('ii_edit_save').addEventListener('click', saveEdit);
+        if ($('ii_delete_btn')) $('ii_delete_btn').addEventListener('click', confirmDelete);
+        load().then(loadSuppliers);
+    });
+})();
+</script>
+{% endblock %}

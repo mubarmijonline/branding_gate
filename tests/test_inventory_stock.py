@@ -201,23 +201,24 @@ class InventoryStockAndCostTest(unittest.TestCase):
     def test_the_page_flags_an_item_at_or_below_its_minimum(self):
         with open('templates/inventory_management.html', encoding='utf-8') as handle:
             page = handle.read()
-        self.assertIn('function stockState(', page)
+        # The reading itself is shared with the item page, so the row and the
+        # page it opens cannot disagree about whether something is low.
+        with open('static/js/bg-stock.js', encoding='utf-8') as handle:
+            shared = handle.read()
+        self.assertIn('const stockState = item => bgStockState(item);', page)
         for label in ('Below Minimum', 'Near Minimum', 'Out of Stock'):
-            self.assertIn(label, page)
+            self.assertIn(label, shared)
         # The flag, and the figure carrying it rather than only the status cell.
-        self.assertIn('fa-flag', page)
+        self.assertIn('fa-flag', shared)
         self.assertIn('function renderStockCell(', page)
         self.assertIn('.stock-below, .stock-out { color: var(--danger); }', page)
 
     def test_an_item_opens_its_own_movements(self):
         with open('templates/inventory_management.html', encoding='utf-8') as handle:
             page = handle.read()
-        self.assertIn('id="itemLedgerModal"', page)
-        self.assertIn('function openItemLedger(', page)
-        self.assertIn('/api/inventory/transactions?item_id=', page)
-        # The whole row, not one word of it.
+        # The whole row opens the item's own page (tests/test_inventory_item_page.py).
         self.assertIn('function attachRowOpensItem(', page)
-        self.assertIn('openItemLedger(data.id)', page)
+        self.assertIn('const url = `/inventory/item/${data.id}`;', page)
         self.assertIn('tr.row-openable { cursor: pointer; }', page)
         # ...and the action buttons still do their own thing.
         self.assertIn(".closest('.row-actions, a, button, input, select, label')", page)

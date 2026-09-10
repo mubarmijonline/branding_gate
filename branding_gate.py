@@ -18737,6 +18737,38 @@ def inventory_management_page():
                          entity_info=entity_info,
                          inventory_type=inventory_type)
 
+@app.route('/inventory/item/<int:item_id>', methods=['GET'])
+@perm('inventory.view')
+def inventory_item_page(item_id):
+    """
+    One item, as a page of its own.
+
+    Details, every movement in and out, its history, and stock in / out right
+    there -- the thing somebody wants when they tap a line of stock. The page
+    fills itself from the same APIs the list uses, so what it shows after a
+    movement is what the database now says, not a guess made in the browser.
+    """
+    if 'user_id' not in session:
+        return redirect('/login')
+    conn, cur = connection()
+    cur.execute("""
+        SELECT i.id, i.item_code, i.item_name, i.entity_id, i.is_credit_item,
+               e.entity_name, e.entity_code
+        FROM inventory_items i
+        LEFT JOIN entities e ON e.id = i.entity_id
+        WHERE i.id = %s
+    """, (item_id,))
+    item = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not item:
+        abort(404)
+    back = ('/inventory?type=credit' if item['is_credit_item']
+            else '/inventory?entity_id=%s' % item['entity_id'] if item['entity_id']
+            else '/inventory-selection')
+    return render_template('inventory_item.html', item=item, back_url=back)
+
+
 @app.route('/api/inventory/items', methods=['GET'])
 @perm('inventory.view')
 def get_inventory_items():

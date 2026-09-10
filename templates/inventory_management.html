@@ -298,33 +298,6 @@ tr.row-openable { cursor: pointer; }
 tr.row-openable:hover .item-name { color: var(--primary); }
 tr.row-openable:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 tr.row-openable .row-actions { cursor: default; }
-.ledger-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; }
-.ledger-meta div { min-width: 120px; }
-.ledger-meta span { display: block; font-size: 11px; letter-spacing: .04em;
-                    text-transform: uppercase; color: var(--muted); }
-.ledger-meta strong { font-size: 16px; }
-.ledger-stamp { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px;
-                color: var(--muted); margin: -6px 0 16px; }
-.person-mobile { color: var(--muted); font-size: 11px; }
-.ledger-tabs .nav-link { font-size: 13px; font-weight: 600; padding: 8px 14px; }
-.item-timeline { list-style: none; margin: 0; padding: 0 0 0 6px; }
-.item-timeline li { display: flex; gap: 12px; padding: 10px 0 10px 10px;
-                    border-left: 2px solid var(--border, #e6e6ef); }
-.item-timeline li:last-child { border-left-color: transparent; }
-.tl-mark { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%;
-           display: inline-flex; align-items: center; justify-content: center;
-           font-size: 11px; margin-left: -23px; background: #ececf5; color: var(--muted); }
-.tl-new .tl-mark { background: rgba(48,196,141,0.18); color: var(--success); }
-.tl-edit .tl-mark { background: rgba(109,93,252,0.15); color: var(--primary); }
-.tl-gone .tl-mark { background: rgba(240,101,72,0.18); color: var(--danger); }
-.tl-body { flex: 1; }
-.tl-what { font-size: 13px; }
-.tl-who { font-size: 11px; color: var(--muted); }
-.tl-when { margin-left: 8px; }
-.ledger-in { color: var(--success); font-weight: 700; }
-.ledger-out { color: var(--danger); font-weight: 700; }
-.ledger-table { font-size: 13px; }
-.ledger-empty { color: var(--muted); padding: 24px; text-align: center; }
 .section-header {
     display: flex;
     justify-content: space-between;
@@ -493,12 +466,6 @@ tr.row-openable .row-actions { cursor: default; }
     .modal-footer .btn { flex: 1 1 auto; margin: 0; }
     .form-row > [class*="col-"] { margin-bottom: 4px; }
 
-    .ledger-meta { gap: 10px; }
-    .ledger-meta div { min-width: 46%; }
-    .ledger-meta strong { font-size: 15px; }
-    .ledger-stamp { flex-direction: column; gap: 4px; }
-    .ledger-tabs .nav-link { padding: 8px 10px; font-size: 12px; }
-    .item-timeline li { padding: 8px 0 8px 10px; }
 }
 </style>
 {% endblock %}
@@ -650,6 +617,7 @@ tr.row-openable .row-actions { cursor: default; }
                 <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
                 <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
                 <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
+                <script src="{{ url_for('static', filename='js/bg-stock.js') }}?v=20260910"></script>
 
         <div class="inventory-panel" id="credit-panel">
             <div class="section-header">
@@ -852,72 +820,6 @@ tr.row-openable .row-actions { cursor: default; }
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="submitAddItem()">Save Item</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal sub-modal" id="itemLedgerModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-xl" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title"><i class="fas fa-clipboard-list mr-1"></i><span id="ledger_title">Item</span></h5>
-                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="ledger-meta" id="ledger_meta"></div>
-                <div class="ledger-stamp" id="ledger_stamp"></div>
-                <ul class="nav nav-tabs ledger-tabs" role="tablist">
-                    <li class="nav-item">
-                        <a class="nav-link active" data-toggle="tab" href="#ledger-movements">
-                            <i class="fas fa-exchange-alt mr-1"></i>Stock In / Out</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-toggle="tab" href="#ledger-history">
-                            <i class="fas fa-history mr-1"></i>Item History</a>
-                    </li>
-                </ul>
-                <div class="tab-content pt-3">
-                <div class="tab-pane fade show active" id="ledger-movements">
-                <div class="table-responsive">
-                    <table class="table table-sm ledger-table" id="ledgerTable">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Movement</th>
-                                <th class="text-right">In</th>
-                                <th class="text-right">Out</th>
-                                <th class="text-right">Unit Cost</th>
-                                <th class="text-right">Balance</th>
-                                <th>Reference</th>
-                                <th>By</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ledger_rows"></tbody>
-                    </table>
-                </div>
-                <div class="ledger-empty" id="ledger_empty" style="display:none;">
-                    Nothing has moved in or out of this item yet.
-                </div>
-                </div>
-                <div class="tab-pane fade" id="ledger-history">
-                    <ol class="item-timeline" id="ledger_timeline"></ol>
-                    <div class="ledger-empty" id="ledger_timeline_empty" style="display:none;">
-                        Nothing has changed on this item yet.
-                    </div>
-                </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
-                {% if 'inventory.transact' in _p %}
-                <button type="button" class="btn btn-info text-white" id="ledger_move">
-                    <i class="fas fa-exchange-alt mr-1"></i>Stock In / Out</button>
-                {% endif %}
-                {% if 'inventory.edit' in _p %}
-                <button type="button" class="btn btn-primary" id="ledger_edit">
-                    <i class="fas fa-edit mr-1"></i>Edit Item</button>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1437,7 +1339,7 @@ function initTables() {
         createdRow: row => {
             row.classList.add('row-openable');
             row.setAttribute('tabindex', '0');
-            row.setAttribute('title', 'Open this item: every movement in and out, and stock in / out');
+            row.setAttribute('title', 'Open this item: details, every movement, stock in / out');
         },
         columns: [
             { data: 'item_code' },
@@ -1526,7 +1428,11 @@ function attachRowOpensItem(tableKey, selector) {
             // A Responsive child row is not a data row; read the parent instead.
             const tr = $(this).hasClass('child') ? $(this).prev('tr')[0] : this;
             const data = table.row(tr).data();
-            if (data && data.id) openItemLedger(data.id);
+            if (!data || !data.id) return;
+            const url = `/inventory/item/${data.id}`;
+            // Ctrl / Cmd / middle click keeps the list where it is.
+            if (event.ctrlKey || event.metaKey || event.button === 1) window.open(url, '_blank');
+            else window.location.href = url;
         })
         .on('keydown', 'tr', function (event) {
             if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -1627,26 +1533,9 @@ function formatDimensions(item) {
     return `<span class="dimensions-text">${Number(width || 0).toFixed(1)} × ${Number(height || 0).toFixed(1)} × ${Number(depth || 0).toFixed(1)} cm</span>`;
 }
 
-// Where an item's stock stands against its own minimum. One reading, used by
-// the badge, the stock cell and the row, so all three say the same thing.
-function stockState(item) {
-    const stock = Number(item.quantity_in_stock || 0);
-    const minLevel = Number(item.minimum_stock_level || 0);
-    if (String(item.status || '').toLowerCase() === 'discontinued') {
-        return { key: 'retired', label: 'Retired', badge: 'status-neutral', icon: 'fa-archive' };
-    }
-    if (stock <= 0) {
-        return { key: 'out', label: 'Out of Stock', badge: 'status-danger', icon: 'fa-flag' };
-    }
-    if (minLevel > 0 && stock <= minLevel) {
-        return { key: 'below', label: 'Below Minimum', badge: 'status-danger', icon: 'fa-flag' };
-    }
-    // Close enough to the minimum to be worth ordering before it is hit.
-    if (minLevel > 0 && stock <= minLevel * 1.2) {
-        return { key: 'near', label: 'Near Minimum', badge: 'status-warning', icon: 'fa-exclamation-triangle' };
-    }
-    return { key: 'ok', label: 'In Stock', badge: 'status-success', icon: '' };
-}
+// Where an item's stock stands against its own minimum: one reading, shared
+// with the item page (static/js/bg-stock.js) so the two never disagree.
+const stockState = item => bgStockState(item);
 
 function renderStatusBadge(item) {
     const state = stockState(item);
@@ -2203,118 +2092,6 @@ function openEditItem(itemId) {
             $('#editItemModal').modal('show');
         })
         .catch(() => Swal.fire('Error', 'Failed to load item details', 'error'));
-}
-
-// Everything that has moved in or out of one item, plus the figures that
-// come out of those movements. The item page shows a total; this is where it
-// came from.
-const LEDGER_IN = ['purchase', 'credit_in', 'adjustment'];
-
-// A person, as a row should name them: who they are and the number to reach
-// them on. A username on its own told the reader nothing.
-function personLabel(name, mobile) {
-    if (!name && !mobile) return 'Unknown';
-    if (!mobile) return name;
-    return `${name} <span class="person-mobile">${mobile}</span>`;
-}
-
-function openItemLedger(itemId) {
-    Promise.all([
-        fetch(`/api/inventory/items/${itemId}`).then(r => r.json()),
-        fetch(`/api/inventory/transactions?item_id=${itemId}`).then(r => r.json()),
-        fetch(`/api/inventory/items/${itemId}/timeline`).then(r => r.json())
-    ]).then(([itemData, transData, timelineData]) => {
-        const item = itemData.item;
-        if (!item) {
-            Swal.fire('Error', 'Item not found', 'error');
-            return;
-        }
-        const state = stockState(item);
-        document.getElementById('ledger_title').textContent =
-            `${item.item_name} (${item.item_code})`;
-        document.getElementById('ledger_meta').innerHTML = `
-            <div><span>In Stock</span><strong class="stock-${state.key}">${bgNumber(item.quantity_in_stock || 0)} ${item.unit_of_measure || ''}</strong></div>
-            <div><span>Minimum</span><strong>${bgNumber(item.minimum_stock_level || 0)}</strong></div>
-            <div><span>Status</span><strong>${renderStatusBadge(item)}</strong></div>
-            <div><span>Average Cost</span><strong>${bgMoney(item.average_cost || 0)}</strong></div>
-            <div><span>Stock Value</span><strong>${bgMoney((Number(item.quantity_in_stock) || 0) * (Number(item.average_cost) || 0))}</strong></div>`;
-
-        // Who made it and who last touched it, with the number to ask them.
-        document.getElementById('ledger_stamp').innerHTML = `
-            <span><i class="fas fa-user-plus mr-1"></i>Added by
-                ${personLabel(item.created_by_name, item.created_by_mobile)}
-                ${item.created_at ? 'on ' + item.created_at : ''}</span>
-            <span><i class="fas fa-user-edit mr-1"></i>Last modified by
-                ${personLabel(item.updated_by_name, item.updated_by_mobile)}
-                ${item.updated_at ? 'on ' + item.updated_at : ''}</span>`;
-
-        renderItemTimeline(timelineData.timeline || []);
-
-        const rows = (transData.transactions || []).slice().sort(
-            (a, b) => String(b.transaction_date).localeCompare(String(a.transaction_date)));
-        const body = document.getElementById('ledger_rows');
-        document.getElementById('ledger_empty').style.display = rows.length ? 'none' : 'block';
-        body.innerHTML = rows.map(row => {
-            const incoming = LEDGER_IN.includes(row.transaction_type);
-            const qty = bgNumber(row.quantity || 0);
-            return `<tr>
-                <td>${row.transaction_date || ''}</td>
-                <td>${String(row.transaction_type || '').replace(/_/g, ' ')}</td>
-                <td class="text-right ledger-in">${incoming ? '+' + qty : ''}</td>
-                <td class="text-right ledger-out">${incoming ? '' : '-' + qty}</td>
-                <td class="text-right">${bgMoney(row.unit_cost || 0)}</td>
-                <td class="text-right">${bgNumber(row.balance_after || 0)}</td>
-                <td>${row.reference_info || row.notes || ''}</td>
-                <td>${personLabel(row.performed_by_name || row.performed_by, row.performed_by_mobile)}</td>
-            </tr>`;
-        }).join('');
-
-        // The two things somebody opens this to do next.
-        const moveButton = document.getElementById('ledger_move');
-        if (moveButton) moveButton.onclick = () => {
-            $('#itemLedgerModal').modal('hide');
-            showAddTransactionModal(item.id);
-        };
-        const editButton = document.getElementById('ledger_edit');
-        if (editButton) editButton.onclick = () => {
-            $('#itemLedgerModal').modal('hide');
-            openEditItem(item.id);
-        };
-        $('#itemLedgerModal').modal('show');
-    }).catch(() => Swal.fire('Error', 'Failed to load the item history', 'error'));
-}
-
-// Everything that has happened to the item's own data, newest first. The
-// movements have their own tab; this is who changed what, from what, to what.
-const TIMELINE_LOOK = {
-    created:  { icon: 'fa-plus',    tone: 'tl-new'  },
-    edited:   { icon: 'fa-pen',     tone: 'tl-edit' },
-    retired:  { icon: 'fa-archive', tone: 'tl-gone' },
-    restored: { icon: 'fa-undo',    tone: 'tl-new'  },
-    deleted:  { icon: 'fa-trash',   tone: 'tl-gone' }
-};
-
-function renderItemTimeline(entries) {
-    const history = entries.filter(entry => entry.kind === 'item');
-    document.getElementById('ledger_timeline_empty').style.display =
-        history.length ? 'none' : 'block';
-    document.getElementById('ledger_timeline').innerHTML = history.map(entry => {
-        const look = TIMELINE_LOOK[entry.event_type] || { icon: 'fa-circle', tone: '' };
-        let what = entry.note || entry.event_type;
-        if (entry.event_type === 'edited' && entry.field_label) {
-            const was = (entry.old_value === null || entry.old_value === '') ? 'empty' : entry.old_value;
-            const now = (entry.new_value === null || entry.new_value === '') ? 'empty' : entry.new_value;
-            what = `<strong>${entry.field_label}</strong>: ${was} &rarr; <strong>${now}</strong>`;
-        }
-        return `<li class="${look.tone}">
-            <span class="tl-mark"><i class="fas ${look.icon}"></i></span>
-            <div class="tl-body">
-                <div class="tl-what">${what}</div>
-                <div class="tl-who">${personLabel(entry.by_name, entry.by_mobile)}
-                    <span class="tl-when">${entry.at}</span></div>
-            </div>
-        </li>`;
-    }).join('');
 }
 
 function submitEditItem() {
