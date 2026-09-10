@@ -172,5 +172,45 @@ class InventoryItemPageTest(unittest.TestCase):
         self.assertIn('bgStockState(item)', page)
 
 
+class TableDragDoesNotEatClicksTest(unittest.TestCase):
+    """
+    A click on a row must reach the row.
+
+    main.html makes any sideways-scrollable table draggable. It took the
+    pointer and called preventDefault on pointerdown itself, so the browser
+    sent every click inside such a table to the wrapper, not the row -- and a
+    row that opens its item on click did nothing at all. It showed up as soon
+    as the inventory table was a pixel wider than its box. Measured live: the
+    press landed on the cell, no mousedown or mouseup followed, and the click
+    arrived on the wrapper DIV.
+    """
+
+    def setUp(self):
+        with open('templates/main.html', encoding='utf-8') as handle:
+            page = handle.read()
+        start = page.index("$(document).on('pointerdown.bgTableDrag'")
+        self.handler = page[start:page.index('function openSettleCustodyModal', start)]
+        self.press = self.handler[:self.handler.index('function endDrag(')]
+
+    def test_a_press_takes_nothing(self):
+        # Nothing between the press and the first real movement may take the
+        # pointer or cancel the press.
+        self.assertNotIn('setPointerCapture', self.press)
+        self.assertNotIn('e.preventDefault()', self.press)
+
+    def test_the_pointer_is_taken_only_once_it_moves_like_a_drag(self):
+        move = self.handler[self.handler.index("'pointermove.bgTableDragMove'"):]
+        self.assertIn('if (Math.abs(dx) < 6) return;', move)
+        self.assertLess(move.index('if (Math.abs(dx) < 6) return;'),
+                        move.index('setPointerCapture'))
+
+    def test_only_a_real_drag_swallows_its_click(self):
+        end = self.handler[self.handler.index('function endDrag('):]
+        self.assertLess(end.index('if (!drag.active) return;'), end.index('swallow'))
+
+    def test_touch_is_left_to_the_browser(self):
+        self.assertIn("if (event.pointerType === 'touch') return;", self.press)
+
+
 if __name__ == '__main__':
     unittest.main()

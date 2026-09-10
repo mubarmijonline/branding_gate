@@ -3698,37 +3698,63 @@ $(document).on('pointerdown.bgTableDrag', '.table-responsive, .dataTables_scroll
   if (event.bgTableDragHandled) return;
   event.bgTableDragHandled = true;
   if (!target || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  // A finger already scrolls a table sideways natively.
+  if (event.pointerType === 'touch') return;
   if ($(event.target).closest('button, a, input, select, textarea, label, .dropdown-menu').length) return;
   if (target.scrollWidth <= target.clientWidth + 2) return;
 
+  // A press is not a drag. This used to take the pointer and preventDefault
+  // on pointerdown itself, which sent every plain click inside a scrollable
+  // table to the wrapper instead of the row that was pressed -- so a row
+  // that opens something on click never heard it. The pointer is taken only
+  // once it has moved far enough to be a drag; a press that stays put is
+  // left alone and its click reaches whatever was clicked.
   drag = {
     startX: event.clientX,
-    scrollLeft: target.scrollLeft
+    scrollLeft: target.scrollLeft,
+    pointerId: event.pointerId,
+    active: false
   };
 
-  target.classList.add('bg-table-dragging');
-  if (target.setPointerCapture && event.pointerId !== undefined) {
-    target.setPointerCapture(event.pointerId);
+  function endDrag(upEvent) {
+    var up = upEvent.originalEvent || upEvent;
+    $(document).off('pointermove.bgTableDragMove pointerup.bgTableDragEnd pointercancel.bgTableDragEnd');
+    if (!drag.active) return;
+    target.classList.remove('bg-table-dragging');
+    if (target.releasePointerCapture && up.pointerId !== undefined) {
+      try {
+        target.releasePointerCapture(up.pointerId);
+      } catch (ignore) {}
+    }
+    // The click that ends a drag is the end of the drag, not a request to
+    // open whatever row it finished over.
+    function swallow(clickEvent) {
+      clickEvent.stopPropagation();
+      clickEvent.preventDefault();
+    }
+    document.addEventListener('click', swallow, true);
+    setTimeout(function() { document.removeEventListener('click', swallow, true); }, 0);
   }
 
-  $(target)
-    .on('pointermove.bgTableDrag', function(moveEvent) {
+  $(document)
+    .on('pointermove.bgTableDragMove', function(moveEvent) {
       var move = moveEvent.originalEvent || moveEvent;
-      target.scrollLeft = drag.scrollLeft + (drag.startX - move.clientX);
+      var dx = drag.startX - move.clientX;
+      if (!drag.active) {
+        if (Math.abs(dx) < 6) return;
+        drag.active = true;
+        target.classList.add('bg-table-dragging');
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        if (target.setPointerCapture && drag.pointerId !== undefined) {
+          try {
+            target.setPointerCapture(drag.pointerId);
+          } catch (ignore) {}
+        }
+      }
+      target.scrollLeft = drag.scrollLeft + dx;
       moveEvent.preventDefault();
     })
-    .one('pointerup.bgTableDrag pointercancel.bgTableDrag lostpointercapture.bgTableDrag', function(upEvent) {
-      var up = upEvent.originalEvent || upEvent;
-      $(target).off('pointermove.bgTableDrag');
-      target.classList.remove('bg-table-dragging');
-      if (target.releasePointerCapture && up.pointerId !== undefined) {
-        try {
-          target.releasePointerCapture(up.pointerId);
-        } catch (ignore) {}
-      }
-    });
-
-  e.preventDefault();
+    .on('pointerup.bgTableDragEnd pointercancel.bgTableDragEnd', endDrag);
 });
 
 function openSettleCustodyModal() {

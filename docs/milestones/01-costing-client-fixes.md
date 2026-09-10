@@ -514,3 +514,17 @@ leader also gets Edit; only the Head gets Delete. The routes check regardless.
 The pop-up it replaces is removed, not left unused. "Where does this item stand
 against its minimum" now lives in one file, `static/js/bg-stock.js`, shared by
 the list and the page, so a row and the page it opens cannot disagree.
+
+**Why a row click could do nothing.** `main.html` makes any sideways-scrollable
+table draggable, and it took the pointer -- `setPointerCapture` plus
+`preventDefault` -- on the press itself. From then on the browser sent the
+click to the table's wrapper instead of the row that was pressed, so a row that
+opens its item on click never heard it. It stayed hidden while tables fitted
+their boxes and surfaced as soon as the inventory table was a pixel wider than
+its own. Measured on the live page: the press landed on the cell, no mousedown
+or mouseup followed, and the click arrived on the wrapper DIV. The pointer is
+now taken only after it has moved six pixels, which is to say only for a drag;
+a press that stays put reaches the row. The click that ends a real drag is
+swallowed so a drag does not also open a row, and touch is left to the
+browser, which already scrolls a table under a finger. The helper is global, so
+this applies to every clickable row inside a scrollable table on the site.
