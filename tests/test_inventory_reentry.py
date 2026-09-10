@@ -117,6 +117,19 @@ class InventoryReEntryTest(unittest.TestCase):
         self.assertEqual(int(row['minimum_stock_level']), 40,
                          'the values they typed on the second add should stick')
 
+    def test_a_revived_item_keeps_its_stock_rather_than_doubling_it(self):
+        first = self._add(self.entity)  # 25 in stock
+        if self._delete(first['item_id']).get('outcome') != 'discontinued':
+            self.skipTest('nothing held this item, so it was really deleted')
+        # Retiring does not empty the shelf, so the 25 are still there.
+        self.assertEqual(int(self._row(first['item_id'])['quantity_in_stock']), 25)
+
+        again = self._add(self.entity, quantity_in_stock='25')
+        self.assertTrue(again.get('revived'))
+        self.assertEqual(int(self._row(first['item_id'])['quantity_in_stock']), 25,
+                         'the opening figure was added on top of stock that never left')
+        self.assertIn('Stock In', again.get('message') or '')
+
     def test_the_message_says_what_happened(self):
         first = self._add(self.entity)
         if self._delete(first['item_id']).get('outcome') != 'discontinued':

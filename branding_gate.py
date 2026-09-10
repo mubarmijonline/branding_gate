@@ -18804,7 +18804,13 @@ def add_inventory_item():
         # Extract new sales-related fields with proper null handling
         sales_request_item_id = data.get('sales_request_item_id') or None
         unit_selling_price = float(data.get('unit_selling_price', 0))
-        average_cost = float(data.get('average_cost', 0))
+        # What the opening stock cost, not a cost anybody gets to set. The
+        # average is derived: the transaction trigger recomputes it on every
+        # purchase, so a typed figure would be overwritten by the next stock
+        # movement anyway -- and until then it was a cost with no purchase
+        # behind it.
+        opening_unit_cost = float(data.get('average_cost', 0) or 0)
+        average_cost = opening_unit_cost
         is_credit_item = data.get('is_credit_item', False)
         credit_supplier_id = data.get('credit_supplier_id') or None
         preferred_supplier_id = data.get('preferred_supplier_id') or None
@@ -18820,6 +18826,28 @@ def add_inventory_item():
         # Calculate expected profit
         expected_profit_per_unit = unit_selling_price - average_cost if unit_selling_price and average_cost else 0
         
+        # The minimum belongs to the item, and it is how the page knows to flag
+        # the row, so it is asked for once here rather than on every movement.
+        minimum_stock_level = data.get('minimum_stock_level')
+        if minimum_stock_level is None or str(minimum_stock_level).strip() == '':
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Minimum quantity is required -- it is what '
+                                     'raises the low-stock flag on this item.'}), 400
+        try:
+            minimum_stock_level = float(minimum_stock_level)
+        except (TypeError, ValueError):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Minimum quantity must be a number.'}), 400
+        if minimum_stock_level < 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False,
+                            'error': 'Minimum quantity cannot be negative.'}), 400
+
         # Generate unique item_code if provided code already exists or is same as item_name
         item_code = data.get('item_code')
         item_name = data.get('item_name')
@@ -18904,6 +18932,9 @@ def add_inventory_item():
         # history, carrying whatever was typed this time.
         revived_query = check_query.replace(" AND status <> 'discontinued'",
                                             " AND status = 'discontinued'")
+        revived_query = revived_query.replace(
+            "SELECT id, item_code, item_name FROM inventory_items",
+            "SELECT id, item_code, item_name, quantity_in_stock FROM inventory_items")
         cur.execute(revived_query, check_params)
         retired_item = cur.fetchone()
         if retired_item:
@@ -18912,23 +18943,32 @@ def add_inventory_item():
                 SET status = 'active',
                     minimum_stock_level = %s,
                     reorder_level = %s,
-                    average_cost = %s,
                     preferred_supplier_id = %s,
                     description = COALESCE(%s, description),
                     updated_at = NOW()
                 WHERE id = %s
-            """, (data.get('minimum_stock_level', 0), data.get('reorder_level', 10),
-                  average_cost, preferred_supplier_id, data.get('description'),
+            """, (minimum_stock_level, data.get('reorder_level', 10),
+                  preferred_supplier_id, data.get('description'),
                   retired_item['id']))
-            revived_quantity = int(data.get('quantity_in_stock', 0) or 0)
+            # average_cost is deliberately not in that UPDATE: the row's own
+            # purchase history decides it, and the stock transaction below
+            # moves it if this add brings more in.
+            # Retiring an item does not empty it -- the stock is still on the
+            # shelf and the transactions still say so -- so it comes back with
+            # whatever it held. Adding the opening figure again on top of that
+            # would double it, which is how a re-added item ended up with twice
+            # the stock nobody had bought. More stock is a movement, like any
+            # other movement.
+            held = float(retired_item['quantity_in_stock'] or 0)
+            revived_quantity = int(data.get('quantity_in_stock', 0) or 0) if held <= 0 else 0
             if revived_quantity > 0:
                 cur.execute("""
                     INSERT INTO inventory_transactions
                     (item_id, entity_id, transaction_type, quantity, unit_cost, total_cost,
                      reference_type, notes, performed_by)
                     VALUES (%s, %s, 'purchase', %s, %s, %s, 'initial_stock', %s, %s)
-                """, (retired_item['id'], entity_id, revived_quantity, average_cost,
-                      revived_quantity * average_cost,
+                """, (retired_item['id'], entity_id, revived_quantity, opening_unit_cost,
+                      revived_quantity * opening_unit_cost,
                       'Stock added when %s was restored' % retired_item['item_code'],
                       session.get('username')))
             conn.commit()
@@ -18939,8 +18979,14 @@ def add_inventory_item():
                 'item_id': retired_item['id'],
                 'item_code': retired_item['item_code'],
                 'revived': True,
-                'message': 'This item had been retired, so it has been restored '
-                           'with its previous history rather than added twice.'
+                'stock_kept': held,
+                'message': ('This item had been retired, so it has been restored with '
+                            'its previous history rather than added twice. It still '
+                            'holds %s in stock, so nothing was added on top -- use '
+                            'Stock In to receive more.' % ('{:,.0f}'.format(held))
+                            if held > 0 else
+                            'This item had been retired, so it has been restored '
+                            'with its previous history rather than added twice.')
             })
         
         # Get initial quantity before insertion (will be added via transaction)
@@ -18965,9 +19011,10 @@ def add_inventory_item():
             data.get('description'),
             data.get('unit_of_measure', 'PCS'),
             0,  # Start with 0 stock - will be added via transaction
-            data.get('minimum_stock_level', 0),
+            minimum_stock_level,
             data.get('reorder_level', 10),
-            average_cost,
+            0,  # and with no average cost - the opening purchase below sets it
+
             preferred_supplier_id,
             data.get('source_type', 'manual'),
             data.get('status', 'active'),
@@ -18998,8 +19045,8 @@ def add_inventory_item():
                 item_id,
                 entity_id,
                 initial_quantity,
-                average_cost,
-                initial_quantity * average_cost,
+                opening_unit_cost,
+                initial_quantity * opening_unit_cost,
                 f'Initial stock for {item_code}',
                 session.get('username')
             ))
@@ -19076,8 +19123,73 @@ def update_inventory_item(item_id):
     try:
         data = request.get_json()
         conn, cur = connection()
-        
+
+        cur.execute("""SELECT item_code, item_name, unit_of_measure, width, height, depth,
+                              entity_id, is_credit_item
+                       FROM inventory_items WHERE id = %s""", (item_id,))
+        current = cur.fetchone()
+        if not current:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Item not found'}), 404
+
+        # Renaming an item onto another one in the same entity used to go
+        # through: two rows then described the same thing with different stock,
+        # and the next add refused with the code of whichever twin it found
+        # first -- a code nobody could see on the page. The identity is checked
+        # here, scoped to the entity and ignoring this row itself.
+        def _dimension(field):
+            if field in data:
+                raw = data.get(field)
+                if raw in (None, ''):
+                    return None
+                return float(raw)
+            return float(current[field]) if current[field] is not None else None
+
+        wanted = {
+            'item_name': (data.get('item_name') or current['item_name']),
+            'unit_of_measure': (data.get('unit_of_measure') or current['unit_of_measure']),
+            'width': _dimension('width'),
+            'height': _dimension('height'),
+            'depth': _dimension('depth'),
+        }
+        twin_query = """
+            SELECT id, item_code FROM inventory_items
+            WHERE id <> %s AND item_name = %s AND unit_of_measure = %s
+              AND is_credit_item = %s AND status <> 'discontinued'
+        """
+        twin_params = [item_id, wanted['item_name'], wanted['unit_of_measure'],
+                       current['is_credit_item'] or 0]
+        if current['entity_id']:
+            twin_query += " AND entity_id = %s"
+            twin_params.append(current['entity_id'])
+        else:
+            twin_query += " AND entity_id IS NULL"
+        for field in ('width', 'height', 'depth'):
+            if wanted[field] is None:
+                twin_query += " AND %s IS NULL" % field
+            else:
+                twin_query += " AND %s = %%s" % field
+                twin_params.append(wanted[field])
+        cur.execute(twin_query, twin_params)
+        twin = cur.fetchone()
+        if twin:
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'This inventory already holds "%s" under %s. Two rows for '
+                         'one item would each report their own stock, so edit %s '
+                         'or change this one\'s name, unit or dimensions.'
+                         % (wanted['item_name'], twin['item_code'], twin['item_code'])
+            }), 400
+
         # Build dynamic update query based on provided fields
+        #
+        # average_cost and quantity_in_stock are deliberately absent: the cost
+        # is the weighted average of what was actually bought, and the stock is
+        # the sum of the movements. Both are maintained by the transaction
+        # trigger, so neither is editable here or anywhere else.
         update_fields = []
         update_values = []
         
@@ -19334,7 +19446,10 @@ def add_inventory_transaction():
         transaction_type = data.get('transaction_type')
         quantity = float(data.get('quantity') or 0)
         unit_cost = float(data.get('unit_cost') or 0)
-        total_cost = float(data.get('total_cost') or 0)
+        # Derived, not taken: the total feeds the weighted average cost, and a
+        # posted figure that disagreed with quantity x unit cost would move the
+        # item's average to a number nothing paid for.
+        total_cost = quantity * unit_cost
         
         if not item_id:
             cur.close()

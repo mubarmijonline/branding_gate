@@ -403,3 +403,50 @@ brought back to `active` with the values from the second add, keeping its item
 code and its transaction history rather than starting a parallel row that
 reports different stock for the same thing. The page says so -- "Item Restored"
 with the reason -- instead of a bare "Created".
+
+## Seventeenth round, 10 September 2026
+
+**Refresh made every tile read zero for a moment.** The four figures are
+labelled for one mode -- Total Items or Credit Items, Inventory Value or Amount
+Due -- but Refresh called both loaders, and whichever answered last wrote the
+tiles. On an entity page that is the credit list, which is empty, so the
+numbers dropped to zero and then came back when something else reloaded them.
+Each loader now writes only in its own mode, and Refresh loads the list the
+page is actually showing.
+
+**Renaming an item onto another one went through in silence.** The update route
+had no duplicate check at all: two rows could describe the same item in the
+same entity, each with its own stock, and the next add would refuse with the
+code of whichever twin it found -- a code nobody could see on the page. The
+check the add route uses is now on the update too, scoped to the entity and
+ignoring the row being edited, and it names the item already holding that
+identity.
+
+**The average cost was typed in.** It is a weighted average of what was
+actually bought, maintained by the transaction trigger on every purchase, so a
+figure typed on the add form was either overwritten by the next movement or --
+with no opening stock behind it -- a cost for an item nobody had bought. The
+row now starts at zero and the opening stock arrives as a purchase, exactly
+like every later movement. The transaction total is derived from quantity times
+unit cost rather than posted, because a total that disagreed moved the average
+to a number nothing was paid at. Nothing on the update route can set the cost or
+the stock: both come from the movements.
+
+**A retired item came back with twice its stock.** Retiring does not empty the
+shelf, so a revived item already holds what it held. Adding the opening figure
+on top doubled it. The stock comes back with the item now, and the message says
+so and points at Stock In for more.
+
+**The minimum belongs to the item.** It is asked for once, on the item, and it
+is required -- zero is the one value that switches the low-stock flag off
+entirely, and it was the default.
+
+**A low item now says so where the number is.** The status column reads Below
+Minimum with a red flag at or under the minimum, Near Minimum in amber within
+20% of it, Out of Stock at zero -- and the stock figure itself carries the same
+colour and flag, so a wide table does not have to be read across.
+
+**An item opens its own history.** Clicking the item name lists every movement
+in and out of it, with the running balance, alongside its stock, minimum,
+average cost and stock value, and offers the two things somebody opens that to
+do next: Stock In / Out, and Edit Item.

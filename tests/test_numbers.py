@@ -317,7 +317,7 @@ class InventoryFormFieldsTest(unittest.TestCase):
         self.assertNotIn('name="unit_type"', form)
 
     def test_the_route_still_reads_those_names(self):
-        self.assertIn("data.get('minimum_stock_level', 0)", self.source)
+        self.assertIn("data.get('minimum_stock_level')", self.source)
         self.assertIn("data.get('unit_of_measure', 'PCS')", self.source)
 
 
@@ -372,3 +372,21 @@ class InventoryStatsTest(unittest.TestCase):
         self.assertIn("element.classList.remove('stat-pending')", self.page)
         # And the count-up that animated a number to itself is gone.
         self.assertNotIn('updateStatAnimation', self.page)
+
+    def test_only_the_mode_on_show_writes_the_tiles(self):
+        # The four tiles are labelled for one mode. Refresh used to call both
+        # loaders, so whichever answered last repainted them with the other
+        # mode's figures -- zero, on a page that has no credit items -- and
+        # then the next load put them back. Each loader now writes only in its
+        # own mode.
+        for fn, guard in (('loadRegularInventory', 'if (!isCredit) {'),
+                          ('loadCreditInventory', 'if (isCredit) {')):
+            start = self.page.index('function %s(' % fn)
+            body = self.page[start:self.page.index('\n}', start)]
+            self.assertIn(guard, body, fn)
+            self.assertLess(body.index(guard), body.index("setStat('stat-regular'"), fn)
+
+    def test_refresh_loads_the_list_this_page_is_showing(self):
+        start = self.page.index("getElementById('refreshAll')")
+        handler = self.page[start:self.page.index('});', start)]
+        self.assertIn('isCredit ? loadCreditInventory() : loadRegularInventory()', handler)
