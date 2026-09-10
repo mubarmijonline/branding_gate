@@ -130,7 +130,9 @@
     .ii-moves thead { display: none; }
     .ii-moves, .ii-moves tbody, .ii-moves tr, .ii-moves td { display: block; width: 100%; }
     .ii-moves tr { border-bottom: 1px solid var(--ii-border); padding: 10px 0; }
-    .ii-moves td { border: none; padding: 2px 0; }
+    /* One column, one alignment: the desktop's right-aligned figures made
+       each card zig-zag. */
+    .ii-moves td { border: none; padding: 2px 0; text-align: left !important; }
     .ii-moves td[data-label]::before { content: attr(data-label) ': '; color: var(--ii-muted);
                                        font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
     .ii-moves td.ii-when { font-size: 12px; color: var(--ii-muted); }
