@@ -287,8 +287,12 @@ body.inventory-surface {
 .stock-figure { font-weight: 700; }
 .stock-near { color: var(--warning); }
 .stock-below, .stock-out { color: var(--danger); }
-.item-link { color: var(--primary); font-weight: 600; text-decoration: none; }
-.item-link:hover { text-decoration: underline; }
+.item-name { font-weight: 600; }
+/* The whole row opens the item, so the whole row has to look like it does. */
+tr.row-openable { cursor: pointer; }
+tr.row-openable:hover .item-name { color: var(--primary); }
+tr.row-openable:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+tr.row-openable .row-actions { cursor: default; }
 .ledger-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; }
 .ledger-meta div { min-width: 120px; }
 .ledger-meta span { display: block; font-size: 11px; letter-spacing: .04em;
@@ -1284,14 +1288,15 @@ function initTables() {
     inventoryTables.regular = $('#regularTable').DataTable({
         responsive: true,
         order: [[0, 'asc']],
+        createdRow: row => {
+            row.classList.add('row-openable');
+            row.setAttribute('tabindex', '0');
+            row.setAttribute('title', 'Open this item: every movement in and out, and stock in / out');
+        },
         columns: [
             { data: 'item_code' },
-            {
-                data: 'item_name',
-                render: (data, type, row) => type !== 'display' ? data :
-                    `<a href="#" class="item-link" onclick="openItemLedger(${row.id}); return false;"
-                        title="Every movement in and out of this item">${data}</a>`
-            },
+            { data: 'item_name', render: (data, type) => type !== 'display' ? data :
+                `<span class="item-name">${data}</span>` },
             { data: 'item_type' },
             { data: 'unit_of_measure', defaultContent: '-' },
             { data: 'dimensions' },
@@ -1322,6 +1327,9 @@ function initTables() {
         ]
     });
 
+    // Bound once, on the tbody, which survives every redraw.
+    attachRowOpensItem('regular', '#regularTable');
+
     inventoryTables.transactions = $('#transTable').DataTable({
         responsive: true,
         order: [[0, 'desc']],
@@ -1330,6 +1338,29 @@ function initTables() {
             { targets: -1, orderable: false, searchable: false } // Reference
         ]
     });
+}
+
+// The row is the target, not the name in it: the thing somebody wants when
+// they look at a line of stock is that line's history, and aiming at one word
+// of it is a worse way to ask for it.
+function attachRowOpensItem(tableKey, selector) {
+    $(selector + ' tbody')
+        .on('click', 'tr', function (event) {
+            // The action buttons, and anything else that already does something.
+            if ($(event.target).closest('.row-actions, a, button, input, select, label').length) return;
+            const table = inventoryTables[tableKey];
+            if (!table) return;
+            // A Responsive child row is not a data row; read the parent instead.
+            const tr = $(this).hasClass('child') ? $(this).prev('tr')[0] : this;
+            const data = table.row(tr).data();
+            if (data && data.id) openItemLedger(data.id);
+        })
+        .on('keydown', 'tr', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            if ($(event.target).closest('.row-actions, a, button, input, select').length) return;
+            event.preventDefault();
+            $(this).trigger('click');
+        });
 }
 
 function attachToolbarEvents() {

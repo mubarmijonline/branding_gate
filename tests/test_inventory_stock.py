@@ -215,7 +215,12 @@ class InventoryStockAndCostTest(unittest.TestCase):
         self.assertIn('id="itemLedgerModal"', page)
         self.assertIn('function openItemLedger(', page)
         self.assertIn('/api/inventory/transactions?item_id=', page)
-        self.assertIn('openItemLedger(${row.id})', page)
+        # The whole row, not one word of it.
+        self.assertIn('function attachRowOpensItem(', page)
+        self.assertIn('openItemLedger(data.id)', page)
+        self.assertIn('tr.row-openable { cursor: pointer; }', page)
+        # ...and the action buttons still do their own thing.
+        self.assertIn(".closest('.row-actions, a, button, input, select, label')", page)
 
     def test_the_movements_api_can_be_asked_for_one_item(self):
         body = self._add('Ledger Probe', average_cost='5',

@@ -446,7 +446,8 @@ Minimum with a red flag at or under the minimum, Near Minimum in amber within
 20% of it, Out of Stock at zero -- and the stock figure itself carries the same
 colour and flag, so a wide table does not have to be read across.
 
-**An item opens its own history.** Clicking the item name lists every movement
+**An item opens its own history.** Clicking anywhere on the row -- not one
+word of it -- lists every movement
 in and out of it, with the running balance, alongside its stock, minimum,
 average cost and stock value, and offers the two things somebody opens that to
 do next: Stock In / Out, and Edit Item.
