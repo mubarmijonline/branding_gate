@@ -380,3 +380,26 @@ fetch landed and all four figures jumped -- the flash that reads as lag. They
 now start blank and are revealed together the moment they are known. The
 count-up "animation" that ran afterwards is gone: it read the value it had just
 been given and spent 600ms in thirty frames counting from that value to itself.
+
+## Sixteenth round, 10 September 2026
+
+**An item removed from an entity's inventory would not go back in.** Add an
+item inside an entity, remove it, add it again: "already exists with INV-00002",
+a code nowhere on the page. Both halves of the duplicate rule -- the check in
+`add_inventory_item` and the `idx_unique_item` index under it -- compared
+`item_name`, unit and dimensions with no `entity_id` at all, so one entity's
+stock blocked every other entity from holding the same thing. That is how a code
+they had never seen could be the one quoted back at them.
+
+The second half: the check matched rows whose status is `discontinued`. An item
+with movements behind it cannot be deleted -- the transactions point at it -- so
+removing it retires it instead. The row the client had just removed was the row
+refusing to let them add it again, and naming itself while it did.
+
+The index is now `(entity_id, item_name, unit_of_measure, width, height, depth,
+is_credit_item)`, applied in `inventory_entity_unique_migration.sql`, and the
+check is scoped the same way. A retired match is no longer a refusal: it is
+brought back to `active` with the values from the second add, keeping its item
+code and its transaction history rather than starting a parallel row that
+reports different stock for the same thing. The page says so -- "Item Restored"
+with the reason -- instead of a bare "Created".

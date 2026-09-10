@@ -18849,6 +18849,15 @@ def add_inventory_item():
             AND unit_of_measure = %s
         """
         check_params = [item_name, unit_of_measure]
+
+        # Inventory is per entity everywhere else on this page, and now in the
+        # unique key too: another entity holding an item of the same name is
+        # not a duplicate of this one.
+        if entity_id:
+            check_query += " AND entity_id = %s"
+            check_params.append(entity_id)
+        else:
+            check_query += " AND entity_id IS NULL"
         
         # Add dimension checks (handle NULL values)
         if width is not None:
@@ -18869,9 +18878,10 @@ def add_inventory_item():
         else:
             check_query += " AND depth IS NULL"
         
+        check_query += " AND status <> 'discontinued'"
         cur.execute(check_query, check_params)
         existing_item = cur.fetchone()
-        
+
         if existing_item:
             # Item already exists - return existing item info
             cur.close()
@@ -18882,6 +18892,55 @@ def add_inventory_item():
                 'item_code': existing_item['item_code'],
                 'message': 'Item already exists',
                 'already_exists': True
+            })
+
+        # A retired one, on the other hand, comes back.
+        #
+        # Deleting an item that has movements retires it rather than removing
+        # it, because the transactions refer to it. Its row still holds the
+        # name, so adding the same item again was refused -- "already exists,
+        # INV-00002" -- pointing at something the user had deleted and could
+        # not see. Reviving it is the honest outcome: the item returns with its
+        # history, carrying whatever was typed this time.
+        revived_query = check_query.replace(" AND status <> 'discontinued'",
+                                            " AND status = 'discontinued'")
+        cur.execute(revived_query, check_params)
+        retired_item = cur.fetchone()
+        if retired_item:
+            cur.execute("""
+                UPDATE inventory_items
+                SET status = 'active',
+                    minimum_stock_level = %s,
+                    reorder_level = %s,
+                    average_cost = %s,
+                    preferred_supplier_id = %s,
+                    description = COALESCE(%s, description),
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (data.get('minimum_stock_level', 0), data.get('reorder_level', 10),
+                  average_cost, preferred_supplier_id, data.get('description'),
+                  retired_item['id']))
+            revived_quantity = int(data.get('quantity_in_stock', 0) or 0)
+            if revived_quantity > 0:
+                cur.execute("""
+                    INSERT INTO inventory_transactions
+                    (item_id, entity_id, transaction_type, quantity, unit_cost, total_cost,
+                     reference_type, notes, performed_by)
+                    VALUES (%s, %s, 'purchase', %s, %s, %s, 'initial_stock', %s, %s)
+                """, (retired_item['id'], entity_id, revived_quantity, average_cost,
+                      revived_quantity * average_cost,
+                      'Stock added when %s was restored' % retired_item['item_code'],
+                      session.get('username')))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': True,
+                'item_id': retired_item['id'],
+                'item_code': retired_item['item_code'],
+                'revived': True,
+                'message': 'This item had been retired, so it has been restored '
+                           'with its previous history rather than added twice.'
             })
         
         # Get initial quantity before insertion (will be added via transaction)

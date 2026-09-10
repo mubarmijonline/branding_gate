@@ -1796,7 +1796,14 @@ function submitAddItem() {
                     Swal.fire({
                         icon: 'info',
                         title: 'Item Already Exists',
-                        html: `This item already exists in inventory:<br><strong>${result.item_code}</strong><br>ID: ${result.item_id}`,
+                        html: `This item is already in this inventory:<br><strong>${result.item_code}</strong><br>ID: ${result.item_id}`,
+                        confirmButtonText: 'OK'
+                    });
+                } else if (result.revived) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Item Restored',
+                        html: `${result.message}<br><strong>${result.item_code}</strong>`,
                         confirmButtonText: 'OK'
                     });
                 } else {
