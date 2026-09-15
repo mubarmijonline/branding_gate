@@ -222,6 +222,11 @@ window.sessionUserId = "{{ session['user_id'] }}";
 // One card per section. The keys are rbac.sections() -- the same list the
 // navbar menus are built from, so a card is never offered for a menu the
 // navbar hides.
+// What this account may open, from the session, so a quick link it cannot use
+// is not drawn on the first paint either -- fetchAndRenderRoles() draws once
+// before the server answers. Replaced below with the server's answer.
+window.USER_PERMS = window.USER_PERMS || {{ session.get('perms', {})|tojson }};
+
 const rolePortals = {
   'admin': {
     icon: 'fas fa-shield-alt',
@@ -246,7 +251,10 @@ const rolePortals = {
     subLinks: [
       { name: 'Sales Requests', url: '/sales_request', icon: 'fas fa-clipboard-list' },
       { name: 'Client Approval', url: '/client_approval', icon: 'fas fa-check-circle' },
-      { name: 'Sales Head Approval', url: '/sales-head-approval', icon: 'fas fa-user-check' }
+      { name: 'Sales Head Approval', url: '/sales-head-approval', icon: 'fas fa-user-check',
+        perm: 'negotiation.decide_sales_head' },
+      { name: 'Account Head Approval', url: '/account-head-approval', icon: 'fas fa-user-tie',
+        perm: 'negotiation.decide_account_head' }
     ]
   },
   'operations': {
@@ -299,7 +307,13 @@ const rolePortals = {
     title: 'Account Manager',
     desc: 'Oversee client accounts and ensure customer satisfaction.',
     link: '/account',
-    theme: 'account'
+    theme: 'account',
+    subLinks: [
+      { name: 'Client Approval', url: '/client_approval', icon: 'fas fa-check-circle',
+        perm: 'client_approval.view' },
+      { name: 'Account Head Approval', url: '/account-head-approval', icon: 'fas fa-user-tie',
+        perm: 'negotiation.decide_account_head' }
+    ]
   },
   'design_2d': {
     icon: 'fas fa-pencil-ruler',
@@ -352,8 +366,14 @@ function createPortalCard(portal) {
 
   // Build sub-links dropdown HTML
   let quickLinksHtml = '';
-  if (portal.subLinks && portal.subLinks.length > 0) {
-    const links = portal.subLinks.map(s =>
+  // A quick link names the permission its page needs; one this account does
+  // not hold is left out rather than drawn and refused. The Sales portal is
+  // shared with Account Management, so its Sales Head link used to be offered
+  // to the account director, who is sent to their own page instead.
+  const heldPerms = window.USER_PERMS || {};
+  const visibleLinks = (portal.subLinks || []).filter(s => !s.perm || s.perm in heldPerms);
+  if (visibleLinks.length > 0) {
+    const links = visibleLinks.map(s =>
       `<a href="${s.url}"><i class="${s.icon}"></i>${s.name}</a>`
     ).join('');
     quickLinksHtml = `

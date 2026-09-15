@@ -258,5 +258,60 @@ class NegotiationReachesItsHeadTest(_Harness):
         self.assertEqual(body['reviewer'], 'Account Director')
 
 
+
+class HomeQuickLinksTest(_Harness):
+    """
+    The home page's portal quick links follow the permissions too.
+
+    The Sales portal is shared with Account Management, and its quick links
+    were drawn with no check at all -- so the account director was offered
+    "Sales Head Approval", a page that now refuses them. The links are data in
+    the page for everyone; which ones are drawn is decided in the browser, so
+    this runs that code in node with the account director's permissions.
+    """
+
+    def _drawn_links(self, user_id):
+        import json
+        import os
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+        if not shutil.which('node'):
+            self.skipTest('node is not installed')
+        html = self._client_for(user_id).get('/home').get_data(as_text=True)
+        start = html.index('window.USER_PERMS = window.USER_PERMS ||')
+        portals = html[start:html.index('function renderRolePortals', start)]
+        card = html[html.index('function createPortalCard(portal)'):]
+        card = card[:card.index('\n}\n') + 3]
+        script = ('var window = {};\n' + portals + '\n' + card + '\n'
+                  'var out = {};\n'
+                  'Object.keys(rolePortals).forEach(function (k) {\n'
+                  '  out[k] = (createPortalCard(rolePortals[k]).match(/href="([^"]+)"/g) || []);\n'
+                  '});\n'
+                  'console.log(JSON.stringify(out));')
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8') as handle:
+            handle.write(script)
+            path = handle.name
+        try:
+            result = subprocess.run(['node', path], capture_output=True, text=True, timeout=30)
+        finally:
+            os.unlink(path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_the_account_director_is_offered_their_page_not_the_sales_heads(self):
+        links = self._drawn_links(self.head)
+        sales = ' '.join(links['sales'])
+        self.assertIn('/account-head-approval', sales)
+        self.assertNotIn('/sales-head-approval', sales)
+        self.assertIn('/account-head-approval', ' '.join(links['account']))
+
+    def test_the_sales_head_is_offered_theirs(self):
+        sales = ' '.join(self._drawn_links(self.sales_head)['sales'])
+        self.assertIn('/sales-head-approval', sales)
+        self.assertNotIn('/account-head-approval', sales)
+
+
 if __name__ == '__main__':
     unittest.main()

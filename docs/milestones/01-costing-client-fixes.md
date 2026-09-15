@@ -628,3 +628,11 @@ the next test waits on them indefinitely. The account-head tests now register
 their rollback as a cleanup as soon as they connect. They also rebuild their
 roles' grants exactly as `seed_rbac.py` does, so an old grant still in the
 database cannot answer for a new one.
+
+The home page's portal quick links were drawn with no permission check, and
+the Sales portal is shared with Account Management -- so the account director
+was offered "Sales Head Approval", a page that now refuses them. Each quick
+link now names the permission its page needs and is drawn only for an account
+that holds it; Account Head Approval sits in both the Sales and the Account
+Manager portals, and the Sales section page has its own card. A test runs the
+link-drawing code in node with each head's permissions.

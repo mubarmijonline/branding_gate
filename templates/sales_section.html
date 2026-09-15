@@ -218,6 +218,30 @@
         </div>
         {% endif %}
 
+        <!-- Account Head Approval: the same workflow for Account Management's
+             own negotiations, decided by the account director. -->
+        {% if 'negotiation.decide_account_head' in _p %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #6f42c1 0%, #4e2a8e 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-user-tie card-icon mr-3"></i>
+                        <div>
+                            <h5>Account Head Approval</h5>
+                            <small>Negotiations on account requests</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Review a client's counter-offer on an Account Management request. Approve to send it to Pricing, or decline to return it to Client Approval.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/account-head-approval" class="btn btn-lg text-white" style="background:#6f42c1;"><i class="fas fa-user-tie mr-1"></i>Account Head Approval</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Client Management (Admin) -->
         {% if 'sales_request.approve' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
