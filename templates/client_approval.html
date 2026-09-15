@@ -1010,7 +1010,25 @@
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
+{% set _p = session.get('perms', {}) %}
 <script>
+// Whether this account may record the client's answer (approve, negotiate,
+// reject). Repeated from the server only to decide what to draw: the routes
+// check the permission and the request's owner for themselves.
+const CAN_DECIDE = {{ ('client_approval.decide' in _p)|tojson }};
+
+// What went wrong, in words. Every failure used to read "Failed to approve
+// item" -- including a 403, which is how five refusals looked like a bug.
+function decideError(xhr, fallback) {
+    const body = (xhr && xhr.responseJSON) || {};
+    const reason = body.error || body.message;
+    if (xhr && xhr.status === 403) {
+        return reason && reason !== 'Forbidden'
+            ? reason
+            : "Your account is not allowed to record the client's answer on this item.";
+    }
+    return reason || fallback;
+}
 console.log('%c🚀 CLIENT APPROVAL PAGE V3.0.0 LOADED', 'background: #e74c3c; color: white; padding: 10px; font-size: 16px; font-weight: bold;');
 console.log('%c📅 Loaded at:', 'color: #3498db; font-weight: bold;', new Date().toLocaleString());
 console.log('%c🎨 Template Version: 3.0.0 - Complete Reconstruction', 'color: #27ae60; font-weight: bold;');
@@ -1581,7 +1599,7 @@ $(document).ready(function() {
                             <i class="fas fa-eye"></i>
                         </button>
                         
-                        ${hasPricing && (statusBadgeClass === 'status-pending') ? `
+                        ${CAN_DECIDE && hasPricing && (statusBadgeClass === 'status-pending') ? `
                             <button class="btn btn-sm btn-approve-item" data-item-id="${item.id}" title="Approve Item" style="background: #22c55e; color: white; border: none; padding: 6px 10px; border-radius: 6px; margin: 2px;">
                                 <i class="fas fa-check"></i>
                             </button>
@@ -1717,11 +1735,11 @@ $(document).ready(function() {
                     Swal.fire('Success', 'Item submitted for client approval', 'success');
                     loadItems();
                 } else {
-                    Swal.fire('Error', response.message, 'error');
+                    Swal.fire('Error', response.error || response.message || 'Nothing was saved.', 'error');
                 }
             },
-            error: function() {
-                Swal.fire('Error', 'Failed to submit item for approval', 'error');
+            error: function(xhr) {
+                Swal.fire('Error', decideError(xhr, 'Failed to submit item for approval'), 'error');
             }
         });
     }
@@ -1743,11 +1761,11 @@ $(document).ready(function() {
                     });
                     loadItems();
                 } else {
-                    Swal.fire('Error', response.message, 'error');
+                    Swal.fire('Error', response.error || response.message || 'Nothing was saved.', 'error');
                 }
             },
-            error: function() {
-                Swal.fire('Error', 'Failed to approve item', 'error');
+            error: function(xhr) {
+                Swal.fire('Error', decideError(xhr, 'Failed to approve item'), 'error');
             }
         });
     }
@@ -1769,11 +1787,11 @@ $(document).ready(function() {
                     });
                     loadItems();
                 } else {
-                    Swal.fire('Error', response.message, 'error');
+                    Swal.fire('Error', response.error || response.message || 'Nothing was saved.', 'error');
                 }
             },
-            error: function() {
-                Swal.fire('Error', 'Failed to reject item', 'error');
+            error: function(xhr) {
+                Swal.fire('Error', decideError(xhr, 'Failed to reject item'), 'error');
             }
         });
     }
@@ -1813,11 +1831,7 @@ $(document).ready(function() {
                 }
             },
             error: function(xhr) {
-                let errorMsg = 'Failed to request negotiation';
-                if (xhr.responseJSON && xhr.responseJSON.error) {
-                    errorMsg = xhr.responseJSON.error;
-                }
-                Swal.fire('Error', errorMsg, 'error');
+                Swal.fire('Error', decideError(xhr, 'Failed to request negotiation'), 'error');
             }
         });
     }

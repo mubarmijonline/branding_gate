@@ -528,3 +528,47 @@ a press that stays put reaches the row. The click that ends a real drag is
 swallowed so a drag does not also open a row, and touch is left to the
 browser, which already scrolls a table under a finger. The helper is global, so
 this applies to every clickable row inside a scrollable table on the site.
+
+## Twentieth round, 15 September 2026
+
+**The account manager could not record the client's answer.** On Client
+Approval, Sarah Gaber -- an account team leader -- pressed Approve, Negotiate
+and Reject on item 620 and got "Failed to approve item" five times. The three
+routes require `client_approval.decide`, which only the account director and
+the sales head held; the account team leader and member could see the page and
+submit items but not decide, so every press was a 403 and the page threw the
+reason away. The account manager is the one in the room when the client
+answers, so the account line now holds it: a member for their own requests, a
+leader for their team's.
+
+Granting it exposed a second hole. The decide routes checked the permission
+and nothing else, so anyone holding it at any scope could act on any item by
+id. They now apply the scope the Client Approval list already applies -- the
+request's owner inside the caller's scope -- through the same `scope_clause`,
+so "I can see it" and "I can decide on it" cannot disagree. A missing item is
+still a 404. The page draws the three buttons only for an account that may use
+them, and a refusal now says why instead of "Failed to approve item".
+
+**Negotiations were missing from the Activity Flow.** `log_item_change`
+encoded the before/after data with `json.dumps`, and the negotiate route passes
+the item's prices as they come from MySQL -- `Decimal`, which json cannot
+encode. The exception was caught and printed, and the entry dropped. It now
+encodes with `default=str`, in the one function every caller goes through.
+
+**Notifications for the account line opened "Not Found".** Most notifications
+are stored without a link, so the tray reads the words and picks a page -- and
+for custody (عهدة) and expenses it picked `/my_expenses` and
+`/expense_tracking`, where the app serves `/my-expenses` and
+`/expense-tracking`. The account head's "عهدة request from Sarah Gaber" and
+Sarah's own "Your عهدة request went to Finance" both landed on a 404. The
+test covering those destinations had the underscored paths in its expected
+table, so it pinned the bug rather than catching it.
+
+The tray now uses the served paths, and sends somebody being asked for a
+decision to where that decision is taken (`/expense-tracking-approval`) and
+the person who asked to their own expenses. The eleven custody and expense
+notifications now carry an explicit link from the server -- the manager chain
+to its approval page, Finance to `/finance/approvals`, the requester to
+`/my-expenses` -- so a new one no longer depends on the guess.
+`tests/test_notification_links.py` asks the app whether it serves every path
+the tray can return and every link the server attaches.

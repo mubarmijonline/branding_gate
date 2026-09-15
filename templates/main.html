@@ -2695,8 +2695,13 @@ window.notifLink = function (notification) {
   if (/re-?costing|costing|cost\b|تكلفة/.test(text))   return '/operation_request' + query;
   if (/re-?pricing|pricing|price|سعر/.test(text))       return '/pricing' + query;
   if (/negotiat|تفاوض/.test(text))                      return '/pricing' + query;
-  if (/عهدة|custody|balance|تسوية/.test(text))          return '/my_expenses';
-  if (/expense|مصروف/.test(text))                       return '/expense_tracking';
+  // Somebody being asked for a decision goes to where decisions are taken;
+  // the person who asked goes to their own expenses. Both paths used to be
+  // written with underscores for pages served with hyphens, so every custody
+  // and expense notification opened "Not Found".
+  var asksForDecision = /request from|needs your|waiting for you|awaiting your|to approve/.test(text);
+  if (/عهدة|custody|balance|تسوية/.test(text)) return asksForDecision ? '/expense-tracking-approval' : '/my-expenses';
+  if (/expense|مصروف/.test(text))            return asksForDecision ? '/expense-tracking-approval' : '/expense-tracking';
   if (/client|company|supplier/.test(text) && /request|added|declined/.test(text)) {
     return /company/.test(text) ? '/company'
          : (/supplier/.test(text) ? '/supplier' : '/client');

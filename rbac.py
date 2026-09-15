@@ -401,14 +401,19 @@ SEED_MATRIX = {
         _manager_expense_approval('department'),
         {'client.create': 'department', 'client.edit': 'department'},
     ),
+    # The account manager is the one in the room when the client says yes,
+    # no, or "cheaper": recording that answer is their job, within their own
+    # requests (member) or their team's (leader). Without it the Client
+    # Approval page offered them Approve, Reject and Negotiate and refused all
+    # three with a 403.
     'account_team_leader': _merge(
-        _sales_line('team'),
+        _sales_line('team', decide_client=True),
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
         {'client.edit': 'team'},
     ),
     'account_member': _merge(
-        _sales_line('own'),
+        _sales_line('own', decide_client=True),
         _OWN_EXPENSES,
         {'expense_tracking.view': 'own', 'expense_tracking.create': 'own'},
     ),

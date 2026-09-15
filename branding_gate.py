@@ -1194,6 +1194,34 @@ def scope_clause(code, column):
     return " AND %s IN (%s)" % (column, placeholders), list(ids)
 
 
+def item_outside_decide_scope(cur, item_id):
+    """
+    True when the caller may not decide on this item's client answer.
+
+    The decide routes (approve, reject, negotiate) were gated on the
+    permission alone, so anyone holding it at any scope could act on any item
+    by id. The rule is the one the Client Approval list already applies to
+    what the caller can see -- the request's owner inside their scope -- so
+    "I can see it" and "I can decide on it" can never disagree. A missing item
+    is not "outside": the route answers that with its own 404.
+    """
+    scope_sql, params = scope_clause('client_approval.decide', 'sr.owner_user_id')
+    if not scope_sql:
+        return False
+    cur.execute("""
+        SELECT 1 FROM sales_request_items i
+        JOIN sales_request sr ON sr.id = i.request_id
+        WHERE i.id = %s""" + scope_sql, [item_id] + params)
+    if cur.fetchone():
+        return False
+    cur.execute("SELECT 1 FROM sales_request_items WHERE id = %s", (item_id,))
+    return cur.fetchone() is not None
+
+
+DECIDE_OUTSIDE_SCOPE = ('This item belongs to a request outside the ones you look after, '
+                        'so you cannot record the client\'s answer on it.')
+
+
 def claim_sales_request(cur, request_id, owner_username=None):
     """
     Stamp the owner on a newly created sales request.
@@ -1602,8 +1630,11 @@ def log_item_change(request_id, item_id, item_name, request_type, action_type, a
                         change_description = f"{action_type} for item '{item_name}'"
             
             # Convert data to JSON strings for old/new values
-            old_value = json.dumps(old_data) if old_data and len(json.dumps(old_data)) < 1000 else None
-            new_value = json.dumps(new_data) if new_data and len(json.dumps(new_data)) < 1000 else None
+            # default=str: prices arrive from MySQL as Decimal, which json
+            # cannot encode, and the exception below swallowed the whole entry
+            # -- so a client negotiation never reached the item's Activity Flow.
+            old_value = json.dumps(old_data, default=str) if old_data and len(json.dumps(old_data, default=str)) < 1000 else None
+            new_value = json.dumps(new_data, default=str) if new_data and len(json.dumps(new_data, default=str)) < 1000 else None
             
             # Use the main logging function WITH SAME CONNECTION
             log_request_change(
@@ -16543,6 +16574,11 @@ def approve_item(item_id):
         user_name = session.get('name', 'Unknown')
         
         conn, cur = connection()
+
+        if item_outside_decide_scope(cur, item_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': DECIDE_OUTSIDE_SCOPE}), 403
         
         # Get item details
         cur.execute("""
@@ -16630,6 +16666,11 @@ def reject_item(item_id):
         user_name = session.get('name', 'Unknown')
         
         conn, cur = connection()
+
+        if item_outside_decide_scope(cur, item_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': DECIDE_OUTSIDE_SCOPE}), 403
         
         # Get item details
         cur.execute("""
@@ -16730,6 +16771,11 @@ def negotiate_item_price(item_id):
             }), 400
         
         conn, cur = connection()
+
+        if item_outside_decide_scope(cur, item_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': DECIDE_OUTSIDE_SCOPE}), 403
         
         # Get current item details
         cur.execute("""
@@ -24293,6 +24339,7 @@ def request_balance():
                 '%s asked for EGP %s. Reason: %s (%s). It needs your approval '
                 'before Finance sees it.'
                 % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
+                link='/expense-tracking-approval',
             )
         else:
             notify_users(
@@ -24300,6 +24347,7 @@ def request_balance():
                 'عهدة request: %s' % asker,
                 '%s asked for EGP %s. Reason: %s (%s)'
                 % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
+                link='/finance/approvals',
             )
 
         return jsonify({'success': True, 'transfer_code': transfer_code,
@@ -24532,6 +24580,7 @@ def approve_balance_request(request_id):
             'Balance approved: EGP %s' % f'{amount:,.2f}',
             '%s approved your request %s. Your balance is now EGP %s.'
             % (approver_name, req['transfer_code'], f'{balance_after:,.2f}'),
+            link='/my-expenses',
         )
 
         return jsonify({'success': True, 'message': 'Request approved', 'new_balance': balance_after, 'transaction_code': transaction_code})
@@ -24585,6 +24634,7 @@ def reject_balance_request(request_id):
             'Your request for EGP %s was declined by %s. Reason: %s'
             % (f"{float(rejected['amount']):,.2f}",
                session.get('name') or 'Finance', reason),
+            link='/my-expenses',
         )
 
         return jsonify({'success': True, 'message': 'Request rejected'})
@@ -24687,6 +24737,7 @@ def settle_custody():
             'تسوية عهدة from %s' % (session.get('name') or 'a colleague'),
             '%s is handing back EGP %s (%s). Confirm it when the cash arrives.'
             % (session.get('name') or 'Someone', f'{amount:,.2f}', code),
+            link='/finance/approvals',
         )
         return jsonify({'success': True, 'transfer_code': code,
                         'message': 'Settlement sent to Finance'})
@@ -24822,6 +24873,7 @@ def confirm_custody_settlement(settlement_id):
             'تسوية عهدة confirmed: EGP %s' % f'{amount:,.2f}',
             '%s confirmed your return of EGP %s. Your عهدة is now EGP %s.'
             % (approver_name, f'{amount:,.2f}', f'{balance_after:,.2f}'),
+            link='/my-expenses',
         )
         return jsonify({'success': True, 'new_balance': balance_after,
                         'transaction_code': transaction_code,
@@ -24910,6 +24962,7 @@ def manager_approve_balance_request(request_id):
             'عهدة request approved by %s' % manager_name,
             '%s approved EGP %s for %s (%s). It is waiting for Finance.'
             % (manager_name, f'{amount:,.2f}', req['requester_name'], req['transfer_code']),
+            link='/finance/approvals',
         )
         notify_user(
             req['to_user_id'],
@@ -24918,6 +24971,7 @@ def manager_approve_balance_request(request_id):
             % (manager_name, req['transfer_code'],
                (' at EGP %s instead of EGP %s'
                 % (f'{amount:,.2f}', f"{float(req['amount']):,.2f}")) if changed else ''),
+            link='/my-expenses',
         )
         return jsonify({'success': True, 'amount': amount,
                         'message': 'Approved and sent to Finance'})
@@ -24977,6 +25031,7 @@ def manager_reject_balance_request(request_id):
             'عهدة request declined: %s' % req['transfer_code'],
             'Your request for EGP %s was declined by %s. Reason: %s'
             % (f"{float(req['amount']):,.2f}", session.get('name') or 'your manager', reason),
+            link='/my-expenses',
         )
         return jsonify({'success': True, 'message': 'Request declined'})
     except HTTPException:
@@ -25023,6 +25078,7 @@ def cancel_balance_request(request_id):
             users_holding('user_balance.approve'),
             'Balance request withdrawn: %s' % code,
             '%s withdrew their request %s.' % (session.get('name') or 'A colleague', code),
+            link='/finance/approvals',
         )
         return jsonify({'success': True, 'message': 'Request withdrawn'})
     except HTTPException:
@@ -26634,6 +26690,7 @@ def create_expense_tracking():
             'Expenses to approve: %s' % user_name,
             '%s submitted EGP %s of expenses (%s) for your approval.'
             % (user_name, f'{total_amount:,.2f}', tracking_code),
+            link=('/expense-tracking-approval' if chain else '/finance-expense-approval'),
         )
 
         return jsonify({

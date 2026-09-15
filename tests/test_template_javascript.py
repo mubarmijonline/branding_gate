@@ -112,8 +112,11 @@ class NotificationDestinationTest(unittest.TestCase):
         ({'title': 'Costing assigned: request #784', 'content': '3 items',
           'link': '/operation_request?request=784'},
          '/operation_request?request=784'),
-        ({'title': 'عهدة request approved', 'content': ''}, '/my_expenses'),
-        ({'title': 'Expense rejected', 'content': 'مصروف'}, '/expense_tracking'),
+        ({'title': 'عهدة request approved', 'content': ''}, '/my-expenses'),
+        ({'title': 'عهدة request from Sarah Gaber',
+          'content': 'It needs your approval before Finance sees it.'},
+         '/expense-tracking-approval'),
+        ({'title': 'Expense rejected', 'content': 'مصروف'}, '/expense-tracking'),
         ({'title': 'Client added: tadros', 'content': 'client request approved'},
          '/client'),
         # Nothing to open is a real answer: the row just marks itself read.

@@ -142,6 +142,15 @@ class ContactValidationTest(unittest.TestCase):
         self.assertIn(b'id="quickAddClientModal"', response.data)
 
     def test_master_data_routes_normalize_contact_fields_before_saving(self):
+        # These numbers are real ones now: a client added through the app
+        # holds 01226401477, and the duplicate check refused the test's client.
+        # Free them inside this transaction (rolled back in tearDown) so the
+        # test checks normalisation rather than what is in the live database.
+        cur = self.raw.cursor()
+        for column in ('mobile_number', 'secondary_mobile_number'):
+            cur.execute("UPDATE client SET %s = CONCAT('x', id) WHERE %s IN ('01226401477', '01002003000')"
+                        % (column, column))
+        cur.close()
         response = self.client.post('/api/clients/add', json={
             'client_name': 'Contact Client',
             'mobile_number': '+20 122 640 1477',
