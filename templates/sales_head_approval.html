@@ -255,7 +255,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h1 class="h2 mb-2">
-                    <i class="fas fa-handshake mr-3"></i>Sales Head - Negotiation Approvals
+                    <i class="fas fa-handshake mr-3"></i>{{ head_title|default('Sales Head') }} - Negotiation Approvals
                 </h1>
                 <p class="mb-0 opacity-75">Review and approve/decline client negotiation requests</p>
             </div>
@@ -306,7 +306,7 @@
                         <option value="pending_costing">Re-Costing Requested by Pricing</option>
                         <option value="pricing_completed">Re-Pricing Completed</option>
                         <option value="pricing_declined">Declined by Pricing</option>
-                        <option value="sales_head_declined">Declined by Sales Head</option>
+                        <option value="sales_head_declined">Declined by {{ head_title|default('Sales Head') }}</option>
                     </select>
                 </div>
                 <div class="col-md-4">
@@ -411,7 +411,9 @@
 
 <script>
 $(document).ready(function() {
-    console.log('Sales Head Approval page loaded');
+    // Which head this page is for. The same page serves the Sales Head and
+    // the Account Director; each sees the negotiations on its own line.
+    const NEGOTIATION_LINE = {{ line|default('sales')|tojson }};
     
     // Load initial data
     loadNegotiations();
@@ -473,6 +475,7 @@ $(document).ready(function() {
         $('#negotiationsContainer').html('<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-3x text-primary"></i><p class="mt-3">Loading negotiations...</p></div>');
         
         $.get('/api/sales-head/negotiations', {
+            line: NEGOTIATION_LINE,
             status: status,
             client_id: client,
             date_range: dateRange
@@ -596,7 +599,7 @@ $(document).ready(function() {
     }
     
     function updateStatistics() {
-        $.get('/api/sales-head/negotiations/statistics', function(response) {
+        $.get('/api/sales-head/negotiations/statistics', { line: NEGOTIATION_LINE }, function(response) {
             if (response.success) {
                 $('#pendingCount').text(response.stats.pending || 0);
                 $('#approvedCount').text(response.stats.approved_today || 0);

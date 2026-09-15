@@ -58,10 +58,15 @@ class _Harness(unittest.TestCase):
                                    use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
+        self._real_notify = branding_gate.notify_users
+        # Registered before anything can fail. A cleanup runs even when setUp
+        # raises -- tearDown does not -- and a transaction left open here keeps
+        # its locks on role_permission, so the next test's setUp waited on
+        # them for ever. That is how one setUp error looked like a hang.
+        self.addCleanup(self._undo)
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
         branding_gate.app.config['TESTING'] = True
         self.sent = []
-        self._real_notify = branding_gate.notify_users
         branding_gate.notify_users = lambda ids, title, body, link=None: (
             self.sent.append({'to': sorted(int(i) for i in (ids or [])), 'title': title,
                               'link': link}) or len(ids or []))
@@ -75,15 +80,20 @@ class _Harness(unittest.TestCase):
         for code in ('account_director', 'account_team_leader', 'account_member', 'sales_head'):
             cur.execute("SELECT id FROM rbac_role WHERE code = %s", (code,))
             self.roles[code] = cur.fetchone()['id']
-        # The grants as rbac.py now defines them, inside this transaction.
-        for code in ('account_director', 'account_team_leader', 'account_member'):
-            for permission in ('client_approval.decide', 'negotiation.decide_sales_head'):
-                scope = rbac.SEED_MATRIX[code].get(permission)
-                if scope:
-                    cur.execute("""INSERT INTO role_permission (role_id, permission_code, scope)
-                                   VALUES (%s, %s, %s)
-                                   ON DUPLICATE KEY UPDATE scope = VALUES(scope)""",
-                                (self.roles[code], permission, scope))
+        # These roles' grants exactly as seed_rbac.py writes them, inside this
+        # transaction: delete what the database holds and insert the matrix.
+        # Adding only the new grants left an old one standing -- the account
+        # director's Sales Head permission from before the pages were split --
+        # and the permission check re-reads the database.
+        for role_code in ('account_director', 'account_team_leader', 'account_member', 'sales_head'):
+            grants = rbac.SEED_MATRIX[role_code]
+            for permission in grants:
+                cur.execute("INSERT IGNORE INTO permission (code, description) VALUES (%s, %s)",
+                            (permission, rbac.PERMISSIONS[permission]))
+            cur.execute("DELETE FROM role_permission WHERE role_id = %s", (self.roles[role_code],))
+            for permission, scope in grants.items():
+                cur.execute("INSERT INTO role_permission (role_id, permission_code, scope) "
+                            "VALUES (%s, %s, %s)", (self.roles[role_code], permission, scope))
         cur.close()
 
         # Heads report to someone, as the real ones do: users_holding() leaves
@@ -93,7 +103,7 @@ class _Harness(unittest.TestCase):
         self.leader = self._make_user('ah-leader', 'account_team_leader', 'account', self.head)
         self.sales_head = self._make_user('ah-sales-head', 'sales_head', 'sales', manager=1)
 
-    def tearDown(self):
+    def _undo(self):
         branding_gate.notify_users = self._real_notify
         branding_gate.connection = self.original
         self.raw.rollback()
@@ -188,8 +198,9 @@ class NegotiationReachesItsHeadTest(_Harness):
             '/api/client-approval/items/%d/negotiate' % self.item_id,
             json={'reason': 'Client wants 100', 'expected_price': 100})
 
-    def _pending_ids(self, user_id):
-        response = self._client_for(user_id).get('/api/sales-head/negotiations')
+    def _pending_ids(self, user_id, line=None):
+        path = '/api/sales-head/negotiations' + ('?line=%s' % line if line else '')
+        response = self._client_for(user_id).get(path)
         self.assertEqual(response.status_code, 200, response.data[:300])
         body = response.get_json()
         rows = body.get('negotiations') or body.get('data') or []
@@ -204,7 +215,7 @@ class NegotiationReachesItsHeadTest(_Harness):
 
     def test_the_account_head_is_told(self):
         self._negotiate()
-        told = [n for n in self.sent if n['link'] == '/sales-head-approval']
+        told = [n for n in self.sent if n['link'] == '/account-head-approval']
         self.assertTrue(told, 'nobody was notified of the negotiation')
         self.assertIn(self.head, told[0]['to'])
         self.assertNotIn(self.sales_head, told[0]['to'])
@@ -226,8 +237,25 @@ class NegotiationReachesItsHeadTest(_Harness):
         self.assertEqual(response.status_code, 200, response.data[:300])
 
     def test_the_account_director_holds_it_for_the_department(self):
-        self.assertEqual(rbac.SEED_MATRIX['account_director'].get('negotiation.decide_sales_head'),
+        self.assertEqual(rbac.SEED_MATRIX['account_director'].get('negotiation.decide_account_head'),
                          'department')
+        self.assertIsNone(rbac.SEED_MATRIX['account_director'].get('negotiation.decide_sales_head'))
+
+    def test_each_head_opens_their_own_page_and_not_the_other(self):
+        head, sales_head = self._client_for(self.head), self._client_for(self.sales_head)
+        self.assertEqual(head.get('/account-head-approval').status_code, 200)
+        self.assertEqual(head.get('/sales-head-approval').status_code, 403)
+        self.assertEqual(sales_head.get('/sales-head-approval').status_code, 200)
+        self.assertEqual(sales_head.get('/account-head-approval').status_code, 403)
+
+    def test_the_account_page_lists_only_the_account_line(self):
+        negotiation_id = self._negotiate().get_json()['negotiation_id']
+        self.assertIn(negotiation_id, self._pending_ids(self.head, 'account'))
+        self.assertNotIn(negotiation_id, self._pending_ids(self.head, 'sales'))
+
+    def test_the_answer_names_who_reviews_it(self):
+        body = self._negotiate().get_json()
+        self.assertEqual(body['reviewer'], 'Account Director')
 
 
 if __name__ == '__main__':

@@ -191,16 +191,20 @@ class PolicyDecisionTest(unittest.TestCase):
         self.assertEqual(rbac.SEED_MATRIX['sales_head']['sales_request.view'], 'department')
 
     def test_only_the_sales_head_decides_a_negotiation_for_sales(self):
-        # The account director is the Sales Head of the account line: a
-        # client's counter-offer on an account request is theirs to decide.
-        # Each holds it at department scope, and the negotiation routes are
-        # scoped to the request's owner, so neither sees the other's.
         self.assertEqual(
             self.holders('negotiation.decide_sales_head'),
-            {'admin', 'sales_head', 'account_director'},
+            {'admin', 'sales_head'},
         )
-        for head in ('sales_head', 'account_director'):
-            self.assertEqual(rbac.SEED_MATRIX[head]['negotiation.decide_sales_head'], 'department')
+
+    def test_only_the_account_director_decides_one_for_the_account_line(self):
+        # Two lines, two heads, two pages: a counter-offer on an account
+        # request goes to the Account Director, not the Sales Head.
+        self.assertEqual(
+            self.holders('negotiation.decide_account_head'),
+            {'admin', 'account_director'},
+        )
+        self.assertEqual(rbac.SEED_MATRIX['account_director']['negotiation.decide_account_head'],
+                         'department')
 
     def test_personal_expenses_are_always_own_scope(self):
         for role, grants in rbac.SEED_MATRIX.items():

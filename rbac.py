@@ -74,6 +74,7 @@ PERMISSIONS = {
     # Negotiation
     'negotiation.view':              'View negotiations',
     'negotiation.decide_sales_head': 'Approve or decline a negotiation as Sales Head',
+    'negotiation.decide_account_head': 'Approve or decline a negotiation as Account Director',
     'negotiation.decide_pricing':    'Re-price, request re-costing, or decline as Pricing',
     'negotiation.complete_costing':  'Complete negotiation re-costing as Operations',
 
@@ -302,7 +303,8 @@ _OWN_EXPENSES = _expand(
 )
 
 
-def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=False):
+def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=False,
+               decide_account_negotiation=False):
     """
     The Sales / Account ladder. Head, team leader and member differ only by
     scope and by which decisions they may take, so express that once.
@@ -326,6 +328,11 @@ def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=Fa
         grants['client_approval.decide'] = scope
     if decide_negotiation:
         grants['negotiation.decide_sales_head'] = scope
+    # The account line has its own head and its own approval page, so a
+    # client's counter-offer on an account request goes to them, not to
+    # the Sales Head.
+    if decide_account_negotiation:
+        grants['negotiation.decide_account_head'] = scope
     return grants
 
 
@@ -395,12 +402,11 @@ SEED_MATRIX = {
     ),
 
     # --- Account management (client relationship line) ----------------------
-    # The account director is the Sales Head of the account line: a client's
-    # counter-offer on an account request is theirs to pass to Pricing or
-    # turn down, exactly as the Sales Head does for Sales. Scoped to their
-    # department, so neither head sees the other's negotiations.
+    # The account director decides negotiations on account requests, on the
+    # Account Head Approval page, exactly as the Sales Head does for Sales on
+    # theirs. Two permissions, two pages, one workflow.
     'account_director': _merge(
-        _sales_line('department', decide_client=True, decide_negotiation=True),
+        _sales_line('department', decide_client=True, decide_account_negotiation=True),
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
         {'client.create': 'department', 'client.edit': 'department'},

@@ -709,6 +709,7 @@
   {% set can_manage_entities   = 'entity.edit'   in _p %}
   {% set can_set_prices        = 'sales_item.price' in _p %}
   {% set can_decide_negotiation = 'negotiation.decide_sales_head' in _p %}
+  {% set can_decide_account_negotiation = 'negotiation.decide_account_head' in _p %}
   {# Which menus exist is rbac.sections(), the same list the home page cards are
      built from, so a card can never offer a section the navbar hides. What sits
      inside a menu is still gated item by item below. #}
@@ -842,10 +843,17 @@
                 <i class="fas fa-bullseye"></i> Targets
               </a>
               {% endif %}
-              {% if can_decide_negotiation %}
+              {% if can_decide_negotiation or can_decide_account_negotiation %}
               <div class="dropdown-divider"></div>
+              {% endif %}
+              {% if can_decide_negotiation %}
               <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
                 <i class="fas fa-user-check"></i> Sales Head Approval
+              </a>
+              {% endif %}
+              {% if can_decide_account_negotiation %}
+              <a class="dropdown-item" href="{{ url_for('account_head_approval_page') }}">
+                <i class="fas fa-user-tie"></i> Account Head Approval
               </a>
               {% endif %}
             </div>
@@ -905,7 +913,7 @@
              came to do. #}
           {% set can_approve_expenses = can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
           {% if can_approve_expenses or can_open_clients or can_open_companies
-                or can_open_suppliers %}
+                or can_open_suppliers or can_decide_negotiation or can_decide_account_negotiation %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="approvalsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-clipboard-check mr-1"></i> Approvals
@@ -932,6 +940,19 @@
               {% if can_open_suppliers %}
               <a class="dropdown-item" href="{{ url_for('supplier') }}#partyRequestCard">
                 <i class="fas fa-truck"></i> Supplier Requests
+              </a>
+              {% endif %}
+              {% endif %}
+              {% if can_decide_negotiation or can_decide_account_negotiation %}
+              {% if can_approve_expenses or can_open_clients or can_open_companies or can_open_suppliers %}<div class="dropdown-divider"></div>{% endif %}
+              {% if can_decide_negotiation %}
+              <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
+                <i class="fas fa-user-check"></i> Sales Head Approval
+              </a>
+              {% endif %}
+              {% if can_decide_account_negotiation %}
+              <a class="dropdown-item" href="{{ url_for('account_head_approval_page') }}">
+                <i class="fas fa-user-tie"></i> Account Head Approval
               </a>
               {% endif %}
               {% endif %}
@@ -2900,6 +2921,7 @@ function checkPageAccessWithNewRoles(newRoles) {
     '/operation_request':  ['approved_item.view'],
     '/pricing':          ['sales_item.price'],
     '/sales-head-approval': ['negotiation.decide_sales_head'],
+    '/account-head-approval': ['negotiation.decide_account_head'],
     '/company':          ['company.view'],
     '/client':           ['client.view'],
     '/supplier':         ['supplier.view'],

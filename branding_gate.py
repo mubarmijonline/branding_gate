@@ -1218,6 +1218,39 @@ def item_outside_decide_scope(cur, item_id):
     return cur.fetchone() is not None
 
 
+# The two heads who decide a client's counter-offer, by the department that
+# owns the request: a line, the permission that decides it, who that is, and
+# the page they do it on. The workflow behind both pages is the same one.
+NEGOTIATION_LINES = {
+    'sales':   ('negotiation.decide_sales_head', 'Sales Head', '/sales-head-approval'),
+    'account': ('negotiation.decide_account_head', 'Account Director', '/account-head-approval'),
+}
+
+
+def negotiation_line_for(department_code):
+    """The line a request belongs to: Account Management's own, or Sales'."""
+    return 'account' if department_code == 'account' else 'sales'
+
+
+def negotiation_decide_code():
+    """
+    The negotiation permission the caller decides with.
+
+    A head holds one of the two, at department scope; the admin holds both at
+    'all', where either gives the same answer.
+    """
+    return ('negotiation.decide_sales_head' if has('negotiation.decide_sales_head')
+            else 'negotiation.decide_account_head')
+
+
+def negotiation_line_clause(line, column='sr.owner_user_id'):
+    """Restrict to requests owned inside one line. `line` is whitelisted."""
+    if line not in NEGOTIATION_LINES:
+        return ''
+    return (" AND %s IN (SELECT u.id FROM user u JOIN department d ON d.id = u.department_id"
+            " WHERE d.code = '%s')" % (column, line))
+
+
 def negotiation_outside_scope(cur, negotiation_id):
     """
     True when the caller may not decide on this negotiation.
@@ -1229,7 +1262,7 @@ def negotiation_outside_scope(cur, negotiation_id):
     owner inside the caller's scope -- the same one the requests themselves
     use. A missing negotiation is not "outside": the route answers that.
     """
-    scope_sql, params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
+    scope_sql, params = scope_clause(negotiation_decide_code(), 'sr.owner_user_id')
     if not scope_sql:
         return False
     cur.execute("""
@@ -8461,6 +8494,8 @@ TEAM_ACTIONS = {
          'fas fa-check-double', 'client_approval_page', ('client_approval.view',)),
         ('Sales Head Approval', 'Decide negotiations as the Sales Head',
          'fas fa-user-check', 'sales_head_approval_page', ('negotiation.decide_sales_head',)),
+        ('Account Head Approval', 'Decide negotiations on account requests',
+         'fas fa-user-tie', 'account_head_approval_page', ('negotiation.decide_account_head',)),
         ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
          'targets_page', ('target.view',)),
         ('Clients', 'The client directory, and requesting a new one',
@@ -16953,11 +16988,15 @@ def negotiate_item_price(item_id):
         update_request_approval_stage(item['request_id'], conn, cur)
 
         # Whose line this request is on, so the right head hears of it.
-        cur.execute("""SELECT u.department_id FROM sales_request sr
-                       JOIN user u ON u.id = sr.owner_user_id WHERE sr.id = %s""",
-                    (item['request_id'],))
+        cur.execute("""SELECT u.department_id, d.code AS department_code
+                       FROM sales_request sr
+                       JOIN user u ON u.id = sr.owner_user_id
+                       LEFT JOIN department d ON d.id = u.department_id
+                       WHERE sr.id = %s""", (item['request_id'],))
         owner_row = cur.fetchone()
         owner_department = owner_row['department_id'] if owner_row else None
+        line = negotiation_line_for(owner_row['department_code'] if owner_row else None)
+        decide_code, head_title, head_page = NEGOTIATION_LINES[line]
         
         conn.commit()
         cur.close()
@@ -16967,7 +17006,7 @@ def negotiate_item_price(item_id):
         # they had no reason to open. The heads of the requester's own
         # department are told; if that line has none, every head is.
         try:
-            deciders = users_holding('negotiation.decide_sales_head')
+            deciders = users_holding(decide_code)
             if deciders and owner_department:
                 conn2, cur2 = connection()
                 cur2.execute("SELECT id FROM user WHERE department_id = %s AND id IN (%s)"
@@ -16982,13 +17021,14 @@ def negotiate_item_price(item_id):
                          '%s asks for EGP %s on "%s" (request #%s). Reason: %s'
                          % (user_name, '{:,.2f}'.format(float(expected_price)), item['name'],
                             item['request_id'], negotiation_reason),
-                         link='/sales-head-approval')
+                         link=head_page)
         except Exception as notify_error:
             print(f"Negotiation notification failed: {notify_error}")
 
         return jsonify({
             'success': True,
-            'message': 'Negotiation submitted for review by your department head.',
+            'message': 'Negotiation submitted to the %s for review.' % head_title,
+            'reviewer': head_title,
             'negotiation_count': item.get('negotiation_count', 0) + 1,
             'negotiation_id': negotiation_id
         })
@@ -17008,11 +17048,26 @@ def negotiate_item_price(item_id):
 @app.route('/sales-head-approval')
 @perm('negotiation.decide_sales_head')
 def sales_head_approval_page():
-    """Sales Head Approval page - admin role is always allowed by decorator"""
-    return render_template('sales_head_approval.html')
+    """Sales Head Approval: negotiations on requests owned in the Sales line."""
+    return render_template('sales_head_approval.html', line='sales',
+                           head_title=NEGOTIATION_LINES['sales'][1])
+
+
+@app.route('/account-head-approval')
+@perm('negotiation.decide_account_head')
+def account_head_approval_page():
+    """
+    Account Head Approval: negotiations on requests owned in Account Management.
+
+    The same page and the same workflow as the Sales Head's -- approve sends
+    the counter-offer to Pricing, decline returns it to Client Approval -- for
+    the other line's head.
+    """
+    return render_template('sales_head_approval.html', line='account',
+                           head_title=NEGOTIATION_LINES['account'][1])
 
 @app.route('/api/sales-head/negotiations', methods=['GET'])
-@perm('negotiation.decide_sales_head')
+@perm('negotiation.decide_sales_head', 'negotiation.decide_account_head')
 def get_sales_head_negotiations():
     """Get all negotiation requests for sales head review"""
     if 'user_id' not in session:
@@ -17047,8 +17102,10 @@ def get_sales_head_negotiations():
         
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
         # Only the negotiations on requests inside the caller's own line.
-        scope_sql, scope_params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
+        scope_sql, scope_params = scope_clause(negotiation_decide_code(), 'sr.owner_user_id')
         where_sql += scope_sql
+        # Which page is asking: each shows its own line's negotiations.
+        where_sql += negotiation_line_clause(request.args.get('line'))
         params += scope_params
         
         # Get negotiations with item and request details
@@ -17114,7 +17171,7 @@ def get_sales_head_negotiations():
         }), 500
 
 @app.route('/api/sales-head/negotiations/statistics', methods=['GET'])
-@perm('negotiation.decide_sales_head')
+@perm('negotiation.decide_sales_head', 'negotiation.decide_account_head')
 def get_sales_head_statistics():
     """Get statistics for sales head dashboard"""
     if 'user_id' not in session:
@@ -17125,8 +17182,9 @@ def get_sales_head_statistics():
 
         # The figures on the head's dashboard count their own line only, the
         # same negotiations the list beside them shows.
-        scope_sql, scope_params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
-        in_line = "request_id IN (SELECT sr.id FROM sales_request sr WHERE 1=1" + scope_sql + ")"
+        scope_sql, scope_params = scope_clause(negotiation_decide_code(), 'sr.owner_user_id')
+        in_line = ("request_id IN (SELECT sr.id FROM sales_request sr WHERE 1=1" + scope_sql
+                   + negotiation_line_clause(request.args.get('line')) + ")")
         
         # Pending count
         cur.execute("""
@@ -17184,7 +17242,7 @@ def get_sales_head_statistics():
         }), 500
 
 @app.route('/api/sales-head/negotiations/<int:negotiation_id>/approve', methods=['POST'])
-@perm('negotiation.decide_sales_head')
+@perm('negotiation.decide_sales_head', 'negotiation.decide_account_head')
 def approve_sales_head_negotiation(negotiation_id):
     """Approve a negotiation and always send it to Pricing for a decision."""
     if 'user_id' not in session:
@@ -17475,7 +17533,7 @@ def pricing_decline_negotiation(negotiation_id):
 
 
 @app.route('/api/sales-head/negotiations/<int:negotiation_id>/decline', methods=['POST'])
-@perm('negotiation.decide_sales_head')
+@perm('negotiation.decide_sales_head', 'negotiation.decide_account_head')
 def decline_sales_head_negotiation(negotiation_id):
     """Decline negotiation - return to client approval"""
     if 'user_id' not in session:

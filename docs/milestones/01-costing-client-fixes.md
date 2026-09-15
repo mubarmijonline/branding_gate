@@ -597,3 +597,34 @@ approve and decline routes were unscoped -- every negotiation in the company --
 and are now limited to requests owned inside the caller's line, so the two
 heads each see their own. The heads of the requester's department are notified
 with a link to the page.
+
+## Twenty-second round, 15 September 2026
+
+**Two approval pages, one workflow.** A client's counter-offer now goes to the
+head of the line that owns the request. Sales requests go to **Sales Head
+Approval** (`/sales-head-approval`, `negotiation.decide_sales_head`), and
+Account Management requests go to the new **Account Head Approval**
+(`/account-head-approval`, `negotiation.decide_account_head`, held by the
+account director). Both pages are one template, taking the head's title and
+the line from the route. Both use the same four endpoints: list, statistics,
+approve and decline. Approving sends the counter-offer to Pricing and declining
+returns it to Client Approval, whichever page it came from. `NEGOTIATION_LINES`
+names each line's permission, head and page in one place.
+
+The account director no longer borrows the Sales Head's permission, so each
+page is gated on its own. The endpoints accept either permission and scope by
+whichever one the caller holds, which means the request's owner must be in the
+head's department. Each page also passes its line, so an admin, who holds both,
+sees Sales on one page and Account on the other.
+
+The negotiate route works out the line from the request owner's department. It
+notifies that line's heads with a link to their page and tells the account
+manager who will review it. Both pages sit in the section the two lines share,
+in the Sales menu and under Approvals, each shown only to its holders.
+
+Getting the tests to agree taught one thing worth keeping. A test that errors in
+`setUp` never reaches `tearDown`, so its open transaction keeps its locks and
+the next test waits on them indefinitely. The account-head tests now register
+their rollback as a cleanup as soon as they connect. They also rebuild their
+roles' grants exactly as `seed_rbac.py` does, so an old grant still in the
+database cannot answer for a new one.
