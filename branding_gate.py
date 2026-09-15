@@ -1218,6 +1218,34 @@ def item_outside_decide_scope(cur, item_id):
     return cur.fetchone() is not None
 
 
+def negotiation_outside_scope(cur, negotiation_id):
+    """
+    True when the caller may not decide on this negotiation.
+
+    The Sales Head list and its approve / decline routes were gated on the
+    permission alone and listed every negotiation in the company. With the
+    account director holding it too, that would have put Sales' negotiations
+    in front of Account Management and the reverse. The rule is the request
+    owner inside the caller's scope -- the same one the requests themselves
+    use. A missing negotiation is not "outside": the route answers that.
+    """
+    scope_sql, params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
+    if not scope_sql:
+        return False
+    cur.execute("""
+        SELECT 1 FROM negotiation_requests nr
+        JOIN sales_request sr ON sr.id = nr.request_id
+        WHERE nr.id = %s""" + scope_sql, [negotiation_id] + params)
+    if cur.fetchone():
+        return False
+    cur.execute("SELECT 1 FROM negotiation_requests WHERE id = %s", (negotiation_id,))
+    return cur.fetchone() is not None
+
+
+NEGOTIATION_OUTSIDE_SCOPE = ('This negotiation is on a request outside your department, '
+                             'so it is not yours to decide.')
+
+
 DECIDE_OUTSIDE_SCOPE = ('This item belongs to a request outside the ones you look after, '
                         'so you cannot record the client\'s answer on it.')
 
@@ -4633,9 +4661,42 @@ def _party_payload(row):
     return payload
 
 
+CONTACT_CHANNELS = ('Phone', 'Email', 'WhatsApp', 'Other')
+
+
+def contact_channel(value):
+    """
+    A preferred contact channel the client table will take.
+
+    The column is ENUM('Phone','Email','WhatsApp','Other') and MySQL refuses
+    anything else outright -- "Data truncated for column
+    'preferred_contact_channel'" -- which is what stopped a client request from
+    being approved: it held a phone number in that field. A known channel in
+    any case is that channel; something that is plainly a phone number means
+    Phone; blank is no answer, so the column default applies; anything else is
+    Other rather than an error on the approver's screen.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for channel in CONTACT_CHANNELS:
+        if text.lower() == channel.lower():
+            return channel
+    if text.lower().replace(' ', '') in ('whatsapp', 'whats'):
+        return 'WhatsApp'
+    digits = [c for c in text if c.isdigit()]
+    if len(digits) >= 7 and all(c.isdigit() or c in ' +-()' for c in text):
+        return 'Phone'
+    return 'Other'
+
+
 def _party_field_value(field, value):
     if value is None:
         return None
+    if field == 'preferred_contact_channel':
+        return contact_channel(value)
     if isinstance(value, str):
         if field in CONTACT_PHONE_FIELDS:
             value = normalize_egypt_mobile(value, field.replace('_', ' ').title(), required=False)
@@ -4774,6 +4835,11 @@ def _create_party_record(cur, req, payload):
     request behind it naming who asked and who agreed. Returns the new id.
     """
     kind = req['kind']
+    if kind == 'client':
+        # Requests saved before the channel was checked can hold anything;
+        # read it the same way now so approving one cannot fail on it.
+        payload = dict(payload, preferred_contact_channel=contact_channel(
+            payload.get('preferred_contact_channel')))
     fields = [f for f in PARTY_FIELDS[kind] if payload.get(f) not in (None, '')]
     columns = fields + ['added_by']
     values = [payload[f] for f in fields] + [req['requester_name']]
@@ -6259,7 +6325,7 @@ def add_client():
             data.get('secondary_mobile_number', '') or None,
             data['email_address'],
             data.get('job_title', ''),
-            data.get('preferred_contact_channel', 'Phone'),
+            contact_channel(data.get('preferred_contact_channel')) or 'Phone',
             data.get('additional_notes', ''),
             session['username']
         ))
@@ -6374,7 +6440,7 @@ def edit_client(client_id):
             data.get('secondary_mobile_number', '') or None,
             data['email_address'],
             data.get('job_title', ''),
-            data.get('preferred_contact_channel', 'Phone'),
+            contact_channel(data.get('preferred_contact_channel')) or 'Phone',
             data.get('additional_notes', ''),
             session['username'],
             client_id
@@ -16885,14 +16951,44 @@ def negotiate_item_price(item_id):
         
         # Update request's overall approval stage
         update_request_approval_stage(item['request_id'], conn, cur)
+
+        # Whose line this request is on, so the right head hears of it.
+        cur.execute("""SELECT u.department_id FROM sales_request sr
+                       JOIN user u ON u.id = sr.owner_user_id WHERE sr.id = %s""",
+                    (item['request_id'],))
+        owner_row = cur.fetchone()
+        owner_department = owner_row['department_id'] if owner_row else None
         
         conn.commit()
         cur.close()
         conn.close()
         
+        # Nothing told the head a negotiation was waiting: it sat on a page
+        # they had no reason to open. The heads of the requester's own
+        # department are told; if that line has none, every head is.
+        try:
+            deciders = users_holding('negotiation.decide_sales_head')
+            if deciders and owner_department:
+                conn2, cur2 = connection()
+                cur2.execute("SELECT id FROM user WHERE department_id = %s AND id IN (%s)"
+                             % ('%s', ','.join(['%s'] * len(deciders))),
+                             [owner_department] + list(deciders))
+                in_line = [row['id'] for row in cur2.fetchall()]
+                cur2.close()
+                conn2.close()
+                deciders = in_line or deciders
+            notify_users(deciders,
+                         'Negotiation to review: %s' % item['name'],
+                         '%s asks for EGP %s on "%s" (request #%s). Reason: %s'
+                         % (user_name, '{:,.2f}'.format(float(expected_price)), item['name'],
+                            item['request_id'], negotiation_reason),
+                         link='/sales-head-approval')
+        except Exception as notify_error:
+            print(f"Negotiation notification failed: {notify_error}")
+
         return jsonify({
             'success': True,
-            'message': 'Negotiation submitted to Sales Head for review.',
+            'message': 'Negotiation submitted for review by your department head.',
             'negotiation_count': item.get('negotiation_count', 0) + 1,
             'negotiation_id': negotiation_id
         })
@@ -16950,6 +17046,10 @@ def get_sales_head_negotiations():
             where_clauses.append("nr.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
         
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        # Only the negotiations on requests inside the caller's own line.
+        scope_sql, scope_params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
+        where_sql += scope_sql
+        params += scope_params
         
         # Get negotiations with item and request details
         query = f"""
@@ -17022,13 +17122,17 @@ def get_sales_head_statistics():
     
     try:
         conn, cur = connection()
+
+        # The figures on the head's dashboard count their own line only, the
+        # same negotiations the list beside them shows.
+        scope_sql, scope_params = scope_clause('negotiation.decide_sales_head', 'sr.owner_user_id')
+        in_line = "request_id IN (SELECT sr.id FROM sales_request sr WHERE 1=1" + scope_sql + ")"
         
         # Pending count
         cur.execute("""
             SELECT COUNT(*) as count
             FROM negotiation_requests
-            WHERE status = 'pending_sales_head'
-        """)
+            WHERE status = 'pending_sales_head' AND """ + in_line, scope_params)
         pending = cur.fetchone()['count']
         
         # Approved today, regardless of what Pricing did afterward
@@ -17036,8 +17140,7 @@ def get_sales_head_statistics():
             SELECT COUNT(*) as count
             FROM negotiation_requests
             WHERE sales_head_decision = 'approved'
-            AND DATE(sales_head_decision_date) = CURDATE()
-        """)
+            AND DATE(sales_head_decision_date) = CURDATE() AND """ + in_line, scope_params)
         approved_today = cur.fetchone()['count']
         
         # Declined today
@@ -17045,8 +17148,7 @@ def get_sales_head_statistics():
             SELECT COUNT(*) as count
             FROM negotiation_requests
             WHERE status = 'sales_head_declined'
-            AND DATE(sales_head_decision_date) = CURDATE()
-        """)
+            AND DATE(sales_head_decision_date) = CURDATE() AND """ + in_line, scope_params)
         declined_today = cur.fetchone()['count']
         
         # Potential savings (difference between current price and expected price for pending)
@@ -17056,8 +17158,7 @@ def get_sales_head_statistics():
             FROM negotiation_requests nr
             INNER JOIN sales_request_items sri ON nr.item_id = sri.id
             WHERE nr.status = 'pending_sales_head'
-            AND sri.sell_per_item IS NOT NULL
-        """)
+            AND sri.sell_per_item IS NOT NULL AND nr.""" + in_line, scope_params)
         savings_result = cur.fetchone()
         potential_savings = float(savings_result['savings']) if savings_result['savings'] else 0
         
@@ -17096,6 +17197,11 @@ def approve_sales_head_negotiation(negotiation_id):
         user_name = session.get('name', 'Sales Head')
         
         conn, cur = connection()
+
+        if negotiation_outside_scope(cur, negotiation_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': NEGOTIATION_OUTSIDE_SCOPE}), 403
         
         # Get negotiation details
         cur.execute("""
@@ -17385,6 +17491,11 @@ def decline_sales_head_negotiation(negotiation_id):
             return jsonify({'success': False, 'error': 'Reason is required'}), 400
         
         conn, cur = connection()
+
+        if negotiation_outside_scope(cur, negotiation_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': NEGOTIATION_OUTSIDE_SCOPE}), 403
         
         # Get negotiation details
         cur.execute("""

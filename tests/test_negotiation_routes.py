@@ -119,6 +119,12 @@ class NegotiationRouteTest(unittest.TestCase):
             branding_gate.session["name"] = "Workflow Test User"
             branding_gate.session["username"] = "workflow-test"
             branding_gate.session["roles"] = roles or ["pricing"]
+            # A real session always carries its permissions, and the Sales
+            # Head routes now scope by them (the request's owner inside the
+            # caller's line). User 1 is the admin, whose scope is everything.
+            perms, role_code = branding_gate.load_permissions(1)
+            branding_gate.session["perms"] = perms
+            branding_gate.session["role_code"] = role_code
             endpoint = getattr(handler, "__wrapped__", handler)
             return endpoint(*self._handler_args(handler))
 

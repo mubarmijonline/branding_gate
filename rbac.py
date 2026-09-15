@@ -395,8 +395,12 @@ SEED_MATRIX = {
     ),
 
     # --- Account management (client relationship line) ----------------------
+    # The account director is the Sales Head of the account line: a client's
+    # counter-offer on an account request is theirs to pass to Pricing or
+    # turn down, exactly as the Sales Head does for Sales. Scoped to their
+    # department, so neither head sees the other's negotiations.
     'account_director': _merge(
-        _sales_line('department', decide_client=True),
+        _sales_line('department', decide_client=True, decide_negotiation=True),
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
         {'client.create': 'department', 'client.edit': 'department'},

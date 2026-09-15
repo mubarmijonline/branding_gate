@@ -572,3 +572,28 @@ to its approval page, Finance to `/finance/approvals`, the requester to
 `/my-expenses` -- so a new one no longer depends on the guess.
 `tests/test_notification_links.py` asks the app whether it serves every path
 the tray can return and every link the server attaches.
+
+## Twenty-first round, 15 September 2026
+
+**A client request could not be approved.** CLR-38691 held a phone number,
+"+20 12 25908839", in its preferred contact channel. The client table takes
+only Phone, Email, WhatsApp or Other, and MySQL refused the insert outright --
+"Data truncated for column 'preferred_contact_channel'" -- so "Approve and add"
+failed for the account head. The quick-add client form offered "In Person",
+which the column refuses the same way. `contact_channel()` now reads the value
+once, wherever it is written: a known channel in any case is that channel, a
+value that is plainly a phone number is Phone, blank leaves the column default,
+anything else is Other. It runs when a request is made, when an approved
+request becomes a client -- so requests already stored like CLR-38691 approve
+cleanly -- and in the client add and edit routes. The quick-add option now
+saves Other.
+
+**The account head never saw a negotiation.** A client's counter-offer went to
+holders of `negotiation.decide_sales_head` -- admin and the Sales Head -- so a
+negotiation on an account request never reached Gamal Gaber, and the negotiate
+route notified nobody at all. The account director now holds that permission
+for the account department. The Sales Head list, its statistics, and its
+approve and decline routes were unscoped -- every negotiation in the company --
+and are now limited to requests owned inside the caller's line, so the two
+heads each see their own. The heads of the requester's department are notified
+with a link to the page.
