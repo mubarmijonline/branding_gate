@@ -335,5 +335,31 @@ class AccountPortalTest(_Harness):
         self.assertNotIn('href="/account-head-approval"', html)
 
 
+
+class ApprovalPageContentTest(_Harness):
+    """
+    Each head's page shows its negotiations, not a refusal.
+
+    Both pages render one template, and the template carried its own check for
+    the Sales Head's permission. The route let the Account Director in -- 200 --
+    and the template then showed them "You don't have sales head permissions".
+    A status code cannot see that, so this reads the page.
+    """
+
+    REFUSAL = "permissions to access this page"
+
+    def test_the_account_director_sees_their_negotiations(self):
+        html = self._client_for(self.head).get('/account-head-approval').get_data(as_text=True)
+        self.assertNotIn(self.REFUSAL, html)
+        self.assertIn('id="negotiationsContainer"', html)
+        self.assertIn('Account Director - Negotiation Approvals', html)
+
+    def test_the_sales_head_sees_theirs(self):
+        html = self._client_for(self.sales_head).get('/sales-head-approval').get_data(as_text=True)
+        self.assertNotIn(self.REFUSAL, html)
+        self.assertIn('id="negotiationsContainer"', html)
+        self.assertIn('Sales Head - Negotiation Approvals', html)
+
+
 if __name__ == '__main__':
     unittest.main()

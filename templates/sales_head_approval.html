@@ -248,7 +248,11 @@
 <div class="container-fluid">
     {% set user_roles = session.get('roles', []) %}
     {% set _p = session.get('perms', {}) %}
-    {% if 'negotiation.decide_sales_head' in _p %}
+    {# The page serves both heads; it opens for the permission of the line
+       it was asked for. Checking only the Sales Head's shut the Account
+       Director out of their own page with a Sales Head warning. #}
+    {% set page_perm = 'negotiation.decide_account_head' if line == 'account' else 'negotiation.decide_sales_head' %}
+    {% if page_perm in _p %}
     
     <!-- Page Header -->
     <div class="page-header">
@@ -401,7 +405,7 @@
     {% else %}
     <div class="alert alert-warning">
         <i class="fas fa-exclamation-triangle mr-2"></i>
-        You don't have sales head permissions to access this page.
+        You don't have {{ head_title|default('Sales Head') }} permissions to access this page.
     </div>
     {% endif %}
 </div>

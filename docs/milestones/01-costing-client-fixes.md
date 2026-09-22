@@ -642,3 +642,11 @@ right and the page opened for him, but it was offered from the Sales menu, the
 Approvals menu and the Sales section -- not from `/account`, the Account
 Management portal, which is where an account head goes first. The portal's card
 list now includes it, drawn only for holders of `negotiation.decide_account_head`.
+
+**…and then it refused him.** The two pages share one template, and the
+template carried its own `{% if 'negotiation.decide_sales_head' in _p %}`. The
+route let the Account Director in, and the template then showed him "You don't
+have sales head permissions to access this page". The template now opens for
+the permission of the line it was asked for and names that head in the
+refusal. The tests had checked the status code only, which cannot see a
+refusal drawn inside a 200; `ApprovalPageContentTest` reads the page.
