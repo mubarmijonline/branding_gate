@@ -8533,6 +8533,12 @@ TEAM_ACTIONS = {
          'fas fa-handshake', 'client', ('client.view',)),
         ('Client Approval', 'Send items to the client and record the answer',
          'fas fa-check-double', 'client_approval_page', ('client_approval.view',)),
+        # The account head's own desk. It was reachable from the Sales menu,
+        # the Approvals menu and the Sales section, but not from the page an
+        # account head opens first -- their own portal -- so to Gamal it did
+        # not appear at all.
+        ('Account Head Approval', 'Decide negotiations on account requests',
+         'fas fa-user-tie', 'account_head_approval_page', ('negotiation.decide_account_head',)),
         ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
          'workflow_timeline', ('sales_request.view',)),
     ],

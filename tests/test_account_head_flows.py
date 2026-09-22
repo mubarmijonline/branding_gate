@@ -313,5 +313,27 @@ class HomeQuickLinksTest(_Harness):
         self.assertNotIn('/account-head-approval', sales)
 
 
+
+class AccountPortalTest(_Harness):
+    """
+    The account head's own portal offers their approval page.
+
+    Account Head Approval was in the Sales menu, the Approvals menu and on the
+    Sales section page, but not on /account -- the Account Management portal,
+    which is the page an account head opens first. To Gamal Gaber it simply
+    did not appear.
+    """
+
+    def test_the_account_head_finds_it_on_their_own_portal(self):
+        html = self._client_for(self.head).get('/account').get_data(as_text=True)
+        # A link, not the path: main.html's page-permission map names every
+        # page's path in the script of every page, whoever is looking.
+        self.assertIn('href="/account-head-approval"', html)
+
+    def test_it_is_not_offered_to_whoever_cannot_open_it(self):
+        html = self._client_for(self.leader).get('/account').get_data(as_text=True)
+        self.assertNotIn('href="/account-head-approval"', html)
+
+
 if __name__ == '__main__':
     unittest.main()

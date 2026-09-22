@@ -636,3 +636,9 @@ link now names the permission its page needs and is drawn only for an account
 that holds it; Account Head Approval sits in both the Sales and the Account
 Manager portals, and the Sales section page has its own card. A test runs the
 link-drawing code in node with each head's permissions.
+
+**Account Head Approval did not appear to Gamal Gaber.** His role and grant were
+right and the page opened for him, but it was offered from the Sales menu, the
+Approvals menu and the Sales section -- not from `/account`, the Account
+Management portal, which is where an account head goes first. The portal's card
+list now includes it, drawn only for holders of `negotiation.decide_account_head`.
