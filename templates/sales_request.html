@@ -12697,8 +12697,14 @@ window.chartPieDemo = function() {
                         : (isAwaitingRecosting
                             ? '<span class="badge badge-warning ml-2"><i class="fas fa-calculator mr-1"></i>AWAITING RE-COSTING</span>'
                             : '<span class="badge badge-info ml-2" title="The client asked for another price; their head decides first"><i class="fas fa-handshake mr-1"></i>IN NEGOTIATION</span>');
+                    // The negotiation goes beside "Priced", not instead of it:
+                    // an item can be priced and still be under negotiation, and
+                    // replacing the badge lost the price's own state.
+                    var pricedBadge = sellPerItem > 0
+                        ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
+                        : '';
                     var statusBadge = isNegotiation
-                        ? negotiationBadge
+                        ? pricedBadge + negotiationBadge
                         : (sellPerItem > 0
                             ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
                             : (needsPricing
@@ -13191,6 +13197,70 @@ window.chartPieDemo = function() {
         }
     }
 
+    // Every item saves on its own. Sending one item to re-costing closes and
+    // reloads this window, and a price typed into another row went with it --
+    // one item's action must never discard another item's work.
+    window.PENDING_PRICE_SAVES = [];
+
+    function priceSaveState($input) {
+        var $group = $input.closest('.input-group');
+        var $state = $group.next('.item-save-state');
+        if (!$state.length) {
+            $state = $('<small class="item-save-state d-block mt-1"></small>');
+            $group.after($state);
+        }
+        return $state;
+    }
+
+    function savePriceForItem($input) {
+        var requestId = $('#priceRequestId').text();
+        var itemId = $input.data('item-id');
+        var sellPerItem = parseFloat($input.val());
+        var originalPrice = parseFloat($input.data('original-price')) || 0;
+        if (!(sellPerItem > 0) || Math.abs(sellPerItem - originalPrice) <= 0.001) {
+            return $.Deferred().resolve().promise();
+        }
+        var $state = priceSaveState($input);
+        $state.attr('class', 'item-save-state d-block mt-1 text-muted')
+              .html('<i class="fas fa-spinner fa-spin mr-1"></i>Saving...');
+        var request = $.ajax({
+            url: '/api/sales/requests/' + requestId + '/set-prices',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ items: [{ item_id: itemId, sell_per_item: sellPerItem }] })
+        }).done(function (response) {
+            if (response && response.success) {
+                $input.data('original-price', sellPerItem);
+                $state.attr('class', 'item-save-state d-block mt-1 text-success')
+                      .html('<i class="fas fa-check mr-1"></i>Saved');
+            } else {
+                $state.attr('class', 'item-save-state d-block mt-1 text-danger')
+                      .html('<i class="fas fa-exclamation-circle mr-1"></i>' +
+                            ((response && (response.error || response.message)) || 'Not saved'));
+            }
+        }).fail(function () {
+            $state.attr('class', 'item-save-state d-block mt-1 text-danger')
+                  .html('<i class="fas fa-exclamation-circle mr-1"></i>Not saved - try again');
+        }).always(function () {
+            var at = window.PENDING_PRICE_SAVES.indexOf(request);
+            if (at !== -1) window.PENDING_PRICE_SAVES.splice(at, 1);
+        });
+        window.PENDING_PRICE_SAVES.push(request);
+        return request;
+    }
+
+    // Anything typed and not yet saved goes first, and the caller waits for it.
+    window.flushPriceEdits = function () {
+        $('#priceItemsContainer .item-sell-price-input').each(function () {
+            savePriceForItem($(this));
+        });
+        return $.when.apply($, window.PENDING_PRICE_SAVES.slice());
+    };
+
+    $(document).on('change', '.item-sell-price-input', function () {
+        savePriceForItem($(this));
+    });
+
     function refreshPricingWorkflow() {
         $('#setPriceModal').modal('hide');
         if (typeof table !== 'undefined' && table && table.ajax) {
@@ -13221,6 +13291,8 @@ window.chartPieDemo = function() {
             confirmButtonColor: '#d97706'
         }).then(function(result) {
             if (!result.isConfirmed) return;
+            // Save what is typed in the other rows before this reloads them.
+            window.flushPriceEdits().always(function () {
             $.ajax({
                 url: '/api/pricing/negotiations/' + negotiationId + '/send-to-costing',
                 type: 'POST',
@@ -13238,6 +13310,7 @@ window.chartPieDemo = function() {
                     var response = xhr.responseJSON || {};
                     Swal.fire('Error', response.error || 'Unable to send negotiation to re-costing', 'error');
                 }
+            });
             });
         });
     });
@@ -13258,6 +13331,8 @@ window.chartPieDemo = function() {
             confirmButtonColor: '#dc3545'
         }).then(function(result) {
             if (!result.isConfirmed) return;
+            // Save what is typed in the other rows before this reloads them.
+            window.flushPriceEdits().always(function () {
             $.ajax({
                 url: '/api/pricing/negotiations/' + negotiationId + '/decline',
                 type: 'POST',
@@ -13275,6 +13350,7 @@ window.chartPieDemo = function() {
                     var response = xhr.responseJSON || {};
                     Swal.fire('Error', response.error || 'Unable to decline negotiation', 'error');
                 }
+            });
             });
         });
     });

@@ -83,15 +83,23 @@ class PricingWindowSaysWhoseMoveItIsTest(unittest.TestCase):
         # Request 785's coffee cup, as it stands once the head has approved.
         verdict = _badge_for(_item('negotiated', 'pending_pricing'))
         self.assertTrue(verdict['isNegotiation'])
-        self.assertEqual(verdict['badge'], 'RE-PRICING REQUIRED')
+        self.assertIn('RE-PRICING REQUIRED', verdict['badge'])
+
+    def test_a_priced_item_keeps_its_price_badge_under_negotiation(self):
+        # The negotiation sits beside "Priced" rather than replacing it: the
+        # item is priced, and that price is what is being argued about.
+        verdict = _badge_for(_item('negotiated', 'pending_pricing'))
+        self.assertIn('Priced', verdict['badge'])
+        self.assertLess(verdict['badge'].index('Priced'),
+                        verdict['badge'].index('RE-PRICING REQUIRED'))
 
     def test_an_item_still_with_the_head_says_so(self):
         verdict = _badge_for(_item('pending_negotiation', 'pending_sales_head'))
-        self.assertEqual(verdict['badge'], 'IN NEGOTIATION')
+        self.assertIn('IN NEGOTIATION', verdict['badge'])
 
     def test_an_item_out_for_re_costing_says_so(self):
         verdict = _badge_for(_item('negotiated', 'pending_costing'))
-        self.assertEqual(verdict['badge'], 'AWAITING RE-COSTING')
+        self.assertIn('AWAITING RE-COSTING', verdict['badge'])
 
     def test_an_ordinary_priced_item_is_unchanged(self):
         verdict = _badge_for({'id': 618, 'cost_per_item': 85.0, 'sell_per_item': 120.0,
@@ -108,6 +116,46 @@ class PricingWindowSaysWhoseMoveItIsTest(unittest.TestCase):
         # Waiting on the head is marked but not opened: it is not this desk's move.
         self.assertIn("var negotiationNeedsAttention = isPricingDecision || isAwaitingRecosting;", page)
         self.assertRegex(page, r'price-item-accordion--negotiation')
+
+
+class EachItemSavesItselfTest(unittest.TestCase):
+    """
+    One item's action must not discard another item's work.
+
+    Sending an item to re-costing closes and reloads the window. A price typed
+    into another row and not yet saved went with it -- so re-costing one item
+    silently threw away the re-pricing of the one above it.
+    """
+
+    def setUp(self):
+        with open(os.path.join(ROOT, 'templates', 'sales_request.html'), encoding='utf-8') as handle:
+            self.page = handle.read()
+
+    def test_a_price_saves_when_the_field_is_left(self):
+        self.assertIn("$(document).on('change', '.item-sell-price-input', function () {", self.page)
+        self.assertIn('function savePriceForItem($input)', self.page)
+        # One item at a time, through the endpoint that already exists.
+        self.assertIn("data: JSON.stringify({ items: [{ item_id: itemId, sell_per_item: sellPerItem }] })",
+                      self.page)
+
+    def test_the_row_says_whether_it_saved(self):
+        for state in ('Saving...', 'Saved', 'Not saved'):
+            self.assertIn(state, self.page)
+
+    def test_both_decisions_flush_what_is_typed_first(self):
+        for handler in ('.pricing-send-to-costing', '.pricing-decline-negotiation'):
+            start = self.page.index("$(document).on('click', '%s'" % handler)
+            block = self.page[start:self.page.index("\n    });", start)]
+            self.assertIn('window.flushPriceEdits().always(function () {', block, handler)
+            self.assertLess(block.index('window.flushPriceEdits()'), block.index('$.ajax({'), handler)
+
+    def test_a_saved_price_is_not_sent_twice(self):
+        # The field's own value becomes the new baseline, so a second flush
+        # before the reload does not repost it.
+        save = self.page[self.page.index('function savePriceForItem($input)'):]
+        save = save[:save.index('window.flushPriceEdits')]
+        self.assertIn("$input.data('original-price', sellPerItem);", save)
+        self.assertIn('Math.abs(sellPerItem - originalPrice) <= 0.001', save)
 
 
 class _RollbackConnection:

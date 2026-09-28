@@ -676,3 +676,18 @@ Gamal Gaber, who prices through the flag, heard nothing. The audience now
 includes active flagged accounts for exactly the permissions the flag grants,
 so the two cannot drift apart. Worth saying plainly: with those three accounts
 inactive, the desk is two people.
+
+**One item's action threw away another item's work.** Prices were only written
+when Save Prices was pressed at the end. Sending a different item to
+re-costing closes and reloads the window, so a price typed into a row above it
+went with it -- re-costing one item silently discarded the re-pricing of
+another. Each row now saves itself when the field is left, through the same
+set-prices endpoint with a single item in the payload, and says whether it
+saved. Send to Re-Costing and Decline flush anything still typed and wait for
+it before they fire, so the reload cannot outrun the save. A price that is
+already saved is not posted again: the field's own value becomes the baseline.
+
+**"Priced" kept its place.** The negotiation badge replaced it, so an item
+under negotiation no longer showed whether it had a price at all -- and the
+price is exactly what the client is arguing about. Both are shown now, the
+negotiation beside the price.
