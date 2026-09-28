@@ -650,3 +650,29 @@ have sales head permissions to access this page". The template now opens for
 the permission of the line it was asked for and names that head in the
 refusal. The tests had checked the status code only, which cannot see a
 refusal drawn inside a 200; `ApprovalPageContentTest` reads the page.
+
+## Twenty-third round, 28 September 2026
+
+**A request marked "Re-Pricing Required" whose price window said everything was
+priced.** Item 619 on request 785 -- coffee cup, priced 120, the client asking
+110 -- showed as plain "Priced" in Set Selling Prices. The window only treated
+an item as a negotiation once the head had approved it, so while the
+counter-offer sat with the head the list read as nothing to do; and the client's
+price, their reason and the two decisions were inside a collapsed row. One badge
+also said "NEGOTIATION" for three different states.
+
+A counter-offer now counts from the moment the client makes it, and the badge
+says whose move it is: IN NEGOTIATION (with the head), RE-PRICING REQUIRED
+(this desk), AWAITING RE-COSTING. The rows this desk must act on open
+themselves, so the expected price, the reason, Re-Price Now and Send to
+Re-Costing are in front of whoever opened the window; one merely waiting on the
+head is marked but left closed.
+
+**The Pricing desk was an audience of one.** Pricing is held two ways -- the
+Pricing roles, and the per-account `is_pricing` flag that `load_permissions()`
+honours -- but `users_holding()` read the roles alone. Every Pricing role
+account is currently inactive, so "tell Pricing" reached Ahmed and nobody else;
+Gamal Gaber, who prices through the flag, heard nothing. The audience now
+includes active flagged accounts for exactly the permissions the flag grants,
+so the two cannot drift apart. Worth saying plainly: with those three accounts
+inactive, the desk is two people.

@@ -12517,9 +12517,17 @@ window.chartPieDemo = function() {
                     var activeNegotiationStatus = activeNegotiation ? activeNegotiation.status : '';
                     var isPricingDecision = activeNegotiationStatus === 'pending_pricing';
                     var isAwaitingRecosting = activeNegotiationStatus === 'pending_costing';
+                    // A counter-offer counts from the moment the client makes it.
+                    // While it sat with the head, this said false and the item
+                    // showed as plainly "Priced" -- so a window with a live
+                    // negotiation in it read as nothing to do.
+                    var isWithHead = activeNegotiationStatus === 'pending_sales_head';
                     var isNegotiation = item.approval_status === 'pending_negotiation' && (
-                        isPricingDecision || isAwaitingRecosting || item.negotiation_status === 'negotiated'
+                        isPricingDecision || isAwaitingRecosting || isWithHead
+                        || item.negotiation_status === 'negotiated'
                     );
+                    // Whose move it is. Only these two are this desk's work.
+                    var negotiationNeedsAttention = isPricingDecision || isAwaitingRecosting;
                     var cardClass = isNegotiation ? 'negotiation-required' : (costPerItem > 0 ? 'costed' : 'pending');
                     var headerClass = isNegotiation ? 'danger-header' : '';
                     
@@ -12597,9 +12605,12 @@ window.chartPieDemo = function() {
                             if (priceMatch) expectedPrice = priceMatch[1];
                         }
 
+                        var negotiationNumber = ' - Negotiation #' + (item.negotiation_count || 1);
                         var negotiationTitle = isAwaitingRecosting
-                            ? 'Re-Costing in Progress - Negotiation #' + (item.negotiation_count || 1)
-                            : 'Re-Pricing Decision - Negotiation #' + (item.negotiation_count || 1);
+                            ? 'Re-Costing in Progress' + negotiationNumber
+                            : (isPricingDecision
+                                ? 'Re-Pricing Decision' + negotiationNumber
+                                : 'With the department head' + negotiationNumber);
                         var pricingDecisionActions = '';
                         if (window.CAN_CONTROL_PRICING && isPricingDecision && activeNegotiation) {
                             pricingDecisionActions = `
@@ -12677,16 +12688,25 @@ window.chartPieDemo = function() {
                     // has handed over and is waiting on a price. Only the second
                     // is work for whoever opened this modal, so say which.
                     var needsPricing = !isNegotiation && sellPerItem <= 0 && costPerItem > 0;
+                    // Whose move it is, on the row itself. "NEGOTIATION" covered
+                    // three different states, including ones where pricing has
+                    // nothing to do yet, so the list read the same whether the
+                    // item was waiting on the head or on this desk.
+                    var negotiationBadge = isPricingDecision
+                        ? '<span class="badge badge-danger ml-2"><i class="fas fa-exclamation-circle mr-1"></i>RE-PRICING REQUIRED</span>'
+                        : (isAwaitingRecosting
+                            ? '<span class="badge badge-warning ml-2"><i class="fas fa-calculator mr-1"></i>AWAITING RE-COSTING</span>'
+                            : '<span class="badge badge-info ml-2" title="The client asked for another price; their head decides first"><i class="fas fa-handshake mr-1"></i>IN NEGOTIATION</span>');
                     var statusBadge = isNegotiation
-                        ? '<span class="badge badge-danger ml-2"><i class="fas fa-handshake mr-1"></i>NEGOTIATION</span>'
+                        ? negotiationBadge
                         : (sellPerItem > 0
                             ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
                             : (needsPricing
                                 ? '<span class="badge badge-info ml-2" title="Costed and waiting for a price"><i class="fas fa-tag mr-1"></i>Needs Pricing</span>'
                                 : '<span class="badge badge-secondary ml-2" title="No cost yet, so it cannot be priced"><i class="fas fa-hourglass-half mr-1"></i>Awaiting Cost</span>'));
                     itemsHtml += `
-                        <div class="price-item-accordion mb-2${needsPricing ? ' price-item-accordion--needs-pricing' : ''}" data-item-accordion-id="${item.id}">
-                            <div class="price-item-summary collapsed" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                        <div class="price-item-accordion mb-2${needsPricing ? ' price-item-accordion--needs-pricing' : ''}${isNegotiation ? ' price-item-accordion--negotiation' : ''}" data-item-accordion-id="${item.id}">
+                            <div class="price-item-summary${negotiationNeedsAttention ? '' : ' collapsed'}" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="${negotiationNeedsAttention ? 'true' : 'false'}" aria-controls="${collapseId}">
                                 <div class="psum-left">
                                     <i class="fas fa-chevron-right psum-chevron"></i>
                                     <div class="psum-icon"><i class="fas fa-cube"></i></div>
@@ -12716,7 +12736,10 @@ window.chartPieDemo = function() {
                                     </div>
                                 </div>
                             </div>
-                            <div class="collapse" id="${collapseId}">
+                            {# An item waiting on a decision opens itself: the client's
+                               price, the reason and the two buttons all live in here,
+                               and behind a closed row the list looked fully priced. #}
+                            <div class="collapse${negotiationNeedsAttention ? ' show' : ''}" id="${collapseId}">
                         <div class="enhanced-item-card ${cardClass}" data-item-id="${item.id}" data-cost-per-item="${costPerItem}" data-total-cost="${totalCost}">
                             <!-- Enhanced Header -->
                             <div class="enhanced-item-header ${headerClass}">

@@ -1508,6 +1508,18 @@ def users_holding(permission, include_root=False):
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
+
+    # Pricing is held two ways. Beside the Pricing roles there is a per-account
+    # flag, and load_permissions() grants the same set to anyone carrying it --
+    # so a flagged account prices and decides negotiations, and heard about
+    # neither. The desk here was the roles alone, and with every Pricing role
+    # account inactive that left an audience of one.
+    if permission in rbac.PRICING_FLAG_PERMISSIONS:
+        cur.execute(
+            "SELECT id FROM user WHERE is_pricing = 1 AND is_active = 1%s"
+            % ("" if include_root else " AND manager_id IS NOT NULL"))
+        user_ids = sorted({row['id'] for row in cur.fetchall()} | set(user_ids))
+
     cur.close()
     conn.close()
     return user_ids
