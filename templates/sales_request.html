@@ -13401,7 +13401,11 @@ window.chartPieDemo = function() {
             },
             error: function(xhr, status, error) {
                 console.error('Save prices error:', error);
-                Swal.fire('Error!', 'Error saving prices: ' + error, 'error');
+                // The server says why -- a refused permission, a locked item.
+                // "Error saving prices: error" said none of it.
+                var body = (xhr && xhr.responseJSON) || {};
+                Swal.fire('Error!', body.error || body.message ||
+                          ('Error saving prices: ' + error), 'error');
             }
         });
     });

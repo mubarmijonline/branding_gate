@@ -1341,8 +1341,18 @@ def perm(*codes):
             fresh_perms = refresh_session_permissions()
             if any(rbac.resolve(fresh_perms, code) is not None for code in codes):
                 return f(*args, **kwargs)
+            # Who was refused what. A 403 used to leave no trace at all, so
+            # "it says error when I save" could not be answered from the log:
+            # the access log records the refusal but never the account, and on
+            # a shared proxy address one person's 403 looks like another's.
+            app.logger.warning(
+                'Refused %s for user %s (role %s) on %s %s',
+                '/'.join(codes), session.get('user_id'),
+                session.get('role_code'), request.method, request.path)
             if request.path.startswith('/api/'):
-                return jsonify(error='Forbidden'), 403
+                return jsonify(error='Your account does not hold the permission '
+                                     'this needs (%s).' % '/'.join(codes),
+                               permission=list(codes)), 403
             return abort(403)
         decorated_function._perms = codes
         return decorated_function

@@ -216,5 +216,88 @@ class PricingDeskHearsAboutItTest(unittest.TestCase):
                 self.assertIn(flagged, branding_gate.users_holding(permission))
 
 
+class ARefusalSaysWhoAndWhyTest(unittest.TestCase):
+    """
+    "Error in Saving price", and nothing anywhere to say why.
+
+    Saving a price came back 403 for somebody, and the server kept no record
+    of who was refused or for which permission: the access log has the
+    refusal but not the account, and behind a shared proxy address one
+    person's 403 looks exactly like another's. The page then threw the
+    server's answer away and showed a generic failure.
+    """
+
+    def setUp(self):
+        self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
+                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+        self.raw.autocommit(False)
+        self.original = branding_gate.connection
+        self.addCleanup(self._undo)
+        branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
+        branding_gate.app.config['TESTING'] = True
+
+        cur = self._cursor()
+        cur.execute("SELECT id FROM rbac_role WHERE code = 'account_team_leader'")
+        role_id = cur.fetchone()['id']
+        cur.execute("""INSERT INTO user (name, mobile, email, password, username, title,
+                                         rbac_role_id, manager_id, is_active, is_pricing, date)
+                       VALUES ('refused-probe', '0179000111', 'refused@example.com', 'x',
+                               'refused-probe', 'Refusal test', %s, 1, 1, 0, NOW())""", (role_id,))
+        self.user_id = cur.lastrowid
+        cur.close()
+
+    def _undo(self):
+        branding_gate.connection = self.original
+        self.raw.rollback()
+        self.raw.close()
+
+    def _cursor(self):
+        return self.raw.cursor(MySQLdb.cursors.DictCursor)
+
+    def _client(self):
+        perms, role_code = branding_gate.load_permissions(self.user_id)
+        self.assertIsNone(perms.get('sales_item.price'), 'this account must not price')
+        client = branding_gate.app.test_client()
+        with client.session_transaction() as flask_session:
+            flask_session.update({'user_id': self.user_id, 'mobile': 'm', 'email': 'e',
+                                  'username': 'u', 'name': 'Refused', 'roles': [role_code],
+                                  'perms': perms, 'role_code': role_code})
+        return client
+
+    def test_the_answer_names_the_permission(self):
+        response = self._client().post('/api/sales/requests/785/set-prices',
+                                       json={'items': [{'item_id': 618, 'sell_per_item': 131}]})
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertIn('sales_item.price', body.get('permission', []))
+        self.assertIn('permission', body['error'])
+        self.assertNotEqual(body['error'], 'Forbidden')
+
+    def test_the_log_names_the_account(self):
+        import logging
+        records = []
+
+        class Catch(logging.Handler):
+            def emit(self, record): records.append(record.getMessage())
+
+        handler = Catch()
+        branding_gate.app.logger.addHandler(handler)
+        try:
+            self._client().post('/api/sales/requests/785/set-prices',
+                                json={'items': [{'item_id': 618, 'sell_per_item': 131}]})
+        finally:
+            branding_gate.app.logger.removeHandler(handler)
+        refusals = [line for line in records if 'Refused' in line]
+        self.assertTrue(refusals, 'the refusal was not logged')
+        self.assertIn('sales_item.price', refusals[0])
+        self.assertIn(str(self.user_id), refusals[0])
+
+    def test_the_window_shows_what_the_server_said(self):
+        with open(os.path.join(ROOT, 'templates', 'sales_request.html'), encoding='utf-8') as handle:
+            page = handle.read()
+        self.assertIn("Swal.fire('Error!', body.error || body.message ||", page)
+        self.assertNotIn("Swal.fire('Error!', 'Error saving prices: ' + error, 'error');", page)
+
+
 if __name__ == '__main__':
     unittest.main()

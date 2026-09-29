@@ -691,3 +691,20 @@ already saved is not posted again: the field's own value becomes the baseline.
 under negotiation no longer showed whether it had a price at all -- and the
 price is exactly what the client is arguing about. Both are shown now, the
 negotiation beside the price.
+
+**"Error in Saving price", with nothing to say who or why.** Six attempts to
+save a price on 28-29 September came back 403. Nothing was broken: the
+permission check refused them, the request never reached the database. Which
+account was refused could not be answered -- the access log records the
+refusal but never the user, and every visitor arrives through the same proxy
+addresses, so one person's 403 is indistinguishable from another's. The same
+visitor's `/api/pricing/summary` succeeded in those minutes, and that needs the
+same `sales_item.price`, which points at two different people rather than one
+broken permission: Gamal Gaber's account resolves that permission through the
+pricing flag and his save replays successfully, while an account manager's
+does not hold it at all.
+
+A refusal now names itself in the log -- account, role, permission, method and
+path -- the API answers with the permission it wanted instead of a bare
+"Forbidden", and the window shows that answer rather than "Error saving
+prices:" followed by nothing useful.
