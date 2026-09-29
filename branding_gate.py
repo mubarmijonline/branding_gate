@@ -12666,15 +12666,24 @@ def set_item_prices(request_id):
                         item_data.get('approval_status') == 'pending_negotiation'
                         and item_data.get('negotiation_status') == 'negotiated'
                     )
-                    user_roles = session.get('roles', [])
-                    if was_negotiation and not any(
-                        role in user_roles for role in ('pricing', 'operation', 'admin')
-                    ):
+                    # Completing a negotiated item is Pricing's decision, or
+                    # Operations' when it came back through re-costing. This
+                    # compared session['roles'] against the words 'pricing',
+                    # 'operation' and 'admin'. Roles are codes now, and none of
+                    # the first two is one: pricing_manager is not 'pricing',
+                    # so the Pricing Manager was refused on the only items that
+                    # are actually theirs to finish, and so was every account
+                    # holding pricing through the is_pricing flag. Ask for the
+                    # permission the work needs instead of a role's name.
+                    if was_negotiation and not (has('negotiation.decide_pricing')
+                                                or has('negotiation.complete_costing')):
                         cur.close()
                         conn.close()
                         return jsonify({
                             'success': False,
-                            'error': 'Pricing role is required to complete a negotiated item'
+                            'error': 'Finishing a negotiated item needs the pricing decision '
+                                     'permission (negotiation.decide_pricing).',
+                            'permission': ['negotiation.decide_pricing']
                         }), 403
                     
                     # RECALCULATE total_sell using formula: sell_per_item × qty × days × dimension_multiplier

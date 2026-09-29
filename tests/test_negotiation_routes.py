@@ -113,16 +113,21 @@ class NegotiationRouteTest(unittest.TestCase):
         )
         cursor.close()
 
-    def _invoke(self, handler, path, payload, roles=None):
+    def _invoke(self, handler, path, payload, roles=None, perms=None):
         with branding_gate.app.test_request_context(path, method="POST", json=payload):
             branding_gate.session["user_id"] = 1
             branding_gate.session["name"] = "Workflow Test User"
             branding_gate.session["username"] = "workflow-test"
             branding_gate.session["roles"] = roles or ["pricing"]
-            # A real session always carries its permissions, and the Sales
-            # Head routes now scope by them (the request's owner inside the
-            # caller's line). User 1 is the admin, whose scope is everything.
-            perms, role_code = branding_gate.load_permissions(1)
+            # A real session always carries its permissions, and these routes
+            # read them: the Sales Head ones scope by them, and finishing a
+            # negotiated item asks for the pricing decision. Default to the
+            # admin, whose scope is everything; a caller testing a refusal
+            # passes the permissions of the role it is standing in for.
+            if perms is None:
+                perms, role_code = branding_gate.load_permissions(1)
+            else:
+                role_code = (roles or ['tester'])[0]
             branding_gate.session["perms"] = perms
             branding_gate.session["role_code"] = role_code
             endpoint = getattr(handler, "__wrapped__", handler)
@@ -316,11 +321,17 @@ class NegotiationRouteTest(unittest.TestCase):
             branding_gate.set_item_prices,
             f"/api/sales/requests/{self.request_id}/set-prices",
             {"items": [{"item_id": self.item_id, "sell_per_item": 145}]},
-            roles=["sales"],
+            roles=["sales_team_leader"],
+            perms=rbac.SEED_MATRIX["sales_team_leader"],
         )
 
         self.assertEqual(status, 403)
-        self.assertIn("Pricing role", response.get_json()["error"])
+        # The rule asks for the permission now, not for a role's name: the
+        # words 'pricing' and 'operation' stopped being roles, so the check
+        # refused the Pricing Manager and let nobody but the admin through.
+        body = response.get_json()
+        self.assertIn("negotiation.decide_pricing", body.get("permission", []))
+        self.assertIn("pricing decision", body["error"])
         self.assertEqual(self._negotiation()["status"], "pending_pricing")
         self.assertEqual(float(self._item()["sell_per_item"]), 160.0)
 

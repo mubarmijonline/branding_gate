@@ -708,3 +708,24 @@ A refusal now names itself in the log -- account, role, permission, method and
 path -- the API answers with the permission it wanted instead of a bare
 "Forbidden", and the window shows that answer rather than "Error saving
 prices:" followed by nothing useful.
+
+**"Pricing role is required to complete a negotiated item."** Saving the price
+of the one item under negotiation was refused for the people whose job it is.
+Inside set-prices, a second check compared `session['roles']` against the words
+'pricing', 'operation' and 'admin' -- written before roles became codes. None
+of the first two is a code: `pricing_manager` is not 'pricing', so the Pricing
+Manager was refused on the only items that are theirs to finish, Operations was
+refused after a re-costing, and so was every account holding pricing through
+the `is_pricing` flag -- Gamal Gaber's among them. Only the literal 'admin'
+still matched, which is why ordinary items saved and this one did not.
+
+The check asks for the permission the work needs -- the pricing decision, or
+Operations' re-costing -- and names it when it refuses. Sales is still refused,
+and a pricing specialist, who may price but not decide a negotiation, still is
+too.
+
+Left alone deliberately: `/api/finance/transactions` auto-approves through the
+same stale pattern, on a role named 'finance' that does not exist any more
+(`finance_manager`, `finance_member`), so finance staff's own transactions go
+to pending instead. That is money behaviour and wants a decision, not a quiet
+fix.

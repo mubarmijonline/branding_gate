@@ -299,5 +299,147 @@ class ARefusalSaysWhoAndWhyTest(unittest.TestCase):
         self.assertNotIn("Swal.fire('Error!', 'Error saving prices: ' + error, 'error');", page)
 
 
+class FinishingANegotiatedItemTest(unittest.TestCase):
+    """
+    "Pricing role is required to complete a negotiated item."
+
+    Saving a price on the one item under negotiation was refused for the
+    people whose job it is. The check compared session['roles'] against the
+    words 'pricing', 'operation' and 'admin' -- from before roles were codes.
+    None of the first two is a code: pricing_manager is not 'pricing', so the
+    Pricing Manager was refused on the only items that are theirs to finish,
+    and so was every account that holds pricing through the is_pricing flag,
+    Gamal Gaber's among them. Only the literal 'admin' still matched.
+    """
+
+    def setUp(self):
+        self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
+                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+        self.raw.autocommit(False)
+        self.original = branding_gate.connection
+        self.addCleanup(self._undo)
+        branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
+        branding_gate.app.config['TESTING'] = True
+
+        cur = self._cursor()
+        self.roles = {}
+        for code in ('pricing_manager', 'pricing_specialist', 'account_director',
+                     'account_team_leader'):
+            cur.execute("SELECT id FROM rbac_role WHERE code = %s", (code,))
+            self.roles[code] = cur.fetchone()['id']
+        cur.execute("SELECT id FROM client ORDER BY id LIMIT 1")
+        client_id = cur.fetchone()['id']
+        cur.execute("""INSERT INTO sales_request (client_id, title, start_date, created_by,
+                                                  items_count, owner_user_id)
+                       VALUES (%s, 'Negotiated save probe', CURDATE(), 'probe', 1, 1)""",
+                    (client_id,))
+        self.request_id = cur.lastrowid
+        # An item exactly as request 785's coffee cup stands: priced, countered,
+        # and approved by the head -- waiting for Pricing to finish it.
+        cur.execute("""INSERT INTO sales_request_items
+                           (request_id, name, qty, unit, cost_per_item, sell_per_item,
+                            total_cost, total_sell, approval_status, negotiation_status,
+                            negotiation_count, sell_type, rental_days)
+                       VALUES (%s, 'coffee cup probe', 200, 'pcs', 75, 120,
+                               15000, 24000, 'pending_negotiation', 'negotiated', 1, 'rent', 1)""",
+                    (self.request_id,))
+        self.item_id = cur.lastrowid
+        # ...and the negotiation behind it, approved by the head and waiting on
+        # Pricing. The route requires one: without it the item is not awaiting
+        # a re-pricing decision at all.
+        cur.execute("""INSERT INTO negotiation_requests
+                           (item_id, request_id, client_expected_price, client_reason,
+                            status, sales_head_decision, destination_team)
+                       VALUES (%s, %s, 110, 'overpriced', 'pending_pricing',
+                               'approved', 'pricing')""",
+                    (self.item_id, self.request_id))
+        self.negotiation_id = cur.lastrowid
+        cur.close()
+
+    def _undo(self):
+        branding_gate.connection = self.original
+        self.raw.rollback()
+        self.raw.close()
+
+    def _cursor(self):
+        return self.raw.cursor(MySQLdb.cursors.DictCursor)
+
+    def _user(self, role_code, is_pricing=0):
+        cur = self._cursor()
+        username = 'finish-%s-%d' % (role_code, is_pricing)
+        cur.execute("""INSERT INTO user (name, mobile, email, password, username, title,
+                                         rbac_role_id, manager_id, is_active, is_pricing, date)
+                       VALUES (%s, %s, %s, 'x', %s, 'Finish test', %s, 1, 1, %s, NOW())""",
+                    (username, '0177%07d' % (abs(hash(username)) % 10 ** 7),
+                     username + '@example.com', username, self.roles[role_code], is_pricing))
+        user_id = cur.lastrowid
+        cur.close()
+        return user_id
+
+    def _save(self, user_id, price=110):
+        perms, role_code = branding_gate.load_permissions(user_id)
+        client = branding_gate.app.test_client()
+        with client.session_transaction() as flask_session:
+            flask_session.update({'user_id': user_id, 'mobile': 'm', 'email': 'e',
+                                  'username': 'u', 'name': 'Pricer', 'roles': [role_code],
+                                  'perms': perms, 'role_code': role_code})
+        return client.post('/api/sales/requests/%d/set-prices' % self.request_id,
+                           json={'items': [{'item_id': self.item_id, 'sell_per_item': price}]})
+
+    def _price(self):
+        cur = self._cursor()
+        cur.execute("SELECT sell_per_item FROM sales_request_items WHERE id = %s", (self.item_id,))
+        price = float(cur.fetchone()['sell_per_item'])
+        cur.close()
+        return price
+
+    def test_the_pricing_manager_can_finish_it(self):
+        response = self._save(self._user('pricing_manager'))
+        self.assertEqual(response.status_code, 200, response.data[:300])
+        self.assertEqual(self._price(), 110.0)
+
+    def test_an_account_holding_pricing_by_the_flag_can(self):
+        # Gamal Gaber: account_director, is_pricing = 1.
+        response = self._save(self._user('account_director', is_pricing=1))
+        self.assertEqual(response.status_code, 200, response.data[:300])
+        self.assertEqual(self._price(), 110.0)
+
+    def test_the_admin_still_can(self):
+        response = self._save(1)
+        self.assertEqual(response.status_code, 200, response.data[:300])
+
+    def test_somebody_who_prices_but_does_not_decide_cannot(self):
+        # A pricing specialist may price, and may not decide a negotiation:
+        # the one account this rule is actually for.
+        response = self._save(self._user('pricing_specialist'))
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertIn('negotiation.decide_pricing', body.get('permission', []))
+        self.assertNotIn('role is required', body['error'])
+        self.assertEqual(self._price(), 120.0, 'the refused save still changed the price')
+
+    def test_an_ordinary_item_is_not_caught_by_this(self):
+        cur = self._cursor()
+        cur.execute("""INSERT INTO sales_request_items
+                           (request_id, name, qty, unit, cost_per_item, sell_per_item,
+                            total_cost, total_sell, approval_status, sell_type, rental_days)
+                       VALUES (%s, 'plain item', 10, 'pcs', 10, 20, 100, 200, 'pending', 'rent', 1)""",
+                    (self.request_id,))
+        plain = cur.lastrowid
+        cur.close()
+        user_id = self._user('account_team_leader')
+        perms, role_code = branding_gate.load_permissions(user_id)
+        client = branding_gate.app.test_client()
+        with client.session_transaction() as flask_session:
+            flask_session.update({'user_id': user_id, 'mobile': 'm', 'email': 'e',
+                                  'username': 'u', 'name': 'Pricer', 'roles': [role_code],
+                                  'perms': perms, 'role_code': role_code})
+        response = client.post('/api/sales/requests/%d/set-prices' % self.request_id,
+                               json={'items': [{'item_id': plain, 'sell_per_item': 25}]})
+        # Refused by the route's own permission, not by the negotiated-item rule.
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('sales_item.price', response.get_json().get('permission', []))
+
+
 if __name__ == '__main__':
     unittest.main()
