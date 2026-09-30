@@ -2583,7 +2583,7 @@ $(document).ready(function() {
         }
         
         // Build CSV content
-        var headers = ['Type', 'Item Name', 'Description', 'Request #', 'Request Start', 'Request End', 'Client', 'Supplier', 'Due Date', 'Received Date', 'Received By', 'Status'];
+        var headers = ['Type', 'Item Name', 'Description', 'Request #', 'Setup Date', 'Request Start', 'Request End', 'Client', 'Supplier', 'Due Date', 'Received Date', 'Received By', 'Status'];
         var csvContent = headers.join(',') + '\n';
         
         supplierReportData.forEach(function(item) {
@@ -2592,6 +2592,8 @@ $(document).ready(function() {
                 '"' + (item.item_name || '').replace(/"/g, '""') + '"',
                 '"' + (item.description || '').replace(/"/g, '""') + '"',
                 item.request_id || '',
+                // Quoted: a request with two templates lists "a, b".
+                '"' + (item.setup_date || '') + '"',
                 item.request_start_date || '',
                 item.request_end_date || '',
                 '"' + (item.client_name || '').replace(/"/g, '""') + '"',

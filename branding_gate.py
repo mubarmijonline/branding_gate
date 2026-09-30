@@ -3763,6 +3763,25 @@ def get_approved_items():
 
 # ===================== APPROVED ITEMS EXCEL EXPORTS =====================
 
+def setup_date_sql(request_column):
+    """
+    A request's setup date, as a SELECT expression named setup_date.
+
+    The setup date is not a column: it is a field of the request's template
+    (booth, event...), kept in sales_request_template_instances.template_data.
+    A request can carry several templates, so every distinct date is listed.
+    Only string values count -- a JSON null would otherwise read as "null".
+    One definition, so every export and report that shows it agrees.
+    """
+    return ("(SELECT GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date'))"
+            " ORDER BY JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date')) SEPARATOR ', ')"
+            " FROM sales_request_template_instances ti"
+            " WHERE ti.request_id = %s"
+            " AND JSON_TYPE(JSON_EXTRACT(ti.template_data, '$.setup_date')) = 'STRING'"
+            " AND JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date')) <> ''"
+            ") AS setup_date" % request_column)
+
+
 def _approved_items_fetch_all():
     """Internal helper: fetch all approved items joined with request + supplier info for exports."""
     conn, cur = connection()
@@ -3778,18 +3797,7 @@ def _approved_items_fetch_all():
             sr.title AS request_title, sr.start_date, sr.end_date, sr.priority,
             sr.status AS request_status,
             c.client_name,
-            -- The setup date is not a column: it is a field of the request's
-            -- template (booth, event...), kept in its JSON. A request can
-            -- carry several templates, so every distinct date is listed.
-            -- Only string values count; JSON null would read as 'null'.
-            (SELECT GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date'))
-                                 ORDER BY JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date'))
-                                 SEPARATOR ', ')
-               FROM sales_request_template_instances ti
-              WHERE ti.request_id = sri.request_id
-                AND JSON_TYPE(JSON_EXTRACT(ti.template_data, '$.setup_date')) = 'STRING'
-                AND JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date')) <> ''
-            ) AS setup_date
+            """ + setup_date_sql('sri.request_id') + """
         FROM sales_request_items sri
         INNER JOIN sales_request sr ON sri.request_id = sr.id
         LEFT JOIN client c ON sr.client_id = c.id
@@ -5258,6 +5266,7 @@ def get_supplier_report():
                 sr.title as request_title,
                 sr.start_date as request_start_date,
                 sr.end_date as request_end_date,
+                """ + setup_date_sql('sr.id') + """,
                 c.client_name,
                 s.id as supplier_id,
                 s.supplier_name,
@@ -5287,6 +5296,7 @@ def get_supplier_report():
                 sr.title as request_title,
                 sr.start_date as request_start_date,
                 sr.end_date as request_end_date,
+                """ + setup_date_sql('sr.id') + """,
                 c.client_name,
                 s.id as supplier_id,
                 s.supplier_name,
@@ -5434,6 +5444,7 @@ def get_supplier_report():
                 'request_title': item['request_title'],
                 'request_start_date': item['request_start_date'].isoformat() if item['request_start_date'] else None,
                 'request_end_date': item['request_end_date'].isoformat() if item['request_end_date'] else None,
+                'setup_date': item.get('setup_date') or '',
                 'client_name': item['client_name'],
                 'supplier_id': item['supplier_id'],
                 'supplier_name': item['supplier_name'],
@@ -5596,6 +5607,7 @@ def export_supplier_report_excel():
                 'Received Date': i.get('received_date'),
                 'Status': i.get('status'),
                 'Received By': i.get('received_by_name'),
+                'Setup Date': i.get('setup_date') or '',
                 'Request Start': i.get('request_start_date'),
                 'Request End': i.get('request_end_date'),
             }

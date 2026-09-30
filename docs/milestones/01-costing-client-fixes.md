@@ -775,3 +775,12 @@ request's distinct setup dates from that JSON -- string values only, so a JSON
 null leaves the cell blank rather than printing "null" -- and "Setup Date" is a
 column of its own, on by default, before Request Start. This is the "Step Date"
 asked for earlier.
+
+**The Supplier Report Generator's export had no setup date either.** Its
+Export to Excel does not use the approved-items exports: it writes the file in
+the browser from `/api/supplier-report`, with its own column list, and the
+standalone Supplier Report page has a server export (`export-excel`) built from
+the same data. Both now carry Setup Date. The lookup that reads it from the
+template JSON is defined once, `setup_date_sql()`, and used by the
+approved-items exports and by both of the report's queries (items and their
+parts), so everything that shows the setup date reads it the same way.

@@ -201,6 +201,59 @@ class ExportColumnsTest(_Harness):
         self.assertTrue(self.HIDDEN <= set(body['columns']))
 
 
+
+class SupplierReportSetupDateTest(_Harness):
+    """
+    The Supplier Report Generator exports from its own data, not the
+    approved-items exports, so fixing those left it without the setup date.
+    It reads the same single definition now (setup_date_sql).
+    """
+
+    def _assigned_probe(self):
+        request_id, item_id = self._request_with_item('approved')
+        cur = self._cursor()
+        supplier_id = fixtures.ensure_suppliers(cur, 1)[0]
+        cur.execute("UPDATE sales_request_items SET supplier_id = %s WHERE id = %s",
+                    (supplier_id, item_id))
+        cur.execute("""INSERT INTO sales_request_template_instances
+                           (request_id, template_id, request_type, instance_order, template_data)
+                       VALUES (%s, 1, 'Booth', 0, %s)""",
+                    (request_id, '{"setup_date": "2026-10-09"}'))
+        cur.close()
+        return request_id
+
+    def test_each_report_row_carries_its_setup_date(self):
+        request_id = self._assigned_probe()
+        items = self._client_for(1).get('/api/supplier-report').get_json().get('items') or []
+        mine = [i for i in items if i.get('request_id') == request_id]
+        self.assertTrue(mine, 'the probe item is not in the report')
+        self.assertEqual(mine[0]['setup_date'], '2026-10-09')
+
+    def test_the_report_export_button_writes_it(self):
+        with open(os.path.join(ROOT, 'templates', 'approved_items.html'), encoding='utf-8') as handle:
+            page = handle.read()
+        start = page.index("$('#exportSupplierReportBtn').click")
+        block = page[start:start + 2500]
+        self.assertIn("'Setup Date'", block)
+        self.assertIn("(item.setup_date || '')", block)
+
+    def test_the_server_side_report_export_writes_it(self):
+        import openpyxl
+        self._assigned_probe()
+        response = self._client_for(1).get('/api/supplier-report/export-excel')
+        self.assertEqual(response.status_code, 200)
+        book = openpyxl.load_workbook(io.BytesIO(response.data))
+        header = [c.value for c in next(book[book.sheetnames[0]].iter_rows(max_row=1))]
+        self.assertIn('Setup Date', header)
+
+    def test_there_is_one_definition(self):
+        with open(os.path.join(ROOT, 'branding_gate.py'), encoding='utf-8') as handle:
+            source = handle.read()
+        # the lookup itself appears once; everything else calls it
+        self.assertEqual(source.count("FROM sales_request_template_instances ti"), 1)
+        self.assertGreaterEqual(source.count("setup_date_sql("), 4)
+
+
 class ExpenseSuppliersTest(_Harness):
 
     def test_operations_can_read_the_supplier_list(self):
