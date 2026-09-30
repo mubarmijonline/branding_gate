@@ -260,6 +260,8 @@
                          100% { box-shadow:0 2px 6px rgba(46,54,80,.05); } }
 
     /* Table: one row per request, expanding to its items. */
+    /* Readable headings: the shared rule left them pale on this page. */
+    #approvedItemsTable thead th { color:#4b5470 !important; }
     #approvedItemsTable tbody tr.ai-rq-row { cursor:pointer; box-shadow:inset 5px 0 0 var(--req, #4e73df); }
     #approvedItemsTable tbody tr.ai-rq-row:hover td { background:var(--req-soft, #f7f9ff); }
     #approvedItemsTable tbody tr.ai-rq-row.shown td { background:var(--req-soft, #f7f9ff); }
