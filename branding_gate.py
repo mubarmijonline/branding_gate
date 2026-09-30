@@ -3777,7 +3777,19 @@ def _approved_items_fetch_all():
             sup.email_address AS supplier_email,
             sr.title AS request_title, sr.start_date, sr.end_date, sr.priority,
             sr.status AS request_status,
-            c.client_name
+            c.client_name,
+            -- The setup date is not a column: it is a field of the request's
+            -- template (booth, event...), kept in its JSON. A request can
+            -- carry several templates, so every distinct date is listed.
+            -- Only string values count; JSON null would read as 'null'.
+            (SELECT GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date'))
+                                 ORDER BY JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date'))
+                                 SEPARATOR ', ')
+               FROM sales_request_template_instances ti
+              WHERE ti.request_id = sri.request_id
+                AND JSON_TYPE(JSON_EXTRACT(ti.template_data, '$.setup_date')) = 'STRING'
+                AND JSON_UNQUOTE(JSON_EXTRACT(ti.template_data, '$.setup_date')) <> ''
+            ) AS setup_date
         FROM sales_request_items sri
         INNER JOIN sales_request sr ON sri.request_id = sr.id
         LEFT JOIN client c ON sr.client_id = c.id
@@ -3818,6 +3830,7 @@ def _approved_item_row_to_dict(item):
         'Supplier': item.get('supplier_name') or 'Unassigned',
         'Supplier Phone': item.get('supplier_phone') or '',
         'Supplier Email': item.get('supplier_email') or '',
+        'Setup Date': item.get('setup_date') or '',
         'Request Start': item['start_date'].isoformat() if item.get('start_date') else '',
         'Request End': item['end_date'].isoformat() if item.get('end_date') else '',
         'Approval Date': item['client_approval_date'].isoformat() if item.get('client_approval_date') else '',
@@ -3829,7 +3842,7 @@ APPROVED_EXPORT_COLUMNS = [
     'Item ID', 'Request ID', 'Request Title', 'Client', 'Item Name', 'Description',
     'Type', 'Quantity', 'Unit', 'Rental Days', 'Width', 'Height', 'Depth',
     'Cost/Unit', 'Total Cost', 'Supplier', 'Supplier Phone', 'Supplier Email',
-    'Request Start', 'Request End', 'Approval Date',
+    'Setup Date', 'Request Start', 'Request End', 'Approval Date',
 ]
 # Left out unless asked for. Operations sends these sheets to suppliers and
 # works from them on site: an internal id, the rent/sell type, what the item

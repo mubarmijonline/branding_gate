@@ -886,6 +886,13 @@
                 <span class="badge badge-danger ml-1 d-none" id="navCostingBadge"></span>
               </a>
               {% endif %}
+              {# The step after costing: what the client signed off, for
+                 Operations to source and deliver. #}
+              {% if 'approved_item.view' in _p %}
+              <a class="dropdown-item" href="{{ url_for('approved_items_page') }}">
+                <i class="fas fa-check-circle"></i> Approved Items
+              </a>
+              {% endif %}
               <a class="dropdown-item" href="{{ url_for('workflow_timeline') }}">
                 <i class="fas fa-stream"></i> Workflow Timeline
               </a>

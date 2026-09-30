@@ -762,3 +762,16 @@ ends with Other, which asks for the name and saves that name, never "Other".
 Open: "Step Date" for the exports has no field of that name. The sheets already
 carry the request's start and end; the candidates are the supplier due date and
 received date. Waiting on which was meant.
+
+**Approved Items in the Operations menu.** The page was reachable only from the
+Operations section; it now sits in the navbar's Operations menu after Costing --
+the step that follows costing -- for whoever holds `approved_item.view`.
+
+**The setup date never reached the exports.** It is not a column: it is a field
+of the request's template (booth, event), kept in
+`sales_request_template_instances.template_data`. The export read columns only.
+`_approved_items_fetch_all()`, which all three exports share, now reads each
+request's distinct setup dates from that JSON -- string values only, so a JSON
+null leaves the cell blank rather than printing "null" -- and "Setup Date" is a
+column of its own, on by default, before Request Start. This is the "Step Date"
+asked for earlier.

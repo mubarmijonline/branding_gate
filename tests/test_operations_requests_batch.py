@@ -154,6 +154,47 @@ class ExportColumnsTest(_Harness):
         self.assertEqual(self._header(base + '?cols=Nonsense'), default)
         self.assertEqual(self._header(base + '?cols='), default)
 
+    def _rows(self, path):
+        import openpyxl
+        response = self._client_for(1).get(path)
+        self.assertEqual(response.status_code, 200, response.data[:200])
+        book = openpyxl.load_workbook(io.BytesIO(response.data))
+        # Every sheet: the supplier export files an item with no supplier on
+        # its own "Unassigned" sheet, last.
+        out = []
+        for name in book.sheetnames:
+            rows = list(book[name].iter_rows(values_only=True))
+            out.extend(dict(zip(rows[0], r)) for r in rows[1:])
+        return out
+
+    def test_the_setup_date_is_in_both_exports_by_default(self):
+        # It lives in the request's template JSON, not in a column, which is
+        # why it never reached the sheets.
+        request_id, _ = self._request_with_item('approved')
+        cur = self._cursor()
+        cur.execute("""INSERT INTO sales_request_template_instances
+                           (request_id, template_id, request_type, instance_order, template_data)
+                       VALUES (%s, 1, 'Booth', 0, %s)""",
+                    (request_id, '{"setup_date": "2026-10-09", "event_date": "2026-10-10"}'))
+        cur.close()
+        for path in ('/api/operations/approved-items/export/request/%d' % request_id,
+                     '/api/operations/approved-items/export/by-supplier'):
+            with self.subTest(export=path):
+                mine = [r for r in self._rows(path) if r.get('Item Name') == 'Ops probe item']
+                self.assertTrue(mine, 'the probe item is missing from the sheet')
+                self.assertEqual(mine[0]['Setup Date'], '2026-10-09')
+
+    def test_a_request_without_one_leaves_it_blank_not_null(self):
+        request_id, _ = self._request_with_item('approved')
+        cur = self._cursor()
+        cur.execute("""INSERT INTO sales_request_template_instances
+                           (request_id, template_id, request_type, instance_order, template_data)
+                       VALUES (%s, 1, 'Event', 0, %s)""",
+                    (request_id, '{"setup_date": null, "event_date": "2026-10-10"}'))
+        cur.close()
+        rows = self._rows('/api/operations/approved-items/export/request/%d' % request_id)
+        self.assertIn(rows[0]['Setup Date'], (None, ''))
+
     def test_the_chooser_is_told_what_exists_and_what_is_off(self):
         body = self._client_for(1).get('/api/operations/approved-items/export/columns').get_json()
         self.assertEqual(set(body['hidden_by_default']), self.HIDDEN)
@@ -206,6 +247,32 @@ class PagesTest(unittest.TestCase):
     def test_the_notice_opens_its_own_request(self):
         page = self._page('approved_items.html')
         self.assertIn("new URLSearchParams(window.location.search).get('request')", page)
+
+
+
+class OperationsMenuTest(_Harness):
+    """Approved Items is in the Operations menu, for whoever may open it."""
+
+    def _operations_menu(self, user_id):
+        html = self._client_for(user_id).get('/home').get_data(as_text=True)
+        start = html.find('id="operationsDropdown"')
+        if start == -1:
+            return None
+        end = html.find('</li>', start)
+        return html[start:end]
+
+    def test_david_finds_it_in_the_operations_menu(self):
+        menu = self._operations_menu(self._user_with_role('operations_manager'))
+        self.assertIsNotNone(menu, 'no Operations menu at all')
+        self.assertIn('href="/approved-items"', menu)
+        # after Costing, before Workflow Timeline: the step that follows costing
+        self.assertLess(menu.index('/approved-items'), menu.index('Workflow Timeline'))
+
+    def test_it_is_drawn_only_for_those_who_can_open_it(self):
+        with open(os.path.join(ROOT, 'templates', 'main.html'), encoding='utf-8') as handle:
+            page = handle.read()
+        at = page.index("{{ url_for('approved_items_page') }}")
+        self.assertIn("{% if 'approved_item.view' in _p %}", page[at - 200:at])
 
 
 if __name__ == '__main__':
