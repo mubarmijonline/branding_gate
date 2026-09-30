@@ -729,3 +729,36 @@ same stale pattern, on a role named 'finance' that does not exist any more
 (`finance_manager`, `finance_member`), so finance staff's own transactions go
 to pending instead. That is money behaviour and wants a decision, not a quiet
 fix.
+
+## Twenty-fourth round, 30 September 2026 -- from David's Operations team
+
+**A client's approval told nobody.** `approve_item` wrote the approval, logged
+it and returned; the item simply appeared on Approved Items for whoever
+happened to open the page. The whole Operations department is now notified,
+with a link that opens Approved Items at that request, highlighted.
+
+**Approved Items was a wall of identical requests.** Each request now carries a
+colour of its own -- chosen from its id, so it holds between visits and between
+views, and consecutive requests never share one -- on the card's edge, the
+header's tint and the request number. Headers gained the event dates and a
+countdown to them, the counts that need attention, and a per-request Excel
+button whose handler existed with nothing to click. The table view was a flat
+list of items grouped by an extension; it is now one row per request that
+expands to that request's items, drawn by the same line renderer the cards use.
+
+**The exports carried columns nobody on site needs.** Item ID, Type, Cost/Unit,
+Total Cost, Supplier Email and Approval Date are now off unless asked for --
+the costs in particular should not reach a supplier. A Columns chooser picks
+what every export carries (all requests, all suppliers, one request), remembered
+per browser. The server holds the list (`APPROVED_EXPORT_COLUMNS`) and the
+defaults; a request with no `cols` gets the trimmed sheet, so old links do too.
+
+**The expense supplier list was empty for Operations.** My Expenses read
+`/api/finance/suppliers`, which only Finance could open, so it answered 403 and
+the dropdown stayed blank without a word. It now opens to anyone who may record
+an expense. The dropdown defaults to Transportation, lists the suppliers, and
+ends with Other, which asks for the name and saves that name, never "Other".
+
+Open: "Step Date" for the exports has no field of that name. The sheets already
+carry the request's start and end; the candidates are the supplier due date and
+received date. Waiting on which was meant.

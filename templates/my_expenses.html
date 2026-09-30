@@ -637,13 +637,15 @@
                     <div class="form-group-modern">
                         <label>Supplier *</label>
                         <select class="form-control select2" id="expenseSupplier" style="width: 100%;">
-                            <option value="">Select Supplier</option>
+                            <option value="__transport" selected>Transportation</option>
+                            <option value="__other">Other (type the name)</option>
                         </select>
                     </div>
-                    
-                    <div class="form-group-modern">
-                        <label>Or Enter Supplier Name</label>
-                        <input type="text" class="form-control" id="expenseSupplierName" placeholder="Enter supplier name if not in list">
+                    {# Shown only for "Other": the name typed here is what is saved,
+                       never the word "Other". #}
+                    <div class="form-group-modern" id="expenseSupplierNameGroup" style="display: none;">
+                        <label>Supplier name *</label>
+                        <input type="text" class="form-control" id="expenseSupplierName" placeholder="Type the supplier's name">
                     </div>
                     
                     <div class="form-group-modern">
@@ -750,20 +752,43 @@ function formatCurrency(amount) {
     return 'EGP ' + parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Transportation is the default, the real suppliers follow, and "Other" lets
+// the name be typed. The list used to come only from /api/finance/suppliers,
+// which answered 403 to anyone outside Finance -- so for Operations the
+// dropdown was empty with no word as to why.
+var EXPENSE_TRANSPORT = '__transport';
+var EXPENSE_OTHER = '__other';
+
+function renderSupplierOptions(list) {
+    var selected = $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
+    var options = '<option value="' + EXPENSE_TRANSPORT + '">Transportation</option>';
+    (list || []).forEach(function (s) {
+        options += '<option value="' + s.id + '">' +
+                   $('<div>').text(s.company_name || s.supplier_name || 'Unknown').html() + '</option>';
+    });
+    options += '<option value="' + EXPENSE_OTHER + '">Other (type the name)</option>';
+    $('#expenseSupplier').html(options).val(selected).trigger('change');
+}
+
 function loadSuppliers() {
+    renderSupplierOptions([]);
     fetch('/api/finance/suppliers')
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                suppliers = data.suppliers;
-                var options = '<option value="">Select Supplier</option>';
-                suppliers.forEach(s => {
-                    options += '<option value="' + s.id + '">' + (s.company_name || s.supplier_name || 'Unknown') + '</option>';
-                });
-                $('#expenseSupplier').html(options);
+                suppliers = data.suppliers || [];
+                renderSupplierOptions(suppliers);
             }
-        });
+        })
+        .catch(function () { /* Transportation and Other still work */ });
 }
+
+// "Other" opens the name box; anything else closes it.
+$(document).on('change', '#expenseSupplier', function () {
+    var other = $(this).val() === EXPENSE_OTHER;
+    $('#expenseSupplierNameGroup').toggle(other);
+    if (!other) $('#expenseSupplierName').val('');
+});
 
 function loadSalesRequests() {
     fetch('/api/sales-requests-lookup')
@@ -987,7 +1012,8 @@ function openAddExpenseModal() {
     $('#expenseModalTitle').text('Add Expense');
     $('#expenseForm')[0].reset();
     $('#expenseDate').val(new Date().toISOString().split('T')[0]);
-    $('#expenseSupplier').val('').trigger('change');
+    $('#expenseSupplier').val(EXPENSE_TRANSPORT).trigger('change');
+    $('#expenseSupplierName').val('');
     $('#expenseSalesRequest').val('').trigger('change');
     $('#expenseClientId').val('');
     $('#expenseClientName').val('');
@@ -1011,8 +1037,14 @@ function editExpense(id) {
                     $('#expenseClientName').val(expense.client_name || '');
                     $('#expenseCompanyId').val(expense.company_id || '');
                     $('#expenseCompanyName').val(expense.company_name || '');
-                    $('#expenseSupplier').val(expense.supplier_id).trigger('change');
-                    $('#expenseSupplierName').val(expense.supplier_name || '');
+                    if (expense.supplier_id) {
+                        $('#expenseSupplier').val(String(expense.supplier_id)).trigger('change');
+                    } else if ((expense.supplier_name || '').trim().toLowerCase() === 'transportation') {
+                        $('#expenseSupplier').val(EXPENSE_TRANSPORT).trigger('change');
+                    } else if (expense.supplier_name) {
+                        $('#expenseSupplier').val(EXPENSE_OTHER).trigger('change');
+                        $('#expenseSupplierName').val(expense.supplier_name);
+                    }
                     $('#expenseAmount').val(expense.amount);
                     $('#expenseDescription').val(expense.description);
                     $('#expenseDate').val(expense.expense_date);
@@ -1051,8 +1083,20 @@ function updateBalancePreview() {
 
 function saveExpense() {
     var id = $('#expenseId').val();
-    var supplierId = $('#expenseSupplier').val();
-    var supplierName = $('#expenseSupplierName').val();
+    var supplierChoice = $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
+    var supplierId = '';
+    var supplierName = '';
+    if (supplierChoice === EXPENSE_TRANSPORT) {
+        supplierName = 'Transportation';
+    } else if (supplierChoice === EXPENSE_OTHER) {
+        supplierName = ($('#expenseSupplierName').val() || '').trim();
+        if (!supplierName) {
+            Swal.fire('Error', 'Type the supplier\'s name for "Other"', 'error');
+            return;
+        }
+    } else {
+        supplierId = supplierChoice;
+    }
     var amount = bgPlainNumber($('#expenseAmount').val());
     var description = $('#expenseDescription').val();
     var expenseDate = $('#expenseDate').val();

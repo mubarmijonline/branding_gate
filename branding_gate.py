@@ -3824,6 +3824,54 @@ def _approved_item_row_to_dict(item):
     }
 
 
+# Every column an approved-items export can carry, in the order they appear.
+APPROVED_EXPORT_COLUMNS = [
+    'Item ID', 'Request ID', 'Request Title', 'Client', 'Item Name', 'Description',
+    'Type', 'Quantity', 'Unit', 'Rental Days', 'Width', 'Height', 'Depth',
+    'Cost/Unit', 'Total Cost', 'Supplier', 'Supplier Phone', 'Supplier Email',
+    'Request Start', 'Request End', 'Approval Date',
+]
+# Left out unless asked for. Operations sends these sheets to suppliers and
+# works from them on site: an internal id, the rent/sell type, what the item
+# cost us and the approval date are noise there, and the costs should not
+# reach a supplier at all.
+APPROVED_EXPORT_DEFAULT_HIDDEN = {
+    'Item ID', 'Type', 'Cost/Unit', 'Total Cost', 'Supplier Email', 'Approval Date',
+}
+
+
+def approved_export_columns():
+    """
+    The columns this export was asked for, in their natural order.
+
+    `?cols=A,B,C` picks them. No `cols` at all means the defaults -- every
+    column but the hidden ones -- so an old bookmark or link still gets the
+    trimmed sheet. Unknown names are ignored, and asking for none falls back
+    to the defaults rather than producing an empty workbook.
+    """
+    defaults = [c for c in APPROVED_EXPORT_COLUMNS if c not in APPROVED_EXPORT_DEFAULT_HIDDEN]
+    asked = request.args.get('cols')
+    if asked is None:
+        return defaults
+    wanted = {c.strip() for c in asked.split(',') if c.strip()}
+    chosen = [c for c in APPROVED_EXPORT_COLUMNS if c in wanted]
+    return chosen or defaults
+
+
+def approved_export_frame(rows):
+    """One sheet's rows, reduced to the chosen columns."""
+    frame = pd.DataFrame(rows, columns=APPROVED_EXPORT_COLUMNS)
+    return frame[approved_export_columns()]
+
+
+@app.route('/api/operations/approved-items/export/columns', methods=['GET'])
+@perm('approved_item.view')
+def approved_export_column_list():
+    """What the column chooser offers, and which are ticked by default."""
+    return jsonify(success=True, columns=APPROVED_EXPORT_COLUMNS,
+                   hidden_by_default=sorted(APPROVED_EXPORT_DEFAULT_HIDDEN))
+
+
 def _safe_sheet_name(name, max_len=31):
     if name is None:
         name = 'Sheet'
@@ -3888,7 +3936,7 @@ def export_approved_by_request():
                     final = _safe_sheet_name(name[:31 - len(suffix)] + suffix)
                     idx += 1
                 used_names.add(final)
-                df = pd.DataFrame(g['items'])
+                df = approved_export_frame(g['items'])
                 df.to_excel(writer, sheet_name=final, index=False)
                 _autosize_worksheet(writer.sheets[final])
 
@@ -3938,7 +3986,7 @@ def export_approved_by_supplier():
                     final = _safe_sheet_name(name[:31 - len(suffix)] + suffix)
                     idx += 1
                 used_names.add(final)
-                df = pd.DataFrame(groups[sname])
+                df = approved_export_frame(groups[sname])
                 df.to_excel(writer, sheet_name=final, index=False)
                 _autosize_worksheet(writer.sheets[final])
 
@@ -3971,7 +4019,7 @@ def export_approved_single_request(request_id):
         buffer = BytesIO()
         with ExcelWriter(buffer, engine='openpyxl') as writer:
             sheet_name = _safe_sheet_name(f"Req {request_id} - {title}" if title else f"Request {request_id}")
-            df = pd.DataFrame(items)
+            df = approved_export_frame(items)
             df.to_excel(writer, sheet_name=sheet_name, index=False)
             _autosize_worksheet(writer.sheets[sheet_name])
 
@@ -16775,6 +16823,19 @@ def approve_item(item_id):
         update_request_approval_stage(item['request_id'], conn, cur)
         
         conn.commit()
+
+        # A client's yes is where Operations' work starts, and nothing told
+        # them: the item simply appeared on the Approved Items page for
+        # whoever happened to open it. The whole team hears now.
+        try:
+            notify_users(operations_team_ids(cur),
+                         'Client approved: %s' % item['name'],
+                         'The client approved "%s" on request #%s. It is ready for '
+                         'Operations to source and deliver.' % (item['name'], item['request_id']),
+                         link='/approved-items?request=%s' % item['request_id'])
+        except Exception as notify_error:
+            print(f"Approval notification failed: {notify_error}")
+
         cur.close()
         conn.close()
         
@@ -22841,7 +22902,10 @@ def get_finance_clients():
 
 
 @app.route('/api/finance/suppliers', methods=['GET'])
-@perm('finance_report.view')
+# Recording an expense means naming who was paid, so anyone who may record
+# one may read this list. It was Finance-only, and the My Expenses dropdown
+# came back empty for everybody else -- Operations included.
+@perm('finance_report.view', 'expense.create')
 def get_finance_suppliers():
     """Get suppliers for finance dropdowns"""
     if 'user_id' not in session:
