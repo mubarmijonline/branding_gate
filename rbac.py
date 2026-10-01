@@ -783,6 +783,21 @@ for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
             'expense_tracking.edit_amount': 'team',
         })
 
+# Targets follow the reporting line in every department, not only Sales: a
+# head sets their team leaders' targets, a team leader sets their own people's
+# out of what they were given, and everybody sees their own. Granted by level,
+# so a department or role added later is covered by being one. Sales held
+# exactly this already; _merge keeps the widest scope, so nothing narrows.
+_TARGETS_BY_LEVEL = {
+    LEVEL_HEAD:        {'target.view': 'department', 'target.assign': 'department'},
+    LEVEL_TEAM_LEADER: {'target.view': 'team', 'target.assign': 'team'},
+    LEVEL_MEMBER:      {'target.view': 'own'},
+}
+
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    if _level in _TARGETS_BY_LEVEL and _role_code in SEED_MATRIX:
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], _TARGETS_BY_LEVEL[_level])
+
 # Self-service: what every employee needs regardless of job. The navbar balance
 # widget and the item-catalog lookup in main.html are rendered for everyone, so
 # gating them behind a departmental permission would break the shell itself.

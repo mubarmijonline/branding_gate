@@ -820,3 +820,20 @@ the checkboxes, so a search that hides a ticked option does not untick it; at
 most 100 matches are drawn at a time, ticked ones first, with "type to narrow"
 when there are more; typing and the match count are debounced, and matching
 uses Sets.
+
+**Targets for every team, down the reporting line.** Targets were Sales-only:
+only the Sales Head, Sales team leaders and members held `target.view` /
+`target.assign`, so Gamal Gaber -- Account Director, and pricing through the
+flag -- had no target anywhere. The grants are now by level in every
+department (`_TARGETS_BY_LEVEL` in rbac.py): a head views and assigns across
+the department, a team leader across the team, a member sees their own. Sales
+held exactly this already, so nothing narrowed. The screen was never Sales-only
+-- what you see follows your scope, what you set follows the reporting line --
+so it needed only the grants, the way in, and a heading that no longer says
+"Sales targets". Every team page has a Targets card, and Pricing is a menu
+(Pricing Dashboard, Targets) for whoever can see targets.
+
+Open, and decisions rather than code: every Pricing role account is inactive,
+so Pricing has nobody to give a target to yet; and "achieved" is the approved
+value of requests a person owns, which suits Sales and Account and reads zero
+for Pricing.

@@ -8667,6 +8667,8 @@ TEAM_ACTIONS = {
          'item_management_page', ('inventory.view',)),
         ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
          'workflow_timeline', ('sales_request.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'sales': [
         ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
@@ -8698,6 +8700,8 @@ TEAM_ACTIONS = {
          ('expense_tracking.approve_finance',)),
         ('My Expenses', 'What you have spent and claimed', 'fas fa-user-tag',
          'my_expenses_page', ('expense.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'marketing': [
         ('Clients', 'The client directory, and requesting a new one',
@@ -8706,6 +8710,8 @@ TEAM_ACTIONS = {
          'sales_request', ('section.sales',)),
         ('My Expenses', 'What you have spent and claimed', 'fas fa-user-tag',
          'my_expenses_page', ('expense.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'account': [
         ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
@@ -8722,6 +8728,8 @@ TEAM_ACTIONS = {
          'fas fa-user-tie', 'account_head_approval_page', ('negotiation.decide_account_head',)),
         ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
          'workflow_timeline', ('sales_request.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'design_2d': [
         ('Approved Items', 'What the client has signed off', 'fas fa-check-circle',
@@ -8730,6 +8738,8 @@ TEAM_ACTIONS = {
          'item_management_page', ('inventory.view',)),
         ('Sales Requests', 'The work behind the designs', 'fas fa-clipboard-list',
          'sales_request', ('section.sales',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'design_3d': [
         ('Approved Items', 'What the client has signed off', 'fas fa-check-circle',
@@ -8740,12 +8750,16 @@ TEAM_ACTIONS = {
          'item_management_page', ('inventory.view',)),
         ('Supplier Report', 'What each supplier owes and when', 'fas fa-file-invoice',
          'supplier_report_page', ('supplier_report.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
     'pricing': [
         ('Pricing Dashboard', 'What is waiting to be priced', 'fas fa-tags',
          'pricing_dashboard', ('sales_item.price',)),
         ('Workflow Timeline', 'Where every request stands', 'fas fa-stream',
          'workflow_timeline', ('sales_request.view',)),
+        ('Targets', 'The quarter, by team and by person', 'fas fa-bullseye',
+         'targets_page', ('target.view',)),
     ],
 }
 

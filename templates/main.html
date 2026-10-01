@@ -970,6 +970,24 @@
           <!-- Pricing. Its own menu rather than a link inside Operations: the
                pricing roles hold the operations section only to reach it. -->
           {% if can_view_pricing %}
+          {% if can_view_targets %}
+          {# Pricing's own targets live here, where the pricing team works,
+             as well as in the Sales menu. #}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="pricingDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-tags mr-1"></i> Pricing
+              <span class="badge badge-danger ml-1 d-none" id="navPricingBadge"></span>
+            </a>
+            <div class="dropdown-menu" aria-labelledby="pricingDropdown">
+              <a class="dropdown-item" href="{{ url_for('pricing_dashboard') }}">
+                <i class="fas fa-tachometer-alt"></i> Pricing Dashboard
+              </a>
+              <a class="dropdown-item" href="{{ url_for('targets_page') }}">
+                <i class="fas fa-bullseye"></i> Targets
+              </a>
+            </div>
+          </li>
+          {% else %}
           <li class="nav-item">
             <a class="nav-link" href="{{ url_for('pricing_dashboard') }}">
               <i class="fas fa-tags mr-1"></i> Pricing
@@ -979,6 +997,7 @@
               <span class="badge badge-danger ml-1 d-none" id="navPricingBadge"></span>
             </a>
           </li>
+          {% endif %}
           {% endif %}
 
           <!-- Finance Dropdown -->
