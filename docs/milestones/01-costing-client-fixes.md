@@ -784,3 +784,22 @@ the same data. Both now carry Setup Date. The lookup that reads it from the
 template JSON is defined once, `setup_date_sql()`, and used by the
 approved-items exports and by both of the report's queries (items and their
 parts), so everything that shows the setup date reads it the same way.
+
+## Twenty-fifth round, 1 October 2026
+
+**Exporting a chosen slice.** The exports always covered every approved item.
+They now take filters on the query string -- `request_ids`, `supplier_ids`
+(with `unassigned` for items with no supplier yet), `clients` (by name,
+`|`-separated because names hold commas), `start_from` / `start_to` on the
+event start date, and `sell_type` -- applied once, in
+`_approved_items_fetch_all()`, which all three exports share and nothing else
+calls. An unreadable value is not a filter; a filter that matches nothing gets
+"No approved items match this export".
+
+On the page, Columns became Export options: pick requests (with their colour),
+suppliers, clients, an event window and rent or sell above the column chooser.
+The window previews, with the same rules, how many items will come out, and
+will not save a filter that matches nothing. A badge on the button counts the
+active filters. Filters last for the visit only -- a filter left on from last
+week would quietly trim today's export -- while the column choice is
+remembered.

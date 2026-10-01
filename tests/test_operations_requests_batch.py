@@ -254,6 +254,116 @@ class SupplierReportSetupDateTest(_Harness):
         self.assertGreaterEqual(source.count("setup_date_sql("), 4)
 
 
+
+class ExportFiltersTest(_Harness):
+    """
+    Exporting a chosen slice: certain requests, certain suppliers, a client,
+    an event window, rent or sell. The filters ride on the export's query
+    string and are applied once, in the fetch all three exports share.
+    """
+
+    def setUp(self):
+        super().setUp()
+        cur = self._cursor()
+        client_id = fixtures.ensure_client(cur)
+        cur.execute("""INSERT INTO supplier (supplier_name, status, added_by)
+                       VALUES ('Filter Probe Supplier', 'Active', 'probe')""")
+        self.supplier_id = cur.lastrowid
+        self.requests = {}
+        for key, start, sell_type, with_supplier in (('a', '2026-11-05', 'rent', True),
+                                                     ('b', '2026-12-20', 'sell', False)):
+            cur.execute("""INSERT INTO sales_request (client_id, title, start_date, end_date,
+                                                      created_by, items_count, owner_user_id)
+                           VALUES (%s, %s, %s, %s, 'probe', 1, 1)""",
+                        (client_id, 'Filter probe ' + key, start, start))
+            request_id = cur.lastrowid
+            cur.execute("""INSERT INTO sales_request_items
+                               (request_id, name, qty, unit, cost_per_item, sell_per_item,
+                                total_cost, total_sell, approval_status, sell_type, rental_days,
+                                supplier_id)
+                           VALUES (%s, %s, 1, 'pcs', 10, 20, 10, 20, 'approved', %s, 1, %s)""",
+                        (request_id, 'Filter item ' + key, sell_type,
+                         self.supplier_id if with_supplier else None))
+            self.requests[key] = request_id
+        cur.execute("SELECT client_name FROM client WHERE id = %s", (client_id,))
+        self.client_name = cur.fetchone()['client_name']
+        cur.close()
+
+    def _names(self, query):
+        import openpyxl
+        response = self._client_for(1).get('/api/operations/approved-items/export/by-request?' + query)
+        if response.status_code == 404:
+            return None
+        self.assertEqual(response.status_code, 200, response.data[:200])
+        book = openpyxl.load_workbook(io.BytesIO(response.data))
+        names = set()
+        for sheet in book.sheetnames:
+            rows = list(book[sheet].iter_rows(values_only=True))
+            at = rows[0].index('Item Name')
+            names.update(r[at] for r in rows[1:])
+        return {n for n in names if n and n.startswith('Filter item')}
+
+    def _only_probes(self):
+        return 'request_ids=%d,%d' % (self.requests['a'], self.requests['b'])
+
+    def test_certain_requests(self):
+        self.assertEqual(self._names('request_ids=%d' % self.requests['a']), {'Filter item a'})
+        self.assertEqual(self._names(self._only_probes()), {'Filter item a', 'Filter item b'})
+
+    def test_certain_suppliers_and_the_unassigned(self):
+        self.assertEqual(self._names('supplier_ids=%d' % self.supplier_id), {'Filter item a'})
+        self.assertEqual(self._names(self._only_probes() + '&supplier_ids=unassigned'), {'Filter item b'})
+        self.assertEqual(self._names(self._only_probes() + '&supplier_ids=%d,unassigned' % self.supplier_id),
+                         {'Filter item a', 'Filter item b'})
+
+    def test_event_window_and_rent_or_sell(self):
+        q = self._only_probes()
+        self.assertEqual(self._names(q + '&start_from=2026-12-01'), {'Filter item b'})
+        self.assertEqual(self._names(q + '&start_to=2026-11-30'), {'Filter item a'})
+        self.assertEqual(self._names(q + '&sell_type=sell'), {'Filter item b'})
+
+    def test_client_by_name(self):
+        import urllib.parse
+        q = self._only_probes() + '&clients=' + urllib.parse.quote(self.client_name)
+        self.assertEqual(self._names(q), {'Filter item a', 'Filter item b'})
+        self.assertIsNone(self._names(self._only_probes() + '&clients=Nobody%20Called%20This'))
+
+    def test_filters_combine(self):
+        q = 'supplier_ids=%d&sell_type=rent&start_from=2026-11-01&start_to=2026-11-30' % self.supplier_id
+        self.assertEqual(self._names(q), {'Filter item a'})
+
+    def test_an_unreadable_value_is_not_a_filter(self):
+        self.assertEqual(self._names(self._only_probes() + '&start_from=not-a-date&sell_type=lease'),
+                         {'Filter item a', 'Filter item b'})
+
+    def test_nothing_matching_says_so(self):
+        response = self._client_for(1).get('/api/operations/approved-items/export/by-request'
+                                            '?request_ids=%d&sell_type=sell' % self.requests['a'])
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('match this export', response.get_json()['error'])
+
+    def test_the_supplier_export_takes_the_same_filters(self):
+        import openpyxl
+        response = self._client_for(1).get('/api/operations/approved-items/export/by-supplier'
+                                            '?supplier_ids=%d' % self.supplier_id)
+        self.assertEqual(response.status_code, 200)
+        book = openpyxl.load_workbook(io.BytesIO(response.data))
+        self.assertEqual(book.sheetnames, ['Filter Probe Supplier'])
+
+    def test_the_page_offers_and_previews_them(self):
+        with open(os.path.join(ROOT, 'templates', 'approved_items.html'), encoding='utf-8') as handle:
+            page = handle.read()
+        self.assertIn('Export options', page)
+        for picker in ('aiPickRequests', 'aiPickSuppliers', 'aiPickClients', 'aiPickFrom',
+                       'aiPickTo', 'aiPickSellType', 'aiMatchCount'):
+            self.assertIn('id="%s"' % picker, page)
+        for param in ('request_ids=', 'supplier_ids=', 'clients=', 'start_from=', 'start_to=', 'sell_type='):
+            self.assertIn(param, page)
+        # Filters last for the visit only; columns are remembered.
+        self.assertNotIn('localStorage.setItem(AI_FILTERS', page)
+        self.assertIn("$('#aiColumnsSave').prop('disabled', n === 0);", page)
+
+
 class ExpenseSuppliersTest(_Harness):
 
     def test_operations_can_read_the_supplier_list(self):

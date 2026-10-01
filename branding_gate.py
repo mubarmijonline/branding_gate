@@ -3782,6 +3782,71 @@ def setup_date_sql(request_column):
             ") AS setup_date" % request_column)
 
 
+def approved_export_filters():
+    """
+    Which approved items an export covers, from its query string.
+
+    request_ids=12,15     only these requests
+    supplier_ids=3,unassigned   these suppliers; "unassigned" for items with none
+    clients=Acme|Beta     these clients, by name ("|" because names hold commas)
+    start_from / start_to=YYYY-MM-DD   event start date within the range
+    sell_type=rent|sell
+    Anything absent or unreadable is simply not a filter.
+    """
+    def ids(name):
+        out = set()
+        for part in (request.args.get(name) or '').split(','):
+            part = part.strip()
+            if part.isdigit():
+                out.add(int(part))
+        return out
+
+    def day(name):
+        try:
+            return datetime.strptime(request.args.get(name) or '', '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    supplier_parts = [p.strip().lower() for p in (request.args.get('supplier_ids') or '').split(',')]
+    sell_type = (request.args.get('sell_type') or '').strip().lower()
+    return {
+        'requests': ids('request_ids'),
+        'suppliers': ids('supplier_ids'),
+        'unassigned': 'unassigned' in supplier_parts,
+        'clients': {c.strip() for c in (request.args.get('clients') or '').split('|') if c.strip()},
+        'start_from': day('start_from'),
+        'start_to': day('start_to'),
+        'sell_type': sell_type if sell_type in ('rent', 'sell') else None,
+    }
+
+
+def filter_approved_rows(rows, filters=None):
+    """Keep the rows an export's filters ask for. No filters keeps everything."""
+    f = filters or approved_export_filters()
+
+    def keep(r):
+        if f['requests'] and r['request_id'] not in f['requests']:
+            return False
+        if f['suppliers'] or f['unassigned']:
+            sid = r.get('supplier_id')
+            if not ((sid is not None and sid in f['suppliers']) or (sid is None and f['unassigned'])):
+                return False
+        if f['clients'] and (r.get('client_name') or '') not in f['clients']:
+            return False
+        start = r.get('start_date')
+        if isinstance(start, datetime):        # a timestamp, not a plain date
+            start = start.date()
+        if f['start_from'] and (not start or start < f['start_from']):
+            return False
+        if f['start_to'] and (not start or start > f['start_to']):
+            return False
+        if f['sell_type'] and (r.get('sell_type') or '').lower() != f['sell_type']:
+            return False
+        return True
+
+    return [r for r in rows if keep(r)]
+
+
 def _approved_items_fetch_all():
     """Internal helper: fetch all approved items joined with request + supplier info for exports."""
     conn, cur = connection()
@@ -3808,7 +3873,9 @@ def _approved_items_fetch_all():
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return rows
+    # Exports only, so the export's own filters apply here, once, for all
+    # three: requests, suppliers, clients, event dates, rent or sell.
+    return filter_approved_rows(rows)
 
 
 def _approved_item_row_to_dict(item):
@@ -3933,7 +4000,7 @@ def export_approved_by_request():
     try:
         rows = _approved_items_fetch_all()
         if not rows:
-            return jsonify(success=False, error='No approved items found'), 404
+            return jsonify(success=False, error='No approved items match this export'), 404
 
         groups = {}
         for r in rows:
@@ -3982,7 +4049,7 @@ def export_approved_by_supplier():
     try:
         rows = _approved_items_fetch_all()
         if not rows:
-            return jsonify(success=False, error='No approved items found'), 404
+            return jsonify(success=False, error='No approved items match this export'), 404
 
         groups = {}
         for r in rows:
