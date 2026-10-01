@@ -803,3 +803,20 @@ will not save a filter that matches nothing. A badge on the button counts the
 active filters. Filters last for the visit only -- a filter left on from last
 week would quietly trim today's export -- while the column choice is
 remembered.
+
+**The Supplier Report takes the same filters.** `get_supplier_report()` now
+applies the export filters before it answers, so the Generator's Export to
+Excel and the standalone report's `export-excel` -- which calls it -- are cut
+the same way. `filter_approved_rows()` reads either shape of event start (a
+date, or the ISO text the report carries), and both report queries select the
+item's rent/sell, a part taking its item's. For a part, the supplier filter
+matches the part's own supplier. The Generator's export fetches the report
+again with its own filters plus the export filters, so the server decides what
+is in the file; the report card has its own Export options button and badge.
+
+**Pickers that stay quick as the lists grow.** Request ids grow without bound,
+so each picker has a search; choices live in a Set per picker rather than in
+the checkboxes, so a search that hides a ticked option does not untick it; at
+most 100 matches are drawn at a time, ticked ones first, with "type to narrow"
+when there are more; typing and the match count are debounced, and matching
+uses Sets.

@@ -281,6 +281,9 @@
     .ai-pick .dot { width:.6rem; height:.6rem; border-radius:50%; display:inline-block; }
     .ai-match { font-size:.85rem; padding:.5rem .75rem; border-radius:8px; background:#eef6f1; color:#168754; }
     .ai-match.none { background:#fdecea; color:#b42318; }
+    .ai-pick-foot { font-size:.75rem; color:#8891a8; margin-top:.25rem; display:flex; gap:.6rem; flex-wrap:wrap; }
+    .ai-pick-foot a { cursor:pointer; }
+    .ai-pick .chosen { font-weight:700; }
     .ai-pill.partial    { background:#fdf0d9; color:#8a6410; }
 
     .request-group-card {
@@ -944,7 +947,7 @@
             <i class="fas fa-file-excel mr-1"></i>Export All Suppliers (1 sheet/supplier)
         </a>
         <button type="button" class="btn btn-outline-secondary" id="aiColumnsBtn" title="Filter what the exports include, and choose their columns">
-            <i class="fas fa-sliders-h mr-1"></i>Export options <span class="badge badge-primary ml-1 d-none" id="aiFilterCount"></span>
+            <i class="fas fa-sliders-h mr-1"></i>Export options <span class="badge badge-primary ml-1 d-none ai-filter-count" id="aiFilterCount"></span>
         </button>
     </div>
 
@@ -962,15 +965,21 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="ai-opt-label">Requests</label>
+                            <input type="search" class="form-control form-control-sm ai-pick-search mb-1" data-pick="aiPickRequests" placeholder="Search requests..." autocomplete="off">
                             <div class="ai-pick" id="aiPickRequests"></div>
+                            <div class="ai-pick-foot" id="aiPickRequestsFoot"></div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="ai-opt-label">Suppliers</label>
+                            <input type="search" class="form-control form-control-sm ai-pick-search mb-1" data-pick="aiPickSuppliers" placeholder="Search suppliers..." autocomplete="off">
                             <div class="ai-pick" id="aiPickSuppliers"></div>
+                            <div class="ai-pick-foot" id="aiPickSuppliersFoot"></div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="ai-opt-label">Clients</label>
+                            <input type="search" class="form-control form-control-sm ai-pick-search mb-1" data-pick="aiPickClients" placeholder="Search clients..." autocomplete="off">
                             <div class="ai-pick" id="aiPickClients"></div>
+                            <div class="ai-pick-foot" id="aiPickClientsFoot"></div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="ai-opt-label">Event starts between</label>
@@ -1051,9 +1060,16 @@
             <div class="card-header" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white;">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="m-0"><i class="fas fa-truck mr-2"></i>Supplier Report Generator</h5>
-                    <button class="btn btn-light btn-sm" id="exportSupplierReportBtn">
-                        <i class="fas fa-file-excel mr-1"></i>Export to Excel
-                    </button>
+                    <div>
+                        <button type="button" class="btn btn-outline-light btn-sm mr-1 ai-export-options"
+                                title="Filter what the export includes">
+                            <i class="fas fa-sliders-h mr-1"></i>Export options
+                            <span class="badge badge-light ml-1 d-none ai-filter-count"></span>
+                        </button>
+                        <button class="btn btn-light btn-sm" id="exportSupplierReportBtn">
+                            <i class="fas fa-file-excel mr-1"></i>Export to Excel
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
@@ -1709,12 +1725,12 @@ $(document).ready(function() {
     // The server decides what an export holds; this only previews it, with the
     // same rules, so the window can say how many items will come out.
     function matchesFilters(item, f) {
-        if (f.requests.length && f.requests.indexOf(String(item.request_id)) === -1) return false;
-        if (f.suppliers.length) {
+        if (f.requests.size && !f.requests.has(String(item.request_id))) return false;
+        if (f.suppliers.size) {
             var sid = item.supplier_id ? String(item.supplier_id) : 'unassigned';
-            if (f.suppliers.indexOf(sid) === -1) return false;
+            if (!f.suppliers.has(sid)) return false;
         }
-        if (f.clients.length && f.clients.indexOf(item.client_name || '') === -1) return false;
+        if (f.clients.size && !f.clients.has(item.client_name || '')) return false;
         var start = (item.start_date || '').slice(0, 10);
         if (f.from && (!start || start < f.from)) return false;
         if (f.to && (!start || start > f.to)) return false;
@@ -1722,27 +1738,105 @@ $(document).ready(function() {
         return true;
     }
 
-    function exportUrl(base) {
-        var params = [];
-        var cols = chosenColumns();
-        if (cols) params.push('cols=' + encodeURIComponent(cols.join(',')));
-        if (AI_FILTERS.requests.length) params.push('request_ids=' + AI_FILTERS.requests.join(','));
-        if (AI_FILTERS.suppliers.length) params.push('supplier_ids=' + AI_FILTERS.suppliers.join(','));
-        if (AI_FILTERS.clients.length) params.push('clients=' + encodeURIComponent(AI_FILTERS.clients.join('|')));
-        if (AI_FILTERS.from) params.push('start_from=' + AI_FILTERS.from);
-        if (AI_FILTERS.to) params.push('start_to=' + AI_FILTERS.to);
-        if (AI_FILTERS.sellType) params.push('sell_type=' + AI_FILTERS.sellType);
-        return params.length ? base + '?' + params.join('&') : base;
+    // The export filters as request parameters -- for the Excel links and for
+    // the Supplier Report's own export alike.
+    function exportFilterParams() {
+        var out = {};
+        if (AI_FILTERS.requests.length) out.request_ids = AI_FILTERS.requests.join(',');
+        if (AI_FILTERS.suppliers.length) out.supplier_ids = AI_FILTERS.suppliers.join(',');
+        if (AI_FILTERS.clients.length) out.clients = AI_FILTERS.clients.join('|');
+        if (AI_FILTERS.from) out.start_from = AI_FILTERS.from;
+        if (AI_FILTERS.to) out.start_to = AI_FILTERS.to;
+        if (AI_FILTERS.sellType) out.sell_type = AI_FILTERS.sellType;
+        return out;
     }
 
-    function pickList(target, options, chosen) {
-        $(target).html(options.length ? options.map(function (o) {
-            return '<label><input type="checkbox" value="' + aiEsc(o.value) + '"' +
-                   (chosen.indexOf(String(o.value)) !== -1 ? ' checked' : '') + '>' +
+    function exportUrl(base) {
+        var params = exportFilterParams();
+        var cols = chosenColumns();
+        if (cols) params.cols = cols.join(',');
+        var query = $.param(params);
+        return query ? base + '?' + query : base;
+    }
+
+    // Pickers that stay quick however long the lists grow. The choices live in
+    // a Set per picker, not in the checkboxes, so a search that hides a ticked
+    // option does not untick it. At most AI_PICK_LIMIT matches are drawn at a
+    // time -- the rest are a search away -- and ticked ones always show first.
+    var AI_PICK_LIMIT = 100;
+    var AI_PICKS = {};
+
+    function setPick(id, options, chosen) {
+        options.forEach(function (o) { o.search = (o.label + ' ' + o.value).toLowerCase(); });
+        AI_PICKS[id] = {options: options, chosen: new Set((chosen || []).map(String)), query: ''};
+        $('.ai-pick-search[data-pick="' + id + '"]').val('');
+        drawPick(id);
+    }
+
+    function drawPick(id) {
+        var p = AI_PICKS[id];
+        if (!p) return;
+        var q = p.query.trim().toLowerCase();
+        var chosen = [], matches = [];
+        p.options.forEach(function (o) {
+            if (p.chosen.has(String(o.value))) chosen.push(o);
+            else if (!q || o.search.indexOf(q) !== -1) matches.push(o);
+        });
+        var shown = chosen.concat(matches.slice(0, AI_PICK_LIMIT));
+        $('#' + id).html(shown.length ? shown.map(function (o) {
+            var on = p.chosen.has(String(o.value));
+            return '<label' + (on ? ' class="chosen"' : '') + '><input type="checkbox" data-pick="' + id +
+                   '" value="' + aiEsc(o.value) + '"' + (on ? ' checked' : '') + '>' +
                    (o.dot ? '<span class="dot" style="background:' + o.dot + '"></span>' : '') +
                    aiEsc(o.label) + '</label>';
-        }).join('') : '<span class="text-muted small">Nothing to choose from</span>');
+        }).join('') : '<span class="text-muted small">' +
+            (p.options.length ? 'Nothing matches "' + aiEsc(p.query) + '"' : 'Nothing to choose from') + '</span>');
+
+        var foot = [];
+        if (p.chosen.size) foot.push('<strong>' + p.chosen.size + ' selected</strong>');
+        if (matches.length > AI_PICK_LIMIT) {
+            foot.push('showing ' + AI_PICK_LIMIT + ' of ' + matches.length.toLocaleString('en-US') +
+                      ' -- type to narrow');
+        }
+        if (matches.length) foot.push('<a data-pick-all="' + id + '">Select shown</a>');
+        if (p.chosen.size) foot.push('<a data-pick-none="' + id + '">Clear</a>');
+        $('#' + id + 'Foot').html(foot.join(' &middot; '));
     }
+
+    function debounce(fn, wait) {
+        var timer = null;
+        return function () {
+            var self = this, args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function () { fn.apply(self, args); }, wait);
+        };
+    }
+
+    $(document).on('input', '.ai-pick-search', debounce(function () {
+        var id = $(this).data('pick');
+        if (AI_PICKS[id]) { AI_PICKS[id].query = $(this).val() || ''; drawPick(id); }
+    }, 150));
+    $(document).on('change', '#aiColumnsModal input[type="checkbox"][data-pick]', function () {
+        var p = AI_PICKS[$(this).data('pick')];
+        if (!p) return;
+        if (this.checked) p.chosen.add(this.value); else p.chosen.delete(this.value);
+        drawPick($(this).data('pick'));
+        updateMatchCountSoon();
+    });
+    $(document).on('click', '[data-pick-all]', function () {
+        var id = $(this).attr('data-pick-all'), p = AI_PICKS[id];
+        var q = p.query.trim().toLowerCase();
+        p.options.filter(function (o) { return !q || o.search.indexOf(q) !== -1; })
+            .slice(0, AI_PICK_LIMIT).forEach(function (o) { p.chosen.add(String(o.value)); });
+        drawPick(id);
+        updateMatchCountSoon();
+    });
+    $(document).on('click', '[data-pick-none]', function () {
+        var id = $(this).attr('data-pick-none');
+        AI_PICKS[id].chosen.clear();
+        drawPick(id);
+        updateMatchCountSoon();
+    });
 
     function renderFilterPickers() {
         var requests = {}, suppliers = {}, clients = {};
@@ -1752,12 +1846,12 @@ $(document).ready(function() {
                 i.supplier_id ? (i.supplier_name || ('Supplier ' + i.supplier_id)) : 'Unassigned (no supplier yet)';
             if (i.client_name) clients[i.client_name] = true;
         });
-        pickList('#aiPickRequests', Object.keys(requests).sort(function (a, b) { return b - a; })
+        setPick('aiPickRequests', Object.keys(requests).sort(function (a, b) { return b - a; })
             .map(function (k) { return {value: k, label: requests[k], dot: requestColor(k)}; }), AI_FILTERS.requests);
-        pickList('#aiPickSuppliers', Object.keys(suppliers).sort(function (a, b) {
+        setPick('aiPickSuppliers', Object.keys(suppliers).sort(function (a, b) {
                 return a === 'unassigned' ? 1 : b === 'unassigned' ? -1 : suppliers[a].localeCompare(suppliers[b]);
             }).map(function (k) { return {value: k, label: suppliers[k]}; }), AI_FILTERS.suppliers);
-        pickList('#aiPickClients', Object.keys(clients).sort()
+        setPick('aiPickClients', Object.keys(clients).sort()
             .map(function (k) { return {value: k, label: k}; }), AI_FILTERS.clients);
         $('#aiPickFrom').val(AI_FILTERS.from);
         $('#aiPickTo').val(AI_FILTERS.to);
@@ -1766,25 +1860,26 @@ $(document).ready(function() {
     }
 
     function filtersFromWindow() {
-        var picked = function (target) {
-            return $(target + ' input:checked').map(function () { return this.value; }).get();
-        };
-        return {requests: picked('#aiPickRequests'), suppliers: picked('#aiPickSuppliers'),
-                clients: picked('#aiPickClients'), from: $('#aiPickFrom').val() || '',
+        var picked = function (id) { return AI_PICKS[id] ? Array.from(AI_PICKS[id].chosen) : []; };
+        return {requests: picked('aiPickRequests'), suppliers: picked('aiPickSuppliers'),
+                clients: picked('aiPickClients'), from: $('#aiPickFrom').val() || '',
                 to: $('#aiPickTo').val() || '', sellType: $('#aiPickSellType').val() || ''};
     }
 
     function updateMatchCount() {
         var f = filtersFromWindow();
-        var n = allItems.filter(function (i) { return matchesFilters(i, f); }).length;
+        // Sets, so the count stays quick with many choices against many items.
+        var fs = {requests: new Set(f.requests), suppliers: new Set(f.suppliers), clients: new Set(f.clients),
+                  from: f.from, to: f.to, sellType: f.sellType};
+        var n = allItems.filter(function (i) { return matchesFilters(i, fs); }).length;
         $('#aiMatchCount').toggleClass('none', n === 0).html(n === 0
             ? '<i class="fas fa-exclamation-circle mr-1"></i>No approved item matches these filters.'
             : '<i class="fas fa-check-circle mr-1"></i>' + n + ' of ' + allItems.length +
               ' approved items will be exported.');
         $('#aiColumnsSave').prop('disabled', n === 0);
     }
-    $(document).on('change input', '#aiColumnsModal .ai-pick input, #aiPickFrom, #aiPickTo, #aiPickSellType',
-                   updateMatchCount);
+    var updateMatchCountSoon = debounce(function () { updateMatchCount(); }, 100);
+    $(document).on('change input', '#aiPickFrom, #aiPickTo, #aiPickSellType', updateMatchCountSoon);
     $(document).on('click', '#aiFiltersClear', function () {
         AI_FILTERS = {requests: [], suppliers: [], clients: [], from: '', to: '', sellType: ''};
         renderFilterPickers();
@@ -1792,7 +1887,7 @@ $(document).ready(function() {
 
     function showFilterCount() {
         var n = activeFilterCount();
-        $('#aiFilterCount').text(n).toggleClass('d-none', n === 0);
+        $('.ai-filter-count').text(n).toggleClass('d-none', n === 0);
     }
     function renderColumnChooser(selected) {
         var hidden = AI_COLS.hidden_by_default;
@@ -1803,7 +1898,7 @@ $(document).ready(function() {
                    '</label>';
         }).join(''));
     }
-    $(document).on('click', '#aiColumnsBtn', function () {
+    $(document).on('click', '#aiColumnsBtn, .ai-export-options', function () {
         (AI_COLS ? $.Deferred().resolve(AI_COLS).promise() : loadExportColumns()).then(function () {
             renderColumnChooser(chosenColumns());
             renderFilterPickers();
@@ -2603,7 +2698,13 @@ $(document).ready(function() {
     });
     
     function loadSupplierReport() {
-        var params = {
+        var params = reportParams();
+        loadSupplierReportWith(params);
+    }
+
+    // The report's own filters, as the Generate button reads them.
+    function reportParams() {
+        return {
             supplier_id: $('#reportSupplierFilter').val(),
             date_from: $('#reportDateFrom').val(),
             date_to: $('#reportDateTo').val(),
@@ -2614,7 +2715,9 @@ $(document).ready(function() {
             request_end_from: $('#reportRequestEndFrom').val(),
             request_end_to: $('#reportRequestEndTo').val()
         };
-        
+    }
+
+    function loadSupplierReportWith(params) {
         $('#supplierReportTableBody').html('<tr><td colspan="12" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></td></tr>');
         
         $.get('/api/supplier-report', params, function(response) {
@@ -2712,17 +2815,34 @@ $(document).ready(function() {
     }
     
     // Export to Excel
+    // The report's export: the report as generated, cut by the Export options
+    // filters. Fetched again with both, so the server decides what is in it.
     $('#exportSupplierReportBtn').click(function() {
         if (supplierReportData.length === 0) {
             Swal.fire('Warning', 'No data to export. Please generate a report first.', 'warning');
             return;
         }
-        
+        var btn = $(this).prop('disabled', true);
+        $.get('/api/supplier-report', $.extend(reportParams(), exportFilterParams()))
+            .done(function (response) {
+                var rows = (response && response.items) || [];
+                if (!rows.length) {
+                    Swal.fire('Nothing to export',
+                              'No item in this report matches the Export options filters.', 'info');
+                    return;
+                }
+                writeSupplierReportCsv(rows);
+            })
+            .fail(function () { Swal.fire('Error', 'Could not prepare the export.', 'error'); })
+            .always(function () { btn.prop('disabled', false); });
+    });
+
+    function writeSupplierReportCsv(rows) {
         // Build CSV content
         var headers = ['Type', 'Item Name', 'Description', 'Request #', 'Setup Date', 'Request Start', 'Request End', 'Client', 'Supplier', 'Due Date', 'Received Date', 'Received By', 'Status'];
         var csvContent = headers.join(',') + '\n';
         
-        supplierReportData.forEach(function(item) {
+        rows.forEach(function(item) {
             var row = [
                 item.assignment_type || '',
                 '"' + (item.item_name || '').replace(/"/g, '""') + '"',
@@ -2760,7 +2880,7 @@ $(document).ready(function() {
             timer: 1500,
             showConfirmButton: false
         });
-    });
+    }
 });
 </script>
 {% endblock %}

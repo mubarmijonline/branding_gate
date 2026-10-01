@@ -264,6 +264,10 @@ class ExportFiltersTest(_Harness):
 
     def setUp(self):
         super().setUp()
+        self._probes()
+
+    def _probes(self):
+        """Two approved items that differ on every filter, and their own supplier."""
         cur = self._cursor()
         client_id = fixtures.ensure_client(cur)
         cur.execute("""INSERT INTO supplier (supplier_name, status, added_by)
@@ -357,11 +361,101 @@ class ExportFiltersTest(_Harness):
         for picker in ('aiPickRequests', 'aiPickSuppliers', 'aiPickClients', 'aiPickFrom',
                        'aiPickTo', 'aiPickSellType', 'aiMatchCount'):
             self.assertIn('id="%s"' % picker, page)
-        for param in ('request_ids=', 'supplier_ids=', 'clients=', 'start_from=', 'start_to=', 'sell_type='):
-            self.assertIn(param, page)
+        # One function builds the parameters, for the Excel links and the report.
+        for key in ('out.request_ids', 'out.supplier_ids', 'out.clients', 'out.start_from',
+                    'out.start_to', 'out.sell_type'):
+            self.assertIn(key, page)
         # Filters last for the visit only; columns are remembered.
         self.assertNotIn('localStorage.setItem(AI_FILTERS', page)
         self.assertIn("$('#aiColumnsSave').prop('disabled', n === 0);", page)
+
+
+
+class SupplierReportFiltersTest(_Harness):
+    """
+    The Supplier Report takes the same filters as the exports. It reads them
+    in get_supplier_report(), so the Generator's export and the standalone
+    report's Excel are cut the same way.
+    """
+
+    def setUp(self):
+        super().setUp()
+        ExportFiltersTest._probes(self)      # the same two probes, not the same tests
+
+    def _report(self, query):
+        response = self._client_for(1).get('/api/supplier-report?' + query)
+        self.assertEqual(response.status_code, 200, response.data[:200])
+        return {i['item_name'] for i in response.get_json().get('items') or []
+                if (i.get('item_name') or '').startswith('Filter item')}
+
+    def test_the_report_takes_each_filter(self):
+        # Only assigned items appear in a supplier report: item a has the probe supplier.
+        self.assertEqual(self._report('supplier_ids=%d' % self.supplier_id), {'Filter item a'})
+        self.assertEqual(self._report('request_ids=%d' % self.requests['a']), {'Filter item a'})
+        self.assertEqual(self._report('supplier_ids=%d&sell_type=sell' % self.supplier_id), set())
+        self.assertEqual(self._report('supplier_ids=%d&start_from=2026-11-01&start_to=2026-11-30'
+                                      % self.supplier_id), {'Filter item a'})
+        self.assertEqual(self._report('supplier_ids=%d&start_from=2026-12-01' % self.supplier_id), set())
+
+    def test_rows_carry_rent_or_sell(self):
+        response = self._client_for(1).get('/api/supplier-report?supplier_ids=%d' % self.supplier_id)
+        rows = [i for i in response.get_json()['items'] if i['item_name'] == 'Filter item a']
+        self.assertEqual(rows[0]['sell_type'], 'rent')
+
+    def test_the_report_excel_follows_them(self):
+        import openpyxl
+        client = self._client_for(1)
+        kept = client.get('/api/supplier-report/export-excel?supplier_ids=%d&sell_type=rent' % self.supplier_id)
+        self.assertEqual(kept.status_code, 200)
+        book = openpyxl.load_workbook(io.BytesIO(kept.data))
+        names = set()
+        for sheet in book.sheetnames:
+            rows = list(book[sheet].iter_rows(values_only=True))
+            if rows and 'Item' in rows[0]:
+                at = rows[0].index('Item')
+                names.update(r[at] for r in rows[1:])
+        self.assertIn('Filter item a', names)
+        # The probe supplier's only item is a rental: asking for sales leaves nothing.
+        none = client.get('/api/supplier-report/export-excel?supplier_ids=%d&sell_type=sell' % self.supplier_id)
+        self.assertEqual(none.status_code, 404)
+        self.assertIn('No items to export', none.get_json()['error'])
+
+class ExportOptionsScaleTest(unittest.TestCase):
+    """
+    Searchable pickers that stay quick when the lists are long: request ids
+    grow without bound. Choices live in a Set, so searching never unticks one;
+    only the first matches are drawn; typing and the count are debounced.
+    """
+
+    def setUp(self):
+        with open(os.path.join(ROOT, 'templates', 'approved_items.html'), encoding='utf-8') as handle:
+            self.page = handle.read()
+
+    def test_each_picker_has_a_search(self):
+        for pick in ('aiPickRequests', 'aiPickSuppliers', 'aiPickClients'):
+            self.assertIn('class="form-control form-control-sm ai-pick-search mb-1" data-pick="%s"' % pick,
+                          self.page)
+
+    def test_only_a_bounded_number_are_drawn(self):
+        self.assertIn('var AI_PICK_LIMIT = 100;', self.page)
+        self.assertIn('matches.slice(0, AI_PICK_LIMIT)', self.page)
+        self.assertIn('-- type to narrow', self.page)
+
+    def test_searching_never_drops_a_choice(self):
+        self.assertIn('chosen: new Set((chosen || []).map(String))', self.page)
+        # ticked options are drawn first, whatever the search says
+        self.assertIn('var shown = chosen.concat(matches.slice(0, AI_PICK_LIMIT));', self.page)
+        self.assertIn('Array.from(AI_PICKS[id].chosen)', self.page)
+
+    def test_typing_and_counting_are_debounced(self):
+        self.assertIn("$(document).on('input', '.ai-pick-search', debounce(function () {", self.page)
+        self.assertIn('var updateMatchCountSoon = debounce(', self.page)
+        self.assertIn('fs = {requests: new Set(f.requests)', self.page)
+
+    def test_the_supplier_report_export_takes_the_filters(self):
+        self.assertIn("$.get('/api/supplier-report', $.extend(reportParams(), exportFilterParams()))", self.page)
+        self.assertIn('class="btn btn-outline-light btn-sm mr-1 ai-export-options"', self.page)
+        self.assertIn("$('.ai-filter-count')", self.page)
 
 
 class ExpenseSuppliersTest(_Harness):

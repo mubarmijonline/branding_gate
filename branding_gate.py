@@ -3820,8 +3820,14 @@ def approved_export_filters():
     }
 
 
-def filter_approved_rows(rows, filters=None):
-    """Keep the rows an export's filters ask for. No filters keeps everything."""
+def filter_approved_rows(rows, filters=None, start_key='start_date'):
+    """
+    Keep the rows an export's filters ask for. No filters keeps everything.
+
+    The approved-items exports carry the event start as a date under
+    start_date; the supplier report carries it as ISO text under
+    request_start_date. Either reads the same.
+    """
     f = filters or approved_export_filters()
 
     def keep(r):
@@ -3833,9 +3839,14 @@ def filter_approved_rows(rows, filters=None):
                 return False
         if f['clients'] and (r.get('client_name') or '') not in f['clients']:
             return False
-        start = r.get('start_date')
+        start = r.get(start_key)
         if isinstance(start, datetime):        # a timestamp, not a plain date
             start = start.date()
+        elif isinstance(start, str):           # ISO text, as the report sends it
+            try:
+                start = datetime.strptime(start[:10], '%Y-%m-%d').date()
+            except ValueError:
+                start = None
         if f['start_from'] and (not start or start < f['start_from']):
             return False
         if f['start_to'] and (not start or start > f['start_to']):
@@ -5334,6 +5345,7 @@ def get_supplier_report():
                 sr.start_date as request_start_date,
                 sr.end_date as request_end_date,
                 """ + setup_date_sql('sr.id') + """,
+                sri.sell_type,
                 c.client_name,
                 s.id as supplier_id,
                 s.supplier_name,
@@ -5364,6 +5376,7 @@ def get_supplier_report():
                 sr.start_date as request_start_date,
                 sr.end_date as request_end_date,
                 """ + setup_date_sql('sr.id') + """,
+                sri.sell_type,
                 c.client_name,
                 s.id as supplier_id,
                 s.supplier_name,
@@ -5512,12 +5525,18 @@ def get_supplier_report():
                 'request_start_date': item['request_start_date'].isoformat() if item['request_start_date'] else None,
                 'request_end_date': item['request_end_date'].isoformat() if item['request_end_date'] else None,
                 'setup_date': item.get('setup_date') or '',
+                'sell_type': item.get('sell_type'),
                 'client_name': item['client_name'],
                 'supplier_id': item['supplier_id'],
                 'supplier_name': item['supplier_name'],
                 'received_by_name': item['received_by_name']
             })
         
+        # The same filters the approved-items exports take -- requests,
+        # suppliers, clients, event window, rent or sell -- so the report and
+        # its exports can be cut the same way. Absent, they keep everything.
+        items_list = filter_approved_rows(items_list, start_key='request_start_date')
+
         return jsonify({
             'success': True,
             'suppliers': suppliers_list,
