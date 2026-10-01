@@ -2191,41 +2191,59 @@ body.finance-surface {
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Payment Method</h5>
+                <h5 class="modal-title" id="pmModalTitle">Add Payment Method</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="paymentMethodForm">
+                    <input type="hidden" id="pmId">
                     <div class="form-group-modern">
-                        <label>Method Name *</label>
-                        <input type="text" class="form-control" id="pmName" required placeholder="e.g., Corporate Bank Account">
+                        <label>Type *</label>
+                        <select class="form-control" id="pmType" required style="height:auto; padding-top:10px; padding-bottom:10px; line-height:1.4;">
+                            <option value="">-- Cash or Bank? --</option>
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
+                        </select>
                     </div>
-                    <div class="form-group-modern">
-                        <label>Method Code *</label>
-                        <input type="text" class="form-control" id="pmCode" required placeholder="e.g., CORP_BANK" style="text-transform: uppercase;">
+                    <div id="pmCashFields" style="display:none;">
+                        <div class="form-group-modern">
+                            <label>Cash Name *</label>
+                            <input type="text" class="form-control" id="pmCashName" placeholder="e.g., Main Safe, Office Petty Cash">
+                        </div>
                     </div>
-                    <div class="form-group-modern">
-                        <label>Bank Name</label>
-                        <input type="text" class="form-control" id="pmBankName" placeholder="Bank name (if applicable)">
+                    <div id="pmBankFields" style="display:none;">
+                        <div class="form-group-modern">
+                            <label>Bank Name *</label>
+                            <input type="text" class="form-control" id="pmBankName" placeholder="e.g., CIB, NBE, Banque Misr">
+                        </div>
+                        <div class="form-group-modern">
+                            <label>Account Number *</label>
+                            <input type="text" class="form-control" id="pmAccountNumber" placeholder="Account number or IBAN">
+                        </div>
+                        <div class="form-group-modern">
+                            <label>Account Name</label>
+                            <input type="text" class="form-control" id="pmAccountName" placeholder="Optional, e.g., CIB Corporate. Defaults to bank + account number">
+                        </div>
                     </div>
-                    <div class="form-group-modern">
-                        <label>Account Number</label>
-                        <input type="text" class="form-control" id="pmAccountNumber" placeholder="Account number">
-                    </div>
-                    <div class="form-group-modern">
-                        <label>Opening Balance (EGP)</label>
-                        <input type="number" class="form-control" id="pmOpeningBalance" step="0.01" value="0" placeholder="Initial balance">
-                    </div>
-                    <div class="form-group-modern">
-                        <label>Description</label>
-                        <textarea class="form-control" id="pmDescription" rows="2" placeholder="Description"></textarea>
+                    <div id="pmCommonFields" style="display:none;">
+                        <div class="form-group-modern" id="pmOpeningGroup">
+                            <label>Opening Balance (EGP)</label>
+                            <input type="number" class="form-control" id="pmOpeningBalance" step="0.01" value="0" placeholder="Initial balance">
+                        </div>
+                        <div class="form-group-modern" id="pmActiveGroup" style="display:none;">
+                            <label><input type="checkbox" id="pmActive"> Active (offered when approving and recording)</label>
+                        </div>
+                        <div class="form-group-modern">
+                            <label>Description</label>
+                            <textarea class="form-control" id="pmDescription" rows="2" placeholder="Description"></textarea>
+                        </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn-pill btn-pill-primary" onclick="submitPaymentMethod()">
-                    <i class="fas fa-plus"></i> Add Method
+                <button type="button" class="btn-pill btn-pill-primary" id="pmSubmitBtn" onclick="submitPaymentMethod()">
+                    <i class="fas fa-save"></i> Save
                 </button>
             </div>
         </div>
@@ -2771,6 +2789,12 @@ $(document).ready(function() {
         updateSRLabel();
     });
     
+    // /finance_management#payment-methods (linked from Finance Approvals) opens that tab.
+    if (location.hash) {
+        var wanted = location.hash.slice(1);
+        $('.finance-tab').filter(function() { return $(this).data('tab') === wanted; }).click();
+    }
+
     console.log('Finance Management Initialized');
 });
 
@@ -2968,15 +2992,14 @@ function renderPaymentMethodsGrid() {
     grid.empty();
     
     paymentMethods.forEach(pm => {
-        const iconClass = pm.method_code === 'CASH' ? 'fa-money-bill-wave' : 
-                         pm.method_code === 'INSTAPAY' ? 'fa-mobile-alt' : 'fa-university';
+        const iconClass = pm.method_type === 'bank' ? 'fa-university' : 'fa-money-bill-wave';
         
         grid.append(`
-            <div class="payment-method-card">
+            <div class="payment-method-card"${pm.is_active ? '' : ' style="opacity:.55;"'}>
                 <div class="method-header">
                     <div>
                         <h3 class="method-name">${pm.method_name}</h3>
-                        <span class="method-code">${pm.method_code}</span>
+                        <span class="method-code">${pm.method_type === 'bank' ? 'BANK' : 'CASH'}${pm.is_active ? '' : ' &middot; INACTIVE'}</span>
                     </div>
                     <div class="method-icon"><i class="fas ${iconClass}"></i></div>
                 </div>
@@ -2984,7 +3007,10 @@ function renderPaymentMethodsGrid() {
                 ${pm.account_number ? `<p style="font-size: 12px; color: var(--muted); margin: 4px 0 0;">${pm.account_number}</p>` : ''}
                 <div class="method-balance">${formatCurrency(pm.current_balance)}</div>
                 <p class="method-label">Current Balance</p>
-                <div style="margin-top: 16px; display: flex; gap: 8px;">
+                <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn-pill btn-pill-outline" style="padding: 8px 14px; font-size: 12px;" onclick="openEditPaymentMethodModal(${pm.id})">
+                        <i class="fas fa-pen"></i> Edit
+                    </button>
                     <button class="btn-pill btn-pill-outline" style="padding: 8px 14px; font-size: 12px;" onclick="openSetBalanceModal(${pm.id}, ${pm.current_balance})">
                         <i class="fas fa-edit"></i> Adjust
                     </button>
@@ -4149,28 +4175,77 @@ function submitApproval() {
 }
 
 // Payment Method Functions
+function togglePaymentMethodBankFields() {
+    var type = $('#pmType').val();
+    $('#pmCashFields').toggle(type === 'cash');
+    $('#pmBankFields').toggle(type === 'bank');
+    $('#pmCommonFields').toggle(!!type);
+}
+$(document).on('change', '#pmType', togglePaymentMethodBankFields);
+
 function openAddPaymentMethodModal() {
     $('#paymentMethodForm')[0].reset();
+    $('#pmId').val('');
+    $('#pmModalTitle').text('Add Payment Method');
+    $('#pmOpeningGroup').show();
+    $('#pmActiveGroup').hide();
+    togglePaymentMethodBankFields();
+    $('#addPaymentMethodModal').modal('show');
+}
+
+function openEditPaymentMethodModal(methodId) {
+    const pm = paymentMethods.find(m => m.id === methodId);
+    if (!pm) return;
+    $('#paymentMethodForm')[0].reset();
+    $('#pmId').val(pm.id);
+    $('#pmModalTitle').text('Edit Payment Method');
+    $('#pmType').val(pm.method_type || 'cash');
+    $('#pmCashName, #pmAccountName').val(pm.method_name);
+    $('#pmBankName').val(pm.bank_name || '');
+    $('#pmAccountNumber').val(pm.account_number || '');
+    $('#pmDescription').val(pm.description || '');
+    $('#pmActive').prop('checked', !!pm.is_active);
+    // The balance moves only through Adjust.
+    $('#pmOpeningGroup').hide();
+    $('#pmActiveGroup').show();
+    togglePaymentMethodBankFields();
     $('#addPaymentMethodModal').modal('show');
 }
 
 function submitPaymentMethod() {
+    const id = $('#pmId').val();
+    const type = $('#pmType').val();
     const data = {
-        method_name: $('#pmName').val(),
-        method_code: $('#pmCode').val().toUpperCase(),
-        bank_name: $('#pmBankName').val(),
-        account_number: $('#pmAccountNumber').val(),
-        opening_balance: $('#pmOpeningBalance').val() || 0,
+        method_type: type,
+        method_name: (type === 'bank' ? $('#pmAccountName') : $('#pmCashName')).val().trim(),
+        bank_name: $('#pmBankName').val().trim(),
+        account_number: $('#pmAccountNumber').val().trim(),
         description: $('#pmDescription').val()
     };
-    
-    if (!data.method_name || !data.method_code) {
-        Swal.fire('Error', 'Method name and code are required', 'error');
-        return;
+    if (id) {
+        data.is_active = $('#pmActive').is(':checked') ? 1 : 0;
+    } else {
+        data.opening_balance = $('#pmOpeningBalance').val() || 0;
     }
     
-    fetch('/api/finance/payment-methods', {
-        method: 'POST',
+    if (!type) {
+        Swal.fire('Error', 'Choose Cash or Bank first', 'error');
+        return;
+    }
+    if (type === 'cash' && !data.method_name) {
+        Swal.fire('Error', 'Cash name is required', 'error');
+        return;
+    }
+    if (type === 'bank' && (!data.bank_name || !data.account_number)) {
+        Swal.fire('Error', 'Bank name and account number are required', 'error');
+        return;
+    }
+    if (type === 'bank' && !data.method_name) {
+        data.method_name = data.bank_name + ' ' + data.account_number;
+    }
+    
+    fetch(id ? '/api/finance/payment-methods/' + id : '/api/finance/payment-methods', {
+        method: id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
@@ -4178,7 +4253,7 @@ function submitPaymentMethod() {
     .then(result => {
         if (result.success) {
             $('#addPaymentMethodModal').modal('hide');
-            Swal.fire('Success', 'Payment method added', 'success');
+            Swal.fire('Success', id ? 'Payment method updated' : 'Payment method added', 'success');
             loadPaymentMethods();
             loadStatistics();
         } else {

@@ -837,3 +837,24 @@ Open, and decisions rather than code: every Pricing role account is inactive,
 so Pricing has nobody to give a target to yet; and "achieved" is the approved
 value of requests a person owns, which suits Sales and Account and reads zero
 for Pricing.
+
+## Round: payment methods for balance approvals
+
+Approving a balance request asks which payment method pays it, and there were
+none defined, so the dropdown was empty.
+
+- Payment methods live on Finance Management > Payment Methods
+  (`/finance_management#payment-methods` opens that tab directly). The approve
+  window links there when the list is empty.
+- Each method is Cash or Bank (`payment_methods.method_type`,
+  `payment_method_type_migration.sql`). Type is chosen first; Cash asks for the
+  cash name, Bank requires bank name and account number (account label optional).
+  The API enforces it on add and edit; switching to Cash clears bank details.
+- The method code is generated from the name and made unique; nobody types it.
+- Methods can now be edited and deactivated; an inactive method is not offered
+  and cannot pay an approval.
+- The approve dropdown shows `Cash: <name>` or `Bank: <name> (<bank> <account>)`
+  with the balance.
+
+Acceptance: `tests/test_payment_method_type.py`; full suite 611 OK.
+Status: done.

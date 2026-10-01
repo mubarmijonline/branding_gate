@@ -21528,6 +21528,28 @@ def get_inventory_statistics():
 
 # ----------------------- PAYMENT METHODS -----------------------
 
+PAYMENT_METHOD_TYPES = ('cash', 'bank')
+
+
+def payment_method_fields(data, current=None):
+    """(method_type, bank_name, account_number, error) from a request body.
+
+    A bank method names its bank and account number; a cash method has
+    neither, so stale bank details are cleared when a method becomes cash.
+    `current` is the stored row on an edit, so omitted fields keep their value.
+    """
+    current = current or {}
+    method_type = (data.get('method_type') or current.get('method_type') or '').strip().lower()
+    if method_type not in PAYMENT_METHOD_TYPES:
+        return None, None, None, 'Type is required: cash or bank'
+    if method_type == 'cash':
+        return 'cash', None, None, None
+    bank_name = str(data.get('bank_name', current.get('bank_name')) or '').strip()
+    account_number = str(data.get('account_number', current.get('account_number')) or '').strip()
+    if not bank_name or not account_number:
+        return None, None, None, 'Bank name and account number are required for a bank method'
+    return 'bank', bank_name, account_number, None
+
 @app.route('/api/finance/payment-methods', methods=['GET'])
 @perm('finance_master.view')
 def get_payment_methods():
@@ -21538,7 +21560,7 @@ def get_payment_methods():
     try:
         conn, cur = connection()
         cur.execute("""
-            SELECT id, method_name, method_code, description, account_number, 
+            SELECT id, method_name, method_code, method_type, description, account_number, 
                    bank_name, current_balance, opening_balance, is_active, 
                    display_order, created_at
             FROM payment_methods 
@@ -21554,6 +21576,7 @@ def get_payment_methods():
                 'id': m['id'],
                 'method_name': m['method_name'],
                 'method_code': m['method_code'],
+                'method_type': m['method_type'],
                 'description': m['description'],
                 'account_number': m['account_number'],
                 'bank_name': m['bank_name'],
@@ -21577,31 +21600,36 @@ def add_payment_method():
     
     try:
         data = request.get_json()
-        method_name = data.get('method_name', '').strip()
-        method_code = data.get('method_code', '').strip().upper()
+        method_type, bank_name, account_number, error = payment_method_fields(data)
+        if error:
+            return jsonify({'success': False, 'error': error}), 400
+        method_name = (data.get('method_name') or '').strip()
+        if not method_name and method_type == 'bank':
+            method_name = '%s %s' % (bank_name, account_number)
+        if not method_name:
+            return jsonify({'success': False, 'error': 'Cash name is required'}), 400
         description = data.get('description', '')
-        account_number = data.get('account_number', '')
-        bank_name = data.get('bank_name', '')
-        opening_balance = float(data.get('opening_balance', 0))
-        
-        if not method_name or not method_code:
-            return jsonify({'success': False, 'error': 'Method name and code are required'}), 400
-        
+        opening_balance = float(data.get('opening_balance') or 0)
+
         conn, cur = connection()
-        
-        # Check for duplicate code
-        cur.execute("SELECT id FROM payment_methods WHERE method_code = %s", (method_code,))
-        if cur.fetchone():
-            cur.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'Payment method code already exists'}), 400
+
+        # The code is an internal key nobody types: derived from the name,
+        # suffixed until it is free.
+        base = re.sub(r'[^A-Z0-9]+', '_', method_name.upper()).strip('_')[:44] or 'METHOD'
+        method_code, n = base, 1
+        while True:
+            cur.execute("SELECT id FROM payment_methods WHERE method_code = %s", (method_code,))
+            if not cur.fetchone():
+                break
+            n += 1
+            method_code = '%s_%d' % (base, n)
         
         cur.execute("""
             INSERT INTO payment_methods 
-            (method_name, method_code, description, account_number, bank_name, 
+            (method_name, method_code, method_type, description, account_number, bank_name, 
              opening_balance, current_balance, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (method_name, method_code, description, account_number, bank_name,
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (method_name, method_code, method_type, description, account_number, bank_name,
               opening_balance, opening_balance, session.get('user_name')))
         
         method_id = cur.lastrowid
@@ -21644,19 +21672,22 @@ def update_payment_method(method_id):
             conn.close()
             return jsonify({'success': False, 'error': 'Payment method not found'}), 404
         
-        method_name = data.get('method_name', method['method_name'])
+        method_name = (data.get('method_name') or method['method_name']).strip()
         description = data.get('description', method['description'])
-        account_number = data.get('account_number', method['account_number'])
-        bank_name = data.get('bank_name', method['bank_name'])
         is_active = data.get('is_active', method['is_active'])
         display_order = data.get('display_order', method['display_order'])
+        method_type, bank_name, account_number, error = payment_method_fields(data, method)
+        if error:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': error}), 400
         
         cur.execute("""
             UPDATE payment_methods 
-            SET method_name = %s, description = %s, account_number = %s, 
+            SET method_name = %s, method_type = %s, description = %s, account_number = %s, 
                 bank_name = %s, is_active = %s, display_order = %s
             WHERE id = %s
-        """, (method_name, description, account_number, bank_name, is_active, 
+        """, (method_name, method_type, description, account_number, bank_name, is_active, 
               display_order, method_id))
         
         conn.commit()
@@ -24866,13 +24897,13 @@ def approve_balance_request(request_id):
         user_name_to = req['user_name']
 
         # Check payment method balance. Locked for the same reason.
-        cur.execute("SELECT * FROM payment_methods WHERE id = %s FOR UPDATE", (payment_method_id,))
+        cur.execute("SELECT * FROM payment_methods WHERE id = %s AND is_active = 1 FOR UPDATE", (payment_method_id,))
         pm = cur.fetchone()
         if not pm:
             conn.rollback()
             cur.close()
             conn.close()
-            return jsonify({'success': False, 'error': 'Payment method not found'}), 404
+            return jsonify({'success': False, 'error': 'Payment method not found or inactive'}), 404
 
         pm_balance_before = float(pm['current_balance'])
         if pm_balance_before < amount:

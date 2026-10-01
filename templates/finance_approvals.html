@@ -559,6 +559,10 @@
                         <option value="">-- Select Payment Method --</option>
                     </select>
                     <small class="text-muted" id="pmBalanceHint"></small>
+                    <div id="pmEmptyHint" class="text-muted" style="display:none; font-size:13px; margin-top:6px;">
+                        No payment method yet.
+                        {% if 'finance_master.edit' in session.get('perms', {}) %}<a href="/finance_management#payment-methods"><i class="fas fa-plus"></i> Add one (Cash or Bank)</a>{% else %}Ask Finance to add one.{% endif %}
+                    </div>
                 </div>
                 <div class="form-group-modern">
                     <label id="approvalNotesLabel">Notes</label>
@@ -1262,9 +1266,14 @@ function loadPaymentMethodsForApproval() {
             if (data.success) {
                 var sel = $('#approvalPaymentMethod');
                 sel.html('<option value="">-- Select Payment Method --</option>');
-                var methods = data.payment_methods || data.methods || [];
+                var methods = (data.payment_methods || data.methods || []).filter(function(m) { return m.is_active; });
+                $('#pmEmptyHint').toggle(methods.length === 0);
                 methods.forEach(function(m) {
-                    sel.append('<option value="' + m.id + '" data-balance="' + m.current_balance + '">' + m.method_name + ' (Balance: ' + formatCurrency(m.current_balance) + ')</option>');
+                    var label = m.method_type === 'bank'
+                        ? 'Bank: ' + m.method_name + ' (' + (m.bank_name || '') + ' ' + (m.account_number || '') + ')'
+                        : 'Cash: ' + m.method_name;
+                    $('<option>').val(m.id).attr('data-balance', m.current_balance)
+                        .text(label + ' | Balance: ' + formatCurrency(m.current_balance)).appendTo(sel);
                 });
                 sel.off('change').on('change', function() {
                     var opt = $(this).find(':selected');
