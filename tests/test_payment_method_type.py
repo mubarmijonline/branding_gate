@@ -95,14 +95,27 @@ class PaymentMethodRoutesTest(unittest.TestCase):
                           got['Test Bank 9x']['account_number']), ('bank', 'CIB', '1002003'))
 
     def test_code_is_generated_and_unique(self):
-        for _ in range(2):
+        for name in ('Test Safe 9z', 'Test Safe 9z!'):
             r = self.client.post('/api/finance/payment-methods',
-                                 json={'method_name': 'Test Safe 9z', 'method_type': 'cash',
+                                 json={'method_name': name, 'method_type': 'cash',
                                        'method_code': 'IGNORED'})
             self.assertEqual(r.status_code, 200, r.get_json())
         cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
-        cur.execute("SELECT method_code FROM payment_methods WHERE method_name = 'Test Safe 9z' ORDER BY id")
+        cur.execute("SELECT method_code FROM payment_methods WHERE method_name LIKE 'Test Safe 9z%%' ORDER BY id")
         self.assertEqual([r['method_code'] for r in cur.fetchall()], ['TEST_SAFE_9Z', 'TEST_SAFE_9Z_2'])
+
+    def test_names_are_unique_on_add_and_edit(self):
+        body = {'method_name': 'Test Bank 9w', 'method_type': 'bank', 'bank_name': 'CIB', 'account_number': '1'}
+        self.assertEqual(self.client.post('/api/finance/payment-methods', json=body).status_code, 200)
+        dup = self.client.post('/api/finance/payment-methods', json=dict(body, method_name=' test bank 9W '))
+        self.assertEqual(dup.status_code, 400)
+        self.assertIn('already exists', dup.get_json()['error'])
+        other = self.client.post('/api/finance/payment-methods',
+                                 json=dict(body, method_name='Test Bank 9w NBE')).get_json()['id']
+        r = self.client.put('/api/finance/payment-methods/%d' % other, json={'method_name': 'Test Bank 9w'})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.put('/api/finance/payment-methods/%d' % other, json={'method_name': 'Test Bank 9w NBE'})
+        self.assertEqual(r.status_code, 200, r.get_json())
 
     def test_bank_without_label_is_named_after_the_account(self):
         r = self.client.post('/api/finance/payment-methods',

@@ -21552,6 +21552,16 @@ def payment_method_fields(data, current=None):
         return None, None, None, 'Bank name and account number are required for a bank method'
     return 'bank', bank_name, account_number, None
 
+def payment_method_name_taken(cur, name, exclude_id=None):
+    """True when another method already carries this name, ignoring case and spacing."""
+    cur.execute("""
+        SELECT id FROM payment_methods
+        WHERE LOWER(TRIM(method_name)) = LOWER(TRIM(%s)) AND (%s IS NULL OR id <> %s)
+        LIMIT 1
+    """, (name, exclude_id, exclude_id))
+    return cur.fetchone() is not None
+
+
 @app.route('/api/finance/payment-methods', methods=['GET'])
 @perm('finance_master.view')
 def get_payment_methods():
@@ -21614,6 +21624,11 @@ def add_payment_method():
         opening_balance = float(data.get('opening_balance') or 0)
 
         conn, cur = connection()
+        if payment_method_name_taken(cur, method_name):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'A payment method named "%s" already exists. '
+                            'Use a distinct name, e.g. with the bank: "%s CIB"' % (method_name, method_name)}), 400
 
         # The code is an internal key nobody types: derived from the name,
         # suffixed until it is free.
@@ -21679,6 +21694,8 @@ def update_payment_method(method_id):
         is_active = data.get('is_active', method['is_active'])
         display_order = data.get('display_order', method['display_order'])
         method_type, bank_name, account_number, error = payment_method_fields(data, method)
+        if not error and payment_method_name_taken(cur, method_name, method_id):
+            error = 'A payment method named "%s" already exists' % method_name
         if error:
             cur.close()
             conn.close()
