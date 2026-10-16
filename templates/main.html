@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang }}" dir="{{ 'rtl' if ui_lang == 'ar' else 'ltr' }}"{% if ui_lang == 'ar' %} class="i18n-pending"{% endif %}>
 
 <head>
 
@@ -681,6 +681,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260910-responsive-tables">
 
+  {% include '_i18n_head.html' %}
 </head>
 
 <body class="bg-shell"{% if embed %} data-embed="1"{% endif %} style="background-color:#f4f6f9;">
@@ -1116,6 +1117,16 @@
                 My Requests <span class="badge badge-warning ml-2" id="navbarPendingBadge" style="display: none;">0</span>
               </a>
             </div>
+          </li>
+
+          <!-- Language: English by default, Arabic one click away -->
+          <li class="nav-item">
+            <a class="nav-link bg-lang-toggle" data-no-i18n
+               href="/lang/{{ 'en' if ui_lang == 'ar' else 'ar' }}"
+               title="{{ 'Switch to English' if ui_lang == 'ar' else 'التبديل إلى العربية' }}">
+              <i class="fas fa-language fa-fw"></i>
+              <span>{{ 'English' if ui_lang == 'ar' else 'عربي' }}</span>
+            </a>
           </li>
 
           <!-- Chat Drawer Trigger -->

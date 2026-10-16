@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang }}" dir="{{ 'rtl' if ui_lang == 'ar' else 'ltr' }}"{% if ui_lang == 'ar' %} class="i18n-pending"{% endif %}>
 
 <head>
 
@@ -20,9 +20,14 @@
   <link href="{{ url_for('static', filename='css/sb-admin-2.min.css')}}" rel="stylesheet">
   <link href="{{ url_for('static', filename='css/branding-gate-system.css')}}?v=20260726-3" rel="stylesheet">
 
+  {% include '_i18n_head.html' %}
 </head>
 {% block body %}
 <body class="bg-light">
+  <a href="/lang/{{ 'en' if ui_lang == 'ar' else 'ar' }}" data-no-i18n class="bg-lang-toggle"
+     style="position:fixed;top:14px;{{ 'left' if ui_lang == 'ar' else 'right' }}:16px;z-index:1050;padding:6px 14px;border-radius:999px;background:#fff;border:1px solid #e3e6f0;color:#4e73df;text-decoration:none;font-size:14px;">
+    <i class="fas fa-language"></i> {{ 'English' if ui_lang == 'ar' else 'عربي' }}
+  </a>
 
   <div class="container">
 

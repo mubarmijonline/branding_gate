@@ -210,3 +210,29 @@ transactions by transaction_date.
 Full Report: `/api/finance/accounts/report` (Companies, Clients, Requests,
 Items, Transactions, Unlinked Payments), for all or one party, in a date range.
 Access: `finance_report.view`; linking: `finance_txn.approve`.
+
+---
+
+# Arabic interface, 2026-10-16
+
+**Ask:** Arabic across the whole system, an easy EN/AR toggle, English by default.
+
+**Approach:** a dictionary applied in the page, not gettext. 45 templates and
+~64k lines of markup, plus text that JavaScript builds at runtime (tables,
+popups, notifications), would take weeks to mark up by hand and would still
+miss the runtime text. Instead:
+- The choice lives in a `bg_lang` cookie (`/lang/ar`, `/lang/en`, one year),
+  default `en`. `<html lang dir>` follow it on every page, login included.
+- Arabic only: `static/css/bg-rtl.css` (RTL flips for Bootstrap 4 utilities,
+  dropdowns, modals, inputs, tables, select2, icons; Cairo font),
+  `static/i18n/ar.js` (English -> Arabic, ~3.6k entries, `{0}` holes for
+  numbers and names) and `static/js/bg-i18n.js` (translates text, placeholders,
+  tooltips, button labels and native dialogs as they reach the page, through a
+  MutationObserver). English loads none of it.
+- Data stays as entered: names, items, codes and amounts are not translated.
+  `data-no-i18n` opts an element out.
+- Not translated: Excel/PDF exports and stored notification text that has no
+  pattern in the dictionary.
+
+**Maintenance:** `python3 scripts_i18n_missing.py` lists strings the pages use
+that the dictionary lacks; translate them and add them to `static/i18n/ar.js`.

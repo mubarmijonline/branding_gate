@@ -47,6 +47,9 @@
 .ca-figure.good strong { color: var(--ca-success); }
 .ca-figure.warn strong { color: var(--ca-warning); }
 .ca-figure.bad strong { color: var(--ca-danger); }
+.ca-why { cursor: pointer; transition: box-shadow .2s, border-color .2s; }
+.ca-why:hover, .ca-why:focus { border-color: var(--ca-warning); box-shadow: 0 4px 14px rgba(245,158,11,.18); outline: none; }
+.ca-why-hint { display: block; margin-top: 4px; font-size: 11px; color: #b45309; font-weight: 600; }
 
 .ca-alert { border: 1px solid var(--ca-warning); background: var(--ca-warning-soft); border-radius: 14px;
             padding: 14px 18px; margin-bottom: 18px; }
@@ -54,27 +57,57 @@
 .ca-alert-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
                 padding: 8px 0; border-top: 1px dashed rgba(146,64,14,.25); font-size: 13px; }
 
-.ca-company { overflow: hidden; }
+/* Each company carries its own colour; its clients hang off the same rail. */
+.ca-company { overflow: hidden; --acc: #6366f1; border-inline-start: 6px solid var(--acc); }
 .ca-company-head { padding: 16px 20px; display: grid; gap: 12px; align-items: center; cursor: pointer;
-                   grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 32px; }
-.ca-company-head:hover { background: var(--ca-row); }
+                   grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 120px;
+                   background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 12%, #fff), #fff 70%);
+                   color: inherit; text-decoration: none; transition: background .2s; }
+[dir=rtl] .ca-company-head { background: linear-gradient(270deg, color-mix(in srgb, var(--acc) 12%, #fff), #fff 70%); }
+.ca-company-head:hover { text-decoration: none; color: inherit;
+                         background: color-mix(in srgb, var(--acc) 16%, #fff); }
 .ca-name { font-weight: 700; color: var(--ca-text); font-size: 15px; }
 .ca-name a { color: inherit; }
 .ca-name a:hover { color: var(--ca-primary); }
 .ca-sub { color: var(--ca-muted); font-size: 12px; }
-.ca-num { text-align: right; font-size: 13px; }
+.ca-num { text-align: end; font-size: 13px; }
 .ca-num small { display: block; color: var(--ca-muted); font-size: 11px; text-transform: uppercase;
                 letter-spacing: .04em; }
 .ca-num b { font-weight: 700; }
-.ca-chev { color: var(--ca-muted); transition: transform .2s; text-align: center; }
-.ca-company.open .ca-chev { transform: rotate(90deg); }
-.ca-clients { display: none; border-top: 1px solid var(--ca-border); background: var(--ca-row); }
+.ca-company-head .ca-name { font-size: 16px; color: var(--acc); }
+.ca-company-icon { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center;
+                   justify-content: center; background: var(--acc); color: #fff; margin-inline-end: 8px; font-size: 15px; }
+.ca-open { justify-self: end; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px;
+           border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--acc);
+           background: #fff; border: 1px solid color-mix(in srgb, var(--acc) 35%, #fff); white-space: nowrap; }
+.ca-company-head:hover .ca-open, .ca-client:hover .ca-open { background: var(--acc); color: #fff; }
+.ca-toggle { width: 100%; border: none; border-top: 1px solid var(--ca-border); background: #fff; cursor: pointer;
+             padding: 9px 20px; text-align: start; font-size: 13px; font-weight: 600; color: var(--acc);
+             display: flex; align-items: center; gap: 8px; }
+.ca-toggle:hover { background: color-mix(in srgb, var(--acc) 6%, #fff); }
+.ca-toggle:focus { outline: none; }
+.ca-toggle:focus-visible { box-shadow: inset 0 0 0 2px var(--acc); }
+.ca-toggle .fa-chevron-down { transition: transform .2s; }
+.ca-company.open .ca-toggle .fa-chevron-down { transform: rotate(180deg); }
+.ca-clients { display: none; background: color-mix(in srgb, var(--acc) 4%, #fff); padding: 6px 14px 14px; }
 .ca-company.open .ca-clients { display: block; }
-.ca-client { padding: 12px 20px 12px 36px; display: grid; gap: 12px; align-items: center;
-             grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 32px;
-             border-bottom: 1px solid var(--ca-border); cursor: pointer; text-decoration: none; color: inherit; }
-.ca-client:hover { background: #fff; text-decoration: none; color: inherit; }
-.ca-client:last-child { border-bottom: none; }
+.ca-client { padding: 12px 16px; display: grid; gap: 12px; align-items: center; margin-top: 8px;
+             grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 120px;
+             background: #fff; border: 1px solid var(--ca-border); border-radius: 12px;
+             border-inline-start: 3px solid color-mix(in srgb, var(--acc) 45%, #fff);
+             margin-inline-start: 22px; position: relative; cursor: pointer; text-decoration: none; color: inherit; }
+.ca-client::before { content: ''; position: absolute; inset-inline-start: -25px; top: 50%; width: 20px;
+                     border-top: 2px dotted color-mix(in srgb, var(--acc) 45%, #fff); }
+.ca-client:hover { text-decoration: none; color: inherit; border-color: var(--acc);
+                   box-shadow: 0 4px 12px color-mix(in srgb, var(--acc) 18%, transparent); }
+.ca-avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+             background: color-mix(in srgb, var(--acc) 15%, #fff); color: var(--acc); font-size: 12px; font-weight: 700;
+             margin-inline-end: 8px; flex: none; }
+.ca-client .ca-name { display: flex; align-items: center; }
+.ca-tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px;
+          border-radius: 6px; margin-inline-start: 8px; }
+.ca-tag-company { background: var(--acc); color: #fff; }
+.ca-tag-client { background: color-mix(in srgb, var(--acc) 12%, #fff); color: var(--acc); }
 
 .pos { color: var(--ca-success); }
 .neg { color: var(--ca-danger); }
@@ -124,10 +157,12 @@
     .ca-head { padding: 16px; }
     .ca-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 16px; }
     .ca-profile { padding: 0 16px 16px; }
-    .ca-company-head, .ca-client { grid-template-columns: 1fr 1fr; padding-left: 16px; }
+    .ca-company-head, .ca-client { grid-template-columns: 1fr 1fr; padding-inline-start: 14px; }
     .ca-company-head .ca-name-cell, .ca-client .ca-name-cell { grid-column: 1 / -1; }
-    .ca-num { text-align: left; }
-    .ca-chev { display: none; }
+    .ca-client { margin-inline-start: 10px; }
+    .ca-client::before { display: none; }
+    .ca-open { grid-column: 1 / -1; justify-self: stretch; justify-content: center; }
+    .ca-num { text-align: start; }
     .ca-tools { width: 100%; }
     .ca-tools input { flex: 1 1 140px; }
 }
@@ -218,9 +253,60 @@
             ['Expected Margin', t.expected_margin, '']
         ];
         $('#caFigures').html(figs.map(function (f) {
-            return '<div class="ca-figure ' + f[2] + '"><span>' + f[0] + '</span><strong>' + money(f[1]) + '</strong></div>';
+            var why = f[0] === 'Pending Collection' && f[1] > 0;
+            return '<div class="ca-figure ' + f[2] + (why ? ' ca-why' : '') + '"' + (why ? ' role="button" tabindex="0" title="Why is this pending?"' : '') +
+                '><span>' + f[0] + '</span><strong>' + money(f[1]) + '</strong>' +
+                (why ? '<small class="ca-why-hint"><i class="fas fa-info-circle"></i> Why pending?</small>' : '') + '</div>';
         }).join(''));
     }
+
+    // Pending Collection: the income still waiting for approval, and on whom.
+    function pendingRows() {
+        var clientNames = {}, companyNames = {};
+        data.clients.forEach(function (c) { clientNames[c.id] = c.client_name; });
+        data.companies.forEach(function (c) { companyNames[c.id] = c.company_name; });
+        return data.transactions.filter(function (t) {
+            return t.transaction_type === 'income' && t.status === 'pending';
+        }).map(function (t) {
+            return $.extend({ client_name: clientNames[t.client_id], company_name: companyNames[t.company_id] }, t);
+        });
+    }
+
+    function daysSince(iso) {
+        if (!iso) return null;
+        return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+    }
+
+    function showPending() {
+        var rows = pendingRows();
+        var approvers = (data.pending_approvers || []).join(', ') || '-';
+        var html = '<div style="text-align:start;font-size:13px;">' +
+            '<p style="margin:0 0 12px;color:var(--ca-muted);">' + esc((window.bgT || String)(
+                'Income recorded but not approved yet. It counts as collected only after Finance approves it.')) + '</p>' +
+            '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>Code</th><th class="r">Amount</th><th>Client</th><th>SR</th>' +
+            '<th>Category</th><th>Why pending</th></tr></thead><tbody>' +
+            rows.map(function (t) {
+                var days = daysSince(t.added_at || t.transaction_date);
+                var notes = ['Waiting for Finance approval'];
+                if (t.category_name && t.category_name.indexOf('Client Payments') !== 0) notes.push('Recorded as ' + t.category_name.split(' | ')[0]);
+                return '<tr><td><b>' + esc(t.transaction_code) + '</b><div class="ca-sub">' + day(t.transaction_date) + '</div></td>' +
+                    '<td class="r">' + money(t.amount) + '</td>' +
+                    '<td>' + esc(t.client_name || '-') + '<div class="ca-sub">' + esc(t.company_name || '') + '</div></td>' +
+                    '<td>' + (t.sales_request_id ? '<a href="/sales_request_details/' + t.sales_request_id + '">SR-' + t.sales_request_id + '</a>' : '-') + '</td>' +
+                    '<td>' + esc(t.category_name || '-') + '</td>' +
+                    '<td>' + notes.map(function (n) { return '<div>' + esc(n) + '</div>'; }).join('') +
+                        '<div class="ca-sub">Added by ' + esc(t.added_by || '-') +
+                        (days != null ? ' &middot; ' + (days === 0 ? 'today' : days + ' day(s) ago') : '') + '</div></td></tr>';
+            }).join('') + '</tbody></table></div>' +
+            '<p style="margin:12px 0 0;"><b>Can approve:</b> ' + esc(approvers) +
+            ' &middot; <a href="/finance/approvals">Finance Approvals</a></p></div>';
+        Swal.fire({ title: 'Why is ' + money(sum(rows, 'amount')) + ' pending?', html: html, width: 980,
+                    showCloseButton: true, confirmButtonText: 'Close' });
+    }
+    $(document).on('click keydown', '.ca-why', function (e) {
+        if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+        showPending();
+    });
 
     function numCell(label, v, cls) {
         return '<div class="ca-num"><small>' + label + '</small><b class="' + (cls || '') + '">' + money(v) + '</b></div>';
@@ -238,6 +324,12 @@
         drawCompanies();
     }
 
+    var PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#ef4444'];
+    function accent(id) { return PALETTE[Math.abs(Number(id) || 0) % PALETTE.length]; }
+    function initials(name) {
+        return String(name || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+    }
+
     function drawCompanies() {
         var q = ($('#caSearch').val() || '').trim().toLowerCase();
         var open = {};
@@ -250,17 +342,21 @@
             });
             if (!nameHit && !shown.length) return '';
             var isOpen = open[co.id] || (q && !nameHit);
-            return '<div class="ca-card ca-company' + (isOpen ? ' open' : '') + '" data-id="' + co.id + '">' +
-                '<div class="ca-company-head">' +
-                    '<div class="ca-name-cell"><div class="ca-name"><a href="/finance/accounts/company/' + co.id + '">' +
-                        '<i class="fas fa-building mr-1"></i>' + esc(co.company_name) + '</a></div>' +
+            return '<div class="ca-card ca-company' + (isOpen ? ' open' : '') + '" data-id="' + co.id +
+                    '" style="--acc:' + accent(co.id) + '">' +
+                '<a class="ca-company-head" href="/finance/accounts/company/' + co.id + '" title="Open company profile">' +
+                    '<div class="ca-name-cell"><div class="ca-name"><span class="ca-company-icon"><i class="fas fa-building"></i></span>' +
+                        esc(co.company_name) + '<span class="ca-tag ca-tag-company">Company</span></div>' +
                         '<div class="ca-sub">' + co.clients_count + ' client(s) &middot; ' + co.requests + ' request(s)' +
                         (co.industry_sector ? ' &middot; ' + esc(co.industry_sector) : '') + '</div></div>' +
                     numCell('Approved', co.approved_sell) + numCell('Collected', co.collected, 'pos') +
                     numCell('Pending', co.pending_in) + numCell('Outstanding', co.outstanding, owedClass(co.outstanding)) +
                     numCell('Margin', co.expected_margin) +
-                    '<div class="ca-chev"><i class="fas fa-chevron-right"></i></div>' +
-                '</div>' +
+                    '<span class="ca-open">View profile <i class="fas fa-arrow-right"></i></span>' +
+                '</a>' +
+                '<button type="button" class="ca-toggle"><i class="fas fa-chevron-down"></i>' +
+                    '<span class="ca-toggle-label">' + (isOpen ? 'Hide clients' : 'Show clients') + '</span>' +
+                    '<span class="ca-sub">(' + shown.length + ')</span></button>' +
                 '<div class="ca-clients">' + (shown.length ? shown.map(clientRow).join('') :
                     '<div class="ca-empty">No clients under this company</div>') + '</div>' +
             '</div>';
@@ -269,14 +365,15 @@
     }
 
     function clientRow(c) {
-        return '<a class="ca-client" href="/finance/accounts/client/' + c.id + '">' +
-            '<div class="ca-name-cell"><div class="ca-name"><i class="fas fa-user mr-1"></i>' + esc(c.client_name) + '</div>' +
+        return '<a class="ca-client" href="/finance/accounts/client/' + c.id + '" title="Open client profile">' +
+            '<div class="ca-name-cell"><div class="ca-name"><span class="ca-avatar">' + esc(initials(c.client_name)) + '</span>' +
+                esc(c.client_name) + '<span class="ca-tag ca-tag-client">Client</span></div>' +
             '<div class="ca-sub">' + esc(c.job_title || '') + (c.owner_name ? ' &middot; Owner: ' + esc(c.owner_name) : '') +
             ' &middot; ' + c.requests + ' request(s)</div></div>' +
             numCell('Approved', c.approved_sell) + numCell('Collected', c.collected, 'pos') +
             numCell('Pending', c.pending_in) + numCell('Outstanding', c.outstanding, owedClass(c.outstanding)) +
             numCell('Margin', c.expected_margin) +
-            '<div class="ca-chev"><i class="fas fa-chevron-right"></i></div></a>';
+            '<span class="ca-open">View profile <i class="fas fa-arrow-right"></i></span></a>';
     }
 
     function renderUnlinked() {
@@ -334,9 +431,9 @@
         });
     });
 
-    $(document).on('click', '.ca-company-head', function (e) {
-        if ($(e.target).closest('a').length) return;
-        $(this).closest('.ca-company').toggleClass('open');
+    $(document).on('click', '.ca-toggle', function () {
+        var card = $(this).closest('.ca-company').toggleClass('open');
+        $(this).find('.ca-toggle-label').text((window.bgT || String)(card.hasClass('open') ? 'Hide clients' : 'Show clients'));
     });
     var searchTimer;
     $(document).on('input', '#caSearch', function () {
@@ -386,7 +483,7 @@
         html += '<div class="ca-panel' + (active === 'transactions' ? ' active' : '') + '" id="ca-transactions">' + transactionsTable(clientNames) + '</div>';
         if (KIND === 'company') {
             html += '<div class="ca-panel' + (active === 'clients' ? ' active' : '') + '" id="ca-clients">' +
-                (data.clients.length ? '<div class="ca-clients" style="display:block;">' + data.clients.map(clientRow).join('') + '</div>' :
+                (data.clients.length ? '<div class="ca-clients" style="display:block;--acc:' + accent(PARTY_ID) + '">' + data.clients.map(clientRow).join('') + '</div>' :
                     '<div class="ca-empty">No clients</div>') + '</div>';
         }
         $('#caBody').html(html + '</div>');

@@ -690,7 +690,7 @@ import requests
 import firebase_admin
 
 from firebase_admin import credentials, auth, messaging
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import google.auth
 from google.auth.transport.requests import Request
 from google.auth import impersonated_credentials
@@ -1123,6 +1123,43 @@ NAV_PORTALS = [
     ('design_2d', '2D Design',  'fas fa-pencil-ruler',  'design_2d_portal'),
     ('design_3d', '3D Design',  'fas fa-cube',          'design_3d_portal'),
 ]
+
+
+UI_LANGUAGES = ('en', 'ar')
+
+
+def _static_version(*names):
+    """Cache-buster from the files' modification times, read once at start."""
+    try:
+        return str(int(max(os.path.getmtime(os.path.join(app.static_folder, n)) for n in names)))
+    except OSError:
+        return '0'
+
+
+I18N_VERSION = _static_version('i18n/ar.js', 'js/bg-i18n.js', 'css/bg-rtl.css')
+
+
+@app.context_processor
+def inject_ui_language():
+    """English unless the visitor chose Arabic; the pages read ui_lang for lang/dir."""
+    lang = request.cookies.get('bg_lang') if has_request_context() else None
+    return {'ui_lang': lang if lang in UI_LANGUAGES else 'en', 'i18n_version': I18N_VERSION}
+
+
+@app.route('/lang/<code>', methods=['GET'])
+def set_ui_language(code):
+    """Switch the interface language and go back to the page it was chosen on."""
+    back = '/home'
+    ref = request.referrer
+    if ref:
+        parsed = urlparse(ref)
+        # Only ever back to this site, never to wherever the Referer points.
+        if parsed.netloc == request.host and parsed.path.startswith('/') and not parsed.path.startswith('/lang/'):
+            back = parsed.path + ('?' + parsed.query if parsed.query else '')
+    response = redirect(back)
+    response.set_cookie('bg_lang', code if code in UI_LANGUAGES else 'en',
+                        max_age=365 * 24 * 3600, samesite='Lax', secure=request.is_secure)
+    return response
 
 
 @app.context_processor
@@ -3473,6 +3510,7 @@ PUBLIC_ENDPOINTS = {
     'get_notifications', 'mark_notifications_read', 'all_notifications',
     'add_notification',
     'serve_item_attachment', 'sales_requests_lookup',
+    'set_ui_language',
 }
 
 
@@ -3524,7 +3562,9 @@ def require_login():
     """
     # List of endpoints that do NOT require login
     allowed_routes = [
-        'login', 'static', 'firebase_messaging_sw'
+        'login', 'static', 'firebase_messaging_sw',
+        # The language is chosen on the login page too, before anyone signs in.
+        'set_ui_language',
     ]
     
     # Allow static files, favicon, etc.
@@ -23909,7 +23949,7 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
     cur.execute("""
         SELECT ft.id, ft.transaction_code, ft.serial_number, ft.transaction_type, ft.amount,
                ft.status, ft.transaction_date, ft.description, ft.reference_number, ft.notes,
-               ft.added_by, ft.approved_by, ft.approved_at, ft.rejection_reason,
+               ft.added_by, ft.added_at, ft.approved_by, ft.approved_at, ft.rejection_reason,
                ft.sales_request_id, c.id AS client_id,
                COALESCE(sr.company_id, c.parent_company_id) AS company_id,
                fc.category_name, fsc.category_name AS subcategory_name,
@@ -24038,15 +24078,23 @@ def finance_accounts_page(kind=None, party_id=None):
 def finance_accounts_api():
     """The list, or one profile with ?company_id= / ?client_id=."""
     f = _accounts_filters(request.args)
+    approver_ids = users_holding('finance_txn.approve', include_root=True)
     conn, cur = connection()
     try:
         data = client_accounts_data(cur, with_items=bool(f['company_id'] or f['client_id']), **f)
+        # Who a pending payment is waiting on, so "Pending" can say why.
+        approvers = []
+        if approver_ids:
+            cur.execute("SELECT name FROM user WHERE id IN (%s) ORDER BY name"
+                        % ','.join(['%s'] * len(approver_ids)), approver_ids)
+            approvers = [r['name'] for r in cur.fetchall()]
     finally:
         cur.close()
         conn.close()
     if (f['company_id'] and not data['companies']) or (f['client_id'] and not data['clients']):
         return jsonify(success=False, error='Not found'), 404
-    return jsonify(success=True, **{k: _json_ready(v) for k, v in data.items()})
+    return jsonify(success=True, pending_approvers=approvers,
+                   **{k: _json_ready(v) for k, v in data.items()})
 
 
 ACCOUNTS_REPORT_SHEETS = (

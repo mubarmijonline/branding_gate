@@ -1,0 +1,9 @@
+{# Arabic: RTL styles, the dictionary and the translator. Included last in <head>,
+   after every other stylesheet, so its overrides win. English loads nothing. #}
+{% if ui_lang == 'ar' %}
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bg-rtl.css') }}?v={{ i18n_version }}">
+<script src="{{ url_for('static', filename='i18n/ar.js') }}?v={{ i18n_version }}"></script>
+<script src="{{ url_for('static', filename='js/bg-i18n.js') }}?v={{ i18n_version }}"></script>
+{% endif %}

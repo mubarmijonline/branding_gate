@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang }}" dir="{{ 'rtl' if ui_lang == 'ar' else 'ltr' }}"{% if ui_lang == 'ar' %} class="i18n-pending"{% endif %}>
 
 <head>
   <meta charset="utf-8">
@@ -21,10 +21,15 @@
 
   <script src="{{ url_for('static', filename='sweetalert/dist/sweetalert2.all.min.js') }}"></script>
   <script src="{{ url_for('static', filename='sweetalert/dist/sweetalert2.min.js') }}"></script>
+  {% include '_i18n_head.html' %}
 </head>
 
 {% block body %}
 <body class="bg-light">
+  <a href="/lang/{{ 'en' if ui_lang == 'ar' else 'ar' }}" data-no-i18n class="bg-lang-toggle"
+     style="position:fixed;top:14px;{{ 'left' if ui_lang == 'ar' else 'right' }}:16px;z-index:1050;padding:6px 14px;border-radius:999px;background:#fff;border:1px solid #e3e6f0;color:#4e73df;text-decoration:none;font-size:14px;">
+    <i class="fas fa-language"></i> {{ 'English' if ui_lang == 'ar' else 'عربي' }}
+  </a>
 
   <div class="container">
 
