@@ -178,3 +178,35 @@ submitter when the answer comes back. Nothing in either flow is silent.
    the money posted at the end.
 6. Deploy, then verify each flow in the browser as a member, a manager and
    Finance.
+
+---
+
+# Client Accounts (Finance), 2026-10-16
+
+**Ask:** one Finance page with every client and parent company, each with a
+profile showing its requests, items and transactions in depth; every
+transaction from an SR tied to that SR's client; a full report.
+
+**Found:** FIN202610-59779, an approved EGP 20,000 Client Payment, was saved
+with no client and no SR. Nothing required either on a Client Payment.
+
+**Rule (server-side, `link_transaction_to_request`):**
+- A transaction naming an SR takes its client from the SR; naming a different
+  client alongside is refused.
+- A Client Payment (category 1) must name its SR.
+- Old unlinked Client Payments are listed and can be linked once
+  (`POST /api/finance/transactions/<id>/link-request`, logged as `modified`).
+
+**Figures (one loader, `client_accounts_data`, feeds page, profiles, workbook):**
+quoted = all item sell; approved = items the client approved; collected =
+approved income; pending = income awaiting approval; outstanding = approved
+minus collected; margin = approved sell minus approved cost; paid out =
+approved expenses on the party's requests. Requests dated by created_at,
+transactions by transaction_date.
+
+**Screens:** `/finance/accounts` (companies, expandable to clients),
+`/finance/accounts/company/<id>`, `/finance/accounts/client/<id>`
+(profile, figures, requests expandable to items, transactions, clients).
+Full Report: `/api/finance/accounts/report` (Companies, Clients, Requests,
+Items, Transactions, Unlinked Payments), for all or one party, in a date range.
+Access: `finance_report.view`; linking: `finance_txn.approve`.

@@ -1014,6 +1014,11 @@
               <a class="dropdown-item" href="{{ url_for('finance_management_page') }}">
                 <i class="fas fa-wallet"></i> Finance Management
               </a>
+              {% if 'finance_report.view' in _p %}
+              <a class="dropdown-item" href="{{ url_for('finance_accounts_page') }}">
+                <i class="fas fa-address-book"></i> Client Accounts
+              </a>
+              {% endif %}
               {% if can_approve_finance %}
               <a class="dropdown-item" href="{{ url_for('finance_approvals') }}">
                 <i class="fas fa-check-double"></i> Finance Approvals

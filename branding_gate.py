@@ -8689,6 +8689,8 @@ TEAM_ACTIONS = {
     'finance': [
         ('Finance Management', 'Transactions, payment methods and categories',
          'fas fa-wallet', 'finance_management_page', ('finance_txn.view',)),
+        ('Client Accounts', 'Every company and client: approved, collected, owed',
+         'fas fa-address-book', 'finance_accounts_page', ('finance_report.view',)),
         ('Finance Approvals', 'Sign off transactions and عهدة requests',
          'fas fa-check-double', 'finance_approvals', ('finance_txn.approve',)),
         ('Expense Tracking', 'Submit a reimbursement sheet', 'fas fa-receipt',
@@ -22265,6 +22267,30 @@ def get_finance_transactions():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+CLIENT_PAYMENTS_CATEGORY_ID = 1
+
+
+def link_transaction_to_request(cur, category_id, client_id, sales_request_id):
+    """(client_id, error) for a transaction about to be saved.
+
+    A transaction that names a sales request belongs to that request's client:
+    the client is taken from the request, and a different client named
+    alongside it is refused rather than silently overwritten. A Client Payment
+    must name its request, otherwise the money cannot be traced to anything.
+    """
+    if not sales_request_id:
+        if str(category_id) == str(CLIENT_PAYMENTS_CATEGORY_ID):
+            return None, 'A Client Payment must be linked to its Sales Request'
+        return client_id or None, None
+    cur.execute("SELECT client_id FROM sales_request WHERE id = %s", (sales_request_id,))
+    row = cur.fetchone()
+    if not row:
+        return None, 'Sales Request SR-%s not found' % sales_request_id
+    if client_id and row['client_id'] and int(client_id) != int(row['client_id']):
+        return None, 'SR-%s belongs to a different client' % sales_request_id
+    return row['client_id'] or client_id or None, None
+
+
 @app.route('/api/finance/transactions', methods=['POST'])
 @perm('finance_txn.create')
 def add_finance_transaction():
@@ -22308,6 +22334,13 @@ def add_finance_transaction():
             return jsonify({'success': False, 'error': 'Employee selection required for Loan/Pay Loan transactions'}), 400
         
         conn, cur = connection()
+
+        client_id, link_error = link_transaction_to_request(
+            cur, category_id, client_id, sales_request_id)
+        if link_error:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': link_error}), 400
         
         # Validate loan user exists if provided
         if loan_user_id:
@@ -23754,6 +23787,380 @@ def get_report_supplier_transactions(supplier_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ----------------------- CLIENT ACCOUNTS -----------------------
+# Every parent company and client, with what was quoted, what the client
+# approved, what was collected and what is still owed. One loader feeds the
+# list, the profiles and the Excel report, so the three never disagree.
+
+def _accounts_filters(args):
+    """company_id, client_id, start, end from a query string; bad values drop."""
+    def as_int(key):
+        value = (args.get(key) or '').strip()
+        return int(value) if value.isdigit() else None
+
+    def as_date(key):
+        value = (args.get(key) or '').strip()
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date() if value else None
+        except ValueError:
+            return None
+    return {'company_id': as_int('company_id'), 'client_id': as_int('client_id'),
+            'start': as_date('start'), 'end': as_date('end')}
+
+
+def _money(value):
+    return float(value or 0)
+
+
+def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=None,
+                         with_items=False):
+    """
+    {'companies', 'clients', 'requests', 'transactions', 'items', 'unlinked'}.
+
+    A transaction belongs to a client through its own client_id or, failing
+    that, through its sales request; its company is the request's company or
+    the client's parent. Collected is approved income; pending is income still
+    waiting for approval; outstanding is client-approved sell minus collected
+    (negative means the client paid ahead). Requests are dated by created_at,
+    transactions by transaction_date.
+    """
+    party = []
+    params = []
+    if company_id:
+        party.append("c.parent_company_id = %s")
+        params.append(company_id)
+    if client_id:
+        party.append("c.id = %s")
+        params.append(client_id)
+    party_sql = (' AND ' + ' AND '.join(party)) if party else ''
+
+    cur.execute("""
+        SELECT co.id, co.company_name, co.industry_sector, co.address, co.tax_number,
+               co.vat_number, co.phone_number, co.email_address, co.website_social_media,
+               co.primary_contact_person, co.additional_notes, co.added_date
+        FROM company co
+        WHERE (%s IS NULL OR co.id = %s)
+          AND (%s IS NULL OR co.id = (SELECT parent_company_id FROM client WHERE id = %s))
+        ORDER BY co.company_name
+    """, (company_id, company_id, client_id, client_id))
+    companies = {r['id']: dict(r) for r in cur.fetchall()}
+
+    cur.execute("""
+        SELECT c.id, c.client_name, c.parent_company_id, c.mobile_number,
+               c.secondary_mobile_number, c.email_address, c.job_title,
+               c.preferred_contact_channel, c.additional_notes, c.added_date,
+               c.owner_user_id, u.name AS owner_name, u.mobile AS owner_mobile
+        FROM client c
+        LEFT JOIN user u ON u.id = c.owner_user_id
+        WHERE 1 = 1""" + party_sql + " ORDER BY c.client_name", params)
+    clients = {r['id']: dict(r) for r in cur.fetchall()}
+
+    req_where, req_params = [], list(params)
+    if start:
+        req_where.append("DATE(sr.created_at) >= %s")
+        req_params.append(start)
+    if end:
+        req_where.append("DATE(sr.created_at) <= %s")
+        req_params.append(end)
+    cur.execute("""
+        SELECT sr.id, sr.title, sr.status, sr.client_approval_stage, sr.created_at,
+               sr.start_date, sr.end_date, sr.client_id,
+               COALESCE(sr.company_id, c.parent_company_id) AS company_id,
+               u.name AS owner_name,
+               COUNT(sri.id) AS items_count,
+               COALESCE(SUM(sri.total_sell), 0) AS quoted_sell,
+               COALESCE(SUM(CASE WHEN sri.approval_status = 'approved' THEN sri.total_sell END), 0) AS approved_sell,
+               COALESCE(SUM(CASE WHEN sri.approval_status = 'approved' THEN sri.total_cost END), 0) AS approved_cost,
+               SUM(sri.approval_status = 'approved') AS approved_items
+        FROM sales_request sr
+        JOIN client c ON c.id = sr.client_id
+        LEFT JOIN user u ON u.id = sr.owner_user_id
+        LEFT JOIN sales_request_items sri ON sri.request_id = sr.id
+        WHERE 1 = 1""" + party_sql + ''.join(' AND ' + w for w in req_where) + """
+        GROUP BY sr.id
+        ORDER BY sr.created_at DESC
+    """, req_params)
+    requests_ = {r['id']: dict(r) for r in cur.fetchall()}
+
+    tx_where, tx_params = [], list(params)
+    if start:
+        tx_where.append("ft.transaction_date >= %s")
+        tx_params.append(start)
+    if end:
+        tx_where.append("ft.transaction_date <= %s")
+        tx_params.append(end)
+    cur.execute("""
+        SELECT ft.id, ft.transaction_code, ft.serial_number, ft.transaction_type, ft.amount,
+               ft.status, ft.transaction_date, ft.description, ft.reference_number, ft.notes,
+               ft.added_by, ft.approved_by, ft.approved_at, ft.rejection_reason,
+               ft.sales_request_id, c.id AS client_id,
+               COALESCE(sr.company_id, c.parent_company_id) AS company_id,
+               fc.category_name, fsc.category_name AS subcategory_name,
+               pm.method_name AS payment_method_name, s.company_name AS supplier_name
+        FROM finance_transactions ft
+        LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
+        JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
+        LEFT JOIN finance_categories fc ON fc.id = ft.category_id
+        LEFT JOIN finance_categories fsc ON fsc.id = ft.subcategory_id
+        LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+        LEFT JOIN supplier s ON s.id = ft.supplier_id
+        WHERE 1 = 1""" + party_sql + ''.join(' AND ' + w for w in tx_where) + """
+        ORDER BY ft.transaction_date DESC, ft.id DESC
+    """, tx_params)
+    transactions = [dict(r) for r in cur.fetchall()]
+
+    items = []
+    if with_items and requests_:
+        placeholders = ','.join(['%s'] * len(requests_))
+        cur.execute("""
+            SELECT sri.id, sri.request_id, sri.name, sri.item_type, sri.sell_type, sri.qty,
+                   sri.unit, sri.rental_days, sri.sell_per_item, sri.total_sell,
+                   sri.cost_per_item, sri.total_cost, sri.approval_status,
+                   sri.negotiation_status, sri.client_approval_date, s.company_name AS supplier_name
+            FROM sales_request_items sri
+            LEFT JOIN supplier s ON s.id = sri.supplier_id
+            WHERE sri.request_id IN (""" + placeholders + """)
+            ORDER BY sri.request_id DESC, sri.id
+        """, list(requests_))
+        items = [dict(r) for r in cur.fetchall()]
+
+    # Client Payments nobody can trace: no request and no client. Shown only on
+    # the unfiltered view, since they belong to no party yet.
+    unlinked = []
+    if not company_id and not client_id:
+        cur.execute("""
+            SELECT ft.id, ft.transaction_code, ft.amount, ft.status, ft.transaction_date,
+                   ft.description, ft.added_by, pm.method_name AS payment_method_name
+            FROM finance_transactions ft
+            LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+            WHERE ft.category_id = %s AND ft.sales_request_id IS NULL AND ft.client_id IS NULL
+              AND ft.status <> 'rejected'
+            ORDER BY ft.transaction_date DESC, ft.id DESC
+        """, (CLIENT_PAYMENTS_CATEGORY_ID,))
+        unlinked = [dict(r) for r in cur.fetchall()]
+
+    def blank():
+        return {'requests': 0, 'quoted_sell': 0.0, 'approved_sell': 0.0, 'approved_cost': 0.0,
+                'collected': 0.0, 'pending_in': 0.0, 'paid_out': 0.0, 'transactions': 0}
+
+    per_request = {rid: blank() for rid in requests_}
+    per_client = {cid: blank() for cid in clients}
+    per_company = {coid: blank() for coid in companies}
+
+    def add(key, value, *buckets):
+        for bucket in buckets:
+            if bucket is not None:
+                bucket[key] += value
+
+    for r in requests_.values():
+        targets = (per_client.get(r['client_id']), per_company.get(r['company_id']))
+        add('requests', 1, *targets)
+        for key in ('quoted_sell', 'approved_sell', 'approved_cost'):
+            per_request[r['id']][key] = _money(r[key])
+            add(key, _money(r[key]), *targets)
+
+    for t in transactions:
+        targets = (per_request.get(t['sales_request_id']), per_client.get(t['client_id']),
+                   per_company.get(t['company_id']))
+        add('transactions', 1, *targets)
+        amount = _money(t['amount'])
+        if t['transaction_type'] == 'income' and t['status'] == 'approved':
+            add('collected', amount, *targets)
+        elif t['transaction_type'] == 'income' and t['status'] == 'pending':
+            add('pending_in', amount, *targets)
+        elif t['transaction_type'] == 'expense' and t['status'] == 'approved':
+            add('paid_out', amount, *targets)
+
+    for totals in list(per_request.values()) + list(per_client.values()) + list(per_company.values()):
+        totals['outstanding'] = totals['approved_sell'] - totals['collected']
+        totals['expected_margin'] = totals['approved_sell'] - totals['approved_cost']
+
+    for rid, r in requests_.items():
+        r.update(per_request[rid])
+    for cid, c in clients.items():
+        c.update(per_client[cid])
+        c['company_name'] = (companies.get(c['parent_company_id']) or {}).get('company_name')
+    for coid, co in companies.items():
+        co.update(per_company[coid])
+        co['clients_count'] = sum(1 for c in clients.values() if c['parent_company_id'] == coid)
+
+    return {'companies': list(companies.values()), 'clients': list(clients.values()),
+            'requests': list(requests_.values()), 'transactions': transactions,
+            'items': items, 'unlinked': unlinked}
+
+
+def _json_ready(rows):
+    """Dates and Decimals out of DB rows, for jsonify."""
+    from datetime import date
+    from decimal import Decimal
+    out = []
+    for row in rows:
+        clean = {}
+        for key, value in row.items():
+            if isinstance(value, Decimal):
+                value = float(value)
+            elif isinstance(value, (datetime, date)):
+                value = value.isoformat()
+            clean[key] = value
+        out.append(clean)
+    return out
+
+
+@app.route('/finance/accounts', methods=['GET'])
+@app.route('/finance/accounts/<kind>/<int:party_id>', methods=['GET'])
+@perm('finance_report.view')
+def finance_accounts_page(kind=None, party_id=None):
+    """Client Accounts: every company and client, and one profile each."""
+    if kind not in (None, 'company', 'client'):
+        abort(404)
+    return render_template('finance_accounts.html', kind=kind, party_id=party_id)
+
+
+@app.route('/api/finance/accounts', methods=['GET'])
+@perm('finance_report.view')
+def finance_accounts_api():
+    """The list, or one profile with ?company_id= / ?client_id=."""
+    f = _accounts_filters(request.args)
+    conn, cur = connection()
+    try:
+        data = client_accounts_data(cur, with_items=bool(f['company_id'] or f['client_id']), **f)
+    finally:
+        cur.close()
+        conn.close()
+    if (f['company_id'] and not data['companies']) or (f['client_id'] and not data['clients']):
+        return jsonify(success=False, error='Not found'), 404
+    return jsonify(success=True, **{k: _json_ready(v) for k, v in data.items()})
+
+
+ACCOUNTS_REPORT_SHEETS = (
+    ('Companies', 'companies', [
+        ('Company', 'company_name'), ('Industry', 'industry_sector'), ('Clients', 'clients_count'),
+        ('Requests', 'requests'), ('Quoted Sell', 'quoted_sell'), ('Approved Sell', 'approved_sell'),
+        ('Approved Cost', 'approved_cost'), ('Expected Margin', 'expected_margin'),
+        ('Collected', 'collected'), ('Pending Collection', 'pending_in'),
+        ('Outstanding', 'outstanding'), ('Paid Out on Requests', 'paid_out'),
+        ('Tax Number', 'tax_number'), ('VAT Number', 'vat_number'), ('Phone', 'phone_number'),
+        ('Email', 'email_address'), ('Address', 'address')]),
+    ('Clients', 'clients', [
+        ('Client', 'client_name'), ('Company', 'company_name'), ('Job Title', 'job_title'),
+        ('Mobile', 'mobile_number'), ('Email', 'email_address'), ('Account Owner', 'owner_name'),
+        ('Requests', 'requests'), ('Quoted Sell', 'quoted_sell'), ('Approved Sell', 'approved_sell'),
+        ('Approved Cost', 'approved_cost'), ('Expected Margin', 'expected_margin'),
+        ('Collected', 'collected'), ('Pending Collection', 'pending_in'),
+        ('Outstanding', 'outstanding'), ('Paid Out on Requests', 'paid_out')]),
+    ('Requests', 'requests', [
+        ('SR', 'id'), ('Title', 'title'), ('Client', 'client_name'), ('Company', 'company_name'),
+        ('Owner', 'owner_name'), ('Status', 'status'), ('Created', 'created_at'),
+        ('Start', 'start_date'), ('End', 'end_date'), ('Items', 'items_count'),
+        ('Approved Items', 'approved_items'), ('Quoted Sell', 'quoted_sell'),
+        ('Approved Sell', 'approved_sell'), ('Approved Cost', 'approved_cost'),
+        ('Expected Margin', 'expected_margin'), ('Collected', 'collected'),
+        ('Pending Collection', 'pending_in'), ('Outstanding', 'outstanding'),
+        ('Paid Out', 'paid_out')]),
+    ('Items', 'items', [
+        ('SR', 'request_id'), ('Item', 'name'), ('Type', 'item_type'), ('Sell Type', 'sell_type'),
+        ('Qty', 'qty'), ('Unit', 'unit'), ('Days', 'rental_days'), ('Sell/Unit', 'sell_per_item'),
+        ('Total Sell', 'total_sell'), ('Cost/Unit', 'cost_per_item'), ('Total Cost', 'total_cost'),
+        ('Client Decision', 'approval_status'), ('Negotiation', 'negotiation_status'),
+        ('Decision Date', 'client_approval_date'), ('Supplier', 'supplier_name')]),
+    ('Transactions', 'transactions', [
+        ('Code', 'transaction_code'), ('Serial', 'serial_number'), ('Date', 'transaction_date'),
+        ('Type', 'transaction_type'), ('Status', 'status'), ('Amount', 'amount'),
+        ('Category', 'category_name'), ('Sub-Category', 'subcategory_name'),
+        ('Client', 'client_name'), ('Company', 'company_name'), ('SR', 'sales_request_id'),
+        ('Payment Method', 'payment_method_name'), ('Supplier', 'supplier_name'),
+        ('Reference', 'reference_number'), ('Description', 'description'),
+        ('Added By', 'added_by'), ('Approved By', 'approved_by'), ('Approved At', 'approved_at')]),
+    ('Unlinked Payments', 'unlinked', [
+        ('Code', 'transaction_code'), ('Date', 'transaction_date'), ('Amount', 'amount'),
+        ('Status', 'status'), ('Payment Method', 'payment_method_name'),
+        ('Description', 'description'), ('Added By', 'added_by')]),
+)
+
+
+def accounts_report_frames(data):
+    """[(sheet name, DataFrame)] for the workbook, names resolved on every row."""
+    client_names = {c['id']: c['client_name'] for c in data['clients']}
+    company_names = {c['id']: c['company_name'] for c in data['companies']}
+    for row in data['requests'] + data['transactions']:
+        row['client_name'] = client_names.get(row.get('client_id'))
+        row['company_name'] = company_names.get(row.get('company_id'))
+    frames = []
+    for sheet, key, columns in ACCOUNTS_REPORT_SHEETS:
+        rows = data[key]
+        if key == 'unlinked' and not rows:
+            continue
+        frame = pd.DataFrame([[_json_ready([r])[0].get(src) for _, src in columns] for r in rows],
+                             columns=[label for label, _ in columns])
+        frames.append((sheet, frame))
+    return frames
+
+
+@app.route('/api/finance/accounts/report', methods=['GET'])
+@perm('finance_report.view')
+def finance_accounts_report():
+    """The full Client Accounts workbook, for everything or one party, in a date range."""
+    f = _accounts_filters(request.args)
+    conn, cur = connection()
+    try:
+        data = client_accounts_data(cur, with_items=True, **f)
+    finally:
+        cur.close()
+        conn.close()
+    buffer = BytesIO()
+    with ExcelWriter(buffer, engine='openpyxl') as writer:
+        for sheet, frame in accounts_report_frames(data):
+            frame.to_excel(writer, sheet_name=sheet, index=False)
+            _autosize_worksheet(writer.sheets[sheet])
+    buffer.seek(0)
+    name = 'client_accounts'
+    if f['company_id'] and data['companies']:
+        name += '_' + re.sub(r'\W+', '_', data['companies'][0]['company_name'] or '')
+    elif f['client_id'] and data['clients']:
+        name += '_' + re.sub(r'\W+', '_', data['clients'][0]['client_name'] or '')
+    return send_file(buffer, as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     download_name='%s_%s.xlsx' % (name, datetime.now().strftime('%Y%m%d_%H%M')))
+
+
+@app.route('/api/finance/transactions/<int:trans_id>/link-request', methods=['POST'])
+@perm('finance_txn.approve')
+def link_finance_transaction_request(trans_id):
+    """Attach a request, and so its client, to a transaction saved without one."""
+    data = request.get_json(silent=True) or {}
+    sr_id = str(data.get('sales_request_id') or '').strip().upper().replace('SR-', '')
+    if not sr_id.isdigit():
+        return jsonify(success=False, error='Choose the Sales Request'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, category_id, client_id, sales_request_id FROM finance_transactions "
+                    "WHERE id = %s FOR UPDATE", (trans_id,))
+        tx = cur.fetchone()
+        if not tx:
+            return jsonify(success=False, error='Transaction not found'), 404
+        if tx['sales_request_id']:
+            return jsonify(success=False,
+                           error='Already linked to SR-%s' % tx['sales_request_id']), 400
+        client_id, error = link_transaction_to_request(cur, tx['category_id'], tx['client_id'], int(sr_id))
+        if error:
+            return jsonify(success=False, error=error), 400
+        cur.execute("UPDATE finance_transactions SET sales_request_id = %s, client_id = %s WHERE id = %s",
+                    (int(sr_id), client_id, trans_id))
+        cur.execute("""
+            INSERT INTO finance_approval_log
+            (transaction_id, action, action_by, action_by_user_id, notes, changes_json)
+            VALUES (%s, 'modified', %s, %s, %s, %s)
+        """, (trans_id, session.get('name') or session.get('username') or 'System',
+              session.get('user_id'), 'Linked to SR-%s' % sr_id,
+              json.dumps({'sales_request_id': [None, int(sr_id)],
+                          'client_id': [tx['client_id'], client_id]})))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, sales_request_id=int(sr_id), client_id=client_id)
+
+
 @app.route('/api/finance/sales-requests', methods=['GET'])
 @perm('sales_request.view')
 def get_finance_sales_requests():
@@ -23767,7 +24174,7 @@ def get_finance_sales_requests():
         conn, cur = connection()
         
         query = """
-            SELECT sr.id, sr.title, c.client_name
+            SELECT sr.id, sr.title, sr.client_id, c.client_name
             FROM sales_request sr
             LEFT JOIN client c ON sr.client_id = c.id
             WHERE sr.status != 'cancelled'
@@ -23777,6 +24184,10 @@ def get_finance_sales_requests():
         if client_id:
             query += " AND sr.client_id = %s"
             params.append(client_id)
+        q = (request.args.get('q') or '').strip().upper().replace('SR-', '')
+        if q:
+            query += " AND (sr.id = %s OR sr.title LIKE %s OR c.client_name LIKE %s)"
+            params.extend([q if q.isdigit() else 0, '%' + q + '%', '%' + q + '%'])
         
         query += " ORDER BY sr.created_at DESC LIMIT 100"
         
@@ -23791,6 +24202,7 @@ def get_finance_sales_requests():
                 'id': r['id'], 
                 'request_number': f"SR-{r['id']}",
                 'title': r['title'],
+                'client_id': r['client_id'],
                 'client_name': r['client_name']
             } for r in requests]
         })

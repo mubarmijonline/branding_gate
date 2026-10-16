@@ -1,0 +1,471 @@
+{% extends "main.html" %}
+
+{% block head %}
+<title>Client Accounts - Finance</title>
+<style>
+:root {
+    --ca-card: #ffffff;
+    --ca-primary: #6366f1;
+    --ca-primary-soft: rgba(99,102,241,0.1);
+    --ca-success: #10b981;
+    --ca-success-soft: rgba(16,185,129,0.12);
+    --ca-warning: #f59e0b;
+    --ca-warning-soft: rgba(245,158,11,0.14);
+    --ca-danger: #ef4444;
+    --ca-danger-soft: rgba(239,68,68,0.12);
+    --ca-text: #0f172a;
+    --ca-muted: #64748b;
+    --ca-border: #e2e8f0;
+    --ca-row: #f8fafc;
+}
+.ca-shell { padding: 24px; max-width: 1320px; margin: 0 auto; }
+.ca-back { display: inline-flex; align-items: center; gap: 8px; color: var(--ca-muted);
+           font-weight: 600; font-size: 14px; margin-bottom: 14px; text-decoration: none; }
+.ca-back:hover { color: var(--ca-primary); text-decoration: none; }
+.ca-card { background: var(--ca-card); border: 1px solid var(--ca-border); border-radius: 18px;
+           box-shadow: 0 4px 14px rgba(15,23,42,0.05); margin-bottom: 18px; }
+.ca-head { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px;
+           justify-content: space-between; align-items: flex-start; }
+.ca-head h1 { font-size: 24px; font-weight: 700; color: var(--ca-text); margin: 0 0 6px; }
+.ca-head p { color: var(--ca-muted); margin: 0; font-size: 14px; }
+.ca-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ca-tools input { padding: 8px 12px; border: 1px solid var(--ca-border); border-radius: 10px;
+                  font-size: 13px; background: #fff; }
+.ca-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 10px;
+          font-size: 13px; font-weight: 600; border: 1px solid var(--ca-border); background: #fff;
+          color: var(--ca-text); cursor: pointer; text-decoration: none; }
+.ca-btn:hover { text-decoration: none; border-color: var(--ca-primary); color: var(--ca-primary); }
+.ca-btn-primary { background: var(--ca-primary); border-color: var(--ca-primary); color: #fff; }
+.ca-btn-primary:hover { color: #fff; opacity: .92; }
+
+.ca-figures { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;
+              padding: 0 24px 22px; }
+.ca-figure { border: 1px solid var(--ca-border); border-radius: 14px; padding: 14px; }
+.ca-figure span { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+                  color: var(--ca-muted); margin-bottom: 4px; }
+.ca-figure strong { font-size: 18px; color: var(--ca-text); }
+.ca-figure.good strong { color: var(--ca-success); }
+.ca-figure.warn strong { color: var(--ca-warning); }
+.ca-figure.bad strong { color: var(--ca-danger); }
+
+.ca-alert { border: 1px solid var(--ca-warning); background: var(--ca-warning-soft); border-radius: 14px;
+            padding: 14px 18px; margin-bottom: 18px; }
+.ca-alert h3 { font-size: 15px; font-weight: 700; margin: 0 0 8px; color: #92400e; }
+.ca-alert-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+                padding: 8px 0; border-top: 1px dashed rgba(146,64,14,.25); font-size: 13px; }
+
+.ca-company { overflow: hidden; }
+.ca-company-head { padding: 16px 20px; display: grid; gap: 12px; align-items: center; cursor: pointer;
+                   grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 32px; }
+.ca-company-head:hover { background: var(--ca-row); }
+.ca-name { font-weight: 700; color: var(--ca-text); font-size: 15px; }
+.ca-name a { color: inherit; }
+.ca-name a:hover { color: var(--ca-primary); }
+.ca-sub { color: var(--ca-muted); font-size: 12px; }
+.ca-num { text-align: right; font-size: 13px; }
+.ca-num small { display: block; color: var(--ca-muted); font-size: 11px; text-transform: uppercase;
+                letter-spacing: .04em; }
+.ca-num b { font-weight: 700; }
+.ca-chev { color: var(--ca-muted); transition: transform .2s; text-align: center; }
+.ca-company.open .ca-chev { transform: rotate(90deg); }
+.ca-clients { display: none; border-top: 1px solid var(--ca-border); background: var(--ca-row); }
+.ca-company.open .ca-clients { display: block; }
+.ca-client { padding: 12px 20px 12px 36px; display: grid; gap: 12px; align-items: center;
+             grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 32px;
+             border-bottom: 1px solid var(--ca-border); cursor: pointer; text-decoration: none; color: inherit; }
+.ca-client:hover { background: #fff; text-decoration: none; color: inherit; }
+.ca-client:last-child { border-bottom: none; }
+
+.pos { color: var(--ca-success); }
+.neg { color: var(--ca-danger); }
+.owe { color: var(--ca-warning); }
+
+.ca-profile { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 20px;
+              padding: 0 24px 22px; }
+.ca-profile div span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+                       color: var(--ca-muted); }
+.ca-profile div b { font-size: 14px; font-weight: 600; color: var(--ca-text); word-break: break-word; }
+
+.ca-tabs { display: flex; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--ca-border);
+           overflow-x: auto; }
+.ca-tab { padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; border: none;
+          background: none; color: var(--ca-muted); white-space: nowrap; cursor: pointer; }
+.ca-tab.active { background: var(--ca-primary-soft); color: var(--ca-primary); }
+.ca-tab .count { margin-left: 6px; font-size: 11px; background: #fff; border-radius: 999px; padding: 1px 7px; }
+.ca-panel { display: none; padding: 0; }
+.ca-panel.active { display: block; }
+
+.ca-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ca-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+               color: var(--ca-muted); padding: 10px 14px; border-bottom: 1px solid var(--ca-border);
+               background: var(--ca-row); white-space: nowrap; }
+.ca-table td { padding: 10px 14px; border-bottom: 1px solid var(--ca-border); vertical-align: top; }
+.ca-table td.r, .ca-table th.r { text-align: right; white-space: nowrap; }
+.ca-table tr.ca-req { cursor: pointer; }
+.ca-table tr.ca-req:hover td { background: var(--ca-row); }
+.ca-table tr.ca-items td { background: var(--ca-row); padding: 0 14px 14px 34px; }
+.ca-table .ca-table th { background: #fff; }
+.ca-scroll { overflow-x: auto; }
+.ca-empty { padding: 40px; text-align: center; color: var(--ca-muted); }
+
+.badge-st { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: capitalize;
+            white-space: nowrap; }
+.st-approved, .st-income { background: var(--ca-success-soft); color: var(--ca-success); }
+.st-pending, .st-negotiation { background: var(--ca-warning-soft); color: #b45309; }
+.st-rejected, .st-expense, .st-cancelled { background: var(--ca-danger-soft); color: var(--ca-danger); }
+.st-other { background: var(--ca-primary-soft); color: var(--ca-primary); }
+
+@media (max-width: 1100px) {
+    .ca-figures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ca-profile { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+    .ca-shell { padding: 14px; }
+    .ca-head { padding: 16px; }
+    .ca-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 16px; }
+    .ca-profile { padding: 0 16px 16px; }
+    .ca-company-head, .ca-client { grid-template-columns: 1fr 1fr; padding-left: 16px; }
+    .ca-company-head .ca-name-cell, .ca-client .ca-name-cell { grid-column: 1 / -1; }
+    .ca-num { text-align: left; }
+    .ca-chev { display: none; }
+    .ca-tools { width: 100%; }
+    .ca-tools input { flex: 1 1 140px; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+{% set _p = session.get('perms', {}) %}
+<div class="ca-shell">
+    {% if kind %}
+    <a class="ca-back" href="/finance/accounts"><i class="fas fa-arrow-left"></i> All client accounts</a>
+    {% endif %}
+
+    <div class="ca-card">
+        <div class="ca-head">
+            <div>
+                <h1 id="caTitle">{% if kind %}Loading...{% else %}Client Accounts{% endif %}</h1>
+                <p id="caSubtitle">{% if not kind %}Every parent company and client: what was quoted, what the client approved, what was collected and what is still owed.{% endif %}</p>
+            </div>
+            <div class="ca-tools">
+                {% if not kind %}<input type="search" id="caSearch" placeholder="Search company or client...">{% endif %}
+                <label class="ca-sub">From <input type="date" id="caStart"></label>
+                <label class="ca-sub">To <input type="date" id="caEnd"></label>
+                <a class="ca-btn ca-btn-primary" id="caReport" href="#"><i class="fas fa-file-excel"></i> Full Report</a>
+            </div>
+        </div>
+        <div class="ca-profile" id="caProfile" style="display:none;"></div>
+        <div class="ca-figures" id="caFigures"></div>
+    </div>
+
+    <div id="caUnlinked"></div>
+    <div id="caBody"><div class="ca-card ca-empty"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+</div>
+
+<script>
+(function () {
+    var KIND = {{ (kind or '')|tojson }};
+    var PARTY_ID = {{ (party_id or 0)|tojson }};
+    var CAN_LINK = {{ ('finance_txn.approve' in _p)|tojson }};
+    var data = null;
+
+    function esc(v) {
+        return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function money(v) {
+        return 'EGP ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function day(v) { return v ? String(v).slice(0, 10) : '-'; }
+    function badge(v) {
+        var known = ['approved', 'pending', 'rejected', 'income', 'expense', 'negotiation', 'cancelled'];
+        var cls = known.indexOf(v) >= 0 ? v : 'other';
+        return '<span class="badge-st st-' + cls + '">' + esc(v || '-') + '</span>';
+    }
+    function owedClass(v) { return v > 0.005 ? 'owe' : (v < -0.005 ? 'pos' : ''); }
+
+    function filterParams() {
+        var p = new URLSearchParams();
+        if (KIND === 'company') p.set('company_id', PARTY_ID);
+        if (KIND === 'client') p.set('client_id', PARTY_ID);
+        if ($('#caStart').val()) p.set('start', $('#caStart').val());
+        if ($('#caEnd').val()) p.set('end', $('#caEnd').val());
+        return p.toString();
+    }
+
+    function load() {
+        var q = filterParams();
+        $('#caReport').attr('href', '/api/finance/accounts/report' + (q ? '?' + q : ''));
+        $.getJSON('/api/finance/accounts' + (q ? '?' + q : '')).done(function (res) {
+            data = res;
+            KIND ? renderProfile() : renderList();
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Could not load accounts';
+            $('#caBody').html('<div class="ca-card ca-empty">' + esc(msg) + '</div>');
+        });
+    }
+
+    function sum(rows, key) { return rows.reduce(function (a, r) { return a + Number(r[key] || 0); }, 0); }
+
+    function renderFigures(t) {
+        var figs = [
+            ['Quoted Sell', t.quoted_sell, ''],
+            ['Client Approved', t.approved_sell, ''],
+            ['Collected', t.collected, 'good'],
+            ['Pending Collection', t.pending_in, t.pending_in > 0 ? 'warn' : ''],
+            ['Outstanding', t.outstanding, t.outstanding > 0.005 ? 'bad' : 'good'],
+            ['Expected Margin', t.expected_margin, '']
+        ];
+        $('#caFigures').html(figs.map(function (f) {
+            return '<div class="ca-figure ' + f[2] + '"><span>' + f[0] + '</span><strong>' + money(f[1]) + '</strong></div>';
+        }).join(''));
+    }
+
+    function numCell(label, v, cls) {
+        return '<div class="ca-num"><small>' + label + '</small><b class="' + (cls || '') + '">' + money(v) + '</b></div>';
+    }
+
+    // ---------------- List ----------------
+    function renderList() {
+        var cos = data.companies;
+        renderFigures({
+            quoted_sell: sum(cos, 'quoted_sell'), approved_sell: sum(cos, 'approved_sell'),
+            collected: sum(cos, 'collected'), pending_in: sum(cos, 'pending_in'),
+            outstanding: sum(cos, 'outstanding'), expected_margin: sum(cos, 'expected_margin')
+        });
+        renderUnlinked();
+        drawCompanies();
+    }
+
+    function drawCompanies() {
+        var q = ($('#caSearch').val() || '').trim().toLowerCase();
+        var open = {};
+        $('.ca-company.open').each(function () { open[$(this).data('id')] = true; });
+        var html = data.companies.map(function (co) {
+            var clients = data.clients.filter(function (c) { return c.parent_company_id === co.id; });
+            var nameHit = !q || (co.company_name || '').toLowerCase().indexOf(q) >= 0;
+            var shown = nameHit ? clients : clients.filter(function (c) {
+                return (c.client_name || '').toLowerCase().indexOf(q) >= 0;
+            });
+            if (!nameHit && !shown.length) return '';
+            var isOpen = open[co.id] || (q && !nameHit);
+            return '<div class="ca-card ca-company' + (isOpen ? ' open' : '') + '" data-id="' + co.id + '">' +
+                '<div class="ca-company-head">' +
+                    '<div class="ca-name-cell"><div class="ca-name"><a href="/finance/accounts/company/' + co.id + '">' +
+                        '<i class="fas fa-building mr-1"></i>' + esc(co.company_name) + '</a></div>' +
+                        '<div class="ca-sub">' + co.clients_count + ' client(s) &middot; ' + co.requests + ' request(s)' +
+                        (co.industry_sector ? ' &middot; ' + esc(co.industry_sector) : '') + '</div></div>' +
+                    numCell('Approved', co.approved_sell) + numCell('Collected', co.collected, 'pos') +
+                    numCell('Pending', co.pending_in) + numCell('Outstanding', co.outstanding, owedClass(co.outstanding)) +
+                    numCell('Margin', co.expected_margin) +
+                    '<div class="ca-chev"><i class="fas fa-chevron-right"></i></div>' +
+                '</div>' +
+                '<div class="ca-clients">' + (shown.length ? shown.map(clientRow).join('') :
+                    '<div class="ca-empty">No clients under this company</div>') + '</div>' +
+            '</div>';
+        }).join('');
+        $('#caBody').html(html || '<div class="ca-card ca-empty">No company or client matches</div>');
+    }
+
+    function clientRow(c) {
+        return '<a class="ca-client" href="/finance/accounts/client/' + c.id + '">' +
+            '<div class="ca-name-cell"><div class="ca-name"><i class="fas fa-user mr-1"></i>' + esc(c.client_name) + '</div>' +
+            '<div class="ca-sub">' + esc(c.job_title || '') + (c.owner_name ? ' &middot; Owner: ' + esc(c.owner_name) : '') +
+            ' &middot; ' + c.requests + ' request(s)</div></div>' +
+            numCell('Approved', c.approved_sell) + numCell('Collected', c.collected, 'pos') +
+            numCell('Pending', c.pending_in) + numCell('Outstanding', c.outstanding, owedClass(c.outstanding)) +
+            numCell('Margin', c.expected_margin) +
+            '<div class="ca-chev"><i class="fas fa-chevron-right"></i></div></a>';
+    }
+
+    function renderUnlinked() {
+        var rows = data.unlinked || [];
+        if (!rows.length) { $('#caUnlinked').empty(); return; }
+        $('#caUnlinked').html('<div class="ca-alert"><h3><i class="fas fa-exclamation-triangle mr-1"></i>' +
+            rows.length + ' Client Payment(s) not linked to any Sales Request</h3>' +
+            '<div class="ca-sub" style="color:#92400e;margin-bottom:6px;">They count for no client until linked. ' +
+            'New Client Payments can no longer be saved without their SR.</div>' +
+            rows.map(function (t) {
+                return '<div class="ca-alert-row"><div><b>' + esc(t.transaction_code) + '</b> &middot; ' + day(t.transaction_date) +
+                    ' &middot; ' + money(t.amount) + ' &middot; ' + esc(t.payment_method_name || '-') + ' &middot; ' + badge(t.status) +
+                    ' &middot; by ' + esc(t.added_by || '-') + (t.description ? ' &middot; ' + esc(t.description) : '') + '</div>' +
+                    (CAN_LINK ? '<button class="ca-btn ca-link" data-id="' + t.id + '" data-code="' + esc(t.transaction_code) +
+                        '"><i class="fas fa-link"></i> Link to SR</button>' : '') + '</div>';
+            }).join('') + '</div>');
+    }
+
+    $(document).on('click', '.ca-link', function () {
+        var id = $(this).data('id'), code = $(this).data('code');
+        Swal.fire({
+            title: 'Link ' + code + ' to a Sales Request',
+            input: 'text',
+            inputPlaceholder: 'SR number, title or client name',
+            showCancelButton: true,
+            confirmButtonText: 'Find',
+            showLoaderOnConfirm: true,
+            preConfirm: function (q) {
+                if (!q || !q.trim()) { Swal.showValidationMessage('Type the SR number'); return false; }
+                return $.getJSON('/api/finance/sales-requests', { q: q.trim() }).then(function (res) {
+                    var list = res.sales_requests || [];
+                    if (list.length !== 1) {
+                        Swal.showValidationMessage(list.length ? list.length + ' matches: ' +
+                            list.slice(0, 5).map(function (s) { return s.request_number; }).join(', ') +
+                            (list.length > 5 ? '...' : '') + '. Type the exact SR number.' : 'No Sales Request matches');
+                        return false;
+                    }
+                    return list[0];
+                });
+            }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            var sr = r.value;
+            Swal.fire({
+                title: 'Link to ' + sr.request_number + '?',
+                text: (sr.title || '') + ' | Client: ' + (sr.client_name || '-'),
+                icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, link it'
+            }).then(function (ok) {
+                if (!ok.isConfirmed) return;
+                $.ajax({ url: '/api/finance/transactions/' + id + '/link-request', method: 'POST',
+                         contentType: 'application/json', data: JSON.stringify({ sales_request_id: sr.id }) })
+                    .done(function () { Swal.fire('Linked', code + ' now belongs to ' + sr.request_number, 'success'); load(); })
+                    .fail(function (xhr) { Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Could not link', 'error'); });
+            });
+        });
+    });
+
+    $(document).on('click', '.ca-company-head', function (e) {
+        if ($(e.target).closest('a').length) return;
+        $(this).closest('.ca-company').toggleClass('open');
+    });
+    var searchTimer;
+    $(document).on('input', '#caSearch', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(drawCompanies, 150);
+    });
+
+    // ---------------- Profile ----------------
+    function field(label, v) { return '<div><span>' + label + '</span><b>' + (v ? esc(v) : '-') + '</b></div>'; }
+
+    function renderProfile() {
+        var p = KIND === 'company' ? data.companies[0] : data.clients[0];
+        var co = KIND === 'company' ? p : null;
+        var clientNames = {};
+        data.clients.forEach(function (c) { clientNames[c.id] = c.client_name; });
+        document.title = (KIND === 'company' ? p.company_name : p.client_name) + ' - Client Accounts';
+        if (KIND === 'company') {
+            $('#caTitle').html('<i class="fas fa-building mr-2"></i>' + esc(p.company_name));
+            $('#caSubtitle').text('Parent company · ' + p.clients_count + ' client(s) · ' + p.requests + ' request(s)');
+            $('#caProfile').html(field('Industry', p.industry_sector) + field('Phone', p.phone_number) +
+                field('Email', p.email_address) + field('Primary Contact', p.primary_contact_person) +
+                field('Tax Number', p.tax_number) + field('VAT Number', p.vat_number) +
+                field('Website / Social', p.website_social_media) + field('Address', p.address)).show();
+        } else {
+            $('#caTitle').html('<i class="fas fa-user mr-2"></i>' + esc(p.client_name));
+            $('#caSubtitle').html((p.company_name ? 'Client at <a href="/finance/accounts/company/' + p.parent_company_id + '">' +
+                esc(p.company_name) + '</a> · ' : '') + p.requests + ' request(s)');
+            $('#caProfile').html(field('Job Title', p.job_title) + field('Mobile', p.mobile_number) +
+                field('Second Mobile', p.secondary_mobile_number) + field('Email', p.email_address) +
+                field('Preferred Channel', p.preferred_contact_channel) +
+                field('Account Owner', p.owner_name ? p.owner_name + (p.owner_mobile ? ' (' + p.owner_mobile + ')' : '') : '') +
+                field('Client Since', day(p.added_date)) + field('Notes', p.additional_notes)).show();
+        }
+        renderFigures(p);
+
+        var tabs = [['requests', 'Sales Requests', data.requests.length],
+                    ['transactions', 'Transactions', data.transactions.length]];
+        if (KIND === 'company') tabs.push(['clients', 'Clients', data.clients.length]);
+        var active = $('.ca-tab.active').data('tab') || 'requests';
+
+        var html = '<div class="ca-card"><div class="ca-tabs">' + tabs.map(function (t) {
+            return '<button class="ca-tab' + (t[0] === active ? ' active' : '') + '" data-tab="' + t[0] + '">' + t[1] +
+                '<span class="count">' + t[2] + '</span></button>';
+        }).join('') + '</div>';
+
+        html += '<div class="ca-panel' + (active === 'requests' ? ' active' : '') + '" id="ca-requests">' + requestsTable(clientNames) + '</div>';
+        html += '<div class="ca-panel' + (active === 'transactions' ? ' active' : '') + '" id="ca-transactions">' + transactionsTable(clientNames) + '</div>';
+        if (KIND === 'company') {
+            html += '<div class="ca-panel' + (active === 'clients' ? ' active' : '') + '" id="ca-clients">' +
+                (data.clients.length ? '<div class="ca-clients" style="display:block;">' + data.clients.map(clientRow).join('') + '</div>' :
+                    '<div class="ca-empty">No clients</div>') + '</div>';
+        }
+        $('#caBody').html(html + '</div>');
+    }
+
+    function requestsTable(clientNames) {
+        if (!data.requests.length) return '<div class="ca-empty">No sales requests in this range</div>';
+        var items = {};
+        data.items.forEach(function (it) { (items[it.request_id] = items[it.request_id] || []).push(it); });
+        var showClient = KIND === 'company';
+        var rows = data.requests.map(function (r) {
+            var list = items[r.id] || [];
+            return '<tr class="ca-req" data-id="' + r.id + '">' +
+                '<td><i class="fas fa-chevron-right mr-1 ca-sub"></i><a href="/sales_request_details/' + r.id + '"><b>SR-' + r.id + '</b></a>' +
+                    '<div class="ca-sub">' + esc(r.title || '') + '</div></td>' +
+                (showClient ? '<td>' + esc(clientNames[r.client_id] || '-') + '</td>' : '') +
+                '<td>' + badge(r.status) + '<div class="ca-sub">' + day(r.created_at) + '</div></td>' +
+                '<td>' + esc(r.owner_name || '-') + '</td>' +
+                '<td class="r">' + (r.approved_items || 0) + ' / ' + r.items_count + '</td>' +
+                '<td class="r">' + money(r.quoted_sell) + '</td>' +
+                '<td class="r">' + money(r.approved_sell) + '</td>' +
+                '<td class="r pos">' + money(r.collected) + '</td>' +
+                '<td class="r">' + money(r.pending_in) + '</td>' +
+                '<td class="r ' + owedClass(r.outstanding) + '">' + money(r.outstanding) + '</td>' +
+                '<td class="r">' + money(r.expected_margin) + '</td></tr>' +
+                '<tr class="ca-items" data-for="' + r.id + '" style="display:none;"><td colspan="' + (showClient ? 11 : 10) + '">' +
+                    (list.length ? '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>Item</th><th>Sell Type</th>' +
+                        '<th class="r">Qty</th><th class="r">Sell / Unit</th><th class="r">Total Sell</th><th class="r">Total Cost</th>' +
+                        '<th>Client Decision</th><th>Supplier</th></tr></thead><tbody>' +
+                        list.map(function (it) {
+                            return '<tr><td>' + esc(it.name) + '<div class="ca-sub">' + esc(it.item_type || '') + '</div></td>' +
+                                '<td>' + esc(it.sell_type || '-') + (it.rental_days ? ' (' + it.rental_days + ' d)' : '') + '</td>' +
+                                '<td class="r">' + esc(it.qty || 0) + ' ' + esc(it.unit || '') + '</td>' +
+                                '<td class="r">' + money(it.sell_per_item) + '</td><td class="r">' + money(it.total_sell) + '</td>' +
+                                '<td class="r">' + money(it.total_cost) + '</td>' +
+                                '<td>' + badge(it.negotiation_status && it.approval_status !== 'approved' && it.approval_status !== 'rejected' &&
+                                    it.negotiation_status !== 'none' ? 'negotiation' : it.approval_status) + '</td>' +
+                                '<td>' + esc(it.supplier_name || '-') + '</td></tr>';
+                        }).join('') + '</tbody></table></div>' : '<div class="ca-empty">No items</div>') +
+                '</td></tr>';
+        }).join('');
+        return '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>Request</th>' + (showClient ? '<th>Client</th>' : '') +
+            '<th>Status</th><th>Owner</th><th class="r">Approved Items</th><th class="r">Quoted</th><th class="r">Approved</th>' +
+            '<th class="r">Collected</th><th class="r">Pending</th><th class="r">Outstanding</th><th class="r">Margin</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table></div>';
+    }
+
+    function transactionsTable(clientNames) {
+        if (!data.transactions.length) return '<div class="ca-empty">No transactions in this range</div>';
+        return '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>Code</th><th>Date</th><th>Type</th><th>Status</th>' +
+            '<th class="r">Amount</th><th>Category</th><th>SR</th>' + (KIND === 'company' ? '<th>Client</th>' : '') +
+            '<th>Payment Method</th><th>Supplier</th><th>By</th></tr></thead><tbody>' +
+            data.transactions.map(function (t) {
+                return '<tr><td><b>' + esc(t.transaction_code) + '</b>' + (t.reference_number ? '<div class="ca-sub">Ref: ' + esc(t.reference_number) + '</div>' : '') + '</td>' +
+                    '<td>' + day(t.transaction_date) + '</td><td>' + badge(t.transaction_type) + '</td><td>' + badge(t.status) + '</td>' +
+                    '<td class="r ' + (t.transaction_type === 'income' ? 'pos' : 'neg') + '">' + (t.transaction_type === 'income' ? '+' : '-') + money(t.amount) + '</td>' +
+                    '<td>' + esc(t.category_name || '-') + (t.subcategory_name ? '<div class="ca-sub">' + esc(t.subcategory_name) + '</div>' : '') + '</td>' +
+                    '<td>' + (t.sales_request_id ? '<a href="/sales_request_details/' + t.sales_request_id + '">SR-' + t.sales_request_id + '</a>' : '-') + '</td>' +
+                    (KIND === 'company' ? '<td>' + esc(clientNames[t.client_id] || '-') + '</td>' : '') +
+                    '<td>' + esc(t.payment_method_name || '-') + '</td><td>' + esc(t.supplier_name || '-') + '</td>' +
+                    '<td>' + esc(t.added_by || '-') + (t.approved_by ? '<div class="ca-sub">Approved: ' + esc(t.approved_by) + '</div>' : '') + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+    }
+
+    $(document).on('click', '.ca-tab', function () {
+        $('.ca-tab').removeClass('active');
+        $(this).addClass('active');
+        $('.ca-panel').removeClass('active');
+        $('#ca-' + $(this).data('tab')).addClass('active');
+    });
+    $(document).on('click', 'tr.ca-req', function (e) {
+        if ($(e.target).closest('a').length) return;
+        var id = $(this).data('id');
+        $('tr.ca-items[data-for="' + id + '"]').toggle();
+        $(this).find('.fa-chevron-right, .fa-chevron-down').toggleClass('fa-chevron-right fa-chevron-down');
+    });
+    $('#caStart, #caEnd').on('change', load);
+
+    $(load);
+})();
+</script>
+{% endblock %}

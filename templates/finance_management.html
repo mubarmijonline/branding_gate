@@ -2643,6 +2643,7 @@ body.finance-surface {
 <script>
 // Global Data
 var paymentMethods = [];
+var CLIENT_PAYMENTS_CATEGORY_ID = 1;  // finance_categories.id; same constant in branding_gate.py
 var categories = [];
 var allCategories = [];  // Store flat list of all categories
 var clients = [];
@@ -2789,6 +2790,19 @@ $(document).ready(function() {
         updateSRLabel();
     });
     
+    // A request belongs to one client: choosing the SR names the client.
+    $('#transSR').change(function() {
+        var srId = $(this).val();
+        var sr = salesRequests.find(function(r) { return String(r.id) === String(srId); });
+        if (sr && sr.client_id && $('#transactionType').val() === 'income' &&
+                String($('#transClient').val() || '') !== String(sr.client_id)) {
+            // Set without the change handler, which would reload the SR list and drop this choice.
+            $('#transClient').val(String(sr.client_id)).trigger('change.select2');
+        }
+        updateSRLabel();
+    });
+    $('#transCategory').change(updateSRLabel);
+    
     // /finance_management#payment-methods (linked from Finance Approvals) opens that tab.
     if (location.hash) {
         var wanted = location.hash.slice(1);
@@ -2802,7 +2816,8 @@ $(document).ready(function() {
 function updateSRLabel() {
     var type = $('#transactionType').val();
     var hasEntity = (type === 'income' && $('#transClient').val()) || 
-                   (type === 'expense' && $('#transSupplier').val());
+                   (type === 'expense' && $('#transSupplier').val()) ||
+                   $('#transCategory').val() == CLIENT_PAYMENTS_CATEGORY_ID;
     
     if (hasEntity) {
         $('#srLabel').html('Related Sales Request <span style="color: var(--danger);">*</span>');
@@ -3918,6 +3933,11 @@ function submitTransaction() {
     // Validate loan user is required for loan categories
     if (isLoanCategory && !loanUserId) {
         Swal.fire('Employee Required | الموظف مطلوب', 'You must select an employee for Loan or Pay Loan transactions.\nيجب اختيار موظف لمعاملات القرض أو سداد القرض.', 'warning');
+        return;
+    }
+    
+    if (categoryId == CLIENT_PAYMENTS_CATEGORY_ID && !salesRequestId) {
+        Swal.fire('Sales Request Required', 'A Client Payment must be linked to its Sales Request, so the money is recorded against the right client.', 'warning');
         return;
     }
     
