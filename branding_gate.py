@@ -1139,11 +1139,69 @@ def _static_version(*names):
 I18N_VERSION = _static_version('i18n/ar.js', 'js/bg-i18n.js', 'css/bg-rtl.css')
 
 
+# Stored values a person typed. The Arabic interface never translates these,
+# even when one happens to be a dictionary word ("Booth", "CASH", a job title).
+I18N_DATA_COLUMNS = (
+    ('client', 'client_name'), ('client', 'job_title'), ('company', 'company_name'),
+    ('company', 'industry_sector'), ('supplier', 'company_name'), ('supplier', 'contact_person_name'),
+    ('supplier', 'supplier_name'), ('supplier', 'job_title'), ('sales_request', 'title'),
+    ('sales_request_items', 'name'), ('sales_request_items', 'unit'), ('item_catalog', 'name'),
+    ('item_catalog', 'unit'), ('inventory_items', 'item_name'), ('items', 'item_name'),
+    ('entities', 'entity_name'), ('approved_item_components', 'component_name'),
+    ('payment_methods', 'method_name'), ('payment_methods', 'bank_name'),
+    ('finance_categories', 'category_name'), ('user', 'name'), ('user', 'title'),
+    ('user_expense_tracking', 'supplier_name'),
+)
+_i18n_protected_cache = {'at': 0.0, 'words': []}
+
+
+def _i18n_dictionary_keys():
+    """Lower-cased English keys of static/i18n/ar.js."""
+    path = os.path.join(app.static_folder, 'i18n', 'ar.js')
+    with open(path, encoding='utf-8') as fh:
+        text = fh.read()
+    return {k.strip().lower() for k in json.loads(text.split('window.BG_AR = ', 1)[1].rstrip().rstrip(';'))}
+
+
+def i18n_protected_words():
+    """
+    Dictionary words that are also stored data, for the translator to skip.
+
+    Only the overlap is sent, so the page learns nothing beyond words already
+    in the public dictionary. Cached for ten minutes: a new item named like a
+    dictionary word is protected within that window.
+    """
+    now = time.time()
+    if now - _i18n_protected_cache['at'] < 600:
+        return _i18n_protected_cache['words']
+    words = []
+    try:
+        keys = _i18n_dictionary_keys()
+        conn, cur = connection()
+        try:
+            found = set()
+            for table, column in I18N_DATA_COLUMNS:
+                cur.execute("SELECT DISTINCT LOWER(TRIM(`%s`)) AS v FROM `%s` WHERE `%s` IS NOT NULL"
+                            % (column, table, column))
+                found.update(r['v'] for r in cur.fetchall() if r['v'])
+        finally:
+            cur.close()
+            conn.close()
+        words = sorted(found & keys)
+    except Exception as e:
+        app.logger.warning('i18n protected words unavailable: %s', e)
+        return _i18n_protected_cache['words']
+    _i18n_protected_cache.update(at=now, words=words)
+    return words
+
+
 @app.context_processor
 def inject_ui_language():
     """English unless the visitor chose Arabic; the pages read ui_lang for lang/dir."""
     lang = request.cookies.get('bg_lang') if has_request_context() else None
-    return {'ui_lang': lang if lang in UI_LANGUAGES else 'en', 'i18n_version': I18N_VERSION}
+    lang = lang if lang in UI_LANGUAGES else 'en'
+    return {'ui_lang': lang, 'i18n_version': I18N_VERSION,
+            'i18n_protected': i18n_protected_words if lang == 'ar' else (lambda: [])}
 
 
 @app.route('/lang/<code>', methods=['GET'])

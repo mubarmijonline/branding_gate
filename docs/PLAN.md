@@ -230,7 +230,10 @@ miss the runtime text. Instead:
   tooltips, button labels and native dialogs as they reach the page, through a
   MutationObserver). English loads none of it.
 - Data stays as entered: names, items, codes and amounts are not translated.
-  `data-no-i18n` opts an element out.
+  Whatever fills a `{0}` hole is shown as stored; the server sends the
+  dictionary words that are also stored values (`i18n_protected_words`, the
+  overlap only, cached 10 min), and those are never translated; text already
+  written "English | عربي" is left as written. `data-no-i18n` opts an element out.
 - Not translated: Excel/PDF exports and stored notification text that has no
   pattern in the dictionary.
 

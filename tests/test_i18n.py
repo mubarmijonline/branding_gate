@@ -75,8 +75,11 @@ class TranslatorTest(unittest.TestCase):
 
     CASES = {
         'Save': 'حفظ',
+        'Booth': 'Booth',
         'approved': 'معتمد',                                  # case-folded short label
-        'Client Payments | مدفوعات العملاء': 'مدفوعات العملاء',  # bilingual label keeps Arabic half
+        'Client Payments | مدفوعات العملاء': 'Client Payments | مدفوعات العملاء',  # bilingual: as written
+        'booth': 'booth',                                     # protected: also an item name
+        'Client approved: Save': 'وافق العميل: Save',          # holes carry data, untranslated
         '4d ago': 'منذ 4 يوم',                                # hole glued to a word
         'Showing 1 to 10 of 57 entries': 'عرض 1 إلى 10 من أصل 57 سجل',
         '3 client(s) · 5 request(s) · pharmcy': '3 عميل · 5 طلب · pharmcy',   # segments, data kept
@@ -93,6 +96,7 @@ global.document = {documentElement: {getAttribute: () => 'ar', classList: {remov
                    createTreeWalker() { return {nextNode: () => null}; }};
 global.MutationObserver = class { observe() {} };
 global.NodeFilter = {SHOW_ELEMENT: 1, SHOW_TEXT: 4, FILTER_REJECT: 2, FILTER_ACCEPT: 1};
+global.BG_AR_DATA = ['Booth'];
 const fs = require('fs');
 eval(fs.readFileSync(process.argv[1] + '/static/i18n/ar.js', 'utf8'));
 eval(fs.readFileSync(process.argv[1] + '/static/js/bg-i18n.js', 'utf8'));
@@ -109,3 +113,46 @@ process.stdout.write(JSON.stringify(out));
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ProtectedDataTest(unittest.TestCase):
+    """Stored values that equal a dictionary word are sent so they stay untranslated."""
+
+    def setUp(self):
+        import MySQLdb
+        import MySQLdb.cursors
+
+        class _Rollback:
+            def __init__(self, raw): self.raw = raw
+            def commit(self): pass
+            def close(self): pass
+
+        self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
+                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+        self.raw.autocommit(False)
+        self.original = branding_gate.connection
+        self.addCleanup(self._undo)
+        branding_gate.connection = lambda: (_Rollback(self.raw), self.raw.cursor(MySQLdb.cursors.DictCursor))
+        branding_gate._i18n_protected_cache.update(at=0.0, words=[])
+        cur = self.raw.cursor()
+        for name, code in (('Save', 'I18N_T1'), ('Zebra Secret 9k', 'I18N_T2')):
+            cur.execute("INSERT INTO payment_methods (method_name, method_code, method_type) VALUES (%s, %s, 'cash')",
+                        (name, code))
+
+    def _undo(self):
+        branding_gate.connection = self.original
+        branding_gate._i18n_protected_cache.update(at=0.0, words=[])
+        self.raw.rollback()
+        self.raw.close()
+
+    def test_only_the_overlap_is_sent(self):
+        words = branding_gate.i18n_protected_words()
+        self.assertIn('save', words)                  # data that is also a dictionary word
+        self.assertNotIn('zebra secret 9k', words)    # other data never reaches the page
+
+    def test_arabic_pages_carry_the_list(self):
+        client = branding_gate.app.test_client()
+        client.set_cookie('bg_lang', 'ar')
+        page = client.get('/login').data.decode()
+        self.assertIn('window.BG_AR_DATA = [', page)
+        self.assertIn('"save"', page)

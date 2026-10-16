@@ -7,11 +7,14 @@
  * the document, including what scripts render later (tables, SweetAlert
  * popups, select2 lists), so pages need no markup changes.
  *
- * Lookup order: exact text, text without decorative punctuation, the Arabic
- * half of an existing "English | عربي" label, " · " / " | " segments, then
- * templates with {0}-style holes ("{0} items", "Approve {0}?").
+ * Lookup order: exact text, text without decorative punctuation, " · " / " | "
+ * segments, then templates with {0}-style holes ("{0} items", "Approve {0}?").
  *
- * Opt out per element with data-no-i18n (names, codes, user content).
+ * Data is never translated: what fills a template hole is shown as stored, and
+ * window.BG_AR_DATA (from the server) lists dictionary words that are also
+ * stored values -- an item called "Booth", a method called "CASH", a job
+ * title -- which are left alone wherever they appear. Text that already holds
+ * Arabic is left as written. Opt out per element with data-no-i18n.
  *
  * ponytail: text-level dictionary, not gettext. A string the extractor missed
  * stays English until it is added to static/i18n; the upgrade path is marking
@@ -28,6 +31,7 @@
     }
 
     var DICT = window.BG_AR;
+    var PROTECTED = new Set((window.BG_AR_DATA || []).map(function (w) { return String(w).trim().toLowerCase(); }));
     var LATIN = /[A-Za-z]/;
     var ARABIC = /[؀-ۿ]/;
     var LEAD = /^[\s:*·|\-–•]+/;
@@ -64,6 +68,7 @@
     });
 
     function exact(s) {
+        if (PROTECTED.has(s.trim().toLowerCase())) return null;
         if (Object.prototype.hasOwnProperty.call(DICT, s)) return DICT[s];
         var folded = FOLDED.get(s.toLowerCase());
         return folded === undefined ? null : folded;
@@ -80,11 +85,9 @@
             for (var i = 0; i < list.length; i++) {
                 var m = list[i].rx.exec(s);
                 if (!m) continue;
+                // Holes carry data (names, items, amounts): shown as stored.
                 var values = {};
-                list[i].order.forEach(function (n, idx) {
-                    var v = m[idx + 1];
-                    values[n] = exact(v) || exact(v.trim()) || v;
-                });
+                list[i].order.forEach(function (n, idx) { values[n] = m[idx + 1]; });
                 return list[i].ar.replace(/\{(\d)\}/g, function (_, n) {
                     return values[n] != null ? values[n] : '';
                 });
@@ -130,13 +133,9 @@
         var s = text.replace(/\s+/g, ' ').trim();
         if (!s || s.length > 400) return null;
         if (cache.has(s)) return cache.get(s);
-        var out = null;
-        if (ARABIC.test(s) && s.indexOf(' | ') > 0) {
-            // Labels already written "English | عربي": keep the Arabic half.
-            var halves = s.split(' | ').filter(function (h) { return ARABIC.test(h) && !LATIN.test(h); });
-            if (halves.length) out = halves.join(' | ');
-        }
-        if (out == null) out = core(s);
+        // "English | عربي" is written bilingual on purpose, often stored data
+        // such as the finance categories. Leave it as written.
+        var out = ARABIC.test(s) && s.indexOf(' | ') > 0 ? null : core(s);
         cache.set(s, out);
         return out;
     }
