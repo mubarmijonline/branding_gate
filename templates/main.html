@@ -1090,6 +1090,7 @@
               <div style="padding: 12px 16px; text-align: center;">
                 <div style="font-size: 28px; font-weight: 800; color: #0369a1;" id="navbarBalanceLarge">EGP 0.00</div>
                 <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Available Balance</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;" id="navbarBalanceBreakdown"></div>
               </div>
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="/my-expenses">
@@ -3670,9 +3671,19 @@ function loadNavbarBalance() {
     .then(function(data) {
       if (data.success) {
         var held = parseFloat(data.balance || 0);
-        var formatted = 'EGP ' + held.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        $('#navbarMyBalance').text(formatted);
-        $('#navbarBalanceLarge').text(formatted);
+        // What is left once the expenses not yet approved come off: it drops as
+        // soon as an expense is added, and moves when a manager or Finance
+        // changes or refuses one.
+        var available = data.available !== undefined ? parseFloat(data.available || 0) : held;
+        var awaiting = parseFloat(data.awaiting_expenses || 0);
+        var money = function (v) { return 'EGP ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+        var formatted = money(held);
+        $('#navbarMyBalance').text(money(available)).closest('.nav-link, a, button')
+            .toggleClass('bg-balance-negative', available < 0);
+        $('#navbarBalanceLarge').text(money(available)).css('color', available < 0 ? '#dc2626' : '#0369a1');
+        $('#navbarBalanceBreakdown').html(awaiting > 0
+            ? 'Custody ' + money(held) + ' &middot; awaiting approval &minus;' + money(awaiting)
+            : 'Custody ' + money(held));
         // Settling is only offered while there is something to settle.
         $('#settleAmount').data('held', held);
         $('#settleHeldAmount').text(formatted);

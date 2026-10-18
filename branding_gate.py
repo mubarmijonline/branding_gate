@@ -25216,6 +25216,30 @@ def get_user_balance(user_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# Stages of a My Expenses line, in order. Until Finance approves, an expense
+# is money already spent out of the custody the person holds, so it comes off
+# what they see at once; the approval then moves it from "awaiting" into the
+# books. A manager or Finance editing the amount moves the figure with it, and
+# a rejection hands it back.
+EXPENSE_AWAITING = ('draft', 'submitted', 'manager_approved')
+EXPENSE_STAGES = ('draft', 'submitted', 'manager_approved', 'approved', 'rejected')
+
+
+def custody_position(cur, user_id):
+    """{'held', 'awaiting', 'available', 'stages': {status: {'count', 'amount'}}} for one person."""
+    cur.execute("SELECT COALESCE(balance, 0) AS balance FROM user_finance_balances WHERE user_id = %s", (user_id,))
+    row = cur.fetchone()
+    held = float(row['balance']) if row else 0.0
+    cur.execute("""SELECT status, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total
+                   FROM user_expense_tracking WHERE user_id = %s GROUP BY status""", (user_id,))
+    stages = {s: {'count': 0, 'amount': 0.0} for s in EXPENSE_STAGES}
+    for r in cur.fetchall():
+        stages.setdefault(r['status'], {'count': 0, 'amount': 0.0})
+        stages[r['status']] = {'count': int(r['n']), 'amount': float(r['total'] or 0)}
+    awaiting = sum(stages[s]['amount'] for s in EXPENSE_AWAITING)
+    return {'held': held, 'awaiting': awaiting, 'available': held - awaiting, 'stages': stages}
+
+
 @app.route('/api/finance/my-balance', methods=['GET'])
 @perm('user_balance.view')
 def get_my_balance():
@@ -25245,12 +25269,16 @@ def get_my_balance():
         """, (user_id,))
         pending = cur.fetchone()
         
+        position = custody_position(cur, user_id)
         cur.close()
         conn.close()
         
         return jsonify({
             'success': True, 
             'balance': float(balance),
+            # What the person sees: custody held minus expenses not yet approved.
+            'available': position['available'],
+            'awaiting_expenses': position['awaiting'],
             'pending_requests': pending['pending_count'] if pending else 0
         })
     except Exception as e:
@@ -26463,15 +26491,9 @@ def get_my_expenses():
         cur.execute(query, params)
         expenses = with_expense_attachments(cur, list(cur.fetchall()))
         
-        # Calculate future balance (current balance - sum of draft/submitted expenses)
-        cur.execute("""
-            SELECT COALESCE(SUM(amount), 0) as pending_total
-            FROM user_expense_tracking
-            WHERE user_id = %s AND status IN ('draft', 'submitted')
-        """, (user_id,))
-        pending_row = cur.fetchone()
-        pending_total = float(pending_row['pending_total']) if pending_row else 0
-        future_balance = current_balance - pending_total
+        # Every expense not yet approved by Finance -- draft, with the manager or
+        # with Finance -- is already off what the person holds.
+        position = custody_position(cur, user_id)
         
         cur.close()
         conn.close()
@@ -26480,8 +26502,9 @@ def get_my_expenses():
             'success': True,
             'expenses': expenses,
             'current_balance': current_balance,
-            'pending_total': pending_total,
-            'future_balance': future_balance
+            'pending_total': position['awaiting'],
+            'future_balance': position['available'],
+            'stages': position['stages']
         })
     except Exception as e:
         import traceback
@@ -26533,7 +26556,7 @@ def add_my_expense():
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0) as pending_total
             FROM user_expense_tracking
-            WHERE user_id = %s AND status IN ('draft', 'submitted')
+            WHERE user_id = %s AND status IN ('draft', 'submitted', 'manager_approved')
         """, (user_id,))
         pending_row = cur.fetchone()
         pending_total = float(pending_row['pending_total']) if pending_row else 0
@@ -26610,7 +26633,7 @@ def update_my_expense(expense_id):
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0) as pending_total
             FROM user_expense_tracking
-            WHERE user_id = %s AND status IN ('draft', 'submitted') AND id != %s
+            WHERE user_id = %s AND status IN ('draft', 'submitted', 'manager_approved') AND id != %s
         """, (user_id, expense_id))
         pending_row = cur.fetchone()
         pending_total = float(pending_row['pending_total']) if pending_row else 0

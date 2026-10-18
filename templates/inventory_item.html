@@ -516,7 +516,10 @@
         }
         const payload = {
             item_id: ITEM_ID,
-            transaction_type: kind === 'in' ? 'purchase' : 'stock_out',
+            // A credit (consignment) item moves as credit in / credit out, so its
+            // received / used figures on the Credit page follow.
+            transaction_type: item.is_credit_item ? (kind === 'in' ? 'credit_in' : 'credit_out')
+                                                  : (kind === 'in' ? 'purchase' : 'stock_out'),
             quantity: qty,
             unit_cost: kind === 'in' ? Number($('ii_cost').value || 0) : Number(item.average_cost || 0),
             notes: $('ii_note').value.trim() || null,
