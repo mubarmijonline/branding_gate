@@ -239,3 +239,21 @@ miss the runtime text. Instead:
 
 **Maintenance:** `python3 scripts_i18n_missing.py` lists strings the pages use
 that the dictionary lacks; translate them and add them to `static/i18n/ar.js`.
+
+---
+
+# Receipts on My Expenses, 2026-10-18
+
+**Ask:** optional photos or documents when adding an expense, shown clearly on
+the Sales Request it was spent on.
+
+- `expense_attachments` (`expense_attachments_migration.sql`), files under
+  `private_uploads/expenses/<expense_id>/`, outside the nginx-served `uploads/`.
+- Upload/remove by the expense's owner until Finance decides (draft, submitted,
+  manager_approved); photos, PDF, Word, Excel; 10MB each, 10 per expense.
+- Read through `/api/expense-attachments/<id>`: the owner, an approver whose
+  `expense_tracking.view` scope reaches the owner, or anyone who may open the
+  linked request.
+- Shown in My Expenses (Files column), the approval screens (paperclip), and an
+  "Expenses & Receipts" section on the Sales Request page (sent expenses only,
+  approved and awaiting totals). Shared viewer: `static/js/bg-expense-files.js`.

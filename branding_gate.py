@@ -26194,7 +26194,7 @@ def get_my_expenses():
         
         query += " ORDER BY uet.created_at DESC"
         cur.execute(query, params)
-        expenses = cur.fetchall()
+        expenses = with_expense_attachments(cur, list(cur.fetchall()))
         
         # Calculate future balance (current balance - sum of draft/submitted expenses)
         cur.execute("""
@@ -26392,6 +26392,8 @@ def delete_my_expense(expense_id):
         conn.commit()
         cur.close()
         conn.close()
+        # The rows went with the expense (ON DELETE CASCADE); the files go too.
+        shutil.rmtree(os.path.join(EXPENSE_FILES_DIR, str(expense_id)), ignore_errors=True)
         
         return jsonify({'success': True, 'message': 'Expense deleted successfully'})
     except Exception as e:
@@ -26466,6 +26468,233 @@ def submit_my_expenses():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ----------------------- EXPENSE ATTACHMENTS -----------------------
+# Receipts and documents on a My Expenses line. Optional. Stored outside the
+# nginx-served uploads/ tree (receipts are financial records) and read only
+# through expense_attachment_file(), which checks who is asking.
+
+EXPENSE_FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'private_uploads', 'expenses')
+EXPENSE_FILE_TYPES = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp',
+    'gif': 'image/gif', 'heic': 'image/heic', 'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+EXPENSE_FILE_MAX_BYTES = 10 * 1024 * 1024
+EXPENSE_FILES_PER_EXPENSE = 10
+# Still the owner's to change: before Finance has decided.
+EXPENSE_FILES_EDITABLE = ('draft', 'submitted', 'manager_approved')
+
+
+def expense_attachments_for(cur, expense_ids):
+    """{expense_id: [attachment, ...]} with the URL each one is read from."""
+    ids = [int(i) for i in expense_ids if i]
+    if not ids:
+        return {}
+    cur.execute("""
+        SELECT id, expense_id, original_name, file_type, file_size, uploaded_at
+        FROM expense_attachments WHERE expense_id IN (%s) ORDER BY id
+    """ % ','.join(['%s'] * len(ids)), ids)
+    out = {}
+    for row in cur.fetchall():
+        out.setdefault(row['expense_id'], []).append({
+            'id': row['id'], 'name': row['original_name'], 'type': row['file_type'],
+            'size': row['file_size'], 'is_image': (row['file_type'] or '').startswith('image/'),
+            'url': '/api/expense-attachments/%d' % row['id'],
+            'uploaded_at': row['uploaded_at'].isoformat() if row['uploaded_at'] else None,
+        })
+    return out
+
+
+def with_expense_attachments(cur, expenses):
+    """Each expense row gains an `attachments` list."""
+    files = expense_attachments_for(cur, [e['id'] for e in expenses])
+    for e in expenses:
+        e['attachments'] = files.get(e['id'], [])
+    return expenses
+
+
+def _scope_covers(code, owner_user_id):
+    """True when the caller holds `code` with a scope that reaches this owner."""
+    if not has(code):
+        return False
+    ids = visible_user_ids(code)
+    return ids is None or owner_user_id in ids
+
+
+@app.route('/api/my-expenses/<int:expense_id>/attachments', methods=['POST'])
+@perm('expense.create')
+def upload_expense_attachments(expense_id):
+    """Attach photos or documents to one of your own expenses."""
+    me = session.get('user_id')
+    files = [f for f in request.files.getlist('files') if f and f.filename]
+    if not files:
+        return jsonify(success=False, error='Choose at least one file'), 400
+    conn, cur = connection()
+    saved_paths = []
+    try:
+        cur.execute("SELECT id, user_id, status FROM user_expense_tracking WHERE id = %s FOR UPDATE",
+                    (expense_id,))
+        expense = cur.fetchone()
+        if not expense or expense['user_id'] != me:
+            return jsonify(success=False, error='Expense not found'), 404
+        if expense['status'] not in EXPENSE_FILES_EDITABLE:
+            return jsonify(success=False, error='Files can no longer be added: this expense is %s'
+                           % expense['status']), 400
+        cur.execute("SELECT COUNT(*) AS n FROM expense_attachments WHERE expense_id = %s", (expense_id,))
+        if cur.fetchone()['n'] + len(files) > EXPENSE_FILES_PER_EXPENSE:
+            return jsonify(success=False, error='At most %d files per expense'
+                           % EXPENSE_FILES_PER_EXPENSE), 400
+
+        checked = []
+        for handle in files:
+            ext = handle.filename.rsplit('.', 1)[-1].lower() if '.' in handle.filename else ''
+            if ext not in EXPENSE_FILE_TYPES:
+                return jsonify(success=False, error='"%s": only photos, PDF, Word or Excel files'
+                               % handle.filename), 400
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(0)
+            if size > EXPENSE_FILE_MAX_BYTES:
+                return jsonify(success=False, error='"%s" is over 10MB' % handle.filename), 400
+            checked.append((handle, ext, size))
+
+        folder = os.path.join(EXPENSE_FILES_DIR, str(expense_id))
+        os.makedirs(folder, exist_ok=True)
+        for handle, ext, size in checked:
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            safe = secure_filename(handle.filename) or ('file.' + ext)
+            path = os.path.join(folder, '%s_%s' % (stamp, safe))
+            handle.save(path)
+            saved_paths.append(path)
+            cur.execute("""
+                INSERT INTO expense_attachments
+                (expense_id, stored_path, original_name, file_type, file_size, uploaded_by)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (expense_id, path, handle.filename[:255], EXPENSE_FILE_TYPES[ext], size, me))
+        conn.commit()
+        attachments = expense_attachments_for(cur, [expense_id]).get(expense_id, [])
+    except Exception:
+        conn.rollback()
+        # Nothing recorded, so nothing kept on disk either.
+        for path in saved_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, attachments=attachments)
+
+
+@app.route('/api/my-expenses/attachments/<int:attachment_id>', methods=['DELETE'])
+@perm('expense.create')
+def delete_expense_attachment(attachment_id):
+    """Take a file back off one of your own expenses, before Finance decides."""
+    me = session.get('user_id')
+    conn, cur = connection()
+    try:
+        cur.execute("""
+            SELECT ea.id, ea.stored_path, uet.user_id, uet.status
+            FROM expense_attachments ea JOIN user_expense_tracking uet ON uet.id = ea.expense_id
+            WHERE ea.id = %s
+        """, (attachment_id,))
+        row = cur.fetchone()
+        if not row or row['user_id'] != me:
+            return jsonify(success=False, error='File not found'), 404
+        if row['status'] not in EXPENSE_FILES_EDITABLE:
+            return jsonify(success=False, error='This expense is %s; its files are kept' % row['status']), 400
+        cur.execute("DELETE FROM expense_attachments WHERE id = %s", (attachment_id,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    try:
+        os.remove(row['stored_path'])
+    except OSError:
+        pass
+    return jsonify(success=True)
+
+
+@app.route('/api/expense-attachments/<int:attachment_id>', methods=['GET'])
+@perm('expense.view', 'expense_tracking.view', 'sales_request.view')
+def expense_attachment_file(attachment_id):
+    """
+    One receipt, to whoever may see the expense: its owner, an approver whose
+    scope reaches the owner, or someone who may open the request it was spent on.
+    """
+    conn, cur = connection()
+    try:
+        cur.execute("""
+            SELECT ea.stored_path, ea.original_name, ea.file_type, uet.user_id,
+                   sr.owner_user_id AS request_owner, uet.sales_request_id
+            FROM expense_attachments ea
+            JOIN user_expense_tracking uet ON uet.id = ea.expense_id
+            LEFT JOIN sales_request sr ON sr.id = uet.sales_request_id
+            WHERE ea.id = %s
+        """, (attachment_id,))
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not row:
+        abort(404)
+    allowed = (row['user_id'] == session.get('user_id')
+               or _scope_covers('expense_tracking.view', row['user_id'])
+               or (row['sales_request_id'] and _scope_covers('sales_request.view', row['request_owner'])))
+    if not allowed:
+        abort(403)
+    path = os.path.realpath(row['stored_path'])
+    if not path.startswith(os.path.realpath(EXPENSE_FILES_DIR) + os.sep) or not os.path.exists(path):
+        abort(404)
+    inline = (row['file_type'] or '').startswith('image/') or row['file_type'] == 'application/pdf'
+    return send_file(path, mimetype=row['file_type'] or 'application/octet-stream',
+                     as_attachment=not inline, download_name=row['original_name'])
+
+
+@app.route('/api/sales/requests/<int:request_id>/expenses', methods=['GET'])
+@perm('sales_request.view')
+def sales_request_expenses(request_id):
+    """What was spent on this request from My Expenses, with the receipts."""
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (request_id,))
+        sr = cur.fetchone()
+        if not sr:
+            return jsonify(success=False, error='Request not found'), 404
+        assert_scope('sales_request.view', sr['owner_user_id'])
+        # Drafts are still the spender's own notes; the request sees what was sent.
+        cur.execute("""
+            SELECT uet.id, uet.tracking_code, uet.amount, uet.description, uet.expense_date,
+                   uet.status, uet.rejection_reason, uet.submitted_at,
+                   COALESCE(s.supplier_name, s.company_name, uet.supplier_name) AS supplier,
+                   u.name AS spent_by, u.mobile AS spent_by_mobile
+            FROM user_expense_tracking uet
+            JOIN user u ON u.id = uet.user_id
+            LEFT JOIN supplier s ON s.id = uet.supplier_id
+            WHERE uet.sales_request_id = %s AND uet.status <> 'draft'
+            ORDER BY uet.expense_date DESC, uet.id DESC
+        """, (request_id,))
+        expenses = with_expense_attachments(cur, [dict(r) for r in cur.fetchall()])
+    finally:
+        cur.close()
+        conn.close()
+    totals = {'approved': 0.0, 'pending': 0.0, 'rejected': 0.0}
+    for e in expenses:
+        amount = float(e['amount'] or 0)
+        e['amount'] = amount
+        e['expense_date'] = e['expense_date'].isoformat() if e['expense_date'] else None
+        e['submitted_at'] = e['submitted_at'].isoformat() if e['submitted_at'] else None
+        key = 'approved' if e['status'] == 'approved' else 'rejected' if e['status'] == 'rejected' else 'pending'
+        totals[key] += amount
+    return jsonify(success=True, expenses=expenses, totals=totals,
+                   files=sum(len(e['attachments']) for e in expenses))
+
+
 @app.route('/api/finance/expense-approvals', methods=['GET'])
 @perm('expense_tracking.view')
 def get_expense_approvals():
@@ -26518,7 +26747,7 @@ def get_expense_approvals():
                 WHERE uet.status = %s
                 ORDER BY uet.submitted_at DESC
             """, (status_filter,))
-        expenses = cur.fetchall()
+        expenses = with_expense_attachments(cur, list(cur.fetchall()))
         
         # Get count by status
         cur.execute("""

@@ -103,3 +103,4 @@ branding_gate_VENV
 nginx_*.log*
 # Claude Code session state and worktrees (hundreds of MB of working copies).
 .claude/
+private_uploads/

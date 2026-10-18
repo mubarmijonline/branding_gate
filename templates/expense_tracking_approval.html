@@ -481,7 +481,7 @@ function renderAllExpenses() {
                 <td>${e.company_name || '-'}</td>
                 <td>${e.user_name || '-'}</td>
                 <td>${e.expense_date || '-'}</td>
-                <td>${e.description || '-'}</td>
+                <td>${e.description || '-'}${e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : ''}</td>
                 <td><strong class="text-primary">${parseFloat(e.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
                 <td><small>${submittedAt}</small></td>
                 <td>
@@ -504,7 +504,7 @@ function renderAllExpenses() {
                 <td>-</td>
                 <td>${e.user_name}</td>
                 <td>${e.tracking_date || '-'}</td>
-                <td>${e.description || '-'}</td>
+                <td>${e.description || '-'}${e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : ''}</td>
                 <td><strong class="text-primary">${parseFloat(e.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
                 <td><small>${e.created_at || '-'}</small></td>
                 <td>
@@ -593,7 +593,7 @@ function renderPersonalExpenses() {
                                 <td>${e.company_name || '-'}</td>
                                 <td>${e.expense_date || '-'}</td>
                                 <td>${e.supplier_display || e.supplier_name || '-'}</td>
-                                <td>${e.description || '-'}</td>
+                                <td>${e.description || '-'}${e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : ''}</td>
                                 <td>
                                     <div class="input-group input-group-sm">
                                         <input type="number" class="form-control text-right font-weight-bold" 
@@ -633,7 +633,7 @@ function renderReimbursementExpenses() {
                     <td><strong>${e.tracking_code}</strong></td>
                     <td>${e.user_name}</td>
                     <td>${e.tracking_date || '-'}</td>
-                    <td>${e.description || '-'}</td>
+                    <td>${e.description || '-'}${e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : ''}</td>
                     <td><span class="badge badge-secondary">${e.item_count} items</span></td>
                     <td><strong class="text-primary">${parseFloat(e.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})} EGP</strong></td>
                     <td><small>${e.created_at || '-'}</small></td>
@@ -856,6 +856,7 @@ function openPersonalApprovalModal(expenseId) {
         </div>
         
         <p><strong>Description:</strong> ${expense.description || '-'}</p>
+        ${expense.attachments && expense.attachments.length ? '<div style="margin-top:10px;"><strong>Receipts:</strong><div class="bg-xf-grid" style="margin-top:8px;">' + expense.attachments.map(function (a) { return bgExpenseFileTile(a, false); }).join('') + '</div></div>' : ''}
         
         <div class="form-group mt-3">
             <label>Notes (Optional)</label>

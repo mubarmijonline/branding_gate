@@ -288,6 +288,17 @@
 }
 
 /* Modals */
+.form-group-modern .exp-drop, .exp-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px;
+            border: 2px dashed #c7d2fe; border-radius: 12px; background: #f8faff; color: #4f46e5;
+            cursor: pointer; font-weight: 600; text-align: center; margin: 0; }
+.exp-drop:hover { background: #eef2ff; }
+.exp-drop i { font-size: 20px; }
+.exp-drop small { color: #64748b; font-weight: 400; }
+.exp-new-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.exp-new-file { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+                background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600; max-width: 100%; }
+.exp-new-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.exp-new-file button { border: none; background: none; color: #ef4444; padding: 0; cursor: pointer; }
 .modal-content {
     border-radius: 20px;
     border: none;
@@ -583,6 +594,7 @@
                             <th>Supplier</th>
                             <th>Amount</th>
                             <th>Description</th>
+                            <th>Files</th>
                             <th>Date</th>
                             <th>Balance After</th>
                             <th>Status</th>
@@ -661,6 +673,18 @@
                     <div class="form-group-modern">
                         <label>Date *</label>
                         <input type="date" class="form-control" id="expenseDate" required>
+                    </div>
+
+                    <div class="form-group-modern">
+                        <label>Receipts / Documents <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                        <div id="expenseExistingFiles" class="bg-xf-grid" style="margin-bottom:10px;"></div>
+                        <label for="expenseFiles" class="exp-drop">
+                            <i class="fas fa-paperclip"></i>
+                            <span>Add photos or documents</span>
+                            <small>Photos, PDF, Word or Excel &middot; up to 10MB each</small>
+                        </label>
+                        <input type="file" id="expenseFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;">
+                        <div id="expenseNewFiles" class="exp-new-files"></div>
                     </div>
                     
                     <div class="balance-preview" id="balancePreview">
@@ -951,7 +975,7 @@ function renderExpenses(expenses) {
     if (expenses.length === 0) {
         tbody.html(`
             <tr>
-                <td colspan="11">
+                <td colspan="12">
                     <div class="empty-state">
                         <i class="fas fa-receipt"></i>
                         <h3>No Expenses Yet</h3>
@@ -998,6 +1022,7 @@ function renderExpenses(expenses) {
                 <td>${supplierName}</td>
                 <td style="font-weight: 700; color: var(--danger);">- ${formatCurrency(exp.amount)}</td>
                 <td>${(exp.description || '').substring(0, 50)}${(exp.description || '').length > 50 ? '...' : ''}</td>
+                <td>${bgExpenseFilesButton(exp.attachments, exp.tracking_code)}</td>
                 <td>${exp.expense_date || '-'}</td>
                 <td style="font-weight: 600; ${exp.balance_after < 0 ? 'color: var(--danger);' : ''}">${formatCurrency(exp.balance_after)}</td>
                 <td><span class="status-badge ${statusClass}"><i class="fas ${statusIcon}"></i> ${exp.status}</span></td>
@@ -1005,6 +1030,58 @@ function renderExpenses(expenses) {
             </tr>
         `);
     });
+}
+
+// Files chosen in the form, sent once the expense itself is saved.
+var pendingFiles = [];
+var EDITABLE_FILE_STATUSES = ['draft', 'submitted', 'manager_approved'];
+
+function renderNewFiles() {
+    $('#expenseNewFiles').html(pendingFiles.map(function (f, i) {
+        return '<span class="exp-new-file"><i class="fas fa-paperclip"></i><span data-no-i18n>' +
+            $('<div>').text(f.name).html() + '</span><button type="button" data-i="' + i + '" title="Remove">' +
+            '<i class="fas fa-times"></i></button></span>';
+    }).join(''));
+}
+$(document).on('change', '#expenseFiles', function () {
+    Array.prototype.forEach.call(this.files || [], function (f) {
+        if (f.size > 10 * 1024 * 1024) {
+            Swal.fire('Error', '"' + f.name + '" is over 10MB', 'error');
+            return;
+        }
+        pendingFiles.push(f);
+    });
+    this.value = '';
+    renderNewFiles();
+});
+$(document).on('click', '.exp-new-file button', function () {
+    pendingFiles.splice(+$(this).data('i'), 1);
+    renderNewFiles();
+});
+
+function renderExistingFiles(expense) {
+    var list = (expense && expense.attachments) || [];
+    var removable = expense && EDITABLE_FILE_STATUSES.indexOf(expense.status) >= 0;
+    $('#expenseExistingFiles').html(list.map(function (a) { return bgExpenseFileTile(a, removable); }).join(''));
+}
+$(document).on('click', '#expenseExistingFiles .bg-xf-remove', function () {
+    var id = $(this).data('id');
+    var tile = $(this).closest('.bg-xf-tile');
+    fetch('/api/my-expenses/attachments/' + id, { method: 'DELETE' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.success) { tile.remove(); loadExpenses(); }
+            else Swal.fire('Error', res.error || 'Could not remove the file', 'error');
+        });
+});
+
+function uploadExpenseFiles(expenseId) {
+    if (!pendingFiles.length) return Promise.resolve({ success: true });
+    var form = new FormData();
+    pendingFiles.forEach(function (f) { form.append('files', f, f.name); });
+    return fetch('/api/my-expenses/' + expenseId + '/attachments', { method: 'POST', body: form })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { success: false, error: 'Upload failed' }; });
 }
 
 function openAddExpenseModal() {
@@ -1019,6 +1096,9 @@ function openAddExpenseModal() {
     $('#expenseClientName').val('');
     $('#expenseCompanyId').val('');
     $('#expenseCompanyName').val('');
+    pendingFiles = [];
+    renderNewFiles();
+    renderExistingFiles(null);
     updateBalancePreview();
     $('#expenseModal').modal('show');
 }
@@ -1048,6 +1128,9 @@ function editExpense(id) {
                     $('#expenseAmount').val(expense.amount);
                     $('#expenseDescription').val(expense.description);
                     $('#expenseDate').val(expense.expense_date);
+                    pendingFiles = [];
+                    renderNewFiles();
+                    renderExistingFiles(expense);
                     updateBalancePreview();
                     $('#expenseModal').modal('show');
                 }
@@ -1145,11 +1228,20 @@ function saveExpense() {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            Swal.fire('Success', id ? 'Expense updated!' : 'Expense added!', 'success');
-            $('#expenseModal').modal('hide');
-            loadExpenses();
-            // Also refresh navbar balance
-            if (typeof loadNavbarBalance === 'function') loadNavbarBalance();
+            var expenseId = id || data.expense_id;
+            uploadExpenseFiles(expenseId).then(function (up) {
+                pendingFiles = [];
+                $('#expenseModal').modal('hide');
+                loadExpenses();
+                if (typeof loadNavbarBalance === 'function') loadNavbarBalance();
+                if (up.success) {
+                    Swal.fire('Success', id ? 'Expense updated!' : 'Expense added!', 'success');
+                } else {
+                    // The expense is saved either way; say which part did not land.
+                    Swal.fire('Expense saved, files not uploaded', (up.error || 'Upload failed') +
+                        '. Open the expense with Edit to add them again.', 'warning');
+                }
+            });
         } else {
             Swal.fire('Error', data.error || 'Failed to save expense', 'error');
         }

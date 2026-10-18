@@ -2,6 +2,18 @@
 
 {% block head %}
 <style>
+  .srd-xp-totals { display: flex; flex-wrap: wrap; gap: 8px; }
+  .srd-xp-total { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .srd-xp-total.ok { background: rgba(16,185,129,.12); color: #059669; }
+  .srd-xp-total.wait { background: rgba(245,158,11,.14); color: #b45309; }
+  .srd-xp-total.files { background: #eef2ff; color: #4f46e5; }
+  .srd-xp { border: 1px solid #e3e6f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .srd-xp-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .srd-xp-amount { font-size: 18px; font-weight: 800; color: #e74a3b; white-space: nowrap; }
+  .srd-xp-meta { color: #858796; font-size: 12px; margin-top: 2px; }
+  .srd-xp-desc { margin-top: 8px; white-space: pre-wrap; }
+  .srd-xp-files { margin-top: 10px; }
+  .srd-xp-nofiles { margin-top: 8px; font-size: 12px; color: #b7b9cc; }
   .srd-wrap { padding: 20px; max-width: 1280px; margin: 0 auto; }
   .srd-card { background: #fff; border: 1px solid #e3e6f0; border-radius: 8px;
               box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 18px; }
@@ -294,6 +306,19 @@
       </div>
       <div class="bd" id="srdItemsBody">
         <div class="srd-empty">No items.</div>
+      </div>
+    </div>
+
+    <!-- Expenses spent on this request, with their receipts (from My Expenses) -->
+    <div class="srd-card" id="srdExpensesCard">
+      <div class="hd">
+        <h5><i class="fas fa-receipt text-danger"></i> Expenses &amp; Receipts
+          <span class="text-muted" id="srdExpensesCount" style="font-weight:normal; font-size:13px;"></span>
+        </h5>
+        <div id="srdExpenseTotals" class="srd-xp-totals"></div>
+      </div>
+      <div class="bd" id="srdExpensesBody">
+        <div class="srd-empty"><i class="fas fa-spinner fa-spin"></i> Loading expenses...</div>
       </div>
     </div>
 
@@ -859,6 +884,41 @@
     $('#srdContent').show();
   }
 
+  // Expenses & Receipts: what was spent on this request through My Expenses.
+  function loadExpenses(){
+    $.ajax({ url: '/api/sales/requests/' + REQUEST_ID + '/expenses', type: 'GET', cache: false })
+      .done(function(r){
+        if (!r || !r.success) { $('#srdExpensesBody').html('<div class="srd-empty">Could not load expenses.</div>'); return; }
+        var list = r.expenses || [];
+        $('#srdExpensesCount').text('(' + list.length + ')');
+        $('#srdExpenseTotals').html(
+          '<span class="srd-xp-total ok">Approved total: ' + esc(money(r.totals.approved)) + '</span>' +
+          (r.totals.pending ? '<span class="srd-xp-total wait">Awaiting approval: ' + esc(money(r.totals.pending)) + '</span>' : '') +
+          '<span class="srd-xp-total files"><i class="fas fa-paperclip"></i> ' + r.files + ' file(s)</span>');
+        if (!list.length) {
+          $('#srdExpensesBody').html('<div class="srd-empty">No expenses recorded on this request yet.</div>');
+          return;
+        }
+        $('#srdExpensesBody').html(list.map(function(e){
+          var files = e.attachments || [];
+          return '<div class="srd-xp">' +
+            '<div class="srd-xp-head"><div>' +
+              '<b>' + esc(e.tracking_code) + '</b> ' + statusBadge(e.status) +
+              '<div class="srd-xp-meta">' + esc(e.expense_date || '-') + ' &middot; Spent by ' + esc(e.spent_by || '-') +
+                (e.spent_by_mobile ? ' (' + esc(e.spent_by_mobile) + ')' : '') +
+                (e.supplier ? ' &middot; Paid to ' + esc(e.supplier) : '') + '</div>' +
+            '</div><div class="srd-xp-amount">- ' + esc(money(e.amount)) + '</div></div>' +
+            (e.description ? '<div class="srd-xp-desc" data-no-i18n>' + esc(e.description) + '</div>' : '') +
+            (e.status === 'rejected' && e.rejection_reason ? '<div class="srd-xp-meta text-danger">Rejected: ' + esc(e.rejection_reason) + '</div>' : '') +
+            (files.length
+              ? '<div class="srd-xp-files bg-xf-grid">' + files.map(function(a){ return bgExpenseFileTile(a, false); }).join('') + '</div>'
+              : '<div class="srd-xp-nofiles"><i class="fas fa-paperclip"></i> No receipt attached</div>') +
+          '</div>';
+        }).join(''));
+      })
+      .fail(function(){ $('#srdExpensesBody').html('<div class="srd-empty">Could not load expenses.</div>'); });
+  }
+
   function showError(msg){
     $('#srdLoading').hide();
     $('#srdErrorMsg').text(msg || 'Unable to load request details.');
@@ -871,6 +931,7 @@
         if (r && r.success && r.request) {
           render(r.request);
           loadFlow();
+          loadExpenses();
         } else {
           showError((r && r.error) || 'Request not found.');
         }

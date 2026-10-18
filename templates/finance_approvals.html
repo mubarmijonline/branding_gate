@@ -780,7 +780,7 @@ function renderUserExpensesForFinance(expenses) {
                 '<td>' + (e.company_name || '-') + '</td>' +
                 '<td>' + (e.expense_date || '-') + '</td>' +
                 '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
-                '<td>' + (e.description || '-') + '</td>' +
+                '<td>' + (e.description || '-') + (e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : '') + '</td>' +
                 '<td>' +
                     '<div class="input-group input-group-sm">' +
                         '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input" ' +
@@ -1492,7 +1492,7 @@ function renderExpenseApprovals(expenses, status) {
                     '<td><strong>' + e.tracking_code + '</strong></td>' +
                     '<td>' + (e.expense_date || '-') + '</td>' +
                     '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
-                    '<td>' + (e.description || '-') + '</td>' +
+                    '<td>' + (e.description || '-') + (e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : '') + '</td>' +
                     '<td>' +
                         '<div class="input-group input-group-sm">' +
                             '<input type="number" class="form-control text-right font-weight-bold expense-amount-input" ' +
@@ -1523,7 +1523,7 @@ function renderExpenseApprovals(expenses, status) {
                 '<div class="item-info">' +
                     '<span class="item-code">' + e.tracking_code + '</span>' +
                     '<span class="item-type expense">EXPENSE</span>' +
-                    '<div class="item-desc"><strong>User:</strong> ' + (e.user_name || 'N/A') + ' &bull; ' + (e.description || '') + '</div>' +
+                    '<div class="item-desc"><strong>User:</strong> ' + (e.user_name || 'N/A') + ' &bull; ' + (e.description || '') + (e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : '') + '</div>' +
                     '<div class="item-meta">Date: ' + (e.expense_date || '-') + '</div>' +
                 '</div>' +
                 '<div class="item-amount" style="color: var(--' + statusClass + ');">' + formatCurrency(e.amount) + '</div>' +
