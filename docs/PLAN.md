@@ -257,3 +257,18 @@ the Sales Request it was spent on.
 - Shown in My Expenses (Files column), the approval screens (paperclip), and an
   "Expenses & Receipts" section on the Sales Request page (sent expenses only,
   approved and awaiting totals). Shared viewer: `static/js/bg-expense-files.js`.
+
+---
+
+# Uploaded files behind the login, 2026-10-18
+
+nginx served `uploads/` from disk to anyone holding a link (item attachments,
+costing alternatives and proposals, company documents, request files). The
+public `location /uploads/` is gone from `branding_gate_nginx.conf`; requests
+reach `serve_upload` (`/uploads/<path>`), which wants a session and:
+- `items/`, `alternatives/`, `costing/`, `sales_requests/`: an item desk
+  permission (costing, pricing, approved items, client approval, negotiation,
+  supplier report), or `sales_request.view` whose scope reaches the request owner;
+- `companies/`: `company.view` or `client.view`;
+- anything else: refused. Paths outside `uploads/` are 404.
+Responses are `Cache-Control: private`. Stored URLs are unchanged.

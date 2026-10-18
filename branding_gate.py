@@ -3567,7 +3567,7 @@ PUBLIC_ENDPOINTS = {
     'subscribe', 'firebase_messaging_sw', 'refresh_user_roles',
     'get_notifications', 'mark_notifications_read', 'all_notifications',
     'add_notification',
-    'serve_item_attachment', 'sales_requests_lookup',
+    'sales_requests_lookup',
     'set_ui_language',
 }
 
@@ -14366,39 +14366,85 @@ def delete_item_attachment(item_id, attachment_id):
             'message': 'Failed to delete attachment'
         }), 500
 
-# Serve uploaded files for items
-@app.route('/uploads/items/<int:item_id>/<filename>')
-def serve_item_attachment(item_id, filename):
-    """Serve uploaded item attachment files"""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    
+# Uploaded files. nginx used to serve uploads/ straight off the disk to anyone
+# holding a link; now every file comes through here, behind the login, and
+# only to people who may see the record it belongs to.
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+
+# Desks that work on any request's items (costing, pricing, operations, client
+# approval). Their own pages are gated by holding the permission, not by who
+# owns the request, so their files are too.
+ITEM_FILE_DESKS = ('costing.view', 'sales_item.cost', 'sales_item.price', 'approved_item.view',
+                   'client_approval.view', 'negotiation.view', 'supplier_report.view')
+UPLOAD_MIMETYPES = {
+    'pdf': 'application/pdf', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'gif': 'image/gif', 'bmp': 'image/bmp', 'webp': 'image/webp', 'heic': 'image/heic',
+}
+
+
+def _request_file_allowed(cur, request_id):
+    """May the caller see files of this sales request (or of an unknown one, when None)?"""
+    if any(has(code) for code in ITEM_FILE_DESKS):
+        return True
+    if not has('sales_request.view'):
+        return False
+    if request_id is None:
+        # The record is gone or the file predates its table: what is left is
+        # who may see requests at all.
+        return True
+    cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (request_id,))
+    row = cur.fetchone()
+    return row is None or _scope_covers('sales_request.view', row['owner_user_id'])
+
+
+def upload_access_allowed(cur, parts):
+    """`parts` is the path under uploads/, split on '/'. True when the caller may read it."""
+    folder = parts[0] if parts else ''
+    owner_id = int(parts[1]) if len(parts) > 2 and parts[1].isdigit() else None
+    if folder == 'companies':
+        return has('company.view') or has('client.view')
+    if folder in ('items', 'alternatives'):
+        request_id = None
+        if owner_id is not None:
+            cur.execute("SELECT request_id FROM sales_request_items WHERE id = %s", (owner_id,))
+            row = cur.fetchone()
+            request_id = row['request_id'] if row else None
+        return _request_file_allowed(cur, request_id)
+    if folder == 'costing':
+        request_id = None
+        if owner_id is not None:
+            cur.execute("SELECT request_id FROM costing_proposal WHERE id = %s", (owner_id,))
+            row = cur.fetchone()
+            request_id = row['request_id'] if row else None
+        return _request_file_allowed(cur, request_id)
+    if folder == 'sales_requests':
+        return _request_file_allowed(cur, owner_id)
+    return False
+
+
+@app.route('/uploads/<path:subpath>')
+@perm('sales_request.view', 'company.view', 'client.view', *ITEM_FILE_DESKS)
+def serve_upload(subpath):
+    """Any file under uploads/, to whoever may see the record it belongs to."""
+    root = os.path.realpath(UPLOADS_DIR)
+    path = os.path.realpath(os.path.join(root, subpath))
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        abort(404)
+    conn, cur = connection()
     try:
-        file_path = os.path.join('uploads', 'items', str(item_id), filename)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'success': False, 'message': 'File not found'}), 404
-        
-        # Determine mimetype based on extension
-        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-        mimetype_map = {
-            'pdf': 'application/pdf',
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'gif': 'image/gif',
-            'bmp': 'image/bmp',
-            'webp': 'image/webp'
-        }
-        
-        mimetype = mimetype_map.get(file_ext, 'application/octet-stream')
-        
-        return send_file(file_path, mimetype=mimetype, as_attachment=False)
-        
-    except Exception as e:
-        print(f"Error serving item attachment: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        allowed = upload_access_allowed(cur, os.path.relpath(path, root).split(os.sep))
+    finally:
+        cur.close()
+        conn.close()
+    if not allowed:
+        abort(403)
+    ext = path.rsplit('.', 1)[-1].lower() if '.' in path else ''
+    mimetype = UPLOAD_MIMETYPES.get(ext)
+    response = send_file(path, mimetype=mimetype or 'application/octet-stream',
+                         as_attachment=mimetype is None, conditional=True)
+    # Private to this browser: a shared cache must not hand it to someone else.
+    response.headers['Cache-Control'] = 'private, max-age=3600'
+    return response
 
 # ============================================================================
 # END ITEM ATTACHMENTS API ENDPOINTS
