@@ -20300,6 +20300,46 @@ def get_inventory_transactions():
         print(f"Error getting inventory transactions: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Movement types as the stock trigger reads them.
+STOCK_IN_TYPES = ('purchase', 'credit_in', 'adjustment')
+STOCK_OUT_TYPES = ('sale', 'stock_out', 'credit_out', 'transfer')
+
+
+def sync_credit_item(cur, item_id, transaction_type, quantity, unit_cost=0):
+    """
+    Carry a stock movement onto the item's credit record.
+
+    The Credit Inventory page reads received / sold / returned / remaining
+    from inventory_credit_items, which only its own Receive / Sell / Return
+    buttons used to update. Stock In and Stock Out from the item page moved
+    the stock (the trigger) and left the credit figures where they were, so
+    the page showed 800 received and 800 remaining after 300 had gone out.
+    Remaining is taken from the item's stock, which the trigger keeps.
+    """
+    cur.execute("""SELECT id, agreed_cost_per_item FROM inventory_credit_items
+                   WHERE item_id = %s ORDER BY id DESC LIMIT 1 FOR UPDATE""", (item_id,))
+    credit = cur.fetchone()
+    if not credit:
+        return
+    quantity = float(quantity or 0)
+    cost = float(unit_cost or 0) or float(credit['agreed_cost_per_item'] or 0)
+    if transaction_type in STOCK_IN_TYPES:
+        cur.execute("""UPDATE inventory_credit_items
+                       SET quantity_received = quantity_received + %s,
+                           total_value = COALESCE(total_value, 0) + %s,
+                           amount_due = COALESCE(amount_due, 0) + %s
+                       WHERE id = %s""", (quantity, quantity * cost, quantity * cost, credit['id']))
+    elif transaction_type in STOCK_OUT_TYPES:
+        cur.execute("UPDATE inventory_credit_items SET quantity_sold = COALESCE(quantity_sold, 0) + %s WHERE id = %s",
+                    (quantity, credit['id']))
+    elif transaction_type == 'return':
+        cur.execute("UPDATE inventory_credit_items SET quantity_returned = COALESCE(quantity_returned, 0) + %s WHERE id = %s",
+                    (quantity, credit['id']))
+    cur.execute("""UPDATE inventory_credit_items c JOIN inventory_items i ON i.id = c.item_id
+                   SET c.quantity_remaining = GREATEST(i.quantity_in_stock, 0)
+                   WHERE c.id = %s""", (credit['id'],))
+
+
 @app.route('/api/inventory/transactions/add', methods=['POST'])
 @perm('inventory.transact')
 def add_inventory_transaction():
@@ -20375,6 +20415,8 @@ def add_inventory_transaction():
         ))
         
         transaction_id = cur.lastrowid
+        # A credit item's own figures follow the movement too.
+        sync_credit_item(cur, item_id, transaction_type, quantity, unit_cost)
         
         conn.commit()
         
