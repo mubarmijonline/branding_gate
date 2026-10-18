@@ -259,6 +259,16 @@
 }
 
 /* User Balances Table */
+.ue-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.ue-pick { display: flex; flex-direction: column; gap: 3px; margin: 0; font-size: 11px; font-weight: 600;
+           text-transform: uppercase; letter-spacing: .04em; color: var(--text-light, #64748b); }
+.ue-pick select { min-width: 200px; text-transform: none; letter-spacing: 0; font-size: 13px; }
+.ue-table-wrap { overflow-x: auto; }
+.balances-table.ue-table { display: table; width: 100% !important; }
+.ue-table .ue-amount { min-width: 110px; }
+.ue-table .ue-amount::-webkit-outer-spin-button, .ue-table .ue-amount::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ue-table .ue-amount { -moz-appearance: textfield; }
+.user-expense-category.ue-missing { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
 .balances-table {
     width: 100%;
     border-collapse: separate;
@@ -670,7 +680,8 @@ function loadUserExpensesForFinance() {
         method: 'GET',
         success: function(data) {
             if (data.success) {
-                renderUserExpensesForFinance(data.expenses);
+                // The "Paid from" picker needs the payment methods first.
+                loadExpensePaymentMethods().always(function () { renderUserExpensesForFinance(data.expenses); });
                 var expenseCount = data.expenses.length;
                 // Update total pending to include expenses
                 var currentTotal = parseInt($('#totalPending').text()) || 0;
@@ -748,17 +759,23 @@ function renderUserExpensesForFinance(expenses) {
         var totalAmount = group.expenses.reduce(function(sum, e) { return sum + parseFloat(e.amount); }, 0);
         
         var html = '<div class="approval-item" data-user-id="' + group.user_id + '" style="display: block; border-left: 4px solid var(--warning);">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">' +
+            '<div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-end; margin-bottom: 16px;">' +
                 '<div>' +
                     '<h5 style="margin: 0;"><i class="fas fa-user mr-2"></i>' + group.user_name + '</h5>' +
                     '<small class="text-muted">' + group.expenses.length + ' expense(s) - Total: <strong>' + formatCurrency(totalAmount) + '</strong></small>' +
                 '</div>' +
-                '<div>' +
+                '<div class="ue-actions">' +
+                    '<label class="ue-pick"><span>Category for all</span>' +
+                        '<select class="form-control form-control-sm ue-category-all" data-user-id="' + group.user_id + '">' +
+                        categoryOptions.replace('-- Select Category --', '-- Apply to every line --') + '</select></label>' +
+                    '<label class="ue-pick"><span>Paid from</span>' +
+                        '<select class="form-control form-control-sm ue-payment-method" id="ue_pm_' + group.user_id + '">' +
+                        expensePaymentMethodOptions() + '</select></label>' +
                     '<button class="btn-pill btn-pill-danger mr-2" onclick="rejectAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-times"></i> Reject All</button>' +
                     '<button class="btn-pill btn-pill-success" onclick="approveAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-check"></i> Approve All</button>' +
                 '</div>' +
             '</div>' +
-            '<table class="balances-table" style="margin: 0;">' +
+            '<div class="ue-table-wrap"><table class="balances-table ue-table" style="margin: 0; width: 100%;">' +
                 '<thead><tr>' +
                     '<th>Code</th>' +
                     '<th>SR</th>' +
@@ -767,23 +784,23 @@ function renderUserExpensesForFinance(expenses) {
                     '<th>Date</th>' +
                     '<th>Supplier</th>' +
                     '<th>Description</th>' +
-                    '<th style="width: 150px;">Amount</th>' +
-                    '<th style="width: 200px;">Category</th>' +
+                    '<th style="width: 190px;">Amount</th>' +
+                    '<th style="width: 230px;">Category <span class="text-danger">*</span></th>' +
                 '</tr></thead>' +
                 '<tbody>';
         
         group.expenses.forEach(function(e) {
-            html += '<tr data-user-expense-id="' + e.id + '">' +
+            html += '<tr data-user-expense-id="' + e.id + '" data-supplier="' + $('<div>').text(e.supplier_display || e.supplier_name || '').html() + '">' +
                 '<td><strong>' + e.tracking_code + '</strong></td>' +
                 '<td>' + (e.sales_request_id ? '<span class="badge badge-info">SR-' + e.sales_request_id + '</span>' : '-') + '</td>' +
                 '<td>' + (e.client_name || '-') + '</td>' +
                 '<td>' + (e.company_name || '-') + '</td>' +
-                '<td>' + (e.expense_date || '-') + '</td>' +
+                '<td style="white-space:nowrap;">' + expenseDay(e.expense_date) + '</td>' +
                 '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
                 '<td>' + (e.description || '-') + (e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : '') + '</td>' +
                 '<td>' +
                     '<div class="input-group input-group-sm">' +
-                        '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input" ' +
+                        '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input ue-amount" ' +
                                'id="user_expense_amount_' + e.id + '" ' +
                                'value="' + parseFloat(e.amount).toFixed(2) + '" ' +
                                'step="0.01" min="0" ' +
@@ -799,10 +816,50 @@ function renderUserExpensesForFinance(expenses) {
             '</tr>';
         });
         
-        html += '</tbody></table></div>';
+        html += '</tbody></table></div></div>';
         container.append(html);
     });
+    // A line whose supplier is also a category ("Transportation") starts with it chosen.
+    container.find('tr[data-user-expense-id]').each(function () {
+        var sel = $(this).find('.user-expense-category');
+        var supplier = String($(this).data('supplier') || '').trim().toLowerCase();
+        if (!supplier) return;
+        sel.find('option').each(function () {
+            var label = $(this).text().replace('↳', '').split('|')[0].trim().toLowerCase();
+            if (label && label === supplier) { sel.val($(this).val()); return false; }
+        });
+    });
 }
+
+function expenseDay(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d)) return String(value).slice(0, 10);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+var expensePaymentMethods = [];
+function expensePaymentMethodOptions() {
+    var active = expensePaymentMethods.filter(function (m) { return m.is_active; });
+    active.sort(function (a, b) { return (a.method_type === 'cash' ? 0 : 1) - (b.method_type === 'cash' ? 0 : 1) || a.id - b.id; });
+    if (!active.length) return '<option value="">No payment method</option>';
+    return active.map(function (m) {
+        return '<option value="' + m.id + '">' + $('<div>').text((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name).html() + '</option>';
+    }).join('');
+}
+function loadExpensePaymentMethods() {
+    return $.getJSON('/api/finance/payment-methods').then(function (d) {
+        expensePaymentMethods = (d && (d.payment_methods || d.methods)) || [];
+    }, function () { expensePaymentMethods = []; return $.Deferred().resolve(); });
+}
+
+$(document).on('change', '.ue-category-all', function () {
+    var val = $(this).val();
+    if (!val) return;
+    var card = $(this).closest('.approval-item');
+    card.find('.user-expense-category').val(val).removeClass('ue-missing');
+});
+$(document).on('change', '.user-expense-category', function () { $(this).removeClass('ue-missing'); });
 
 // Auto-save user expense amount for finance
 function autoSaveUserExpenseAmount(expenseId) {
@@ -836,6 +893,7 @@ function autoSaveUserExpenseAmount(expenseId) {
 // Approve all user expenses for a user (finance approval)
 function approveAllUserExpensesForFinance(userId, userName) {
     var expenses = [];
+    var missing = [];
     
     // Find the card for this specific user
     var userCard = $('.approval-item[data-user-id="' + userId + '"]');
@@ -848,9 +906,9 @@ function approveAllUserExpensesForFinance(userId, userName) {
         var selectedOption = catSelect.find('option:selected');
         var selectedVal = catSelect.val();
         if (!selectedVal) {
-            Swal.fire('Error', 'Please select a category for all expenses before approving', 'error');
-            expenses = [];
-            return false; // break
+            catSelect.addClass('ue-missing');
+            missing.push(row.find('td:first').text());
+            return; // keep going, so every missing line is marked
         }
         var parentId = selectedOption.data('parent-id');
         var expenseData = { id: expId, amount: amount };
@@ -866,7 +924,19 @@ function approveAllUserExpensesForFinance(userId, userName) {
         expenses.push(expenseData);
     });
     
+    if (missing.length) {
+        var first = userCard.find('.ue-missing').first();
+        if (first.length) first[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        Swal.fire('Category required', 'Select a category for every expense before approving. Missing: ' + missing.join(', ') +
+                  '. Tip: use "Category for all" to set them in one go.', 'warning');
+        return;
+    }
     if (expenses.length === 0) return;
+    var paymentMethodId = $('#ue_pm_' + userId).val();
+    if (!paymentMethodId) {
+        Swal.fire('Payment method required', 'Add a payment method first (Finance Management > Payment Methods).', 'warning');
+        return;
+    }
     
     var totalAmount = expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
     
@@ -885,7 +955,7 @@ function approveAllUserExpensesForFinance(userId, userName) {
                 url: '/api/finance/expense-approvals/finance-approve-bulk',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ expenses: expenses }),
+                data: JSON.stringify({ expenses: expenses, payment_method_id: parseInt(paymentMethodId) }),
                 success: function(response) {
                     if (response.success) {
                         Swal.fire('Approved!', response.approved_count + ' expense(s) approved as income transactions', 'success');

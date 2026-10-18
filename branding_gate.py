@@ -26939,6 +26939,24 @@ def approve_expenses_bulk():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def expense_payment_method(cur, requested_id=None):
+    """
+    (payment_method_id, error) for recording an approved expense.
+
+    The one Finance chose, if it is active; otherwise the first active cash
+    method. Both routes used to write id 1, which does not exist, so every
+    approval failed on the foreign key.
+    """
+    if requested_id:
+        cur.execute("SELECT id FROM payment_methods WHERE id = %s AND is_active = 1", (requested_id,))
+        row = cur.fetchone()
+        return (row['id'], None) if row else (None, 'Payment method not found or inactive')
+    cur.execute("""SELECT id FROM payment_methods WHERE is_active = 1
+                   ORDER BY method_type = 'cash' DESC, id LIMIT 1""")
+    row = cur.fetchone()
+    return (row['id'], None) if row else (None, 'Add a payment method first (Finance Management > Payment Methods)')
+
+
 @app.route('/api/finance/expense-approvals/<int:expense_id>/finance-approve', methods=['POST'])
 @perm('expense_tracking.approve_finance')
 def finance_approve_user_expense(expense_id):
@@ -26986,9 +27004,10 @@ def finance_approve_user_expense(expense_id):
         cur.execute("SELECT COALESCE(MAX(serial_number), 0) + 1 as next_serial FROM finance_transactions WHERE serial_number IS NOT NULL")
         serial_number = cur.fetchone()['next_serial']
         
-        # Default to Cash payment method (id=1) and Operational Expenses category (id=13)
-        payment_method_id = 1
-        category_id = 13  # Operational Expenses
+        payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
+        if pm_error:
+            return jsonify({'success': False, 'error': pm_error}), 400
+        category_id = int(data.get('category_id') or 13)  # Operational Expenses unless chosen
         
         # Get payment method balance
         cur.execute("SELECT current_balance FROM payment_methods WHERE id = %s", (payment_method_id,))
@@ -27078,8 +27097,15 @@ def finance_approve_expenses_bulk():
         cur.execute("SELECT name FROM user WHERE id = %s", (approver_id,))
         approver_name = cur.fetchone()['name']
         
-        # Default payment method
-        payment_method_id = 1  # Cash
+        payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
+        if pm_error:
+            return jsonify({'success': False, 'error': pm_error}), 400
+        # Every line needs its category: refuse the batch rather than approve part of it.
+        missing = [str(e.get('id')) for e in expenses if not e.get('category_id')]
+        if missing:
+            return jsonify({'success': False, 'missing_category': missing,
+                            'error': 'Select a category for every expense before approving '
+                                     '(%d missing)' % len(missing)}), 400
         
         import random
         
