@@ -553,9 +553,10 @@ SEED_MATRIX = {
             'approved_item.view': 'all',
             'supplier.view': 'all',
             'inventory.view': 'all',
-            # Stock in and stock out, and nothing else on the item itself: a
-            # member moves what is on the shelf, the leader maintains the item,
-            # and only the Head deletes one.
+            # Members add items (regular and credit) and move stock in and
+            # out; the leader also edits an item, and only the Head deletes
+            # one. Adding was the leader's until David opened it to the team.
+            'inventory.create': 'all',
             'inventory.transact': 'all',
             'catalog.view': 'all',
             'expense_tracking.view': 'own',

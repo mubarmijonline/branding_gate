@@ -5,9 +5,11 @@ Three separate complaints, one subject:
 
   * Deleting an item was open to anyone who could edit one. It is the Head's
     call alone -- a delete takes a row and its history with it -- while the
-    team leader does everything else, and a member moves stock and nothing
-    more. Members could not even do that: they held `inventory.view` and
-    nothing else, so the stock they physically move could not be recorded.
+    team leader does everything else, and a member adds items (regular and
+    credit) and moves stock, but neither edits nor deletes one. Members could
+    once not even move stock: they held `inventory.view` and nothing else, so
+    the stock they physically move could not be recorded. Adding items was
+    opened to them later, at the Operations Head's request.
   * `created_by` held a bare username and there was no `updated_by` at all, so
     a row said `01050172555` and nothing about the edit made yesterday.
   * A minimum quantity that nothing watches is decoration. A movement that
@@ -48,9 +50,9 @@ class RolesOnInventoryTest(unittest.TestCase):
         for permission, scope in leader.items():
             self.assertEqual(head[permission], scope, permission)
 
-    def test_a_member_moves_stock_and_nothing_else(self):
+    def test_a_member_adds_items_and_moves_stock_but_never_edits_or_deletes(self):
         member = self._inventory('operations_member')
-        self.assertEqual(set(member), {'view', 'transact'})
+        self.assertEqual(set(member), {'view', 'create', 'transact'})
 
     def test_the_page_draws_what_the_account_may_do(self):
         with open('templates/inventory_management.html', encoding='utf-8') as handle:
