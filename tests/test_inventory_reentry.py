@@ -68,13 +68,13 @@ class InventoryReEntryTest(unittest.TestCase):
                     (name, name.replace(' ', '-').upper()))
         return cur.lastrowid
 
-    def _add(self, entity_id, **extra):
+    def _add(self, entity_id, expect=200, **extra):
         payload = {'item_name': self.NAME, 'unit_of_measure': 'PCS',
                    'minimum_stock_level': '10', 'quantity_in_stock': '25',
                    'entity_id': entity_id}
         payload.update(extra)
         response = self.client.post('/api/inventory/items/add', json=payload)
-        self.assertEqual(response.status_code, 200, response.data[:300])
+        self.assertEqual(response.status_code, expect, response.data[:300])
         return response.get_json()
 
     def _delete(self, item_id):
@@ -152,8 +152,9 @@ class InventoryReEntryTest(unittest.TestCase):
 
     def test_a_live_item_in_the_same_entity_is_still_refused_once(self):
         self._add(self.entity)
-        twice = self._add(self.entity)
-        self.assertTrue(twice.get('already_exists'),
+        twice = self._add(self.entity, expect=409)
+        # Refused (409) with the first item, so the page offers to add to it.
+        self.assertTrue(twice.get('duplicate'),
                         'adding the same live item twice should point at the first')
 
     def test_the_unique_index_is_scoped_to_the_entity(self):

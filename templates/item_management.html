@@ -2631,10 +2631,26 @@ function addInventoryItem() {
             }
         },
         error: function(xhr) {
-            Swal.fire('Error', 'Failed to add item: ' + xhr.responseText, 'error');
+            if (xhr.responseJSON && xhr.responseJSON.duplicate) {
+                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_in_stock, unitCost: data.average_cost })
+                    .then(function () {
+                        $('#addItemModal').modal('hide');
+                        loadInventoryItems();
+                        loadDashboardStatistics();
+                    });
+                return;
+            }
+            Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to add item', 'error');
         }
     });
 }
+
+$(function () {
+    bgItemTwin.watch('#addItemForm [name="item_name"]', function () {
+        return { entity_id: $('#addItemForm [name="entity_id"]').val() || null };
+    });
+    bgItemTwin.watch('#addCreditForm [name="item_name"]', function () { return { credit: true }; });
+});
 
 // Add credit item
 function addCreditItem() {
@@ -2669,7 +2685,16 @@ function addCreditItem() {
             }
         },
         error: function(xhr) {
-            Swal.fire('Error', 'Failed to add credit item', 'error');
+            if (xhr.responseJSON && xhr.responseJSON.duplicate) {
+                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item })
+                    .then(function () {
+                        $('#addCreditModal').modal('hide');
+                        loadCreditItems();
+                        loadInventoryItems();
+                    });
+                return;
+            }
+            Swal.fire('Error', (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to add credit item', 'error');
         }
     });
 }

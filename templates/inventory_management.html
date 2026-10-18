@@ -1200,6 +1200,16 @@ const currentEntityId = JSON.parse('{{ entity_id|default("null")|tojson }}');
 const currentInventoryType = '{{ inventory_type|default("") }}';
 const isCredit = currentInventoryType === 'credit';
 
+// Typing a name that already exists here warns at once; saving offers to add
+// to that item's stock instead (static/js/bg-item-twin.js).
+$(function () {
+    bgItemTwin.watch('#addItemForm [name="item_name"]', function () { return { entity_id: currentEntityId }; });
+    bgItemTwin.watch('#credit_item_name', function () { return { credit: true }; });
+    bgItemTwin.watch('#edit_item_name', function () {
+        return { entity_id: currentEntityId, credit: isCredit, exclude_id: $('#edit_item_id').val() };
+    });
+});
+
 // What this account may do, decided by the server and only repeated here so a
 // button nobody can use is not drawn. Every route checks for itself.
 const CAN = {
@@ -1998,6 +2008,15 @@ function submitAddItem() {
     })
         .then(response => response.json())
         .then(result => {
+            if (result.duplicate) {
+                return bgItemTwin.resolve(result, { quantity: data.quantity_in_stock, unitCost: data.average_cost })
+                    .then(() => {
+                        $('#addItemModal').modal('hide');
+                        loadRegularInventory();
+                        loadTransactions();
+                        loadAlerts();
+                    });
+            }
             if (result.success) {
                 $('#addItemModal').modal('hide');
                 loadRegularInventory();
@@ -2498,6 +2517,16 @@ function submitAddCredit() {
     })
         .then(response => response.json())
         .then(result => {
+            if (result.duplicate) {
+                return bgItemTwin.resolve(result, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item })
+                    .then(() => {
+                        $('#addCreditModal').modal('hide');
+                        loadCreditInventory();
+                        loadRegularInventory();
+                        loadTransactions();
+                        loadAlerts();
+                    });
+            }
             if (result.success) {
                 $('#addCreditModal').modal('hide');
                 loadCreditInventory();

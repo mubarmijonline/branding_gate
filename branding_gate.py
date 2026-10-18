@@ -19533,6 +19533,93 @@ def get_inventory_items():
         print(f"Error getting inventory items: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ----------------------- ONE ROW PER ITEM NAME -----------------------
+# "ميلجا" was received twice as two credit items, each with its own stock, so
+# neither figure was the real one. A new item whose name matches an existing
+# one -- after the normalising below -- is refused; the person adds to the
+# existing item's stock instead, or discards.
+
+_ARABIC_DIACRITICS = re.compile('[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]')
+_ARABIC_FOLD = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ة': 'ه', 'ى': 'ي',
+                              'ؤ': 'و', 'ئ': 'ي', '٠': '0', '١': '1', '٢': '2', '٣': '3',
+                              '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'})
+
+
+def normalize_item_name(name):
+    """What makes two item names the same item: case, spacing, punctuation and
+    Arabic spelling variants (hamza forms, taa marbuta, alef maqsura,
+    diacritics, tatweel, Arabic digits) do not count."""
+    text = _ARABIC_DIACRITICS.sub('', str(name or '')).translate(_ARABIC_FOLD).casefold()
+    return re.sub(r'[\W_]+', '', text)
+
+
+def find_item_twin(cur, item_name, entity_id=None, is_credit=False, exclude_id=None):
+    """
+    The active item this name already belongs to, or None.
+
+    Credit items are one list whatever the entity; regular items are per
+    entity. Retired (discontinued) items are not twins: adding one again
+    restores it.
+    """
+    key = normalize_item_name(item_name)
+    if not key:
+        return None
+    query = """
+        SELECT i.id, i.item_code, i.item_name, i.quantity_in_stock, i.unit_of_measure,
+               i.average_cost, i.entity_id,
+               (SELECT c.id FROM inventory_credit_items c WHERE c.item_id = i.id
+                ORDER BY c.id DESC LIMIT 1) AS credit_id
+        FROM inventory_items i
+        WHERE i.status <> 'discontinued' AND COALESCE(i.is_credit_item, 0) = %s
+    """
+    params = [1 if is_credit else 0]
+    if not is_credit:
+        if entity_id:
+            query += " AND i.entity_id = %s"
+            params.append(entity_id)
+        else:
+            query += " AND i.entity_id IS NULL"
+    if exclude_id:
+        query += " AND i.id <> %s"
+        params.append(exclude_id)
+    cur.execute(query, params)
+    for row in cur.fetchall():
+        if normalize_item_name(row['item_name']) == key:
+            return {'id': row['id'], 'item_code': row['item_code'], 'item_name': row['item_name'],
+                    'quantity_in_stock': float(row['quantity_in_stock'] or 0),
+                    'unit_of_measure': row['unit_of_measure'],
+                    'average_cost': float(row['average_cost'] or 0),
+                    'credit_id': row['credit_id'], 'is_credit': bool(is_credit)}
+    return None
+
+
+def duplicate_item_response(twin):
+    """409 carrying the existing item, so the page can offer to add to it."""
+    return jsonify({
+        'success': False, 'duplicate': twin,
+        'error': '"%s" already exists as %s (stock %g). Add to its stock instead of creating it again.'
+                 % (twin['item_name'], twin['item_code'], twin['quantity_in_stock']),
+    }), 409
+
+
+@app.route('/api/inventory/items/name-check', methods=['GET'])
+@perm('inventory.view')
+def inventory_item_name_check():
+    """As the name is typed: does an item with this name already exist here?"""
+    name = (request.args.get('name') or '').strip()
+    if not name:
+        return jsonify(success=True, duplicate=None)
+    entity_id = request.args.get('entity_id', type=int)
+    is_credit = request.args.get('credit') in ('1', 'true')
+    conn, cur = connection()
+    try:
+        twin = find_item_twin(cur, name, entity_id, is_credit, request.args.get('exclude_id', type=int))
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, duplicate=twin)
+
+
 @app.route('/api/inventory/items/add', methods=['POST'])
 @perm('inventory.create')
 def add_inventory_item():
@@ -19612,6 +19699,12 @@ def add_inventory_item():
                 next_num = (result['max_num'] or 0) + 1
                 item_code = f'INV-{next_num:05d}'
         
+        twin = find_item_twin(cur, item_name, entity_id, is_credit=False)
+        if twin:
+            cur.close()
+            conn.close()
+            return duplicate_item_response(twin)
+
         # Check if item already exists based on unique constraint (name, unit, dimensions)
         unit_of_measure = data.get('unit_of_measure', 'PCS')
         check_query = """
@@ -20003,6 +20096,10 @@ def update_inventory_item(item_id):
                 twin_params.append(wanted[field])
         cur.execute(twin_query, twin_params)
         twin = cur.fetchone()
+        if not twin and normalize_item_name(wanted['item_name']) != normalize_item_name(current['item_name']):
+            # Renamed onto another item's name, however it is spelled.
+            twin = find_item_twin(cur, wanted['item_name'], current['entity_id'],
+                                  bool(current['is_credit_item']), exclude_id=item_id)
         if twin:
             cur.close()
             conn.close()
@@ -20590,6 +20687,11 @@ def add_credit_item():
             item_code = f"INV-{max_id + 1:05d}"
             
             item_name = data.get('item_name') or sri.get('name') or 'Credit Item'
+            twin = find_item_twin(cur, item_name, is_credit=True)
+            if twin:
+                cur.close()
+                conn.close()
+                return duplicate_item_response(twin)
             
             # Create the inventory item
             cur.execute("""
@@ -20626,6 +20728,11 @@ def add_credit_item():
                 cur.close()
                 conn.close()
                 return jsonify({'success': False, 'error': 'Item name is required'}), 400
+            twin = find_item_twin(cur, item_name, is_credit=True)
+            if twin:
+                cur.close()
+                conn.close()
+                return duplicate_item_response(twin)
             
             # Auto-generate item code if not provided
             if not item_code:
