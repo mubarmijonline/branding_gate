@@ -20008,7 +20008,7 @@ def get_inventory_item_timeline(item_id):
 
         cur.execute("""
             SELECT transaction_type, quantity, unit_cost, balance_after,
-                   reference_type, notes, performed_by, transaction_date
+                   reference_type, lot_code, notes, performed_by, transaction_date
             FROM inventory_transactions
             WHERE item_id = %s
             ORDER BY transaction_date DESC, id DESC
@@ -20021,6 +20021,7 @@ def get_inventory_item_timeline(item_id):
                 'quantity': float(row['quantity'] or 0),
                 'unit_cost': float(row['unit_cost'] or 0),
                 'balance_after': float(row['balance_after'] or 0),
+                'lot_code': row['lot_code'],
                 'note': row['notes'] or row['reference_type'] or '',
                 'by_name': person['name'],
                 'by_mobile': person['mobile'],
@@ -20397,6 +20398,65 @@ def get_inventory_transactions():
         print(f"Error getting inventory transactions: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def clean_lot_code(value):
+    """A movement's code as stored: trimmed, at most 50 characters, None when blank."""
+    code = str(value or '').strip()[:50]
+    return code or None
+
+
+def stock_by_code(cur, item_id):
+    """
+    {'total', 'general', 'codes': [{'code', 'quantity'}]} for one item.
+
+    Each code's stock is its coded movements in minus out; general is the rest
+    of the item's stock, so opening quantities and older uncoded movements
+    land there without needing a history of their own.
+    """
+    cur.execute("SELECT quantity_in_stock FROM inventory_items WHERE id = %s", (item_id,))
+    row = cur.fetchone()
+    total = float(row['quantity_in_stock'] or 0) if row else 0.0
+    cur.execute("""
+        SELECT lot_code,
+               SUM(CASE WHEN transaction_type IN ('purchase', 'credit_in', 'adjustment') THEN quantity
+                        WHEN transaction_type IN ('sale', 'stock_out', 'credit_out', 'transfer', 'return') THEN -quantity
+                        ELSE 0 END) AS quantity
+        FROM inventory_transactions
+        WHERE item_id = %s AND lot_code IS NOT NULL
+        GROUP BY lot_code ORDER BY lot_code
+    """, (item_id,))
+    codes = [{'code': r['lot_code'], 'quantity': float(r['quantity'] or 0)} for r in cur.fetchall()]
+    codes = [c for c in codes if abs(c['quantity']) > 1e-9]
+    return {'total': total, 'general': total - sum(c['quantity'] for c in codes), 'codes': codes}
+
+
+def lot_shortfall(cur, item_id, lot_code, quantity):
+    """Error text when taking `quantity` out of this code (or general) would overdraw it."""
+    split = stock_by_code(cur, item_id)
+    if lot_code:
+        held = next((c['quantity'] for c in split['codes'] if c['code'] == lot_code), 0.0)
+        where = 'code %s' % lot_code
+    else:
+        held = split['general']
+        where = 'general stock'
+    if quantity > held + 1e-9:
+        others = ', '.join('%s: %g' % (c['code'], c['quantity']) for c in split['codes'])
+        return ('Only %g in %s. %s' % (held, where,
+                ('Choose the code it comes from (%s).' % others) if others and not lot_code else '')).strip()
+    return None
+
+
+@app.route('/api/inventory/items/<int:item_id>/stock-by-code', methods=['GET'])
+@perm('inventory.view')
+def inventory_stock_by_code(item_id):
+    """The item's stock split into general and each code."""
+    conn, cur = connection()
+    try:
+        return jsonify(success=True, **stock_by_code(cur, item_id))
+    finally:
+        cur.close()
+        conn.close()
+
+
 # Movement types as the stock trigger reads them.
 STOCK_IN_TYPES = ('purchase', 'credit_in', 'adjustment')
 STOCK_OUT_TYPES = ('sale', 'stock_out', 'credit_out', 'transfer')
@@ -20484,18 +20544,25 @@ def add_inventory_transaction():
         item_entity_id = item['entity_id']  # Get entity from item
         
         # Check if we have enough stock for outgoing transactions
+        lot_code = clean_lot_code(data.get('lot_code'))
         if transaction_type in outgoing_types:
             if quantity > current_stock:
                 cur.close()
                 conn.close()
                 return jsonify({'success': False, 'error': f'Insufficient stock. Available: {current_stock}, Requested: {quantity}'}), 400
+            # Out of a code, or out of general: neither may go below zero.
+            shortfall = lot_shortfall(cur, item_id, lot_code, quantity)
+            if shortfall:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': shortfall}), 400
         
         # Insert transaction with entity_id - the database trigger handles stock updates and balance_after
         cur.execute("""
             INSERT INTO inventory_transactions
             (item_id, entity_id, transaction_type, quantity, unit_cost, total_cost,
-             reference_type, reference_id, supplier_id, client_id, notes, performed_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             reference_type, reference_id, lot_code, supplier_id, client_id, notes, performed_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             item_id,
             item_entity_id,  # Include entity_id from the item
@@ -20505,6 +20572,7 @@ def add_inventory_transaction():
             total_cost,
             data.get('reference_type'),
             data.get('reference_id'),
+            lot_code,
             data.get('supplier_id') if data.get('supplier_id') else None,
             data.get('client_id') if data.get('client_id') else None,
             data.get('notes'),
@@ -20577,9 +20645,11 @@ def get_credit_items():
             LEFT JOIN sales_request_items sri ON c.sales_request_item_id = sri.id
             LEFT JOIN sales_request sr ON sri.request_id = sr.id
             LEFT JOIN client cl ON sr.client_id = cl.id
+            WHERE i.status <> 'discontinued'
             ORDER BY c.received_date DESC
         """)
         credit_items = cur.fetchall()
+        splits = {item['item_id']: stock_by_code(cur, item['item_id']) for item in credit_items}
         
         credit_list = []
         for item in credit_items:
@@ -20616,7 +20686,8 @@ def get_credit_items():
                 'sales_request_item_id': item['sales_request_item_id'],
                 'request_number': item['request_number'],
                 'request_id': item['request_id'],
-                'client_name': item['client_name']
+                'client_name': item['client_name'],
+                'stock_by_code': splits.get(item['item_id']),
             })
         
         cur.close()
@@ -20990,14 +21061,15 @@ def add_quantity_to_credit_item(credit_id):
         cur.execute("""
             INSERT INTO inventory_transactions
             (item_id, transaction_type, quantity, unit_cost, total_cost,
-             reference_type, reference_id, supplier_id, notes, performed_by)
-            VALUES (%s, 'credit_in', %s, %s, %s, 'credit_item', %s, %s, %s, %s)
+             reference_type, reference_id, lot_code, supplier_id, notes, performed_by)
+            VALUES (%s, 'credit_in', %s, %s, %s, 'credit_item', %s, %s, %s, %s, %s)
         """, (
             credit_item['item_id'],
             quantity_to_add,
             cost_per_item,
             additional_value,
             credit_id,
+            clean_lot_code(data.get('lot_code')),
             credit_item['supplier_id'],
             f"Added {quantity_to_add} more to credit item. {notes}",
             session.get('username')

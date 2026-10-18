@@ -2632,7 +2632,7 @@ function addInventoryItem() {
         },
         error: function(xhr) {
             if (xhr.responseJSON && xhr.responseJSON.duplicate) {
-                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_in_stock, unitCost: data.average_cost })
+                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_in_stock, unitCost: data.average_cost, lotCode: data.item_code })
                     .then(function () {
                         $('#addItemModal').modal('hide');
                         loadInventoryItems();
@@ -2686,7 +2686,7 @@ function addCreditItem() {
         },
         error: function(xhr) {
             if (xhr.responseJSON && xhr.responseJSON.duplicate) {
-                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item })
+                bgItemTwin.resolve(xhr.responseJSON, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item, lotCode: data.item_code })
                     .then(function () {
                         $('#addCreditModal').modal('hide');
                         loadCreditItems();

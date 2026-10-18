@@ -1093,6 +1093,10 @@ tr.row-openable .row-actions { cursor: default; }
                         </div>
                     </div>
                     <div class="form-group">
+                        <label><i class="fas fa-tags mr-1 text-muted"></i>Code <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                        <input type="text" class="form-control" name="lot_code" maxlength="50" placeholder="Leave empty for general stock">
+                    </div>
+                    <div class="form-group">
                         <label><i class="fas fa-sticky-note mr-1 text-muted"></i>Reference / Notes</label>
                         <input type="text" class="form-control" name="notes" placeholder="PO number, reason, adjustment notes, etc.">
                     </div>
@@ -1602,6 +1606,15 @@ function renderItemActions(item) {
 }
 
 
+// Remaining, and under it the split when part of it sits under a code.
+function remainingWithCodes(item) {
+    const split = item.stock_by_code;
+    if (!split || !split.codes || !split.codes.length) return item.quantity_remaining;
+    const chips = [`General ${bgNumber(split.general)}`].concat(
+        split.codes.map(c => `<bdi data-no-i18n>${$('<div>').text(c.code).html()}</bdi>: ${bgNumber(c.quantity)}`));
+    return `<strong>${item.quantity_remaining}</strong><div class="small text-muted" style="white-space:nowrap;">${chips.join(' &middot; ')}</div>`;
+}
+
 function loadCreditInventory() {
     return fetch('/api/inventory/credit-items')
         .then(response => response.json())
@@ -1626,7 +1639,7 @@ function loadCreditInventory() {
                     item.request_number ? `<a href="/operation_request/${item.request_id}" target="_blank" class="badge badge-info">${item.request_number}</a>` : '<span class="text-muted">-</span>',
                     item.quantity_received,
                     item.quantity_sold,
-                    item.quantity_remaining,
+                    remainingWithCodes(item),
                     `EGP ${Number(item.amount_due || 0).toLocaleString()}`,
                     item.status,
                     renderCreditActions(item)
@@ -1676,7 +1689,31 @@ function renderCreditActions(item) {
                     onclick="showAddMoreQuantityModal(${item.id}, '${safeName}', ${item.agreed_cost_per_item || 0})"><i class="fas fa-plus"></i></button>
             <button type="button" class="btn-action btn-move" title="Add transaction"
                     onclick="showAddTransactionModal(null, ${item.id})"><i class="fas fa-exchange-alt"></i></button>
+            <a class="btn-action btn-move" title="Open item page" href="/inventory/item/${item.item_id}"><i class="fas fa-external-link-alt"></i></a>
+            ${CAN.remove ? `<button type="button" class="btn-action btn-delete" title="Delete item"
+                    onclick="deleteCreditItem(${item.item_id}, '${safeName}')"><i class="fas fa-trash"></i></button>` : ''}
         </div>`;
+}
+
+// Only the Operations Head (and the owner) see this button; the route checks too.
+function deleteCreditItem(itemId, itemName) {
+    Swal.fire({
+        title: 'Delete credit item?',
+        html: '<b data-no-i18n>' + $('<div>').text(itemName).html() + '</b><br>' +
+              'An item with movements is retired: it leaves the list and keeps its history.',
+        icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc3545', confirmButtonText: 'Delete'
+    }).then(choice => {
+        if (!choice.isConfirmed) return;
+        fetch(`/api/inventory/items/${itemId}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) { Swal.fire('Error', res.error || res.message || 'Not deleted', 'error'); return; }
+                Swal.fire(res.outcome === 'discontinued' ? 'Retired' : 'Deleted', res.message, 'success');
+                loadCreditInventory();
+                loadTransactions();
+            })
+            .catch(() => Swal.fire('Error', 'Not deleted. Please try again.', 'error'));
+    });
 }
 
 function showAddMoreQuantityModal(creditId, itemName, currentCost) {
@@ -1692,6 +1729,10 @@ function showAddMoreQuantityModal(creditId, itemName, currentCost) {
                 <div class="form-group">
                     <label>Cost per Item (optional)</label>
                     <input type="number" id="addMoreCost" class="form-control" min="0" step="0.01" value="${currentCost}" placeholder="Leave empty to use existing cost">
+                </div>
+                <div class="form-group">
+                    <label>Code (optional)</label>
+                    <input type="text" id="addMoreLot" class="form-control" maxlength="50" placeholder="Leave empty for general stock">
                 </div>
                 <div class="form-group">
                     <label>Notes</label>
@@ -1711,7 +1752,8 @@ function showAddMoreQuantityModal(creditId, itemName, currentCost) {
             return {
                 quantity: qty,
                 cost_per_item: parseFloat(document.getElementById('addMoreCost').value) || 0,
-                notes: document.getElementById('addMoreNotes').value
+                notes: document.getElementById('addMoreNotes').value,
+                lot_code: document.getElementById('addMoreLot').value.trim() || null
             };
         }
     }).then((result) => {
@@ -2009,7 +2051,7 @@ function submitAddItem() {
         .then(response => response.json())
         .then(result => {
             if (result.duplicate) {
-                return bgItemTwin.resolve(result, { quantity: data.quantity_in_stock, unitCost: data.average_cost })
+                return bgItemTwin.resolve(result, { quantity: data.quantity_in_stock, unitCost: data.average_cost, lotCode: data.item_code })
                     .then(() => {
                         $('#addItemModal').modal('hide');
                         loadRegularInventory();
@@ -2518,7 +2560,7 @@ function submitAddCredit() {
         .then(response => response.json())
         .then(result => {
             if (result.duplicate) {
-                return bgItemTwin.resolve(result, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item })
+                return bgItemTwin.resolve(result, { quantity: data.quantity_received, unitCost: data.agreed_cost_per_item, lotCode: data.item_code })
                     .then(() => {
                         $('#addCreditModal').modal('hide');
                         loadCreditInventory();

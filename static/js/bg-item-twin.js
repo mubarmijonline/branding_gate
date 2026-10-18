@@ -4,7 +4,7 @@
  * The server refuses a new item whose name matches an existing one (spelling
  * variants included) with 409 and the existing item. This file
  *   - warns while the name is typed:   bgItemTwin.watch(input, contextFn)
- *   - turns the refusal into a choice: bgItemTwin.resolve(result, {quantity, unitCost})
+ *   - turns the refusal into a choice: bgItemTwin.resolve(result, {quantity, unitCost, lotCode})
  *     -> "Add to existing stock" (a stock-in on the existing item) or "Discard".
  * resolve() returns a Promise of true when the duplicate was dealt with
  * (added or discarded), false when the result was not a duplicate.
@@ -24,12 +24,15 @@
             ' &middot; Current stock: <b>' + num(twin.quantity_in_stock) + '</b> ' + esc(twin.unit_of_measure || '');
     }
 
-    function addToExisting(twin, quantity, unitCost) {
+    function addToExisting(twin, quantity, unitCost, lotCode) {
+        // The code typed for the new item (e.g. "10") becomes the code its
+        // stock sits under inside the existing item.
         var req = twin.is_credit && twin.credit_id
             ? { url: '/api/inventory/credit-items/' + twin.credit_id + '/add-quantity',
-                body: { quantity: quantity, cost_per_item: unitCost || 0, notes: 'Added from a duplicate entry' } }
+                body: { quantity: quantity, cost_per_item: unitCost || 0, lot_code: lotCode || null,
+                        notes: 'Added from a duplicate entry' } }
             : { url: '/api/inventory/transactions/add',
-                body: { item_id: twin.id, transaction_type: 'purchase', quantity: quantity,
+                body: { item_id: twin.id, transaction_type: 'purchase', quantity: quantity, lot_code: lotCode || null,
                         unit_cost: unitCost || 0, notes: 'Added from a duplicate entry' } };
         return fetch(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) })
             .then(function (r) { return r.json(); });
@@ -41,11 +44,14 @@
         var quantity = parseFloat(entry && entry.quantity) || 0;
         var unitCost = parseFloat(entry && entry.unitCost) || 0;
         var canAdd = quantity > 0;
+        var lotCode = String((entry && entry.lotCode) || '').trim();
+        if (lotCode && lotCode === twin.item_code) lotCode = '';
         return Swal.fire({
             icon: 'warning',
             title: 'Item already exists',
             html: '<div style="text-align:start">' + describe(twin) + '<br><br>' +
-                (canAdd ? 'Add the <b>' + num(quantity) + '</b> you entered to its stock, or discard this entry.'
+                (canAdd ? 'Add the <b>' + num(quantity) + '</b> you entered to its stock' +
+                    (lotCode ? ' under code <b data-no-i18n>' + esc(lotCode) + '</b>' : '') + ', or discard this entry.'
                         : 'An item cannot be created twice. Open the existing one, or discard this entry.') + '</div>',
             showDenyButton: true,
             showCancelButton: false,
@@ -60,7 +66,7 @@
                 if (!twin.is_credit) window.location.href = '/inventory/item/' + twin.id;
                 return true;
             }
-            return addToExisting(twin, quantity, unitCost).then(function (res) {
+            return addToExisting(twin, quantity, unitCost, lotCode).then(function (res) {
                 if (res && res.success) {
                     Swal.fire('Stock updated', 'Added ' + num(quantity) + ' to ' + twin.item_name + '.', 'success');
                 } else {

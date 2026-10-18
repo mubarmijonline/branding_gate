@@ -51,6 +51,16 @@
 .status-danger  { background: var(--ii-danger-soft); color: var(--ii-danger); }
 .status-neutral { background: var(--ii-primary-soft); color: var(--ii-primary); }
 
+.ii-codes { padding: 0 24px 20px; }
+.ii-codes-title { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ii-muted);
+                  margin-bottom: 8px; font-weight: 700; }
+.ii-codes-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.ii-code-chip { border: 1px solid var(--ii-border); border-radius: 12px; padding: 8px 14px; min-width: 110px; }
+.ii-code-chip span { display: block; font-size: 11px; color: var(--ii-muted); font-weight: 600; }
+.ii-code-chip strong { font-size: 18px; color: var(--ii-text); }
+.ii-code-chip.general { background: var(--ii-primary-soft); border-color: transparent; }
+.ii-lot { display: inline-block; margin-inline-start: 6px; padding: 1px 7px; border-radius: 6px; font-size: 11px;
+          font-weight: 700; background: var(--ii-warning-soft); color: #92400e; }
 .ii-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .ii-section-title { font-size: 15px; font-weight: 700; color: var(--ii-text); margin: 0;
                     display: flex; align-items: center; gap: 8px; }
@@ -174,6 +184,10 @@
             <div class="ii-figure"><span>Stock Value</span><strong id="ii_value">&mdash;</strong></div>
             <div class="ii-figure"><span>Last Movement</span><strong id="ii_last" style="font-size:15px;">&mdash;</strong></div>
         </div>
+        <div class="ii-codes" id="ii_codes" hidden>
+            <div class="ii-codes-title"><i class="fas fa-tags"></i> Stock by code</div>
+            <div class="ii-codes-list" id="ii_codes_list"></div>
+        </div>
     </div>
 
     <div class="ii-grid">
@@ -228,6 +242,11 @@
                         <div class="form-group" data-only="in">
                             <label for="ii_supplier">Supplier</label>
                             <select class="form-control" id="ii_supplier"><option value="">No supplier</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="ii_lot">Code <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                            <input type="text" class="form-control" id="ii_lot" maxlength="50" list="ii_lot_options" placeholder="Leave empty for general stock">
+                            <datalist id="ii_lot_options"></datalist>
                         </div>
                         <div class="form-group">
                             <label for="ii_note" id="ii_note_label">Reference / note</label>
@@ -377,7 +396,7 @@
             const fresh = newestAt && index === 0 && move.at >= newestAt ? 'ii-new' : '';
             return `<tr class="${fresh}">
                 <td class="ii-when">${esc(move.at)}</td>
-                <td class="ii-type" data-label="Movement">${esc(String(move.event_type).replace(/_/g, ' '))}</td>
+                <td class="ii-type" data-label="Movement">${esc(String(move.event_type).replace(/_/g, ' '))}${move.lot_code ? `<span class="ii-lot" data-no-i18n>${esc(move.lot_code)}</span>` : ''}</td>
                 <td class="text-right ii-in ii-qty-cell">${incoming ? '+' + qty : ''}</td>
                 <td class="text-right ii-out ii-qty-cell">${incoming ? '' : '-' + qty}</td>
                 <td class="text-right" data-label="Unit cost">${move.unit_cost ? bgMoney(move.unit_cost) : '—'}</td>
@@ -417,8 +436,26 @@
             }
             item = itemData.item;
             renderItem(previousStock);
+            loadCodes();
             renderTimeline(timelineData.timeline || [], options.newestAt);
         }).catch(() => Swal.fire('Error', 'Could not load this item. Please refresh.', 'error'));
+    }
+
+    // --- stock by code ---------------------------------------------------
+    // General stock plus whatever was received under a code ("10"): one item,
+    // one total, and the split inside it.
+    function loadCodes() {
+        return fetch(`/api/inventory/items/${ITEM_ID}/stock-by-code`).then(r => r.json()).then(split => {
+            const codes = (split && split.codes) || [];
+            $('ii_codes').hidden = codes.length === 0;
+            $('ii_lot_options').innerHTML = codes.map(c => `<option value="${esc(c.code)}">`).join('');
+            if (!codes.length) return;
+            $('ii_codes_list').innerHTML =
+                `<div class="ii-code-chip general"><span>General</span><strong>${bgNumber(split.general)}</strong></div>` +
+                codes.map(c => `<div class="ii-code-chip"><span>Code <bdi data-no-i18n>${esc(c.code)}</bdi></span>` +
+                               `<strong>${bgNumber(c.quantity)}</strong></div>`).join('') +
+                `<div class="ii-code-chip"><span>Total</span><strong>${bgNumber(split.total)}</strong></div>`;
+        }).catch(() => {});
     }
 
     // --- stock in / out -------------------------------------------------
@@ -482,7 +519,8 @@
             transaction_type: kind === 'in' ? 'purchase' : 'stock_out',
             quantity: qty,
             unit_cost: kind === 'in' ? Number($('ii_cost').value || 0) : Number(item.average_cost || 0),
-            notes: $('ii_note').value.trim() || null
+            notes: $('ii_note').value.trim() || null,
+            lot_code: $('ii_lot').value.trim() || null
         };
         if (kind === 'in' && $('ii_supplier').value) payload.supplier_id = Number($('ii_supplier').value);
 
@@ -498,6 +536,7 @@
             }
             $('ii_qty').value = '';
             $('ii_note').value = '';
+            $('ii_lot').value = '';
             if ($('ii_cost')) $('ii_cost').value = '';
             Swal.fire({
                 toast: true, position: 'top-end', timer: 2600, showConfirmButton: false, icon: 'success',
