@@ -323,3 +323,15 @@ class SupplierGovernanceTest(unittest.TestCase):
             page = handle.read()
         self.assertIn('if (SUPPLIER_CAN.edit)', page)
         self.assertIn('if (SUPPLIER_CAN.remove)', page)
+
+
+class PartyDeclineTest(unittest.TestCase):
+    """Declining a client/company/supplier request is typed inside the request window."""
+
+    def test_no_sweetalert_input_over_the_modal(self):
+        with open('templates/party_requests_section.html', encoding='utf-8') as handle:
+            page = handle.read()
+        # A SweetAlert input opened over the Bootstrap modal could not take keys.
+        self.assertNotIn("input: 'text'", page)
+        self.assertIn('id="partyDeclineReason"', page)
+        self.assertIn("decide($(this).data('id'), 'reject', {reason: reason}", page)

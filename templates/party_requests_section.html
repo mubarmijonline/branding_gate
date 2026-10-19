@@ -60,6 +60,29 @@
 </div>
 
 <!-- The proposed record, in full, for whoever has to decide it -->
+<style>
+  .pr-summary { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+                background: #f8f9fc; border: 1px solid #e3e6f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
+  .pr-summary .who { font-weight: 700; color: #3a3b45; }
+  .pr-summary .when { font-size: 12px; color: #858796; }
+  .pr-why { background: #fff8e6; border-inline-start: 4px solid #f6c23e; border-radius: 8px; padding: 10px 14px;
+            margin-bottom: 16px; font-size: 14px; }
+  .pr-why b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #b7791f; }
+  .pr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+  .pr-grid .full { grid-column: 1 / -1; }
+  .pr-grid span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #858796; }
+  .pr-grid b { font-weight: 600; color: #3a3b45; word-break: break-word; }
+  .pr-trail { margin-top: 16px; border-top: 1px dashed #e3e6f0; padding-top: 12px; font-size: 13px; }
+  .pr-trail div { margin-bottom: 4px; }
+  .pr-decline-box { border: 1px solid #f5c2c7; background: #fff5f5; border-radius: 12px; padding: 16px; }
+  .pr-decline-box h6 { color: #c82333; font-weight: 700; margin-bottom: 10px; }
+  .pr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .pr-chip { border: 1px solid #e3e6f0; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px;
+             cursor: pointer; color: #5a5c69; }
+  .pr-chip:hover { border-color: #e74a3b; color: #e74a3b; }
+  .pr-count { font-size: 11px; color: #858796; text-align: end; margin-top: 4px; }
+  @media (max-width: 576px) { .pr-grid { grid-template-columns: 1fr; } }
+</style>
 <div class="modal fade" id="partyRequestModal" tabindex="-1" role="dialog">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
@@ -216,23 +239,67 @@
   }
 
   function detailHtml(q) {
-    var rows = FIELDS.filter(function (f) { return q.payload[f[0]]; }).map(function (f) {
-      return '<tr><th class="text-muted small" style="width:38%">' + f[1] + '</th>' +
-             '<td>' + esc(q.payload[f[0]]) + '</td></tr>';
+    var fields = FIELDS.filter(function (f) { return q.payload[f[0]]; }).map(function (f) {
+      var wide = f[0] === 'additional_notes' || f[0] === 'address';
+      return '<div' + (wide ? ' class="full"' : '') + '><span>' + f[1] + '</span><b data-no-i18n>' +
+             esc(q.payload[f[0]]) + '</b></div>';
     }).join('');
-    var trail = '<tr><th class="text-muted small">Asked by</th><td>' +
-                esc(q.requested_by_name) + ' &middot; ' + esc(q.requested_at || '') + '</td></tr>';
-    if (q.note) { trail += '<tr><th class="text-muted small">Reason given</th><td>' + esc(q.note) + '</td></tr>'; }
-    if (q.head_name) { trail += '<tr><th class="text-muted small">Passed by</th><td>' +
-                esc(q.head_name) + ' &middot; ' + esc(q.head_approved_at || '') +
-                (q.head_notes ? '<div class="small text-muted">' + esc(q.head_notes) + '</div>' : '') +
-                '</td></tr>'; }
-    if (q.admin_name) { trail += '<tr><th class="text-muted small">Approved by</th><td>' +
-                esc(q.admin_name) + ' &middot; ' + esc(q.admin_approved_at || '') + '</td></tr>'; }
-    if (q.rejection_reason) { trail += '<tr><th class="text-muted small">Declined</th><td class="text-danger">' +
-                esc(q.rejection_reason) + '</td></tr>'; }
-    return '<table class="table table-sm mb-0">' + rows + trail + '</table>';
+    var badge = STATUS[q.status] || ['secondary', q.status];
+    var html = '<div class="pr-summary"><div><div class="who"><i class="fas fa-user mr-1"></i>' +
+               esc(q.requested_by_name) + '</div><div class="when">Asked ' + esc(q.requested_at || '') + '</div></div>' +
+               '<span class="badge badge-' + badge[0] + ' px-3 py-2">' + esc(badge[1]) + '</span></div>';
+    if (q.note) { html += '<div class="pr-why"><b>Why this one</b><span data-no-i18n>' + esc(q.note) + '</span></div>'; }
+    html += '<div class="pr-grid">' + fields + '</div>';
+    var trail = '';
+    if (q.head_name) { trail += '<div><i class="fas fa-check text-success mr-1"></i>Passed by <b>' + esc(q.head_name) +
+                '</b> &middot; ' + esc(q.head_approved_at || '') +
+                (q.head_notes ? ' &middot; <span class="text-muted">' + esc(q.head_notes) + '</span>' : '') + '</div>'; }
+    if (q.admin_name) { trail += '<div><i class="fas fa-check-double text-success mr-1"></i>Approved by <b>' +
+                esc(q.admin_name) + '</b> &middot; ' + esc(q.admin_approved_at || '') + '</div>'; }
+    if (q.rejection_reason) { trail += '<div class="text-danger"><i class="fas fa-times mr-1"></i>Declined: ' +
+                esc(q.rejection_reason) + '</div>'; }
+    return html + (trail ? '<div class="pr-trail">' + trail + '</div>' : '');
   }
+
+  // Declining happens inside this window. A SweetAlert opened over a Bootstrap
+  // modal could not be typed into: the modal kept pulling focus back to
+  // itself, so the reason box ignored every key.
+  var DECLINE_REASONS = ['Already exists', 'Missing contact details', 'Not needed now', 'Wrong type or details'];
+
+  function showDecline(q) {
+    $('#partyRequestModalBody').html(
+      '<div class="pr-decline-box">' +
+        '<h6><i class="fas fa-times-circle mr-1"></i>Decline ' + esc(q.request_code) + '</h6>' +
+        '<label for="partyDeclineReason" class="small font-weight-bold mb-1">Reason <span class="text-danger">*</span>' +
+          ' <span class="text-muted font-weight-normal">' + esc(q.requested_by_name) + ' will see this</span></label>' +
+        '<textarea class="form-control" id="partyDeclineReason" rows="3" maxlength="300" ' +
+          'placeholder="Say what is wrong, so they can fix it and ask again"></textarea>' +
+        '<div class="pr-count"><span id="partyDeclineCount">0</span>/300</div>' +
+        '<div class="pr-chips">' + DECLINE_REASONS.map(function (r) {
+          return '<button type="button" class="pr-chip" data-reason="' + esc(r) + '">' + esc(r) + '</button>';
+        }).join('') + '</div>' +
+      '</div>');
+    $('#partyRequestModalFoot').html(
+      '<button class="btn btn-light party-back" data-id="' + q.id + '"><i class="fas fa-arrow-left mr-1"></i>Back</button>' +
+      '<button class="btn btn-danger" id="partyDeclineSend" data-id="' + q.id + '" disabled>' +
+        '<i class="fas fa-times mr-1"></i>Decline request</button>');
+    setTimeout(function () { $('#partyDeclineReason').trigger('focus'); }, 50);
+  }
+
+  $(document).on('input', '#partyDeclineReason', function () {
+    var len = $(this).val().trim().length;
+    $('#partyDeclineCount').text($(this).val().length);
+    $('#partyDeclineSend').prop('disabled', len < 3);
+  });
+  $(document).on('click', '.pr-chip', function () {
+    var box = $('#partyDeclineReason');
+    var current = box.val().trim();
+    box.val(current ? current + ' — ' + $(this).data('reason') : $(this).data('reason')).trigger('input').trigger('focus');
+  });
+  $(document).on('click', '.party-back', function () {
+    var id = $(this).data('id');
+    $('.party-view').filter(function () { return $(this).data('id') === id; }).first().trigger('click');
+  });
 
   $(document).on('click', '#partyRequestNew', function () {
     $('#partyRequestModalTitle').text('Request a new ' + KIND);
@@ -281,27 +348,35 @@
     $('#partyRequestModal').modal('show');
   });
 
+  function decide(id, act, payload, button) {
+    var original = button ? button.html() : '';
+    if (button) { button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Saving...'); }
+    $.ajax({url: '/api/party-requests/' + id + '/' + act, method: 'POST',
+            contentType: 'application/json', data: JSON.stringify(payload || {})})
+      .done(function (r) {
+        if (!r.success) { Swal.fire('Not saved', r.error || 'Try again', 'error'); return; }
+        $('#partyRequestModal').modal('hide');
+        Swal.fire(act === 'reject' ? 'Declined' : 'Done', r.message || '', 'success');
+        load();
+      })
+      .fail(function (x) { Swal.fire('Not saved', (x.responseJSON || {}).error || 'Server error', 'error'); })
+      .always(function () { if (button) { button.prop('disabled', false).html(original); } });
+  }
+
   $(document).on('click', '.party-decide', function () {
     var id = $(this).data('id'), act = $(this).data('act');
-    var go = function (payload) {
-      $.ajax({url: '/api/party-requests/' + id + '/' + act, method: 'POST',
-              contentType: 'application/json', data: JSON.stringify(payload || {})})
-        .done(function (r) {
-          if (!r.success) { Swal.fire('No', r.error || 'Try again', 'error'); return; }
-          $('#partyRequestModal').modal('hide');
-          Swal.fire('Done', r.message || '', 'success');
-          load();
-        })
-        .fail(function (x) { Swal.fire('No', (x.responseJSON || {}).error || 'Server error', 'error'); });
-    };
     if (act === 'reject') {
-      Swal.fire({title: 'Decline it?', input: 'text', inputLabel: 'Reason — they will see this',
-                 showCancelButton: true,
-                 inputValidator: function (v) { return v ? null : 'A reason is required'; }})
-        .then(function (res) { if (res.value) { go({reason: res.value}); } });
-    } else {
-      go({});
+      var q = (window.PARTY_REQUESTS || []).filter(function (x) { return x.id === id; })[0];
+      if (q) { showDecline(q); }
+      return;
     }
+    decide(id, act, {}, $(this));
+  });
+
+  $(document).on('click', '#partyDeclineSend', function () {
+    var reason = $('#partyDeclineReason').val().trim();
+    if (reason.length < 3) { $('#partyDeclineReason').trigger('focus'); return; }
+    decide($(this).data('id'), 'reject', {reason: reason}, $(this));
   });
 
   $(document).on('click', '.party-cancel', function () {
