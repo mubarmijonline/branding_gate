@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>فاتورة {{ inv.invoice_number or 'مسودة' }}</title>
+<title>{% if inv.kind == 'refund' %}فاتورة مرتجع R-{{ inv.invoice_number }}{% else %}فاتورة {{ inv.invoice_number or 'مسودة' }}{% endif %}</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   /* The layout of Finance's sample sheet: header block, lines, totals. */
@@ -38,8 +38,9 @@
 </div>
 <div class="sheet">
   {% if inv.status != 'posted' %}<div class="draft">مسودة - لم تُرحّل بعد ({{ inv.status }})</div>{% endif %}
+  {% if inv.kind == 'refund' %}<h2 style="text-align:center;margin:0 0 10px;">فاتورة مرتجع (إشعار دائن)</h2>{% endif %}
   <div class="head">
-    <div><span class="label">رقم الفاتورة</span><b>{{ inv.invoice_number or '—' }}</b></div>
+    <div><span class="label">{% if inv.kind == 'refund' %}رقم المرتجع{% else %}رقم الفاتورة{% endif %}</span><b>{% if inv.kind == 'refund' %}R-{% endif %}{{ inv.invoice_number or '—' }}</b></div>
     <div><span class="label">كود الشركة</span><b>{{ inv.company_id or '—' }}</b></div>
     <div><span class="label">اسم الشركة</span><b>{{ inv.company_name or '—' }}</b></div>
     <div><span class="label">تاريخ الفاتورة</span><b dir="ltr">{{ (inv.invoice_date or '')[:10] }}</b></div>
@@ -47,6 +48,7 @@
     <div><span class="label">رقم التسجيل</span><b dir="ltr">{{ inv.company_tax_number or '—' }}</b></div>
     <div><span class="label">شهر المطالبة</span><b dir="ltr">{{ inv.billing_month }}</b></div>
     <div><span class="label">طلب المبيعات</span><b dir="ltr">SR-{{ inv.sales_request_id }}</b></div>
+    {% if inv.kind == 'refund' %}<div><span class="label">مرتجع من فاتورة</span><b>{{ inv.refund_of_number }}</b></div><div></div>{% endif %}
   </div>
 
   <table>

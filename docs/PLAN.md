@@ -326,3 +326,15 @@ bank by payment-method type) and opens with balances brought forward
 (`client_opening_balance`, set by Finance). Combined balances by company or
 client: `/api/finance/accounts/balances`. Pages are full width. In Arabic the
 minus sign follows the amount (bg-i18n `minusAfter`).
+
+**Refunds and money on posting, 2026-10-19:** a refund is a `client_invoice` of
+kind `refund` against a posted invoice (`refund_of`), lines chosen from it with
+quantities up to what is left (`refund_of_line`), at its prices and taxes; own
+series R-n (`invoice_series` id 2). Posting either kind requires a payment
+method and an amount (default the total, 0 = owed): `book_client_money` books
+an approved Client Payment (income) or Client Refunds (expense) transaction,
+moving the payment method balance with history, so it reaches Finance's
+balances and reports. Statement: refund = credit, refund paid back = debit;
+Client Accounts' Invoiced is net of refunds. Finance > Clients groups Client
+Accounts & Statements, Invoices & Refunds and Combined Balances, with a shared
+tab bar (`_clients_nav.html`).

@@ -1020,19 +1020,25 @@
               <a class="dropdown-item" href="{{ url_for('finance_management_page') }}">
                 <i class="fas fa-wallet"></i> Finance Management
               </a>
-              {% if 'finance_report.view' in _p %}
-              <a class="dropdown-item" href="{{ url_for('finance_accounts_page') }}">
-                <i class="fas fa-address-book"></i> Client Accounts
-              </a>
-              {% endif %}
-              {% if 'invoice.post' in _p or ('invoice.view' in _p and 'finance_report.view' in _p) %}
-              <a class="dropdown-item" href="{{ url_for('client_invoices_page') }}">
-                <i class="fas fa-file-invoice"></i> Client Invoices
-              </a>
-              {% endif %}
               {% if can_approve_finance %}
               <a class="dropdown-item" href="{{ url_for('finance_approvals') }}">
                 <i class="fas fa-check-double"></i> Finance Approvals
+              </a>
+              {% endif %}
+              {% if 'finance_report.view' in _p %}
+              {# Everything about clients' money in one group. #}
+              <div class="dropdown-divider"></div>
+              <h6 class="dropdown-header"><i class="fas fa-users mr-1"></i> Clients</h6>
+              <a class="dropdown-item" href="{{ url_for('finance_accounts_page') }}">
+                <i class="fas fa-address-book"></i> Client Accounts &amp; Statements
+              </a>
+              {% if 'invoice.view' in _p %}
+              <a class="dropdown-item" href="{{ url_for('client_invoices_page') }}">
+                <i class="fas fa-file-invoice"></i> Invoices &amp; Refunds
+              </a>
+              {% endif %}
+              <a class="dropdown-item" href="{{ url_for('finance_accounts_page') }}?view=balances">
+                <i class="fas fa-balance-scale"></i> Combined Balances
               </a>
               {% endif %}
               <div class="dropdown-divider"></div>

@@ -2,6 +2,10 @@
 
 ## For Finance (George)
 
+Everything about clients is under **Finance > Clients**: *Client Accounts &
+Statements*, *Invoices & Refunds*, *Combined Balances*; the same three tabs sit
+at the top of each of those pages.
+
 **1. Load the item list (once).**
 Finance > Client Invoices > *Invoice Items* > **Import Excel**. The sheet needs
 three columns: `كود`, `اسم المنتج`, `code name`. Existing codes are updated, new
@@ -19,10 +23,12 @@ You are notified when an account manager sends one. Finance > Client Invoices,
 card **With Finance**, open the invoice:
 - check the lines, item codes, prices, dates and the 1% tick; you may correct
   them in the window;
-- **Post to client account**: confirm or change the invoice number (it offers
-  the next free number; change it once to continue your paper series, e.g.
-  2453), then **Post**. The invoice is locked, numbered, and on the client's
-  account;
+- **Post to client account**: confirm the number, choose the **payment method**
+  the money came into, and the **amount received now** (the full total by
+  default; 0 if the client has not paid yet), then **Post**. The invoice is
+  locked and on the client's account, and the money received is booked in that
+  payment method: it shows in the payment method's balance and in Finance's
+  reports, and as a collection on the statement;
 - or **Return** with what needs fixing; it goes back to its author.
 Each line carries its SR item's id as its code, so nothing waits on the item list.
 
@@ -32,6 +38,15 @@ came into, date and cheque / transfer number. It becomes a *Client Payment* in
 Finance (linked to the SR and client, referenced "Invoice N"), shows under
 *Payments received* on the invoice, and is a credit on the statement once
 approved.
+
+**Refunds (فاتورة مرتجع).** Open a posted invoice > **Create refund**, tick the
+items and set the quantity to refund (up to what has not been refunded
+already), add the reason, **Create refund draft**. It is calculated at the
+invoice's prices, VAT 14% and the 1% if the invoice had it. **Post refund**:
+choose the payment method and the amount paid back to the client (0 if
+nothing is paid back, e.g. the invoice was not paid). It is a credit on the
+statement (*Refund R-n*); money paid back is a debit (*Refund paid back*) and
+comes out of the payment method. Refunds have their own series (R-1, R-2 ...).
 
 **4. Print.** Open the invoice > **Print** (the layout of your sample sheet).
 
@@ -78,6 +93,9 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
 # فواتير العملاء وكشوف الحساب: طريقة الاستخدام
 
 ## للمالية (جورج)
+كل ما يخص العملاء في **المالية > العملاء**: حسابات العملاء وكشوف الحساب، الفواتير والمرتجعات، مجمع حسابات العملاء.
+- **الترحيل:** اختر طريقة الدفع والمبلغ المستلم الآن (الإجمالي افتراضيًا، أو 0 إذا لم يدفع العميل)، فيُسجّل في رصيد طريقة الدفع وتقارير المالية.
+- **المرتجع:** من فاتورة مرحّلة > إنشاء مرتجع، اختر البنود والكميات، ثم ترحيل المرتجع مع طريقة الدفع والمبلغ المردود. يظهر دائنًا في كشف الحساب، والمبلغ المردود مدينًا ويُخصم من طريقة الدفع.
 1. **قائمة الأصناف (مرة واحدة):** المالية > فواتير العملاء > أصناف الفاتورة > استيراد Excel
    (أعمدة: كود، اسم المنتج، code name). يمكن الإضافة والتعديل يدويًا لاحقًا.
 2. **ترحيل الفواتير:** يصلك إشعار عند الإرسال. افتح الفاتورة من بطاقة "لدى المالية"،

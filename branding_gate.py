@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 import rbac
 import targets as targets_lib
 import invoicing
+from decimal import Decimal
 import costing
 import org_chart_pdf
 import target_pdf
@@ -24284,7 +24285,7 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
                ft.added_by, ft.added_at, ft.approved_by, ft.approved_at, ft.rejection_reason,
                ft.sales_request_id, c.id AS client_id,
                COALESCE(sr.company_id, c.parent_company_id) AS company_id,
-               fc.category_name, fsc.category_name AS subcategory_name,
+               fc.category_name, fc.category_code, fsc.category_name AS subcategory_name,
                pm.method_name AS payment_method_name, s.company_name AS supplier_name
         FROM finance_transactions ft
         LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
@@ -24331,7 +24332,7 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
     def blank():
         return {'requests': 0, 'quoted_sell': 0.0, 'approved_sell': 0.0, 'approved_cost': 0.0,
                 'collected': 0.0, 'pending_in': 0.0, 'paid_out': 0.0, 'transactions': 0,
-                'invoiced': 0.0, 'invoices': 0}
+                'invoiced': 0.0, 'invoices': 0, 'refunded': 0.0, 'refunds_paid': 0.0}
 
     per_request = {rid: blank() for rid in requests_}
     per_client = {cid: blank() for cid in clients}
@@ -24360,10 +24361,12 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
             add('pending_in', amount, *targets)
         elif t['transaction_type'] == 'expense' and t['status'] == 'approved':
             add('paid_out', amount, *targets)
+            if t.get('category_code') == CLIENT_REFUNDS_CATEGORY_CODE:
+                add('refunds_paid', amount, *targets)
 
     # Posted invoices: what the client has been billed. Balance due is billed
     # minus collected, which is what a statement of account shows.
-    inv_sql = """SELECT i.sales_request_id, i.client_id, i.company_id, i.total
+    inv_sql = """SELECT i.kind, i.sales_request_id, i.client_id, i.company_id, i.total
                  FROM client_invoice i LEFT JOIN client c ON c.id = i.client_id
                  WHERE i.status = 'posted'""" + party_sql
     inv_params = list(params)
@@ -24377,12 +24380,17 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
     for inv in cur.fetchall():
         targets = (per_request.get(inv['sales_request_id']), per_client.get(inv['client_id']),
                    per_company.get(inv['company_id']))
-        add('invoiced', _money(inv['total']), *targets)
-        add('invoices', 1, *targets)
+        if inv['kind'] == 'refund':
+            # Net of refunds: what the client is billed for, after credit notes.
+            add('invoiced', -_money(inv['total']), *targets)
+            add('refunded', _money(inv['total']), *targets)
+        else:
+            add('invoiced', _money(inv['total']), *targets)
+            add('invoices', 1, *targets)
 
     for totals in list(per_request.values()) + list(per_client.values()) + list(per_company.values()):
         totals['outstanding'] = totals['approved_sell'] - totals['collected']
-        totals['balance_due'] = totals['invoiced'] - totals['collected']
+        totals['balance_due'] = totals['invoiced'] - totals['collected'] + totals['refunds_paid']
         totals['expected_margin'] = totals['approved_sell'] - totals['approved_cost']
 
     for rid, r in requests_.items():
@@ -24701,13 +24709,77 @@ def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, appl
     return totals, None
 
 
-def next_invoice_number(cur):
-    """The next serial: after the highest used, and never below where Finance said the series continues."""
-    cur.execute("SELECT next_number FROM invoice_series WHERE id = 1 FOR UPDATE")
+INVOICE_SERIES_ID = {'invoice': 1, 'refund': 2}
+CLIENT_PAYMENTS_CATEGORY = 1
+CLIENT_REFUNDS_CATEGORY_CODE = 'CLIENT_REFUNDS'
+
+
+def next_invoice_number(cur, kind='invoice'):
+    """The next serial of this kind: after the highest used, and never below where Finance said it continues."""
+    cur.execute("SELECT next_number FROM invoice_series WHERE id = %s FOR UPDATE", (INVOICE_SERIES_ID[kind],))
     row = cur.fetchone()
     floor = row['next_number'] if row else 1
-    cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice")
+    cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice WHERE kind = %s", (kind,))
     return max(cur.fetchone()['n'] + 1, floor)
+
+
+def invoice_label(inv):
+    """'Invoice 2553' or 'Refund R-12'."""
+    if inv.get('kind') == 'refund':
+        return 'Refund R-%s' % inv.get('invoice_number')
+    return 'Invoice %s' % inv.get('invoice_number')
+
+
+def book_client_money(cur, transaction_type, amount, payment_method_id, category_id, client_id,
+                      sales_request_id, reference, description, day=None):
+    """
+    An approved finance transaction for money a client paid (income) or was
+    paid back (expense), the way Finance's own approval books one: the payment
+    method's balance moves, with its history and the approval log. Returns
+    (transaction_id, error).
+    """
+    amount = float(amount)
+    cur.execute("SELECT id, method_name, current_balance, is_active FROM payment_methods WHERE id = %s FOR UPDATE",
+                (payment_method_id,))
+    pm = cur.fetchone()
+    if not pm or not pm['is_active']:
+        return None, 'Choose an active payment method'
+    before = float(pm['current_balance'] or 0)
+    if transaction_type == 'expense' and amount > before + 0.004:
+        return None, 'Not enough in %s: %s available' % (pm['method_name'], f'{before:,.2f}')
+    after = before + amount if transaction_type == 'income' else before - amount
+    code = generate_transaction_code()
+    cur.execute("SELECT id FROM finance_transactions WHERE transaction_code = %s", (code,))
+    while cur.fetchone():
+        code = generate_transaction_code()
+        cur.execute("SELECT id FROM finance_transactions WHERE transaction_code = %s", (code,))
+    cur.execute("SELECT COALESCE(MAX(serial_number), 0) + 1 AS n FROM finance_transactions WHERE serial_number IS NOT NULL")
+    serial = cur.fetchone()['n']
+    who, uid = session.get('name') or session.get('username') or 'System', session.get('user_id')
+    cur.execute("""
+        INSERT INTO finance_transactions
+        (transaction_code, transaction_type, amount, payment_method_id, category_id, client_id, sales_request_id,
+         description, reference_number, transaction_date, status, serial_number, added_by, added_by_user_id,
+         approved_by, approved_by_user_id, approved_at, balance_before, balance_after)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
+    """, (code, transaction_type, amount, payment_method_id, category_id, client_id, sales_request_id,
+          description, reference, day or datetime.now().date(), serial, who, uid, who, uid, before, after))
+    trans_id = cur.lastrowid
+    cur.execute("UPDATE payment_methods SET current_balance = %s, updated_at = NOW() WHERE id = %s", (after, payment_method_id))
+    cur.execute("""INSERT INTO payment_method_balance_history
+                   (payment_method_id, change_type, change_amount, previous_balance, new_balance, transaction_id, description, created_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (payment_method_id, transaction_type, amount if transaction_type == 'income' else -amount,
+                 before, after, trans_id, '%s %s' % (reference, code), who))
+    cur.execute("""INSERT INTO finance_approval_log (transaction_id, action, action_by, action_by_user_id, notes, previous_status, new_status)
+                   VALUES (%s, 'approved', %s, %s, %s, NULL, 'approved')""", (trans_id, who, uid, 'Booked when %s was posted' % reference))
+    return trans_id, None
+
+
+def _refund_category_id(cur):
+    cur.execute("SELECT id FROM finance_categories WHERE category_code = %s", (CLIENT_REFUNDS_CATEGORY_CODE,))
+    row = cur.fetchone()
+    return row['id'] if row else 17   # Other Expenses, if the category was ever removed
 
 
 @app.route('/api/invoice-series', methods=['GET', 'POST'])
@@ -24722,7 +24794,7 @@ def invoice_series():
             value = str((request.get_json(silent=True) or {}).get('next_number') or '').strip()
             if not value.isdigit() or int(value) < 1:
                 return jsonify(success=False, error='Give a whole number'), 400
-            cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice")
+            cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice WHERE kind = 'invoice'")
             used = cur.fetchone()['n']
             if int(value) <= used:
                 return jsonify(success=False, error='Number %d is already used; the series is past it' % used), 400
@@ -24730,12 +24802,13 @@ def invoice_series():
                            ON DUPLICATE KEY UPDATE next_number = VALUES(next_number), updated_by = VALUES(updated_by)""",
                         (int(value), session.get('user_id')))
             conn.commit()
-        number = next_invoice_number(cur)
+        number = next_invoice_number(cur, 'invoice')
+        refund_number = next_invoice_number(cur, 'refund')
         conn.rollback()
     finally:
         cur.close()
         conn.close()
-    return jsonify(success=True, next_number=number)
+    return jsonify(success=True, next_number=number, next_refund_number=refund_number)
 
 
 def _invoice_header(data):
@@ -24768,10 +24841,14 @@ def client_invoice_print(invoice_id):
         if not _invoice_visible(inv):
             abort(403)
         lines = _invoice_lines(cur, invoice_id)
+        data = _invoice_dict(inv)
+        if inv['kind'] == 'refund':
+            cur.execute("SELECT invoice_number FROM client_invoice WHERE id = %s", (inv['refund_of'],))
+            data['refund_of_number'] = (cur.fetchone() or {}).get('invoice_number')
     finally:
         cur.close()
         conn.close()
-    return render_template('client_invoice_print.html', inv=_invoice_dict(inv), lines=lines)
+    return render_template('client_invoice_print.html', inv=data, lines=lines)
 
 
 @app.route('/api/invoice-catalog', methods=['GET'])
@@ -24878,7 +24955,8 @@ def client_invoices_list():
     conn, cur = connection()
     try:
         cur.execute("""
-            SELECT i.id, i.invoice_number, i.status, i.sales_request_id, i.company_id, i.client_id,
+            SELECT i.id, i.kind, i.refund_of, (SELECT o.invoice_number FROM client_invoice o WHERE o.id = i.refund_of) AS refund_of_number,
+                   i.invoice_number, i.status, i.sales_request_id, i.company_id, i.client_id,
                    i.invoice_date, i.billing_month, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
                    i.created_by, i.created_at, i.submitted_at, i.posted_at, i.return_reason,
                    co.company_name, c.client_name, sr.owner_user_id AS request_owner, u.name AS created_by_name,
@@ -24926,12 +25004,26 @@ def client_invoice_get(invoice_id):
             cur.execute("""SELECT ft.id, ft.transaction_code, ft.amount, ft.status, ft.transaction_date,
                                     pm.method_name AS payment_method_name
                              FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
-                             WHERE ft.transaction_type = 'income' AND ft.reference_number = %s
+                             WHERE ft.transaction_type = %s AND ft.reference_number = %s
                                AND ft.status <> 'rejected' ORDER BY ft.transaction_date""",
-                        ('Invoice %d' % inv['invoice_number'],))
+                        ('income' if inv['kind'] == 'invoice' else 'expense', invoice_label(inv)))
             payments = [_invoice_dict(r) for r in cur.fetchall()]
         cur.execute("SELECT COUNT(*) AS n FROM invoice_catalog WHERE is_active = 1")
         catalog_size = cur.fetchone()['n']
+        refund_of_number, refundable, refunds = None, [], []
+        if inv['kind'] == 'refund' and inv['refund_of']:
+            cur.execute("SELECT invoice_number FROM client_invoice WHERE id = %s", (inv['refund_of'],))
+            refund_of_number = (cur.fetchone() or {}).get('invoice_number')
+            # A refund draft's editable lines: its own quantities and what is left.
+            left = _refundable(cur, inv['refund_of'], except_refund=invoice_id)
+            for line in lines:
+                src = left.get(line.get('refund_of_line'))
+                line['max_qty'] = src['refundable'] if src else line['qty']
+        if inv['kind'] == 'invoice' and inv['status'] == 'posted':
+            refundable = [_invoice_dict({k: v for k, v in l.items()}) for l in _refundable(cur, invoice_id).values()]
+            cur.execute("""SELECT id, invoice_number, status, total FROM client_invoice
+                             WHERE kind = 'refund' AND refund_of = %s AND status <> 'cancelled' ORDER BY id""", (invoice_id,))
+            refunds = [_invoice_dict(r) for r in cur.fetchall()]
     finally:
         cur.close()
         conn.close()
@@ -24939,12 +25031,20 @@ def client_invoice_get(invoice_id):
     data = _invoice_dict(inv)
     data['payments'] = payments
     data['paid'] = sum(p['amount'] for p in payments if p['status'] == 'approved')
+    data['label'] = invoice_label(inv)
+    data['refund_of_number'] = refund_of_number
+    data['refundable'] = refundable
+    data['refunds'] = refunds
+    data['can_refund'] = (inv['kind'] == 'invoice' and inv['status'] == 'posted'
+                          and (has('invoice.post') or has('invoice.create'))
+                          and any(l['refundable'] > 0 for l in refundable))
     data['catalog_size'] = catalog_size
     data['can_record_payment'] = inv['status'] == 'posted' and has('finance_txn.create')
     data['can_edit'] = ((inv['created_by'] == me and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR)
                         or (has('invoice.post') and inv['status'] in ('draft', 'submitted', 'returned')))
     data['can_submit'] = inv['created_by'] == me and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR
-    data['can_post'] = has('invoice.post') and inv['status'] == 'submitted'
+    data['can_post'] = has('invoice.post') and (inv['status'] == 'submitted' or (
+        inv['status'] in ('draft', 'returned') and inv['created_by'] == me))
     return jsonify(success=True, invoice=data, lines=lines)
 
 
@@ -24974,7 +25074,7 @@ def client_invoice_prefill(request_id):
         items = cur.fetchall()
         cur.execute("""SELECT l.sales_request_item_id, i.status, i.invoice_number, i.id
                        FROM client_invoice_line l JOIN client_invoice i ON i.id = l.invoice_id
-                       WHERE i.sales_request_id = %s AND i.status <> 'cancelled'""", (request_id,))
+                       WHERE i.sales_request_id = %s AND i.kind = 'invoice' AND i.status <> 'cancelled'""", (request_id,))
         invoiced = {r['sales_request_item_id']: r for r in cur.fetchall() if r['sales_request_item_id']}
     finally:
         cur.close()
@@ -24994,6 +25094,100 @@ def client_invoice_prefill(request_id):
     return jsonify(success=True, request={k: sr[k] for k in ('id', 'title', 'client_id', 'company_id',
                                                                'client_name', 'company_name', 'tax_number')},
                    lines=lines)
+
+
+def _refundable(cur, original_id, except_refund=None):
+    """{line_id: line with 'refundable' qty} for a posted invoice: invoiced minus already refunded."""
+    cur.execute("SELECT * FROM client_invoice_line WHERE invoice_id = %s ORDER BY line_no", (original_id,))
+    lines = {r['id']: dict(r) for r in cur.fetchall()}
+    cur.execute("""SELECT l.refund_of_line, COALESCE(SUM(l.qty), 0) AS q
+                   FROM client_invoice_line l JOIN client_invoice r ON r.id = l.invoice_id
+                   WHERE r.kind = 'refund' AND r.refund_of = %s AND r.status <> 'cancelled'
+                     AND (%s IS NULL OR r.id <> %s)
+                   GROUP BY l.refund_of_line""", (original_id, except_refund, except_refund))
+    done = {r['refund_of_line']: float(r['q']) for r in cur.fetchall()}
+    for line_id, line in lines.items():
+        line['refunded'] = done.get(line_id, 0.0)
+        line['refundable'] = round(float(line['qty']) - line['refunded'], 2)
+    return lines
+
+
+def _write_refund_lines(cur, refund_id, original, lines):
+    """A refund's lines: chosen lines of the original, at its prices, up to what is left to refund."""
+    available = _refundable(cur, original['id'], except_refund=refund_id)
+    clean = []
+    for n, line in enumerate(lines or [], start=1):
+        try:
+            line_id = int(line.get('refund_of_line') or 0)
+            qty = Decimal(str(line.get('qty') or 0))
+        except (TypeError, ValueError, ArithmeticError):
+            return None, 'Line %d: quantity must be a number' % n
+        src = available.get(line_id)
+        if not src:
+            return None, 'Line %d is not on invoice %s' % (n, original['invoice_number'])
+        if qty <= 0:
+            continue
+        if float(qty) > src['refundable'] + 1e-9:
+            return None, '"%s": at most %g can still be refunded' % (src['description'], src['refundable'])
+        share = qty / Decimal(str(src['qty'])) if src['qty'] else Decimal(0)
+        clean.append({'src': src, 'qty': qty, 'unit_price': src['unit_price'],
+                      'cash_discount': invoicing.money(Decimal(str(src['cash_discount'] or 0)) * share)})
+    if not clean:
+        return None, 'Choose at least one item and quantity to refund'
+    totals = invoicing.compute_invoice(clean, original['vat_rate'], original['profit_tax_rate'],
+                                       bool(original['apply_profit_tax']))
+    cur.execute("DELETE FROM client_invoice_line WHERE invoice_id = %s", (refund_id,))
+    for n, (line, fig) in enumerate(zip(clean, totals['lines']), start=1):
+        src = line['src']
+        cur.execute("""
+            INSERT INTO client_invoice_line (invoice_id, line_no, item_code, description, qty, unit_price, cash_discount,
+                sales_value, vat, line_total, sales_request_item_id, refund_of_line)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (refund_id, n, src['item_code'], src['description'], line['qty'], src['unit_price'], line['cash_discount'],
+              fig['sales_value'], fig['vat'], fig['line_total'], src['sales_request_item_id'], src['id']))
+    cur.execute("""UPDATE client_invoice SET subtotal = %s, cash_discount_total = %s, vat_total = %s,
+                   profit_tax_total = %s, total = %s WHERE id = %s""",
+                (totals['subtotal'], totals['cash_discount_total'], totals['vat_total'],
+                 totals['profit_tax_total'], totals['total'], refund_id))
+    return totals, None
+
+
+@app.route('/api/invoices/<int:invoice_id>/refund', methods=['POST'])
+@perm('invoice.create', 'invoice.post')
+def client_invoice_refund(invoice_id):
+    """
+    A refund invoice against a posted one: chosen lines and quantities, at the
+    original prices and taxes. It goes to Finance like an invoice; once posted
+    it is a credit on the client's statement.
+    """
+    data = request.get_json(silent=True) or {}
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM client_invoice WHERE id = %s FOR UPDATE", (invoice_id,))
+        original = cur.fetchone()
+        if not original or original['kind'] != 'invoice' or original['status'] != 'posted':
+            return jsonify(success=False, error='A refund is raised against a posted invoice'), 400
+        loaded = _invoice_load(cur, invoice_id)
+        if not _invoice_visible(loaded):
+            return jsonify(success=False, error='Not yours to open'), 403
+        number = next_invoice_number(cur, 'refund')
+        today = datetime.now().date()
+        cur.execute("""INSERT INTO client_invoice (kind, refund_of, invoice_number, status, sales_request_id, company_id,
+                       client_id, invoice_date, billing_month, vat_rate, profit_tax_rate, apply_profit_tax, notes, created_by)
+                       VALUES ('refund', %s, %s, 'draft', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (invoice_id, number, original['sales_request_id'], original['company_id'], original['client_id'],
+                     today, today.strftime('%Y-%m'), original['vat_rate'], original['profit_tax_rate'],
+                     original['apply_profit_tax'], (data.get('notes') or '').strip()[:2000] or None, session.get('user_id')))
+        refund_id = cur.lastrowid
+        totals, error = _write_refund_lines(cur, refund_id, original, data.get('lines'))
+        if error:
+            conn.rollback()
+            return jsonify(success=False, error=error), 400
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, id=refund_id, invoice_number=number, total=float(totals['total']))
 
 
 @app.route('/api/invoices', methods=['POST'])
@@ -25016,7 +25210,7 @@ def client_invoice_create():
         # The invoice carries its serial from the start: the next number in the
         # series, read under a lock so two drafts never share one. Finance can
         # still change it when posting.
-        number = next_invoice_number(cur)
+        number = next_invoice_number(cur, 'invoice')
         cur.execute("""INSERT INTO client_invoice (invoice_number, status, sales_request_id, company_id, client_id,
                        invoice_date, billing_month, apply_profit_tax, notes, created_by)
                        VALUES (%s, 'draft', %s, %s, %s, %s, %s, %s, %s, %s)""",
@@ -25052,10 +25246,17 @@ def client_invoice_update(invoice_id):
         if not ((mine and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR)
                 or (has('invoice.post') and inv['status'] in ('draft', 'submitted', 'returned'))):
             return jsonify(success=False, error='This invoice is %s and can no longer be changed' % inv['status']), 400
-        cur.execute("""UPDATE client_invoice SET invoice_date = %s, billing_month = %s, apply_profit_tax = %s,
-                       notes = %s WHERE id = %s""", (invoice_date, month, 1 if apply_tax else 0, notes, invoice_id))
-        totals, error = _write_invoice_lines(cur, invoice_id, data.get('lines'), inv['vat_rate'],
-                                             inv['profit_tax_rate'], apply_tax)
+        if inv['kind'] == 'refund':
+            # A refund follows its invoice's taxes; only its date, notes and lines change.
+            cur.execute("UPDATE client_invoice SET invoice_date = %s, billing_month = %s, notes = %s WHERE id = %s",
+                        (invoice_date, month, notes, invoice_id))
+            cur.execute("SELECT * FROM client_invoice WHERE id = %s", (inv['refund_of'],))
+            totals, error = _write_refund_lines(cur, invoice_id, cur.fetchone(), data.get('lines'))
+        else:
+            cur.execute("""UPDATE client_invoice SET invoice_date = %s, billing_month = %s, apply_profit_tax = %s,
+                           notes = %s WHERE id = %s""", (invoice_date, month, 1 if apply_tax else 0, notes, invoice_id))
+            totals, error = _write_invoice_lines(cur, invoice_id, data.get('lines'), inv['vat_rate'],
+                                                 inv['profit_tax_rate'], apply_tax)
         if error:
             conn.rollback()
             return jsonify(success=False, error=error), 400
@@ -25100,7 +25301,12 @@ def client_invoice_submit(invoice_id):
 @app.route('/api/invoices/<int:invoice_id>/post', methods=['POST'])
 @perm('invoice.post')
 def client_invoice_post(invoice_id):
-    """Finance posts it: it takes its number and goes on the client's account."""
+    """
+    Finance posts it: numbered, locked, on the client's account. The money
+    that moves with it -- received for an invoice, paid back for a refund --
+    is booked in the payment method chosen, so it reaches Finance's balances
+    and reports. An amount of 0 posts it as owed, to be collected later.
+    """
     data = request.get_json(silent=True) or {}
     conn, cur = connection()
     try:
@@ -25108,26 +25314,52 @@ def client_invoice_post(invoice_id):
         inv = cur.fetchone()
         if not inv:
             return jsonify(success=False, error='Invoice not found'), 404
-        if inv['status'] != 'submitted':
+        # Sent to Finance; or Finance's own draft, which needs no second desk.
+        own_draft = inv['status'] in ('draft', 'returned') and inv['created_by'] == session.get('user_id')
+        if inv['status'] != 'submitted' and not own_draft:
             return jsonify(success=False, error='Only an invoice sent to Finance can be posted'), 400
+        kind = inv['kind']
         # It keeps the serial it was drafted with unless Finance gives another.
-        next_number = next_invoice_number(cur)
         wanted = str(data.get('invoice_number') or '').strip()
-        number = int(wanted) if wanted.isdigit() else (inv['invoice_number'] or next_number)
-        cur.execute("SELECT id FROM client_invoice WHERE invoice_number = %s AND id <> %s", (number, invoice_id))
+        number = int(wanted) if wanted.isdigit() else (inv['invoice_number'] or next_invoice_number(cur, kind))
+        cur.execute("SELECT id FROM client_invoice WHERE kind = %s AND invoice_number = %s AND id <> %s",
+                    (kind, number, invoice_id))
         if cur.fetchone():
-            return jsonify(success=False, error='Invoice number %d is already used' % number), 400
+            return jsonify(success=False, error='%s number %d is already used' % (kind.title(), number)), 400
+        if not data.get('payment_method_id'):
+            return jsonify(success=False, error='Choose the payment method'), 400
+        try:
+            amount = float(invoicing.money(data.get('amount') if data.get('amount') not in (None, '') else inv['total']))
+        except (ValueError, ArithmeticError):
+            return jsonify(success=False, error='The amount must be a number'), 400
+        if amount < 0 or amount > float(inv['total']) + 0.004:
+            return jsonify(success=False, error='The amount is between 0 and the total, %s' % f"{float(inv['total']):,.2f}"), 400
         cur.execute("""UPDATE client_invoice SET status = 'posted', invoice_number = %s, posted_by = %s,
                        posted_at = NOW() WHERE id = %s""", (number, session.get('user_id'), invoice_id))
+        trans_id = None
+        if amount > 0:
+            label = invoice_label({'kind': kind, 'invoice_number': number})
+            trans_id, error = book_client_money(
+                cur, 'income' if kind == 'invoice' else 'expense', amount, data['payment_method_id'],
+                CLIENT_PAYMENTS_CATEGORY if kind == 'invoice' else _refund_category_id(cur),
+                inv['client_id'], inv['sales_request_id'], label,
+                ('Payment for ' if kind == 'invoice' else 'Paid back on ') + label)
+            if error:
+                conn.rollback()
+                return jsonify(success=False, error=error), 400
+            cur.execute("UPDATE client_invoice SET payment_transaction_id = %s WHERE id = %s", (trans_id, invoice_id))
         conn.commit()
     finally:
         cur.close()
         conn.close()
-    notify_user(inv['created_by'], 'Invoice %d posted' % number,
-                '%s posted your invoice for SR-%s: EGP %s is on the client\'s account.'
-                % (session.get('name') or 'Finance', inv['sales_request_id'], f"{float(inv['total'] or 0):,.2f}"),
+    label = invoice_label({'kind': kind, 'invoice_number': number})
+    notify_user(inv['created_by'], '%s posted' % label,
+                '%s posted your %s for SR-%s: EGP %s %s.'
+                % (session.get('name') or 'Finance', 'invoice' if kind == 'invoice' else 'refund', inv['sales_request_id'],
+                   f"{float(inv['total'] or 0):,.2f}",
+                   'is on the client\'s account' if kind == 'invoice' else 'is credited to the client'),
                 link='/invoices?open=%d' % invoice_id)
-    return jsonify(success=True, invoice_number=number)
+    return jsonify(success=True, invoice_number=number, transaction_id=trans_id, amount=amount)
 
 
 @app.route('/api/invoices/<int:invoice_id>/return', methods=['POST'])
@@ -25205,7 +25437,32 @@ def ledger_entries(cur, company_id=None, client_id=None):
                           FROM client_invoice_line l WHERE l.invoice_id = i.id)) AS description,
                i.total AS debit, 0 AS credit
         FROM client_invoice i LEFT JOIN sales_request sr ON sr.id = i.sales_request_id
-        WHERE i.status = 'posted'""" + where_inv, params)
+        WHERE i.status = 'posted' AND i.kind = 'invoice'""" + where_inv, params)
+    entries += [dict(r) for r in cur.fetchall()]
+    # A posted refund takes off what the client owes.
+    cur.execute("""
+        SELECT i.invoice_date AS day, 'refund' AS kind, i.id AS ref_id, i.invoice_number, i.sales_request_id,
+               i.company_id, i.client_id, NULL AS method_type,
+               CONCAT('Refund of invoice ', o.invoice_number, ': ',
+                      (SELECT GROUP_CONCAT(l.description ORDER BY l.line_no SEPARATOR ', ')
+                       FROM client_invoice_line l WHERE l.invoice_id = i.id)) AS description,
+               0 AS debit, i.total AS credit
+        FROM client_invoice i LEFT JOIN client_invoice o ON o.id = i.refund_of
+        WHERE i.status = 'posted' AND i.kind = 'refund'""" + where_inv, params)
+    entries += [dict(r) for r in cur.fetchall()]
+    # Money paid back to the client on a refund.
+    cur.execute("""
+        SELECT ft.transaction_date AS day, 'refund_paid' AS kind, ft.id AS ref_id, NULL AS invoice_number,
+               ft.sales_request_id, COALESCE(sr.company_id, c.parent_company_id) AS company_id, c.id AS client_id,
+               pm.method_type, COALESCE(NULLIF(ft.reference_number, ''), ft.transaction_code) AS description,
+               ft.amount AS debit, 0 AS credit
+        FROM finance_transactions ft
+        JOIN finance_categories fc ON fc.id = ft.category_id AND fc.category_code = %s
+        LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
+        JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
+        LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+        WHERE ft.transaction_type = 'expense' AND ft.status = 'approved'""" + where_pay,
+                [CLIENT_REFUNDS_CATEGORY_CODE] + params)
     entries += [dict(r) for r in cur.fetchall()]
     cur.execute("""
         SELECT ft.transaction_date AS day, 'payment' AS kind, ft.id AS ref_id, NULL AS invoice_number,
@@ -25218,7 +25475,7 @@ def ledger_entries(cur, company_id=None, client_id=None):
         LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
         WHERE ft.transaction_type = 'income' AND ft.status = 'approved'""" + where_pay, params)
     entries += [dict(r) for r in cur.fetchall()]
-    order = {'opening': 0, 'invoice': 1, 'payment': 2}
+    order = {'opening': 0, 'invoice': 1, 'refund': 2, 'payment': 3, 'refund_paid': 4}
     entries.sort(key=lambda r: (r['day'], order[r['kind']], r['ref_id']))
     for r in entries:
         r['debit'], r['credit'] = float(r['debit'] or 0), float(r['credit'] or 0)
@@ -25227,6 +25484,10 @@ def ledger_entries(cur, company_id=None, client_id=None):
             r['label'] = 'Cheque / bank collection' if r['method_type'] == 'bank' else 'Cash collection'
         elif r['kind'] == 'opening':
             r['label'] = 'Balance brought forward'
+        elif r['kind'] == 'refund':
+            r['label'] = 'Refund R-%s' % r['invoice_number']
+        elif r['kind'] == 'refund_paid':
+            r['label'] = 'Refund paid back (bank)' if r['method_type'] == 'bank' else 'Refund paid back (cash)'
         else:
             r['label'] = 'Invoice %s' % r['invoice_number']
     return entries
@@ -25325,9 +25586,10 @@ def finance_account_statement():
             for r in data['entries']:
                 rows.append([r['day'], r['sales_request_id'] or '', r['invoice_number'] or '',
                              {'Cash collection': 'تحصيل نقدي (الخزينة)', 'Cheque / bank collection': 'تحصيل بشيك / بنك (البنك)',
-                              'Balance brought forward': 'رصيد مرحّل'}.get(r['label'], '') +
-                             ((' - ' if r['label'] in ('Cash collection', 'Cheque / bank collection', 'Balance brought forward') and r['description'] else '') +
-                              (r['description'] or '')),
+                              'Balance brought forward': 'رصيد مرحّل', 'Refund paid back (cash)': 'رد مبلغ مرتجع (الخزينة)',
+                              'Refund paid back (bank)': 'رد مبلغ مرتجع (البنك)'}.get(r['label'],
+                                 ('مرتجع R-%s' % r['invoice_number']) if r['kind'] == 'refund' else '') +
+                             ((' - ' if r['kind'] != 'invoice' and r['description'] else '') + (r['description'] or '')),
                              r['debit'] or None, r['credit'] or None, r['balance']])
             rows.append(['', '', '', 'الإجمالي / الرصيد', data['debit'], data['credit'], data['closing']])
             pd.DataFrame(rows, columns=['التاريخ', 'كود الشغل', 'رقم الفاتورة', 'البيان', 'مدين', 'دائن', 'الرصيد']) \

@@ -180,6 +180,7 @@
 {% block body %}
 {% set _p = session.get('perms', {}) %}
 <div class="ca-shell">
+    {% if not kind or session.get('perms', {}).get('finance_report.view') %}{% set clients_tab = 'accounts' %}{% include '_clients_nav.html' %}{% endif %}
     {% if kind %}
     <a class="ca-back" href="/finance/accounts"><i class="fas fa-arrow-left"></i> All client accounts</a>
     {% endif %}
@@ -529,12 +530,12 @@
             var party = st.party || {};
             var isCompany = KIND === 'company';
             var rows = (st.entries || []).map(function (e) {
-                var label = e.kind === 'invoice'
+                var label = (e.kind === 'invoice' || e.kind === 'refund')
                     ? '<a href="/invoices/' + e.ref_id + '/print" target="_blank">' + esc(e.label) + '</a>'
                     : '<b>' + esc(LABEL_AR[e.label] || e.label) + '</b>';
                 return '<tr><td>' + day(e.day) + '</td>' +
                     '<td>' + (e.sales_request_id ? '<a href="/sales_request_details/' + e.sales_request_id + '">SR-' + e.sales_request_id + '</a>' : '-') + '</td>' +
-                    '<td>' + (e.invoice_number ? '<span class="ca-sub" style="font-weight:700;color:#4f46e5">' + e.invoice_number + '</span>' : '-') + '</td>' +
+                    '<td>' + (e.invoice_number ? '<span class="ca-sub" style="font-weight:700;color:#4f46e5">' + (e.kind === 'refund' ? 'R-' : '') + e.invoice_number + '</span>' : '-') + '</td>' +
                     '<td>' + label + (e.description ? '<div class="ca-sub" data-no-i18n>' + esc(e.description) + '</div>' : '') + '</td>' +
                     (isCompany ? '<td data-no-i18n>' + esc(e.client_name || '-') + '</td>' : '') +
                     '<td class="r">' + (e.debit ? money(e.debit) : '') + '</td>' +
@@ -689,6 +690,13 @@
     });
 
     $(load);
+    // Opened from "Combined Balances": show that panel straight away.
+    if (!KIND && new URLSearchParams(location.search).get('view') === 'balances') {
+        $(function () {
+            $('.clients-nav a').removeClass('active').filter('[href$="view=balances"]').addClass('active');
+            $('#caBalancesBtn').trigger('click');
+        });
+    }
 })();
 </script>
 {% endblock %}
