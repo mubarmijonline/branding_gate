@@ -246,6 +246,62 @@
     background: rgba(99,102,241,0.02);
 }
 
+/* Expenses table: the site stylesheet sets these tables to display:block so
+   they scroll, which stops the columns spreading across the card. The wrapper
+   scrolls instead and the table is a table again. */
+.xp-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+table.expense-table.xp-table { display: table; width: 100%; min-width: 900px; }
+.xp-table thead th { position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+.xp-table .xp-r { text-align: end; }
+.xp-table .xp-c { text-align: center; }
+.xp-table tbody td { padding: 14px 16px; }
+.xp-row td:first-child { border-inline-start: 4px solid transparent; }
+.xp-row.draft td:first-child { border-inline-start-color: #cbd5e1; }
+.xp-row.submitted td:first-child { border-inline-start-color: #f59e0b; }
+.xp-row.manager_approved td:first-child { border-inline-start-color: #6366f1; }
+.xp-row.approved td:first-child { border-inline-start-color: #10b981; }
+.xp-row.rejected td:first-child { border-inline-start-color: #ef4444; }
+.xp-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; font-size: 13px; color: #4f46e5; }
+.xp-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.xp-sr { display: inline-block; padding: 2px 9px; border-radius: 999px; background: #e0f2fe; color: #0369a1;
+         font-size: 12px; font-weight: 700; }
+.xp-desc { max-width: 320px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.xp-reason { margin-top: 4px; font-size: 12px; color: #dc2626; }
+.xp-amount { font-weight: 800; color: #0f172a; white-space: nowrap; }
+.xp-actions { display: inline-flex; gap: 6px; }
+.xp-icon-btn { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); background: #fff; cursor: pointer;
+               display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.xp-icon-btn.edit { color: #4f46e5; } .xp-icon-btn.edit:hover { background: #eef2ff; border-color: #c7d2fe; }
+.xp-icon-btn.del { color: #dc2626; } .xp-icon-btn.del:hover { background: #fef2f2; border-color: #fecaca; }
+.xp-table tfoot td { padding: 12px 16px; background: #f8fafc; font-size: 13px; font-weight: 700; color: var(--muted);
+                     border-top: 1px solid var(--border); }
+.xp-loading { text-align: center; padding: 40px !important; color: var(--muted); }
+.xp-empty { display: flex; align-items: center; justify-content: center; gap: 20px; padding: 36px 16px; text-align: start; }
+.xp-empty-icon { width: 64px; height: 64px; border-radius: 18px; background: #eef2ff; color: #6366f1; font-size: 26px;
+                 display: flex; align-items: center; justify-content: center; flex: none; }
+.xp-empty h3 { font-size: 17px; font-weight: 700; margin: 0 0 4px; color: var(--text); }
+.xp-empty p { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+@media (max-width: 768px) {
+    /* Phones: each expense is a card, label beside value. */
+    .xp-table-wrap { border: none; background: none; overflow: visible; }
+    table.expense-table.xp-table { min-width: 0; }
+    .xp-table thead { display: none; }
+    .xp-table, .xp-table tbody, .xp-table tfoot { display: block; width: 100%; }
+    .xp-table tr.xp-row { display: block; background: #fff; border: 1px solid var(--border); border-radius: 14px;
+                          margin-bottom: 10px; padding: 6px 4px; border-inline-start-width: 4px; }
+    .xp-row.submitted { border-inline-start-color: #f59e0b; } .xp-row.manager_approved { border-inline-start-color: #6366f1; }
+    .xp-row.approved { border-inline-start-color: #10b981; } .xp-row.rejected { border-inline-start-color: #ef4444; }
+    .xp-table tr.xp-row td { display: flex; justify-content: space-between; gap: 12px; border: none !important;
+                             padding: 6px 12px; text-align: end; }
+    .xp-table tr.xp-row td::before { content: attr(data-label); font-size: 11px; font-weight: 700; text-transform: uppercase;
+                                     letter-spacing: .04em; color: var(--muted); text-align: start; }
+    .xp-desc { max-width: 60vw; }
+    .xp-table tfoot tr { display: flex; justify-content: space-between; border-radius: 12px; overflow: hidden; }
+    .xp-table tfoot td { display: block; border: none; }
+    .xp-table tfoot td:last-child { display: none; }
+    .xp-empty { flex-direction: column; text-align: center; }
+}
+
 /* Status Badges */
 .status-badge {
     padding: 6px 12px;
@@ -652,26 +708,26 @@
             
             <!-- Expenses Table -->
             <div id="expensesContainer">
-                <table class="expense-table" id="expensesTable">
+                <div class="xp-table-wrap">
+                <table class="expense-table xp-table" id="expensesTable">
                     <thead>
                         <tr>
-                            <th>Code</th>
-                            <th>SR</th>
-                            <th>Client</th>
-                            <th>Company</th>
-                            <th>Supplier</th>
-                            <th>Amount</th>
+                            <th>Expense</th>
+                            <th>Request</th>
+                            <th>Paid to</th>
                             <th>Description</th>
-                            <th>Files</th>
-                            <th>Date</th>
+                            <th class="xp-c">Files</th>
+                            <th class="xp-r">Amount</th>
                             <th>Status</th>
-                            <th>Actions</th>
+                            <th class="xp-c">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="expensesBody">
-                        <tr><td colspan="11" style="text-align: center; padding: 40px;">Loading...</td></tr>
+                        <tr><td colspan="8" class="xp-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
                     </tbody>
+                    <tfoot id="expensesFoot"></tfoot>
                 </table>
+                </div>
             </div>
         </div>
     </div>
@@ -1027,7 +1083,7 @@ function loadExpenses() {
         })
         .catch(err => {
             console.error('Error loading expenses:', err);
-            $('#expensesBody').html('<tr><td colspan="11" class="text-center text-danger">Error loading expenses</td></tr>');
+            $('#expensesBody').html('<tr><td colspan="8" class="text-center text-danger">Error loading expenses</td></tr>');
         });
 }
 
@@ -1061,68 +1117,76 @@ $(document).on('click', '.xp-stage', function () {
     loadExpenses();
 });
 
+function xpEsc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+
+function xpDay(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d)) return xpEsc(String(value).slice(0, 10));
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
 function renderExpenses(expenses) {
     var tbody = $('#expensesBody');
+    var foot = $('#expensesFoot');
     tbody.empty();
+    foot.empty();
     
     if (expenses.length === 0) {
-        tbody.html(`
-            <tr>
-                <td colspan="11">
-                    <div class="empty-state">
-                        <i class="fas fa-receipt"></i>
-                        <h3>No Expenses Yet</h3>
-                        <p>Start tracking your expenses by clicking the button below</p>
-                        <button class="btn-pill btn-pill-primary" onclick="openAddExpenseModal()">
-                            <i class="fas fa-plus"></i> Add Your First Expense
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `);
+        // Say which list is empty: "nothing with Finance" is not "nothing at all".
+        var stage = $('#filterStatus').val();
+        var title = stage ? 'Nothing ' + (stage === 'draft' ? 'in Draft' : stage === 'submitted' ? 'with your manager'
+                      : stage === 'manager_approved' ? 'with Finance' : stage === 'approved' ? 'approved yet' : 'rejected')
+                    : 'No expenses yet';
+        var showAdd = !stage || stage === 'draft';
+        tbody.html(
+            '<tr><td colspan="8"><div class="xp-empty">' +
+                '<div class="xp-empty-icon"><i class="fas fa-receipt"></i></div>' +
+                '<div><h3>' + title + '</h3>' +
+                '<p>' + (showAdd ? 'Add what you spent, attach the receipt, and send it for approval.'
+                                 : 'Choose another stage above to see the rest.') + '</p>' +
+                (showAdd ? '<button class="btn-pill btn-pill-primary" onclick="openAddExpenseModal()"><i class="fas fa-plus"></i> Add Expense</button>' : '') +
+                '</div></div></td></tr>');
         return;
     }
     
-    expenses.forEach(exp => {
+    var total = 0;
+    expenses.forEach(function (exp) {
+        total += parseFloat(exp.amount || 0);
         var supplierName = exp.supplier_display || exp.supplier_name || '-';
-        var statusClass = exp.status;
-        var statusIcon = exp.status === 'draft' ? 'fa-edit' : 
+        var statusIcon = exp.status === 'draft' ? 'fa-edit' :
                         exp.status === 'submitted' ? 'fa-user-tie' :
                         exp.status === 'manager_approved' ? 'fa-coins' :
                         exp.status === 'approved' ? 'fa-check' : 'fa-times';
-        
-        var actions = '';
+        var actions = '<span class="text-muted">-</span>';
         if (exp.status === 'draft') {
-            actions = `
-                <button class="btn btn-sm btn-outline-primary mr-1" onclick="editExpense(${exp.id})" title="Edit">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteExpense(${exp.id})" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-        } else if (exp.status === 'rejected') {
-            actions = `<span class="text-danger small" title="${exp.rejection_reason || 'No reason'}"><i class="fas fa-info-circle"></i> ${(exp.rejection_reason || '').substring(0, 30)}...</span>`;
-        } else {
-            actions = '-';
+            actions = '<div class="xp-actions">' +
+                '<button class="xp-icon-btn edit" onclick="editExpense(' + exp.id + ')" title="Edit"><i class="fas fa-pen"></i></button>' +
+                '<button class="xp-icon-btn del" onclick="deleteExpense(' + exp.id + ')" title="Delete"><i class="fas fa-trash"></i></button></div>';
         }
-        
-        tbody.append(`
-            <tr>
-                <td><code>${exp.tracking_code}</code></td>
-                <td>${exp.sales_request_id ? '<span class="badge badge-info">SR-' + exp.sales_request_id + '</span>' : '-'}</td>
-                <td>${exp.client_name || '-'}</td>
-                <td>${exp.company_name || '-'}</td>
-                <td>${supplierName}</td>
-                <td style="font-weight: 700; color: var(--danger); white-space: nowrap;">- ${formatCurrency(exp.amount)}${adjustedNote(exp)}</td>
-                <td>${(exp.description || '').substring(0, 50)}${(exp.description || '').length > 50 ? '...' : ''}</td>
-                <td>${bgExpenseFilesButton(exp.attachments, exp.tracking_code)}</td>
-                <td>${exp.expense_date || '-'}</td>
-                <td><span class="status-badge ${statusClass}"><i class="fas ${statusIcon}"></i> ${STAGE_LABEL[exp.status] || exp.status}</span></td>
-                <td>${actions}</td>
-            </tr>
-        `);
+        var request = exp.sales_request_id
+            ? '<span class="xp-sr">SR-' + exp.sales_request_id + '</span>' +
+              '<div class="xp-sub" data-no-i18n>' + xpEsc(exp.client_name || '') + (exp.company_name ? ' &middot; ' + xpEsc(exp.company_name) : '') + '</div>'
+            : '<span class="text-muted">-</span>';
+        var rejected = exp.status === 'rejected' && exp.rejection_reason
+            ? '<div class="xp-reason"><i class="fas fa-info-circle"></i> ' + xpEsc(exp.rejection_reason) + '</div>' : '';
+        tbody.append(
+            '<tr class="xp-row ' + exp.status + '">' +
+                '<td data-label="Expense"><div class="xp-code" data-no-i18n>' + xpEsc(exp.tracking_code) + '</div>' +
+                    '<div class="xp-sub">' + xpDay(exp.expense_date) + '</div></td>' +
+                '<td data-label="Request">' + request + '</td>' +
+                '<td data-label="Paid to" data-no-i18n>' + xpEsc(supplierName) + '</td>' +
+                '<td data-label="Description"><div class="xp-desc" title="' + xpEsc(exp.description) + '" data-no-i18n>' +
+                    xpEsc(exp.description || '-') + '</div>' + rejected + '</td>' +
+                '<td data-label="Files" class="xp-c">' + bgExpenseFilesButton(exp.attachments, exp.tracking_code) + '</td>' +
+                '<td data-label="Amount" class="xp-r"><div class="xp-amount">' + formatCurrency(exp.amount) + '</div>' + adjustedNote(exp) + '</td>' +
+                '<td data-label="Status"><span class="status-badge ' + exp.status + '"><i class="fas ' + statusIcon + '"></i> ' +
+                    (STAGE_LABEL[exp.status] || exp.status) + '</span></td>' +
+                '<td data-label="Actions" class="xp-c">' + actions + '</td>' +
+            '</tr>');
     });
+    foot.html('<tr><td colspan="5">' + expenses.length + ' expense(s)</td>' +
+              '<td class="xp-r"><div class="xp-amount">' + formatCurrency(total) + '</div></td><td colspan="2"></td></tr>');
 }
 
 // Files chosen in the form, sent once the expense itself is saved.
