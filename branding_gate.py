@@ -24645,10 +24645,9 @@ def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, appl
     """Replace the invoice's lines and totals from what was sent. Returns (totals, error).
 
     Every line is one of the request's client-approved items: what is billed is
-    what the client approved, never a line typed in. The item's name comes from
-    the request, the code from the item list.
+    what the client approved, never a line typed in. Name and code (the item's
+    id) both come from the request.
     """
-    catalog = _catalog_by_code(cur)
     cur.execute("SELECT sales_request_id FROM client_invoice WHERE id = %s", (invoice_id,))
     sr_id = (cur.fetchone() or {}).get('sales_request_id')
     cur.execute("""SELECT id, name FROM sales_request_items
@@ -24665,17 +24664,13 @@ def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, appl
         if sri in seen:
             return None, 'Line %d: "%s" is on the invoice twice' % (n, sr_items[sri])
         seen.add(sri)
-        code = str(line.get('item_code') or '').strip()
-        item = None
-        if code:
-            if not code.isdigit() or int(code) not in catalog:
-                return None, 'Line %d: item code %s is not on the item list' % (n, code)
-            item = catalog[int(code)]
+        # The item's code is its own id on the request: a serial nobody types
+        # and nobody can get wrong.
         clean.append({
-            'catalog_id': item['id'] if item else None,
-            'item_code': item['code'] if item else None,
-            'name_ar': (item['name_ar'] if item else '')[:200],
-            'name_en': (item['name_en'] if item else '')[:200],
+            'catalog_id': None,
+            'item_code': sri,
+            'name_ar': '',
+            'name_en': '',
             'description': (sr_items[sri] or '')[:500] or None,
             'qty': line.get('qty') or 0,
             'unit_price': line.get('unit_price') or 0,
@@ -24981,26 +24976,18 @@ def client_invoice_prefill(request_id):
                        FROM client_invoice_line l JOIN client_invoice i ON i.id = l.invoice_id
                        WHERE i.sales_request_id = %s AND i.status <> 'cancelled'""", (request_id,))
         invoiced = {r['sales_request_item_id']: r for r in cur.fetchall() if r['sales_request_item_id']}
-        catalog = list(_catalog_by_code(cur).values())
     finally:
         cur.close()
         conn.close()
-    by_name = {}
-    for c in catalog:
-        if c['is_active']:
-            by_name.setdefault(normalize_item_name(c['name_en']), c)
-            by_name.setdefault(normalize_item_name(c['name_ar']), c)
     lines = []
     for it in items:
         qty = float(it['qty'] or 1) or 1
         total = float(it['total_sell'] or 0)
-        guess = by_name.get(normalize_item_name(it['name']))
         already = invoiced.get(it['id'])
         lines.append({
             'sales_request_item_id': it['id'], 'description': it['name'], 'qty': qty,
             'unit_price': round(total / qty, 2) if qty else total,
-            'item_code': guess['code'] if guess else None,
-            'name_ar': guess['name_ar'] if guess else '', 'name_en': guess['name_en'] if guess else '',
+            'item_code': it['id'],
             'already_on': ('#%s' % already['invoice_number'] if already and already['invoice_number']
                            else ('a %s invoice' % already['status'] if already else None)),
         })
@@ -25123,10 +25110,6 @@ def client_invoice_post(invoice_id):
             return jsonify(success=False, error='Invoice not found'), 404
         if inv['status'] != 'submitted':
             return jsonify(success=False, error='Only an invoice sent to Finance can be posted'), 400
-        cur.execute("SELECT COUNT(*) AS n FROM client_invoice_line WHERE invoice_id = %s AND item_code IS NULL",
-                    (invoice_id,))
-        if cur.fetchone()['n']:
-            return jsonify(success=False, error='Every line needs an item code before posting'), 400
         # It keeps the serial it was drafted with unless Finance gives another.
         next_number = next_invoice_number(cur)
         wanted = str(data.get('invoice_number') or '').strip()

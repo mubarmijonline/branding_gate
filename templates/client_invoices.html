@@ -166,10 +166,6 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
                '<span>' + s[1] + '</span><b>' + d.count + '</b><small>EGP ' + money(d.total) + '</small></button>';
       }).join(''));
       draw();
-      if (CAN.post && !catalog.length && !$('#ivEmptyCatalog').length) {
-        $('#ivStages').before('<div class="iv-next warn" id="ivEmptyCatalog"><i class="fas fa-exclamation-triangle"></i><div>' +
-          'The item list is empty. Invoices cannot be posted until their lines have item codes: open <b>Invoice Items</b> and Import Excel.</div></div>');
-      }
       var open = new URLSearchParams(location.search).get('open');
       if (open && !current) openInvoice(+open);
     });
@@ -252,21 +248,13 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   });
 
   // ---------- editor ----------
-  // Items come from the Sales Request only: the name is the request's, the
-  // code is picked from Finance's list. Nothing is typed in.
+  // Items come from the Sales Request only: the name is the request's and the
+  // code is the item's own id. Nothing is typed in.
   var srLines = [];
-  function codeOptions(selected) {
-    return '<option value="">Choose code...</option>' + catalog.filter(function (c) { return c.is_active || String(c.code) === String(selected); })
-      .map(function (c) {
-        return '<option value="' + c.code + '"' + (String(c.code) === String(selected) ? ' selected' : '') + '>' +
-               c.code + ' · ' + esc(c.name_en) + ' · ' + esc(c.name_ar) + '</option>';
-      }).join('');
-  }
   function lineRow(l) {
     return '<tr class="iv-line" data-sri="' + (l.sales_request_item_id || '') + '">' +
-      '<td><select class="form-control form-control-sm code" style="min-width:210px">' + codeOptions(l.item_code) + '</select></td>' +
+      '<td><span class="iv-num">#' + esc(l.item_code || l.sales_request_item_id || '') + '</span></td>' +
       '<td><div class="font-weight-bold" data-no-i18n>' + esc(l.description || '') + '</div>' +
-        '<div class="iv-line-name iv-sub" data-no-i18n></div>' +
         (l.already_on ? '<div class="iv-line-warn"><i class="fas fa-exclamation-triangle"></i> Already on ' + esc(l.already_on) + '</div>' : '') + '</td>' +
       '<td><input type="number" class="form-control form-control-sm qty" min="0" step="0.01" value="' + (l.qty || 0) + '"></td>' +
       '<td><input type="number" class="form-control form-control-sm price" min="0" step="0.01" value="' + (l.unit_price || 0) + '"></td>' +
@@ -292,9 +280,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   function recalc() {
     var sub = 0, vat = 0;
     $('#ivLines tr.iv-line').each(function () {
-      var tr = $(this), code = String(tr.find('.code').val() || '');
-      var item = catalog.filter(function (c) { return String(c.code) === code; })[0];
-      tr.find('.iv-line-name').text(item ? item.name_en + ' · ' + item.name_ar : 'Choose the item code').toggleClass('text-danger', !item);
+      var tr = $(this);
       var sv = r2(Number(tr.find('.qty').val() || 0) * Number(tr.find('.price').val() || 0) - Number(tr.find('.disc').val() || 0));
       var v = r2(sv * VAT / 100);
       sub += sv; vat += v;
@@ -313,14 +299,12 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   function nextStep(inv) {
     if (!inv) return '<div class="iv-next info"><i class="fas fa-route"></i><div><b>1. Draft</b> from a Sales Request &rarr; ' +
       '<b>2. Send to Finance</b> &rarr; <b>3. Finance posts it</b>: it is numbered and goes on the client\'s account and statement.</div></div>';
-    var warn = (CAN.post && inv.status === 'submitted' && !inv.catalog_size)
-      ? '<div class="iv-next warn"><i class="fas fa-exclamation-triangle"></i><div>The item list is empty, so no line has an item code and the invoice cannot be posted. ' +
-        'Load the list first on <b>Invoice Items</b> (Import Excel), then give each line its code here.</div></div>' : '';
+    var warn = '';
     var msg = {
       draft: ['info', 'fa-pen', 'Draft: only its author sees changes. <b>Send to Finance</b> when it is ready.'],
       returned: ['warn', 'fa-undo', 'Returned by Finance: fix what they asked and <b>Send to Finance</b> again.'],
       submitted: CAN.post
-        ? ['info', 'fa-stamp', 'Waiting for you. Check the lines and codes, then <b>Post to client account</b> (this is the approval: it numbers the invoice and puts it on the client\'s account), or <b>Return</b> it with a reason.']
+        ? ['info', 'fa-stamp', 'Waiting for you. Check the lines, then <b>Post to client account</b> (this is the approval: it numbers the invoice and puts it on the client\'s account), or <b>Return</b> it with a reason.']
         : ['info', 'fa-hourglass-half', 'With Finance. You will be notified when it is posted or returned.'],
       posted: ['ok', 'fa-check-circle', 'Posted: on the client\'s account and statement. When the client pays, <b>Record payment received</b>; it becomes a Client Payment in Finance and a credit on the statement.'],
       cancelled: ['warn', 'fa-ban', 'Cancelled: it never reached the client\'s account.']
@@ -355,7 +339,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
           '<input type="checkbox" id="ivProfit" class="mr-2" ' + (!inv || inv.apply_profit_tax ? 'checked' : '') + '> Deduct 1% (أ.ت.ص)</label></div>' +
         '<div><label>Notes</label><input id="ivNotes" class="form-control" value="' + esc((inv && inv.notes) || '') + '"></div>' +
       '</div>' +
-      '<div class="table-responsive"><table class="iv-table iv-lines" style="min-width:980px"><thead><tr><th>Code</th><th>Item</th><th>Qty</th>' +
+      '<div class="table-responsive"><table class="iv-table iv-lines" style="min-width:980px"><thead><tr><th>Item code</th><th>Item</th><th>Qty</th>' +
         '<th>Unit price</th><th>Cash discount</th><th class="iv-r">Sales value</th><th class="iv-r">VAT 14%</th><th class="iv-r">Total</th><th></th></tr></thead>' +
         '<tbody id="ivLines">' + (lines || []).map(lineRow).join('') + '</tbody></table></div>' +
       (editable ? '<div class="mt-2" id="ivAddFromSr"></div>' : '') +
@@ -376,7 +360,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       apply_profit_tax: $('#ivProfit').is(':checked'), notes: $('#ivNotes').val(),
       lines: $('#ivLines tr.iv-line').map(function () {
         var tr = $(this);
-        return { item_code: tr.find('.code').val() || '', qty: tr.find('.qty').val(),
+        return { qty: tr.find('.qty').val(),
                  unit_price: tr.find('.price').val(), cash_discount: tr.find('.disc').val(),
                  sales_request_item_id: tr.data('sri') || null };
       }).get()

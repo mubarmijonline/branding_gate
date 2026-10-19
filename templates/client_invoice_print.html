@@ -50,13 +50,13 @@
   </div>
 
   <table>
-    <thead><tr><th class="n">م</th><th>البيان</th><th style="width:70px">الكمية</th><th style="width:130px">سعر الوحدة</th>
+    <thead><tr><th class="n">م</th><th style="width:80px">كود الصنف</th><th>البيان</th><th style="width:70px">الكمية</th><th style="width:130px">سعر الوحدة</th>
       <th style="width:110px">خصم نقدي</th><th style="width:140px">الإجمالي</th></tr></thead>
     <tbody>
       {% for l in lines %}
       <tr><td class="n">{{ loop.index }}</td>
-          <td>{{ l.name_en or l.description }}{% if l.name_ar %} - {{ l.name_ar }}{% endif %}
-              {% if l.description and l.name_en and l.description != l.name_en %}<div style="font-size:12px;color:#555">{{ l.description }}</div>{% endif %}</td>
+          <td class="num" style="text-align:center">{{ l.item_code or '' }}</td>
+          <td>{{ l.description or l.name_en }}</td>
           <td class="num" style="text-align:center">{{ '%g' % l.qty }}</td>
           <td class="num">{{ '{:,.2f}'.format(l.unit_price) }}</td>
           <td class="num">{{ '{:,.2f}'.format(l.cash_discount) if l.cash_discount else '-' }}</td>

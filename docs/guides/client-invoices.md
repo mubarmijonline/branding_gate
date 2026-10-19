@@ -24,7 +24,7 @@ card **With Finance**, open the invoice:
   2453), then **Post**. The invoice is locked, numbered, and on the client's
   account;
 - or **Return** with what needs fixing; it goes back to its author.
-Every line must have an item code before posting.
+Each line carries its SR item's id as its code, so nothing waits on the item list.
 
 **3. Record what the client pays.** Open a posted invoice > **Record payment
 received**: amount (the remaining balance is filled in), the payment method it
@@ -58,8 +58,8 @@ opening, debit, credit and balance for the period, totals, and Excel export.
 2. Choose the **Sales Request**. Its client, company and client-approved items
    fill the invoice, with their prices; a line already on another invoice is
    flagged.
-3. Give every line its **item code** (pick from the list). Lines are the SR's
-   client-approved items only: nothing is typed in. Quantity, price and cash
+3. Lines are the SR's client-approved items only, each coded with the item's
+   own id (e.g. #6382), automatically: nothing is typed or chosen. Quantity, price and cash
    discount can be adjusted; a line can be removed and put back from
    *Add an item from this SR*.
 4. Set the **invoice date** and **billing month**. Leave **Deduct 1%** ticked
@@ -83,7 +83,7 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
 2. **ترحيل الفواتير:** يصلك إشعار عند الإرسال. افتح الفاتورة من بطاقة "لدى المالية"،
    راجعها ويمكنك التعديل، ثم "ترحيل إلى حساب العميل" وأكّد رقم الفاتورة (أول رقم متاح،
    غيّره مرة واحدة ليكمل تسلسلكم الحالي مثل 2453) ثم "ترحيل". أو "إرجاع" مع سبب.
-   لا يتم الترحيل إلا إذا كان لكل بند كود.
+   كود كل بند هو رقم البند في الطلب تلقائيًا.
 3. **تسجيل التحصيل:** افتح فاتورة مرحّلة > "تسجيل دفعة مستلمة" (المبلغ المتبقي مكتوب تلقائيًا،
    وطريقة الدفع، والتاريخ، ورقم الشيك أو التحويل). تُسجّل كمدفوعات عملاء في المالية وتظهر في كشف الحساب.
 4. **الطباعة:** افتح الفاتورة > طباعة (بنفس شكل النموذج).
@@ -93,6 +93,6 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
 
 ## لمديري الحسابات
 1. المبيعات > الفواتير > فاتورة جديدة، واختر طلب المبيعات: تمتلئ البيانات والبنود المعتمدة بأسعارها.
-2. ضع كود الصنف لكل بند، وعدّل الكمية أو السعر أو الخصم، وأضف أو احذف بنود.
+2. كود كل بند هو رقم البند في الطلب تلقائيًا. يمكن تعديل الكمية أو السعر أو الخصم، وحذف بند وإعادته من بنود الطلب.
 3. حدد تاريخ الفاتورة وشهر المطالبة، واترك "خصم 1%" مفعّلًا إلا إذا كان العميل لا يخصمها.
 4. "حفظ كمسودة" أو "حفظ وإرسال للمالية". عند الإرجاع يصلك السبب، وعند الترحيل يصلك رقم الفاتورة.

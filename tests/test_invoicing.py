@@ -104,10 +104,10 @@ class InvoiceFlowTest(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.get_json())
         return r.get_json()['id'], prefill
 
-    def test_prefill_takes_approved_items_and_guesses_codes(self):
+    def test_prefill_takes_approved_items_coded_by_their_id(self):
         _, prefill = self._draft(self._web(self.account))
-        codes = sorted((l['description'], l['item_code']) for l in prefill['lines'])
-        self.assertEqual(codes, [('LED Screen', 9001), ('stage', 9002)])
+        self.assertEqual(sorted(l['description'] for l in prefill['lines']), ['LED Screen', 'stage'])
+        self.assertTrue(all(l['item_code'] == l['sales_request_item_id'] for l in prefill['lines']))
 
     def test_draft_submit_post_and_the_statement(self):
         author, finance = self._web(self.account), self._web(self.finance)
@@ -177,16 +177,14 @@ class InvoiceFlowTest(unittest.TestCase):
         second, _ = self._draft(author)
         self.assertEqual(author.get('/api/invoices/%d' % second).get_json()['invoice']['invoice_number'], top + 1)
 
-    def test_posting_needs_every_code_and_codes_must_exist(self):
+    def test_line_code_is_the_item_id_whatever_is_sent(self):
         author, finance = self._web(self.account), self._web(self.finance)
         prefill = author.get('/api/invoices/from-request/%d' % self.sr).get_json()
         sri = prefill['lines'][0]['sales_request_item_id']
-        bad = author.post('/api/invoices', json={'sales_request_id': self.sr, 'invoice_date': '2026-01-18',
-                                                 'lines': [{'sales_request_item_id': sri, 'item_code': '77777', 'qty': 1, 'unit_price': 5}]})
-        self.assertEqual(bad.status_code, 400)
-        inv_id, _ = self._draft(author, lines=[{'sales_request_item_id': sri, 'qty': 1, 'unit_price': 100}])
+        inv_id, _ = self._draft(author, lines=[{'sales_request_item_id': sri, 'item_code': '77777', 'qty': 1, 'unit_price': 100}])
+        self.assertEqual(author.get('/api/invoices/%d' % inv_id).get_json()['lines'][0]['item_code'], sri)
         author.post('/api/invoices/%d/submit' % inv_id)
-        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id).status_code, 400)
+        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98100}).status_code, 200)
 
     def test_outsiders_see_nothing(self):
         inv_id, _ = self._draft(self._web(self.account))
