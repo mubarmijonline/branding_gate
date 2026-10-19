@@ -94,3 +94,45 @@ class CustodyTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MyBalanceRequestsTest(unittest.TestCase):
+    """'My Balance Requests' lists the caller's own requests, whatever their scope."""
+
+    def setUp(self):
+        self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
+                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+        self.raw.autocommit(False)
+        self.original = branding_gate.connection
+        self.addCleanup(self._undo)
+        branding_gate.connection = lambda: (_RollbackConnection(self.raw), self.raw.cursor(MySQLdb.cursors.DictCursor))
+        branding_gate.app.config['TESTING'] = True
+        cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id WHERE r.code = 'admin' ORDER BY u.id LIMIT 1")
+        self.owner = cur.fetchone()['id']
+        cur.execute("""SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
+                       WHERE r.code = 'operations_member' AND u.is_active = 1 ORDER BY u.id LIMIT 1""")
+        self.member = cur.fetchone()['id']
+        for code, who in (('REQ-T9001', self.member), ('REQ-T9002', self.owner)):
+            cur.execute("""INSERT INTO user_balance_transfers (transfer_code, to_user_id, requested_by, amount,
+                           transfer_type, status, description) VALUES (%s, %s, %s, 100, 'user_request', 'pending_manager', 't')""",
+                        (code, who, who))
+        cur.close()
+
+    def _undo(self):
+        branding_gate.connection = self.original
+        self.raw.rollback()
+        self.raw.close()
+
+    def test_owner_sees_only_their_own(self):
+        perms, role = branding_gate.load_permissions(self.owner)
+        web = branding_gate.app.test_client()
+        with web.session_transaction() as s:
+            s.update({'user_id': self.owner, 'mobile': 'm', 'email': 'e', 'username': 'u', 'name': 'T',
+                      'roles': [role], 'perms': perms, 'role_code': role})
+        codes = [r['transfer_code'] for r in web.get('/api/finance/balance-requests?mine=1').get_json()['requests']]
+        self.assertIn('REQ-T9002', codes)
+        self.assertNotIn('REQ-T9001', codes)
+        # The Finance view of everything is still there without the flag.
+        everything = [r['transfer_code'] for r in web.get('/api/finance/balance-requests').get_json()['requests']]
+        self.assertIn('REQ-T9001', everything)

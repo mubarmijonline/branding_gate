@@ -3710,60 +3710,82 @@ function openGlobalMyRequestsModal() {
 }
 
 function loadGlobalMyRequests() {
-  $('#globalMyRequestsBody').html('<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
-  
-  fetch('/api/finance/balance-requests')
+  $('#globalMyRequestsBody').html('<div class="mbr-loading"><i class="fas fa-spinner fa-spin"></i> Loading your requests...</div>');
+  // Only this person's own requests, whatever their scope.
+  fetch('/api/finance/balance-requests?mine=1')
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.success && data.requests.length > 0) {
-        var esc = function (v) {
-          return $('<div>').text(v === null || v === undefined ? '' : v).html();
-        };
-        var html = '<table class="table table-sm"><thead><tr><th>Code</th><th>Reason</th>' +
-                   '<th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>';
-        data.requests.forEach(function(req) {
-          // Say who is holding it, not just that it is "pending".
-          var WAITING = {
-            pending_manager: ['warning', 'with your manager'],
-            pending_finance: ['info', 'with Finance'],
-            pending: ['warning', 'pending'],
-            approved: ['success', 'approved'],
-            rejected: ['danger', 'declined'],
-            cancelled: ['secondary', 'withdrawn']
-          };
-          var shown = WAITING[req.status] || ['secondary', req.status];
-          var statusClass = shown[0];
-          var statusLabel = shown[1] +
-            (req.transfer_type === 'settlement' ? ' · تسوية' : '');
-          // A rejection used to show a red word and nothing else, so the one
-          // thing the requester needed -- why -- was the one thing missing.
-          var outcome = '';
-          if (req.status === 'rejected' && req.rejection_reason) {
-            outcome = '<div class="small text-danger mt-1">' + esc(req.rejection_reason) + '</div>';
-          } else if (req.status === 'approved' && req.approved_by_name) {
-            outcome = '<div class="small text-muted mt-1">Approved by ' + esc(req.approved_by_name) + '</div>';
-          }
-          var waiting = req.status === 'pending_manager' || req.status === 'pending_finance'
-                     || req.status === 'pending';
-          var action = (waiting && req.transfer_type !== 'settlement')
-            ? '<button class="btn btn-sm btn-outline-danger" onclick="cancelGlobalBalanceRequest(' +
-              req.id + ')">Withdraw</button>'
-            : '';
-          html += '<tr><td><code>' + esc(req.transfer_code) + '</code></td>' +
-                  '<td>' + esc(req.description || '-') + outcome + '</td>' +
-                  '<td>EGP ' + parseFloat(req.amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) + '</td>' +
-                  '<td><span class="badge badge-' + statusClass + '">' + esc(statusLabel) + '</span></td>' +
-                  '<td>' + (req.created_at ? new Date(req.created_at).toLocaleDateString() : '-') + '</td>' +
-                  '<td class="text-right">' + action + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        $('#globalMyRequestsBody').html(html);
-      } else {
-        $('#globalMyRequestsBody').html('<div style="text-align: center; padding: 40px; color: #64748b;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.3;"></i><p>No balance requests yet</p></div>');
+      var list = (data && data.success && data.requests) || [];
+      if (!list.length) {
+        $('#globalMyRequestsBody').html(
+          '<div class="mbr-empty"><div class="mbr-empty-icon"><i class="fas fa-hand-holding-usd"></i></div>' +
+          '<h6>No balance requests yet</h6><p>Ask for a balance (عهدة) when you need cash for work. ' +
+          'Your manager approves it first, then Finance.</p>' +
+          '<button class="btn btn-primary btn-sm" onclick="$(\'#globalMyRequestsModal\').modal(\'hide\'); openGlobalRequestBalanceModal();">' +
+          '<i class="fas fa-plus mr-1"></i>Request Balance</button></div>');
+        return;
       }
+      var esc = function (v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); };
+      var money = function (v) { return 'EGP ' + parseFloat(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var day = function (v) {
+        if (!v) return '-';
+        var d = new Date(v);
+        return isNaN(d) ? esc(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      };
+      var LOOK = {
+        pending_manager: ['wait', 'With your manager'], pending_finance: ['finance', 'With Finance'],
+        pending: ['wait', 'Waiting'], approved: ['ok', 'Approved'], rejected: ['no', 'Declined'],
+        cancelled: ['off', 'Withdrawn']
+      };
+      var waiting = 0, approvedTotal = 0, declined = 0;
+      var cards = list.map(function (req) {
+        var look = LOOK[req.status] || ['off', req.status];
+        var isWaiting = ['pending_manager', 'pending_finance', 'pending'].indexOf(req.status) >= 0;
+        if (isWaiting) waiting++;
+        if (req.status === 'approved') approvedTotal += parseFloat(req.amount || 0);
+        if (req.status === 'rejected') declined++;
+        // Where it is: requested -> manager -> Finance.
+        var mgrDone = req.status === 'pending_finance' || req.status === 'approved' || !!req.manager_approved_by;
+        var steps = [
+          ['Requested', 'done'],
+          ['Manager', req.status === 'pending_manager' ? 'now' : (mgrDone ? 'done' : (req.status === 'rejected' && !req.manager_approved_by ? 'stop' : 'todo'))],
+          ['Finance', req.status === 'pending_finance' ? 'now' : (req.status === 'approved' ? 'done' : (req.status === 'rejected' && req.manager_approved_by ? 'stop' : 'todo'))]
+        ];
+        var stepper = req.transfer_type === 'settlement' ? '' : '<div class="mbr-steps">' + steps.map(function (st) {
+          var icon = st[1] === 'done' ? 'fa-check' : st[1] === 'now' ? 'fa-clock' : st[1] === 'stop' ? 'fa-times' : 'fa-circle';
+          return '<span class="mbr-step ' + st[1] + '"><i class="fas ' + icon + '"></i>' + st[0] + '</span>';
+        }).join('<span class="mbr-line"></span>') + '</div>';
+        var note = '';
+        if (req.status === 'rejected' && req.rejection_reason) {
+          note = '<div class="mbr-note no"><i class="fas fa-info-circle mr-1"></i>' + esc(req.rejection_reason) + '</div>';
+        } else if (req.status === 'approved' && req.approved_by_name) {
+          note = '<div class="mbr-note ok"><i class="fas fa-check-circle mr-1"></i>Approved by ' + esc(req.approved_by_name) + '</div>';
+        }
+        var changed = req.original_amount && Math.abs(parseFloat(req.original_amount) - parseFloat(req.amount)) > 0.005
+          ? '<div class="mbr-was">asked ' + money(req.original_amount) + '</div>' : '';
+        var action = (isWaiting && req.transfer_type !== 'settlement')
+          ? '<button class="btn btn-sm btn-outline-danger" onclick="cancelGlobalBalanceRequest(' + req.id + ')">' +
+            '<i class="fas fa-undo mr-1"></i>Withdraw</button>' : '';
+        return '<div class="mbr-card ' + look[0] + '">' +
+          '<div class="mbr-top"><div><span class="mbr-code" data-no-i18n>' + esc(req.transfer_code) + '</span>' +
+            (req.transfer_type === 'settlement' ? '<span class="mbr-kind">تسوية</span>' : '') +
+            '<div class="mbr-date">' + day(req.created_at) + '</div></div>' +
+          '<div class="mbr-amount">' + money(req.amount) + changed + '</div></div>' +
+          '<div class="mbr-reason" data-no-i18n>' + esc(req.description || '-') + '</div>' +
+          stepper + note +
+          '<div class="mbr-foot"><span class="mbr-status ' + look[0] + '">' + look[1] + '</span>' + action + '</div>' +
+        '</div>';
+      }).join('');
+      $('#globalMyRequestsBody').html(
+        '<div class="mbr-summary">' +
+          '<div><b>' + list.length + '</b><span>Requests</span></div>' +
+          '<div class="wait"><b>' + waiting + '</b><span>Waiting</span></div>' +
+          '<div class="ok"><b>' + money(approvedTotal) + '</b><span>Approved</span></div>' +
+          '<div class="no"><b>' + declined + '</b><span>Declined</span></div>' +
+        '</div><div class="mbr-list">' + cards + '</div>');
     })
-    .catch(function(err) {
-      $('#globalMyRequestsBody').html('<div class="alert alert-danger">Error loading requests</div>');
+    .catch(function() {
+      $('#globalMyRequestsBody').html('<div class="alert alert-danger">Could not load your requests. Please try again.</div>');
     });
 }
 
@@ -4011,6 +4033,42 @@ $(document).ready(function() {
 </div>
 
 <!-- Global My Requests Modal -->
+<style>
+  #globalMyRequestsModal .modal-body { background: #f8fafc; max-height: 70vh; overflow-y: auto; }
+  .mbr-loading { text-align: center; padding: 30px; color: #64748b; }
+  .mbr-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .mbr-summary > div { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; }
+  .mbr-summary b { display: block; font-size: 18px; color: #0f172a; white-space: nowrap; }
+  .mbr-summary span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; font-weight: 700; }
+  .mbr-summary .wait b { color: #d97706; } .mbr-summary .ok b { color: #059669; } .mbr-summary .no b { color: #dc2626; }
+  .mbr-list { display: flex; flex-direction: column; gap: 10px; }
+  .mbr-card { background: #fff; border: 1px solid #e2e8f0; border-inline-start: 4px solid #94a3b8; border-radius: 12px; padding: 12px 16px; }
+  .mbr-card.wait { border-inline-start-color: #f59e0b; } .mbr-card.finance { border-inline-start-color: #6366f1; }
+  .mbr-card.ok { border-inline-start-color: #10b981; } .mbr-card.no { border-inline-start-color: #ef4444; }
+  .mbr-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .mbr-code { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: #4f46e5; font-size: 13px; }
+  .mbr-kind { margin-inline-start: 6px; font-size: 11px; background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 6px; }
+  .mbr-date { font-size: 12px; color: #64748b; }
+  .mbr-amount { font-size: 18px; font-weight: 800; color: #0f172a; text-align: end; white-space: nowrap; }
+  .mbr-was { font-size: 11px; color: #94a3b8; font-weight: 600; text-decoration: line-through; }
+  .mbr-reason { margin: 6px 0 8px; color: #334155; }
+  .mbr-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .mbr-step { font-size: 12px; font-weight: 600; color: #94a3b8; display: inline-flex; align-items: center; gap: 4px; }
+  .mbr-step i { font-size: 10px; }
+  .mbr-step.done { color: #059669; } .mbr-step.now { color: #d97706; } .mbr-step.stop { color: #dc2626; }
+  .mbr-line { flex: 0 0 18px; height: 2px; background: #e2e8f0; border-radius: 2px; }
+  .mbr-note { font-size: 13px; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+  .mbr-note.no { background: #fef2f2; color: #b91c1c; } .mbr-note.ok { background: #ecfdf5; color: #047857; }
+  .mbr-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .mbr-status { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; }
+  .mbr-status.wait { background: #fef3c7; color: #b45309; } .mbr-status.finance { background: #eef2ff; color: #4f46e5; }
+  .mbr-status.ok { background: #d1fae5; color: #047857; } .mbr-status.no { background: #fee2e2; color: #b91c1c; }
+  .mbr-empty { text-align: center; padding: 30px 16px; color: #64748b; }
+  .mbr-empty-icon { width: 60px; height: 60px; border-radius: 16px; background: #eef2ff; color: #6366f1; font-size: 24px;
+                    display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .mbr-empty h6 { font-weight: 700; color: #0f172a; }
+  @media (max-width: 576px) { .mbr-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
 <div class="modal fade" id="globalMyRequestsModal" tabindex="-1" role="dialog">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">

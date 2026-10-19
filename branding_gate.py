@@ -25629,6 +25629,27 @@ def get_balance_requests():
         is_admin = visible_user_ids('user_balance.view') is None
         user_id = session.get('user_id')
 
+        if request.args.get('mine') in ('1', 'true'):
+            # "My Balance Requests": what this person asked for or handed back,
+            # whatever their scope. The owner's 'all' scope used to fill the
+            # window with everybody's requests, each with a Withdraw button.
+            cur.execute("""
+                SELECT ubt.*, u_to.name AS to_user_name, u_app.name AS approved_by_name,
+                       u_mgr.name AS manager_approved_by_name
+                FROM user_balance_transfers ubt
+                LEFT JOIN user u_to ON ubt.to_user_id = u_to.id
+                LEFT JOIN user u_app ON ubt.approved_by = u_app.id
+                LEFT JOIN user u_mgr ON ubt.manager_approved_by = u_mgr.id
+                WHERE ubt.transfer_type IN ('user_request', 'settlement')
+                  AND (ubt.requested_by = %s OR (ubt.transfer_type = 'user_request' AND ubt.to_user_id = %s))
+                ORDER BY ubt.created_at DESC
+                LIMIT 100
+            """, (user_id, user_id))
+            mine = cur.fetchall()
+            cur.close()
+            conn.close()
+            return jsonify({'success': True, 'requests': mine, 'pending_count': 0})
+
         if is_admin:
             # Unrestricted scope sees all
             status_filter = request.args.get('status', '')
