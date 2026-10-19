@@ -272,3 +272,45 @@ reach `serve_upload` (`/uploads/<path>`), which wants a session and:
 - `companies/`: `company.view` or `client.view`;
 - anything else: refused. Paths outside `uploads/` are 404.
 Responses are `Cache-Control: private`. Stored URLs are unchanged.
+
+---
+
+# Client invoices and statements of account, 2026-10-19
+
+**Ask (George, Finance head):** the client side of the books. Invoices built
+from the company's item list, issued by the client's account people, posted
+to the client's account, and a statement of account per client.
+
+**Decided with Ahmed:**
+- The account manager drafts the invoice and sends it to Finance; George
+  posts it. Only a posted invoice counts on the client's account.
+- Lines come from the Sales Request's client-approved items (with their
+  prices), each given an item code from George's list; lines can be edited,
+  removed or added.
+- VAT 14% is always added; the 1% commercial-profits tax (أ.ت.ص) is deducted
+  per invoice, ticked by default.
+- The item list (104 codes, Arabic and English names) comes from George's
+  Excel; Finance imports it on the Invoice Items page and maintains it there.
+
+**Arithmetic (matches the sample, invoice 2452):** per line, sales value =
+qty × price − cash discount; VAT = 14% of sales value. Invoice: subtotal =
+Σ sales value; VAT = Σ line VAT; profit tax = 1% of subtotal when ticked;
+total = subtotal + VAT − profit tax (157,600 + 22,064 − 1,576 = 178,088).
+Money in Decimal, rounded to 2 places per line. Pure logic in `invoicing.py`.
+
+**Data:** `invoice_catalog` (code, name_ar, name_en, active); `client_invoice`
+(number assigned on posting, unique; SR, company, client, invoice date,
+billing month, rates, totals, status draft → submitted → posted, or returned
+with a reason); `client_invoice_line`. Company code = company id; registration
+number = the company's tax number.
+
+**Permissions:** `invoice.view` (scoped like sales requests on the
+sales/account ladder; all for Finance), `invoice.create` (own; sales/account),
+`invoice.post` (Finance manager), `invoice_catalog.edit` (Finance manager).
+
+**Screens:** Finance > Invoices (list by stage, new invoice from an SR,
+review and post or return), printable invoice in the sample's layout, Invoice
+Items (catalog with Excel import), and a Statement tab on each client /
+company profile in Client Accounts (posted invoices debit, approved payments
+credit, running balance, date range with opening balance, Excel export).
+Client Accounts gains Invoiced and Balance due.

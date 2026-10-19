@@ -102,6 +102,10 @@ PERMISSIONS = {
     'finance_txn.approve':  'Approve or reject finance transactions',
     'finance_txn.delete':   'Delete finance transactions',
     'finance_report.view':  'View income statement, balance sheet and analytics',
+    'invoice.view':         'See client invoices',
+    'invoice.create':       'Draft a client invoice from a sales request and send it to Finance',
+    'invoice.post':         'Post a client invoice to the client account, or return it',
+    'invoice_catalog.edit': 'Maintain the invoice item list (codes and names)',
     'user_balance.view':    'View user balances',
     'user_balance.request': 'Request a balance top-up',
     'user_balance.transfer': 'Transfer balance between users',
@@ -321,6 +325,10 @@ def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=Fa
         'company.view': 'all',
         'catalog.view': 'all',
         'dashboard.sales': 'all',
+        # Invoices: the account people draft them from their requests;
+        # Finance posts them.
+        'invoice.view': scope,
+        'invoice.create': 'own',
     }
     if approve:
         grants['sales_request.approve'] = scope
@@ -580,6 +588,9 @@ SEED_MATRIX = {
             'finance_txn.approve': 'all',
             'finance_txn.delete': 'all',
             'finance_report.view': 'all',
+            'invoice.view': 'all',
+            'invoice.post': 'all',
+            'invoice_catalog.edit': 'all',
             'user_balance.view': 'all',
             'user_balance.request': 'own',
             'user_balance.transfer': 'all',
@@ -607,6 +618,7 @@ SEED_MATRIX = {
             'finance_txn.view': 'all',
             'finance_txn.create': 'all',
             'finance_report.view': 'all',
+            'invoice.view': 'all',
             'user_balance.view': 'all',
             'user_balance.request': 'own',
             'loan.view': 'all',

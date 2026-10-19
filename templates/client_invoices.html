@@ -1,0 +1,424 @@
+{% extends "main.html" %}
+
+{% block head %}
+<title>Invoices</title>
+<style>
+:root { --iv-primary: #4f46e5; --iv-soft: #eef2ff; --iv-border: #e2e8f0; --iv-muted: #64748b; --iv-text: #0f172a; }
+.iv-shell { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.iv-card { background: #fff; border: 1px solid var(--iv-border); border-radius: 18px; box-shadow: 0 4px 14px rgba(15,23,42,.05); margin-bottom: 18px; }
+.iv-head { padding: 22px 24px 8px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.iv-head h1 { font-size: 24px; font-weight: 800; color: var(--iv-text); margin: 0 0 4px; }
+.iv-head p { color: var(--iv-muted); margin: 0; font-size: 14px; max-width: 680px; }
+.iv-tabs { display: flex; gap: 6px; padding: 8px 24px 0; }
+.iv-tab { border: none; background: none; padding: 10px 14px; font-weight: 700; color: var(--iv-muted); border-bottom: 3px solid transparent; }
+.iv-tab.active { color: var(--iv-primary); border-bottom-color: var(--iv-primary); }
+.iv-pane { display: none; padding: 18px 24px 24px; }
+.iv-pane.active { display: block; }
+.iv-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.iv-stage { border: 1px solid var(--iv-border); background: #fff; border-radius: 14px; padding: 12px 14px; text-align: start; cursor: pointer; }
+.iv-stage:focus { outline: none; }
+.iv-stage.active { border-color: var(--iv-primary); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+.iv-stage span { display: block; font-size: 12px; font-weight: 700; color: var(--iv-muted); }
+.iv-stage b { font-size: 22px; color: var(--iv-text); }
+.iv-stage small { display: block; color: var(--iv-muted); font-size: 12px; white-space: nowrap; }
+.iv-stage.submitted span { color: #d97706; } .iv-stage.returned span { color: #dc2626; } .iv-stage.posted span { color: #059669; }
+.iv-table-wrap { overflow-x: auto; border: 1px solid var(--iv-border); border-radius: 14px; }
+table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; display: table; }
+.iv-table th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--iv-muted);
+               padding: 10px 12px; border-bottom: 1px solid var(--iv-border); white-space: nowrap; text-align: start; }
+.iv-table td { padding: 11px 12px; border-bottom: 1px solid var(--iv-border); font-size: 14px; vertical-align: middle; }
+.iv-table tr.iv-row { cursor: pointer; } .iv-table tr.iv-row:hover td { background: #fafbff; }
+.iv-r { text-align: end !important; white-space: nowrap; }
+.iv-num { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--iv-primary); }
+.iv-sub { font-size: 12px; color: var(--iv-muted); }
+.iv-badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.iv-badge.draft { background: #f1f5f9; color: #475569; } .iv-badge.submitted { background: #fef3c7; color: #b45309; }
+.iv-badge.returned { background: #fee2e2; color: #b91c1c; } .iv-badge.posted { background: #d1fae5; color: #047857; }
+.iv-badge.cancelled { background: #f1f5f9; color: #94a3b8; text-decoration: line-through; }
+.iv-empty { text-align: center; padding: 40px; color: var(--iv-muted); }
+.iv-toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.iv-toolbar input[type=search] { padding: 8px 12px; border: 1px solid var(--iv-border); border-radius: 10px; min-width: 240px; }
+/* editor */
+#ivEditor .modal-dialog { max-width: 1180px; }
+.iv-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.iv-meta label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--iv-muted); margin-bottom: 3px; }
+.iv-party { background: #f8fafc; border: 1px solid var(--iv-border); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px;
+            display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 13px; }
+.iv-party b { color: var(--iv-text); }
+.iv-lines input { min-width: 70px; }
+.iv-lines .code { width: 90px; } .iv-lines .qty { width: 80px; } .iv-lines .price, .iv-lines .disc { width: 120px; }
+.iv-lines td { padding: 6px 8px; }
+.iv-line-warn { font-size: 11px; color: #b45309; }
+.iv-totals { margin-inline-start: auto; width: 360px; max-width: 100%; margin-top: 14px; }
+.iv-totals div { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
+.iv-totals .grand { border-top: 2px solid var(--iv-text); font-size: 17px; font-weight: 800; padding-top: 8px; }
+.iv-return { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+@media (max-width: 992px) { .iv-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 576px) { .iv-shell { padding: 12px; } .iv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set _p = session.get('perms', {}) %}
+<div class="iv-shell">
+  <div class="iv-card">
+    <div class="iv-head">
+      <div>
+        <h1><i class="fas fa-file-invoice mr-2" style="color:var(--iv-primary)"></i>Client Invoices</h1>
+        <p>Drafted by the client's account manager from a Sales Request, sent to Finance, and posted to the client's account.
+           A posted invoice is numbered and appears on the client's statement.</p>
+      </div>
+      {% if 'invoice.create' in _p %}
+      <button class="btn btn-primary" id="ivNew"><i class="fas fa-plus mr-1"></i>New invoice</button>
+      {% endif %}
+    </div>
+    <div class="iv-tabs">
+      <button class="iv-tab active" data-pane="ivInvoicesPane"><i class="fas fa-list mr-1"></i>Invoices</button>
+      <button class="iv-tab" data-pane="ivItemsPane"><i class="fas fa-tags mr-1"></i>Invoice Items</button>
+    </div>
+
+    <div class="iv-pane active" id="ivInvoicesPane">
+      <div class="iv-stages" id="ivStages"></div>
+      <div class="iv-toolbar"><input type="search" id="ivSearch" placeholder="Search number, company, client, SR..."></div>
+      <div class="iv-table-wrap">
+        <table class="iv-table">
+          <thead><tr><th>Invoice</th><th>Company / Client</th><th>SR</th><th>Date</th><th>Billing month</th>
+            <th class="iv-r">Before tax</th><th class="iv-r">VAT</th><th class="iv-r">Total</th><th>Status</th><th>By</th></tr></thead>
+          <tbody id="ivRows"><tr><td colspan="10" class="iv-empty"><i class="fas fa-spinner fa-spin"></i></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="iv-pane" id="ivItemsPane">
+      <div class="iv-toolbar">
+        <input type="search" id="ivItemSearch" placeholder="Search code or name...">
+        {% if 'invoice_catalog.edit' in _p %}
+        <div>
+          <label class="btn btn-outline-primary mb-0"><i class="fas fa-file-excel mr-1"></i>Import Excel
+            <input type="file" id="ivImport" accept=".xlsx,.xls" hidden></label>
+          <button class="btn btn-primary" id="ivItemAdd"><i class="fas fa-plus mr-1"></i>Add item</button>
+        </div>
+        {% endif %}
+      </div>
+      <div class="iv-sub mb-2">Excel columns: <b>كود</b>, <b>اسم المنتج</b>, <b>code name</b>. Existing codes are updated, new ones added.</div>
+      <div class="iv-table-wrap">
+        <table class="iv-table" style="min-width:520px">
+          <thead><tr><th>Code</th><th>Arabic name</th><th>English name</th><th>Status</th>{% if 'invoice_catalog.edit' in _p %}<th></th>{% endif %}</tr></thead>
+          <tbody id="ivItems"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="ivEditor" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg,#4f46e5,#3730a3);color:#fff;">
+        <h5 class="modal-title" id="ivEditorTitle">New invoice</h5>
+        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body" id="ivEditorBody"></div>
+      <div class="modal-footer" id="ivEditorFoot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CAN = { create: {{ ('invoice.create' in _p)|tojson }}, post: {{ ('invoice.post' in _p)|tojson }},
+              editItems: {{ ('invoice_catalog.edit' in _p)|tojson }} };
+  var STAGES = [['', 'All'], ['draft', 'Draft'], ['submitted', 'With Finance'], ['returned', 'Returned'], ['posted', 'Posted']];
+  var LABEL = { draft: 'Draft', submitted: 'With Finance', returned: 'Returned', posted: 'Posted', cancelled: 'Cancelled' };
+  var VAT = 14, PROFIT = 1;
+  var invoices = [], stageFilter = '', catalog = [], current = null;
+
+  function esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+  function money(v) { return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function day(v) { return v ? String(v).slice(0, 10) : '-'; }
+  function r2(v) { return Math.round((Number(v) + Number.EPSILON) * 100) / 100; }
+
+  // ---------- list ----------
+  function load() {
+    $.getJSON('/api/invoices').done(function (res) {
+      invoices = res.invoices || [];
+      var st = res.stages || {}, all = 0, allTotal = 0;
+      Object.keys(st).forEach(function (k) { if (k !== 'cancelled') { all += st[k].count; allTotal += st[k].total; } });
+      $('#ivStages').html(STAGES.map(function (s) {
+        var d = s[0] ? (st[s[0]] || { count: 0, total: 0 }) : { count: all, total: allTotal };
+        return '<button class="iv-stage ' + s[0] + (stageFilter === s[0] ? ' active' : '') + '" data-stage="' + s[0] + '">' +
+               '<span>' + s[1] + '</span><b>' + d.count + '</b><small>EGP ' + money(d.total) + '</small></button>';
+      }).join(''));
+      draw();
+      var open = new URLSearchParams(location.search).get('open');
+      if (open && !current) openInvoice(+open);
+    });
+  }
+  function draw() {
+    var q = ($('#ivSearch').val() || '').toLowerCase().trim();
+    var rows = invoices.filter(function (i) {
+      if (stageFilter ? i.status !== stageFilter : i.status === 'cancelled') return false;
+      if (!q) return true;
+      return [i.invoice_number, i.company_name, i.client_name, 'sr-' + i.sales_request_id, i.created_by_name]
+        .join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    $('#ivRows').html(rows.length ? rows.map(function (i) {
+      return '<tr class="iv-row" data-id="' + i.id + '">' +
+        '<td><span class="iv-num">' + (i.invoice_number ? '#' + i.invoice_number : 'Not numbered') + '</span>' +
+          '<div class="iv-sub">' + i.lines_count + ' line(s)</div></td>' +
+        '<td><b data-no-i18n>' + esc(i.company_name || '-') + '</b><div class="iv-sub" data-no-i18n>' + esc(i.client_name || '') + '</div></td>' +
+        '<td>' + (i.sales_request_id ? 'SR-' + i.sales_request_id : '-') + '</td>' +
+        '<td>' + day(i.invoice_date) + '</td><td>' + esc(i.billing_month) + '</td>' +
+        '<td class="iv-r">' + money(i.subtotal) + '</td><td class="iv-r">' + money(i.vat_total) + '</td>' +
+        '<td class="iv-r"><b>' + money(i.total) + '</b></td>' +
+        '<td><span class="iv-badge ' + i.status + '">' + LABEL[i.status] + '</span>' +
+          (i.status === 'returned' && i.return_reason ? '<div class="iv-sub text-danger" data-no-i18n>' + esc(i.return_reason) + '</div>' : '') + '</td>' +
+        '<td data-no-i18n>' + esc(i.created_by_name || '-') + '</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="iv-empty">No invoices here yet.</td></tr>');
+  }
+  $(document).on('click', '.iv-stage', function () { stageFilter = $(this).data('stage') || ''; $('.iv-stage').removeClass('active'); $(this).addClass('active'); draw(); });
+  $('#ivSearch').on('input', draw);
+  $(document).on('click', '.iv-tab', function () {
+    $('.iv-tab').removeClass('active'); $(this).addClass('active');
+    $('.iv-pane').removeClass('active'); $('#' + $(this).data('pane')).addClass('active');
+  });
+  $(document).on('click', 'tr.iv-row', function () { openInvoice(+$(this).data('id')); });
+
+  // ---------- items ----------
+  function loadItems() {
+    return $.getJSON('/api/invoice-catalog').done(function (res) { catalog = res.items || []; drawItems(); });
+  }
+  function drawItems() {
+    var q = ($('#ivItemSearch').val() || '').toLowerCase().trim();
+    var rows = catalog.filter(function (c) { return !q || (c.code + ' ' + c.name_ar + ' ' + c.name_en).toLowerCase().indexOf(q) >= 0; });
+    $('#ivItems').html(rows.length ? rows.map(function (c) {
+      return '<tr><td class="iv-num">' + c.code + '</td><td data-no-i18n>' + esc(c.name_ar) + '</td><td data-no-i18n>' + esc(c.name_en) + '</td>' +
+        '<td>' + (c.is_active ? '<span class="iv-badge posted">Active</span>' : '<span class="iv-badge cancelled">Hidden</span>') + '</td>' +
+        (CAN.editItems ? '<td class="iv-r"><button class="btn btn-sm btn-outline-primary iv-item-edit" data-id="' + c.id + '"><i class="fas fa-pen"></i></button></td>' : '') + '</tr>';
+    }).join('') : '<tr><td colspan="5" class="iv-empty">' + (catalog.length ? 'No item matches.' :
+      'The item list is empty. ' + (CAN.editItems ? 'Import Finance\'s Excel to load it.' : 'Finance loads it.')) + '</td></tr>');
+  }
+  $('#ivItemSearch').on('input', drawItems);
+  function itemForm(item) {
+    item = item || { code: '', name_ar: '', name_en: '', is_active: 1 };
+    Swal.fire({
+      title: item.id ? 'Edit item' : 'Add item',
+      html: '<input id="ivfCode" class="swal2-input" placeholder="Code" value="' + esc(item.code) + '">' +
+            '<input id="ivfAr" class="swal2-input" dir="rtl" placeholder="اسم المنتج" value="' + esc(item.name_ar) + '">' +
+            '<input id="ivfEn" class="swal2-input" placeholder="English name" value="' + esc(item.name_en) + '">' +
+            (item.id ? '<label style="display:block;margin-top:10px"><input type="checkbox" id="ivfActive" ' + (item.is_active ? 'checked' : '') + '> Active</label>' : ''),
+      showCancelButton: true, confirmButtonText: 'Save', focusConfirm: false,
+      preConfirm: function () {
+        return $.ajax({ url: '/api/invoice-catalog', method: 'POST', contentType: 'application/json',
+          data: JSON.stringify({ id: item.id, code: $('#ivfCode').val(), name_ar: $('#ivfAr').val(), name_en: $('#ivfEn').val(),
+                                 is_active: item.id ? $('#ivfActive').is(':checked') : 1 }) })
+          .then(function (r) { if (!r.success) throw new Error(r.error); return r; })
+          .catch(function (x) { Swal.showValidationMessage((x.responseJSON && x.responseJSON.error) || x.message || 'Not saved'); });
+      }
+    }).then(function (r) { if (r.isConfirmed) loadItems(); });
+  }
+  $(document).on('click', '#ivItemAdd', function () { itemForm(null); });
+  $(document).on('click', '.iv-item-edit', function () { itemForm(catalog.filter(function (c) { return c.id === $(this).data('id'); }.bind(this))[0]); });
+  $(document).on('change', '#ivImport', function () {
+    var f = this.files[0]; if (!f) return;
+    var fd = new FormData(); fd.append('file', f);
+    Swal.fire({ title: 'Importing...', didOpen: function () { Swal.showLoading(); }, allowOutsideClick: false });
+    fetch('/api/invoice-catalog/import', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res.success) { Swal.fire('Not imported', res.error, 'error'); return; }
+      Swal.fire('Imported', res.added + ' added, ' + res.updated + ' updated, ' + res.skipped + ' skipped', 'success');
+      loadItems();
+    });
+    this.value = '';
+  });
+
+  // ---------- editor ----------
+  function lineRow(l) {
+    l = l || { qty: 1, unit_price: 0, cash_discount: 0 };
+    return '<tr class="iv-line" data-sri="' + (l.sales_request_item_id || '') + '">' +
+      '<td><input class="form-control form-control-sm code" list="ivCodes" value="' + esc(l.item_code || '') + '" placeholder="Code"></td>' +
+      '<td><div class="iv-line-name" data-no-i18n>' + esc(l.name_en || '') + (l.name_ar ? ' · ' + esc(l.name_ar) : '') + '</div>' +
+        '<input class="form-control form-control-sm desc mt-1" value="' + esc(l.description || '') + '" placeholder="Description">' +
+        (l.already_on ? '<div class="iv-line-warn"><i class="fas fa-exclamation-triangle"></i> Already on ' + esc(l.already_on) + '</div>' : '') + '</td>' +
+      '<td><input type="number" class="form-control form-control-sm qty" min="0" step="0.01" value="' + (l.qty || 0) + '"></td>' +
+      '<td><input type="number" class="form-control form-control-sm price" min="0" step="0.01" value="' + (l.unit_price || 0) + '"></td>' +
+      '<td><input type="number" class="form-control form-control-sm disc" min="0" step="0.01" value="' + (l.cash_discount || 0) + '"></td>' +
+      '<td class="iv-r sv">0.00</td><td class="iv-r vat">0.00</td><td class="iv-r tot">0.00</td>' +
+      '<td><button class="btn btn-sm btn-link text-danger iv-line-del" title="Remove"><i class="fas fa-times"></i></button></td></tr>';
+  }
+  function recalc() {
+    var sub = 0, vat = 0;
+    $('#ivLines tr.iv-line').each(function () {
+      var tr = $(this), code = tr.find('.code').val().trim();
+      var item = catalog.filter(function (c) { return String(c.code) === code; })[0];
+      tr.find('.iv-line-name').text(item ? item.name_en + ' · ' + item.name_ar : (code ? 'Not on the item list' : 'Choose an item code'))
+        .toggleClass('text-danger', !!code && !item);
+      var sv = r2(Number(tr.find('.qty').val() || 0) * Number(tr.find('.price').val() || 0) - Number(tr.find('.disc').val() || 0));
+      var v = r2(sv * VAT / 100);
+      sub += sv; vat += v;
+      tr.find('.sv').text(money(sv)); tr.find('.vat').text(money(v)); tr.find('.tot').text(money(sv + v));
+    });
+    var withhold = $('#ivProfit').is(':checked') ? r2(sub * PROFIT / 100) : 0;
+    $('#ivTotals').html('<div><span>Total before tax</span><b>' + money(sub) + '</b></div>' +
+      '<div><span>VAT 14%</span><b>' + money(vat) + '</b></div>' +
+      '<div><span>Commercial profits tax 1%</span><b>' + (withhold ? '−' + money(withhold) : '0.00') + '</b></div>' +
+      '<div class="grand"><span>Total</span><span>EGP ' + money(sub + vat - withhold) + '</span></div>');
+  }
+  $(document).on('input change', '#ivLines input, #ivProfit', recalc);
+  $(document).on('click', '.iv-line-del', function () { $(this).closest('tr').remove(); recalc(); });
+  $(document).on('click', '#ivAddLine', function () { $('#ivLines').append(lineRow()); recalc(); });
+
+  function editorHtml(inv, party, lines, editable) {
+    var today = new Date().toISOString().slice(0, 10);
+    return (inv && inv.status === 'returned' && inv.return_reason
+            ? '<div class="iv-return"><i class="fas fa-undo mr-1"></i>Returned by Finance: <span data-no-i18n>' + esc(inv.return_reason) + '</span></div>' : '') +
+      (inv ? '' : '<div class="mb-3"><label class="iv-sub font-weight-bold">Sales Request</label>' +
+        '<select id="ivSr" class="form-control" style="width:100%"><option value="">Search an SR...</option></select></div>') +
+      '<div class="iv-party" id="ivParty">' + partyHtml(party) + '</div>' +
+      '<div class="iv-meta">' +
+        '<div><label>Invoice date</label><input type="date" id="ivDate" class="form-control" value="' + esc((inv && inv.invoice_date) || today) + '"></div>' +
+        '<div><label>Billing month</label><input type="month" id="ivMonth" class="form-control" value="' + esc((inv && inv.billing_month) || today.slice(0, 7)) + '"></div>' +
+        '<div><label>Profits tax</label><label class="d-flex align-items-center mt-2" style="text-transform:none;font-size:14px;color:var(--iv-text)">' +
+          '<input type="checkbox" id="ivProfit" class="mr-2" ' + (!inv || inv.apply_profit_tax ? 'checked' : '') + '> Deduct 1% (أ.ت.ص)</label></div>' +
+        '<div><label>Notes</label><input id="ivNotes" class="form-control" value="' + esc((inv && inv.notes) || '') + '"></div>' +
+      '</div>' +
+      '<div class="table-responsive"><table class="iv-table iv-lines" style="min-width:980px"><thead><tr><th>Code</th><th>Item</th><th>Qty</th>' +
+        '<th>Unit price</th><th>Cash discount</th><th class="iv-r">Sales value</th><th class="iv-r">VAT 14%</th><th class="iv-r">Total</th><th></th></tr></thead>' +
+        '<tbody id="ivLines">' + (lines || []).map(lineRow).join('') + '</tbody></table></div>' +
+      (editable ? '<button class="btn btn-sm btn-outline-primary mt-2" id="ivAddLine"><i class="fas fa-plus mr-1"></i>Add line</button>' : '') +
+      '<div class="iv-totals" id="ivTotals"></div>' +
+      '<datalist id="ivCodes">' + catalog.filter(function (c) { return c.is_active; }).map(function (c) {
+        return '<option value="' + c.code + '">' + esc(c.name_en + ' · ' + c.name_ar) + '</option>'; }).join('') + '</datalist>';
+  }
+  function partyHtml(p) {
+    if (!p) return '<span class="iv-sub">Choose the Sales Request: its client, company and approved items fill the invoice.</span>';
+    return '<div>Company: <b data-no-i18n>' + esc(p.company_name || '-') + '</b> <span class="iv-sub">(code ' + esc(p.company_id || '-') + ')</span></div>' +
+           '<div>Client: <b data-no-i18n>' + esc(p.client_name || '-') + '</b></div>' +
+           '<div>Registration no.: <b data-no-i18n>' + esc(p.tax_number || p.company_tax_number || '-') + '</b></div>' +
+           '<div>SR: <b>SR-' + esc(p.id || p.sales_request_id) + '</b></div>';
+  }
+  function collect() {
+    return {
+      sales_request_id: current ? current.sales_request_id : $('#ivSr').val(),
+      invoice_date: $('#ivDate').val(), billing_month: $('#ivMonth').val(),
+      apply_profit_tax: $('#ivProfit').is(':checked'), notes: $('#ivNotes').val(),
+      lines: $('#ivLines tr.iv-line').map(function () {
+        var tr = $(this);
+        return { item_code: tr.find('.code').val().trim(), description: tr.find('.desc').val(), qty: tr.find('.qty').val(),
+                 unit_price: tr.find('.price').val(), cash_discount: tr.find('.disc').val(),
+                 sales_request_item_id: tr.data('sri') || null };
+      }).get()
+    };
+  }
+  function lockEditor(locked) { $('#ivEditorBody input, #ivEditorBody select').prop('disabled', locked); $('.iv-line-del, #ivAddLine').toggle(!locked); }
+
+  function openNew() {
+    current = null;
+    $('#ivEditorTitle').text('New invoice');
+    $('#ivEditorBody').html(editorHtml(null, null, [], true));
+    $('#ivEditorFoot').html('<button class="btn btn-light" data-dismiss="modal">Cancel</button>' +
+      '<button class="btn btn-outline-primary" id="ivSaveDraft"><i class="fas fa-save mr-1"></i>Save draft</button>' +
+      '<button class="btn btn-primary" id="ivSaveSend"><i class="fas fa-paper-plane mr-1"></i>Save and send to Finance</button>');
+    recalc();
+    $('#ivEditor').modal('show');
+    $('#ivSr').select2({ dropdownParent: $('#ivEditor'), width: '100%', placeholder: 'Search an SR...',
+      ajax: { url: '/api/finance/sales-requests', dataType: 'json', delay: 250,
+              data: function (p) { return { q: p.term || '' }; },
+              processResults: function (d) { return { results: (d.sales_requests || []).map(function (s) {
+                return { id: s.id, text: s.request_number + ' · ' + (s.title || '') + ' · ' + (s.client_name || '') }; }) }; } } })
+      .on('change', function () {
+        var id = $(this).val(); if (!id) return;
+        $.getJSON('/api/invoices/from-request/' + id).done(function (res) {
+          $('#ivParty').html(partyHtml(res.request));
+          $('#ivLines').html((res.lines || []).map(lineRow).join(''));
+          if (!res.lines.length) Swal.fire('No approved items', 'This request has no client-approved items yet. Add lines by hand.', 'info');
+          recalc();
+        }).fail(function (x) { Swal.fire('Error', (x.responseJSON && x.responseJSON.error) || 'Could not load the request', 'error'); });
+      });
+  }
+  $(document).on('click', '#ivNew', openNew);
+
+  function openInvoice(id) {
+    $.getJSON('/api/invoices/' + id).done(function (res) {
+      var inv = res.invoice; current = inv;
+      $('#ivEditorTitle').html((inv.invoice_number ? 'Invoice #' + inv.invoice_number : 'Invoice draft') +
+        ' <span class="iv-badge ' + inv.status + ' ml-2">' + LABEL[inv.status] + '</span>');
+      $('#ivEditorBody').html(editorHtml(inv, inv, res.lines, inv.can_edit));
+      recalc(); lockEditor(!inv.can_edit);
+      var foot = '<a class="btn btn-light" target="_blank" href="/invoices/' + inv.id + '/print"><i class="fas fa-print mr-1"></i>Print</a>' +
+                 '<button class="btn btn-light" data-dismiss="modal">Close</button>';
+      if (inv.can_edit && inv.status !== 'posted') foot += '<button class="btn btn-outline-danger" id="ivCancelInv">Cancel invoice</button>';
+      if (inv.can_edit) foot += '<button class="btn btn-outline-primary" id="ivSave"><i class="fas fa-save mr-1"></i>Save</button>';
+      if (inv.can_submit) foot += '<button class="btn btn-primary" id="ivSend"><i class="fas fa-paper-plane mr-1"></i>Send to Finance</button>';
+      if (inv.can_post) foot += '<button class="btn btn-outline-danger" id="ivReturn"><i class="fas fa-undo mr-1"></i>Return</button>' +
+                                '<button class="btn btn-success" id="ivPost"><i class="fas fa-check mr-1"></i>Post to client account</button>';
+      $('#ivEditorFoot').html(foot);
+      $('#ivEditor').modal('show');
+    }).fail(function (x) { Swal.fire('Error', (x.responseJSON && x.responseJSON.error) || 'Could not open', 'error'); });
+  }
+
+  function save(thenSend, quiet) {
+    var body = collect();
+    if (!body.sales_request_id) { Swal.fire('Choose the Sales Request', '', 'warning'); return $.Deferred().reject(); }
+    if (!body.lines.length) { Swal.fire('Add at least one line', '', 'warning'); return $.Deferred().reject(); }
+    var req = current
+      ? $.ajax({ url: '/api/invoices/' + current.id, method: 'PUT', contentType: 'application/json', data: JSON.stringify(body) })
+      : $.ajax({ url: '/api/invoices', method: 'POST', contentType: 'application/json', data: JSON.stringify(body) });
+    return req.then(function (r) {
+      var id = current ? current.id : r.id;
+      if (!thenSend) return id;
+      return $.ajax({ url: '/api/invoices/' + id + '/submit', method: 'POST' }).then(function () { return id; });
+    }).done(function (id) {
+      if (quiet) return;
+      $('#ivEditor').modal('hide');
+      Swal.fire(thenSend ? 'Sent to Finance' : 'Saved', thenSend ? 'Finance will post it to the client\'s account.' : '', 'success');
+      load();
+    }).fail(function (x) { if (x && x.responseJSON) Swal.fire('Not saved', x.responseJSON.error || 'Try again', 'error'); });
+  }
+  $(document).on('click', '#ivSaveDraft, #ivSave', function () { save(false); });
+  $(document).on('click', '#ivSaveSend', function () { save(true); });
+  $(document).on('click', '#ivSend', function () { save(true); });
+  $(document).on('click', '#ivCancelInv', function () {
+    if (!confirm('Cancel this invoice? It will not reach the client\'s account.')) return;
+    $.post('/api/invoices/' + current.id + '/cancel').done(function () { $('#ivEditor').modal('hide'); load(); });
+  });
+  $(document).on('click', '#ivPost', function () {
+    var next = Math.max.apply(null, [0].concat(invoices.map(function (i) { return i.invoice_number || 0; }))) + 1;
+    $('#ivEditorFoot').html('<div class="d-flex align-items-center flex-wrap" style="gap:8px;width:100%">' +
+      '<label class="mb-0 iv-sub font-weight-bold">Invoice number</label>' +
+      '<input type="number" id="ivNumber" class="form-control" style="width:140px" value="' + next + '">' +
+      '<span class="iv-sub">Next free number; change it to continue your paper series.</span>' +
+      '<span class="ml-auto"></span><button class="btn btn-light" id="ivBack">Back</button>' +
+      '<button class="btn btn-success" id="ivPostConfirm"><i class="fas fa-check mr-1"></i>Post</button></div>');
+    $('#ivNumber').trigger('focus');
+  });
+  $(document).on('click', '#ivBack', function () { openInvoice(current.id); });
+  $(document).on('click', '#ivPostConfirm', function () {
+    var btn = $(this).prop('disabled', true);
+    // Whatever Finance corrected in the window is saved first, then posted.
+    save(false, true).then(function () {
+      return $.ajax({ url: '/api/invoices/' + current.id + '/post', method: 'POST', contentType: 'application/json',
+                      data: JSON.stringify({ invoice_number: $('#ivNumber').val() }) });
+    }).done(function (r) { $('#ivEditor').modal('hide'); Swal.fire('Posted', 'Invoice #' + r.invoice_number + ' is on the client\'s account.', 'success'); load(); })
+      .fail(function (x) { btn.prop('disabled', false); if (x && x.responseJSON) Swal.fire('Not posted', x.responseJSON.error, 'error'); });
+  });
+  $(document).on('click', '#ivReturn', function () {
+    $('#ivEditorFoot').html('<div style="width:100%"><label class="iv-sub font-weight-bold">What needs fixing <span class="text-danger">*</span></label>' +
+      '<textarea id="ivReturnReason" class="form-control" rows="2" maxlength="500"></textarea>' +
+      '<div class="d-flex justify-content-end mt-2" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
+      '<button class="btn btn-danger" id="ivReturnSend">Return to author</button></div></div>');
+    $('#ivReturnReason').trigger('focus');
+  });
+  $(document).on('click', '#ivReturnSend', function () {
+    var reason = $('#ivReturnReason').val().trim();
+    if (reason.length < 3) { $('#ivReturnReason').trigger('focus'); return; }
+    $.ajax({ url: '/api/invoices/' + current.id + '/return', method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ reason: reason }) })
+      .done(function () { $('#ivEditor').modal('hide'); Swal.fire('Returned', '', 'success'); load(); })
+      .fail(function (x) { Swal.fire('Not returned', (x.responseJSON || {}).error || 'Try again', 'error'); });
+  });
+  $('#ivEditor').on('hidden.bs.modal', function () { current = null; });
+
+  $(function () { loadItems().always(load); });
+})();
+</script>
+{% endblock %}

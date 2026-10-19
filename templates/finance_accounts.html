@@ -38,7 +38,7 @@
 .ca-btn-primary { background: var(--ca-primary); border-color: var(--ca-primary); color: #fff; }
 .ca-btn-primary:hover { color: #fff; opacity: .92; }
 
-.ca-figures { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;
+.ca-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
               padding: 0 24px 22px; }
 .ca-figure { border: 1px solid var(--ca-border); border-radius: 14px; padding: 14px; }
 .ca-figure span { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
@@ -250,7 +250,9 @@
             ['Collected', t.collected, 'good'],
             ['Pending Collection', t.pending_in, t.pending_in > 0 ? 'warn' : ''],
             ['Outstanding', t.outstanding, t.outstanding > 0.005 ? 'bad' : 'good'],
-            ['Expected Margin', t.expected_margin, '']
+            ['Expected Margin', t.expected_margin, ''],
+            ['Invoiced', t.invoiced, ''],
+            ['Balance Due', t.balance_due, t.balance_due > 0.005 ? 'bad' : 'good']
         ];
         $('#caFigures').html(figs.map(function (f) {
             var why = f[0] === 'Pending Collection' && f[1] > 0;
@@ -318,7 +320,8 @@
         renderFigures({
             quoted_sell: sum(cos, 'quoted_sell'), approved_sell: sum(cos, 'approved_sell'),
             collected: sum(cos, 'collected'), pending_in: sum(cos, 'pending_in'),
-            outstanding: sum(cos, 'outstanding'), expected_margin: sum(cos, 'expected_margin')
+            outstanding: sum(cos, 'outstanding'), expected_margin: sum(cos, 'expected_margin'),
+            invoiced: sum(cos, 'invoiced'), balance_due: sum(cos, 'balance_due')
         });
         renderUnlinked();
         drawCompanies();
@@ -472,6 +475,7 @@
         var tabs = [['requests', 'Sales Requests', data.requests.length],
                     ['transactions', 'Transactions', data.transactions.length]];
         if (KIND === 'company') tabs.push(['clients', 'Clients', data.clients.length]);
+        tabs.push(['statement', 'Statement of Account', '']);
         var active = $('.ca-tab.active').data('tab') || 'requests';
 
         var html = '<div class="ca-card"><div class="ca-tabs">' + tabs.map(function (t) {
@@ -481,12 +485,48 @@
 
         html += '<div class="ca-panel' + (active === 'requests' ? ' active' : '') + '" id="ca-requests">' + requestsTable(clientNames) + '</div>';
         html += '<div class="ca-panel' + (active === 'transactions' ? ' active' : '') + '" id="ca-transactions">' + transactionsTable(clientNames) + '</div>';
+        html += '<div class="ca-panel' + (active === 'statement' ? ' active' : '') + '" id="ca-statement">' +
+            '<div class="ca-empty"><i class="fas fa-spinner fa-spin"></i></div></div>';
         if (KIND === 'company') {
             html += '<div class="ca-panel' + (active === 'clients' ? ' active' : '') + '" id="ca-clients">' +
                 (data.clients.length ? '<div class="ca-clients" style="display:block;--acc:' + accent(PARTY_ID) + '">' + data.clients.map(clientRow).join('') + '</div>' :
                     '<div class="ca-empty">No clients</div>') + '</div>';
         }
         $('#caBody').html(html + '</div>');
+        loadStatement();
+    }
+
+    // Statement of account: posted invoices (debit), payments received
+    // (credit), running balance; the date range folds earlier entries into
+    // the opening balance.
+    function loadStatement() {
+        var q = filterParams();
+        $.getJSON('/api/finance/accounts/statement?' + q).done(function (st) {
+            var rows = (st.entries || []).map(function (e) {
+                var doc = e.kind === 'invoice'
+                    ? '<a href="/invoices/' + e.ref_id + '/print" target="_blank">' + esc(e.document) + '</a>'
+                    : esc(e.document);
+                return '<tr><td>' + day(e.day) + '</td><td>' + doc + '</td>' +
+                    '<td>' + (e.sales_request_id ? '<a href="/sales_request_details/' + e.sales_request_id + '">SR-' + e.sales_request_id + '</a>' : '-') + '</td>' +
+                    (KIND === 'company' ? '<td data-no-i18n>' + esc(e.client_name || '-') + '</td>' : '') +
+                    '<td class="r">' + (e.debit ? money(e.debit) : '') + '</td>' +
+                    '<td class="r pos">' + (e.credit ? money(e.credit) : '') + '</td>' +
+                    '<td class="r"><b class="' + owedClass(e.balance) + '">' + money(e.balance) + '</b></td></tr>';
+            }).join('');
+            var cols = KIND === 'company' ? 7 : 6;
+            $('#ca-statement').html(
+                '<div class="d-flex flex-wrap justify-content-between align-items-center p-3" style="gap:8px">' +
+                  '<div class="ca-sub">Posted invoices are debits, payments received are credits. Use From / To above for a period.</div>' +
+                  '<a class="ca-btn" href="/api/finance/accounts/statement?format=xlsx&' + q + '"><i class="fas fa-file-excel"></i> Export statement</a>' +
+                '</div><div class="ca-scroll"><table class="ca-table"><thead><tr><th>Date</th><th>Document</th><th>SR</th>' +
+                (KIND === 'company' ? '<th>Client</th>' : '') +
+                '<th class="r">Debit (invoiced)</th><th class="r">Credit (paid)</th><th class="r">Balance</th></tr></thead><tbody>' +
+                '<tr><td></td><td colspan="' + (cols - 2) + '"><b>Opening balance</b></td><td class="r"><b>' + money(st.opening) + '</b></td></tr>' +
+                (rows || '<tr><td colspan="' + cols + '" class="ca-empty">No posted invoices or payments in this period.</td></tr>') +
+                '<tr><td></td><td colspan="' + (cols - 4) + '"><b>Totals / closing balance</b></td><td class="r"><b>' + money(st.debit) + '</b></td>' +
+                '<td class="r pos"><b>' + money(st.credit) + '</b></td><td class="r"><b class="' + owedClass(st.closing) + '">' + money(st.closing) + '</b></td></tr>' +
+                '</tbody></table></div>');
+        }).fail(function () { $('#ca-statement').html('<div class="ca-empty">Could not load the statement.</div>'); });
     }
 
     function requestsTable(clientNames) {

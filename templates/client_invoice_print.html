@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>فاتورة {{ inv.invoice_number or 'مسودة' }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* The layout of Finance's sample sheet: header block, lines, totals. */
+  * { box-sizing: border-box; }
+  body { font-family: 'Cairo', Tahoma, sans-serif; color: #111; margin: 0; background: #f1f5f9; }
+  .sheet { width: 210mm; min-height: 297mm; margin: 16px auto; background: #fff; padding: 14mm 12mm; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .toolbar { width: 210mm; margin: 16px auto 0; display: flex; gap: 8px; justify-content: flex-start; }
+  .toolbar button { font-family: inherit; padding: 8px 18px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-weight: 700; }
+  .toolbar .primary { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+  .draft { color: #b91c1c; font-weight: 700; border: 2px solid #b91c1c; display: inline-block; padding: 2px 10px; border-radius: 6px; margin-bottom: 8px; }
+  .head { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #333; }
+  .head div { padding: 8px 12px; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; gap: 12px; }
+  .head b { font-weight: 700; }
+  .head .label { color: #333; font-weight: 700; min-width: 110px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th { background: #e5e7eb; border: 1px solid #333; padding: 8px; font-size: 15px; }
+  td { border: 1px solid #555; padding: 6px 8px; font-size: 14px; }
+  td.n, th.n { text-align: center; width: 40px; }
+  td.num { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .totals { width: 100%; margin-top: 0; }
+  .totals td { border: 1px solid #333; padding: 6px 10px; }
+  .totals td.lbl { text-align: center; font-weight: 700; }
+  .totals tr.grand td { font-weight: 800; background: #f3f4f6; }
+  .foot { margin-top: 24px; font-size: 12px; color: #555; display: flex; justify-content: space-between; }
+  @media print { body { background: #fff; } .toolbar { display: none; } .sheet { margin: 0; box-shadow: none; width: auto; min-height: auto; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button class="primary" onclick="window.print()">طباعة</button>
+  <button onclick="window.close()">إغلاق</button>
+</div>
+<div class="sheet">
+  {% if inv.status != 'posted' %}<div class="draft">مسودة - لم تُرحّل بعد ({{ inv.status }})</div>{% endif %}
+  <div class="head">
+    <div><span class="label">رقم الفاتورة</span><b>{{ inv.invoice_number or '—' }}</b></div>
+    <div><span class="label">كود الشركة</span><b>{{ inv.company_id or '—' }}</b></div>
+    <div><span class="label">اسم الشركة</span><b>{{ inv.company_name or '—' }}</b></div>
+    <div><span class="label">تاريخ الفاتورة</span><b dir="ltr">{{ (inv.invoice_date or '')[:10] }}</b></div>
+    <div><span class="label">اسم العميل</span><b>{{ inv.client_name or '—' }}</b></div>
+    <div><span class="label">رقم التسجيل</span><b dir="ltr">{{ inv.company_tax_number or '—' }}</b></div>
+    <div><span class="label">شهر المطالبة</span><b dir="ltr">{{ inv.billing_month }}</b></div>
+    <div><span class="label">طلب المبيعات</span><b dir="ltr">SR-{{ inv.sales_request_id }}</b></div>
+  </div>
+
+  <table>
+    <thead><tr><th class="n">م</th><th>البيان</th><th style="width:70px">الكمية</th><th style="width:130px">سعر الوحدة</th>
+      <th style="width:110px">خصم نقدي</th><th style="width:140px">الإجمالي</th></tr></thead>
+    <tbody>
+      {% for l in lines %}
+      <tr><td class="n">{{ loop.index }}</td>
+          <td>{{ l.name_en or l.description }}{% if l.name_ar %} - {{ l.name_ar }}{% endif %}
+              {% if l.description and l.name_en and l.description != l.name_en %}<div style="font-size:12px;color:#555">{{ l.description }}</div>{% endif %}</td>
+          <td class="num" style="text-align:center">{{ '%g' % l.qty }}</td>
+          <td class="num">{{ '{:,.2f}'.format(l.unit_price) }}</td>
+          <td class="num">{{ '{:,.2f}'.format(l.cash_discount) if l.cash_discount else '-' }}</td>
+          <td class="num">{{ '{:,.2f}'.format(l.sales_value) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr><td class="num" style="width:140px">{{ '{:,.2f}'.format(inv.subtotal) }}</td><td class="lbl">الإجمالي قبل الضريبة</td></tr>
+    <tr><td class="num">{{ '{:,.2f}'.format(inv.vat_total) }}</td><td class="lbl">ضريبة القيمة المضافة {{ '%g' % inv.vat_rate }}%</td></tr>
+    <tr><td class="num">{{ '{:,.2f}'.format(inv.profit_tax_total) if inv.apply_profit_tax else '-' }}</td><td class="lbl">ضريبة أرباح تجارية {{ '%g' % inv.profit_tax_rate }}%</td></tr>
+    <tr class="grand"><td class="num">{{ '{:,.2f}'.format(inv.total) }}</td><td class="lbl">الإجمالي</td></tr>
+  </table>
+
+  <div class="foot">
+    <span>أعدها: {{ inv.created_by_name or '—' }}</span>
+    <span>{% if inv.posted_by_name %}رحّلها: {{ inv.posted_by_name }} - {{ (inv.posted_at or '')[:10] }}{% endif %}</span>
+  </div>
+</div>
+</body>
+</html>
