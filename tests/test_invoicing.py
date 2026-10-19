@@ -143,12 +143,48 @@ class InvoiceFlowTest(unittest.TestCase):
         got = author.get('/api/invoices/%d' % inv_id).get_json()['invoice']
         self.assertEqual((got['status'], got['return_reason'], got['can_submit']), ('returned', 'Wrong month', True))
 
+    def test_lines_come_from_the_request_only(self):
+        author = self._web(self.account)
+        prefill = author.get('/api/invoices/from-request/%d' % self.sr).get_json()
+        sri = prefill['lines'][0]['sales_request_item_id']
+        typed = author.post('/api/invoices', json={'sales_request_id': self.sr, 'invoice_date': '2026-01-18',
+                                                   'lines': [{'qty': 1, 'unit_price': 5, 'description': 'typed in'}]})
+        self.assertEqual(typed.status_code, 400)
+        twice = author.post('/api/invoices', json={'sales_request_id': self.sr, 'invoice_date': '2026-01-18',
+                                                   'lines': [{'sales_request_item_id': sri, 'qty': 1, 'unit_price': 5}] * 2})
+        self.assertEqual(twice.status_code, 400)
+        cur = self._cursor()
+        cur.execute("SELECT id FROM sales_request_items WHERE request_id = %s AND approval_status = 'pending'", (self.sr,))
+        pending = cur.fetchone()['id']
+        unapproved = author.post('/api/invoices', json={'sales_request_id': self.sr, 'invoice_date': '2026-01-18',
+                                                        'lines': [{'sales_request_item_id': pending, 'qty': 1, 'unit_price': 5}]})
+        self.assertEqual(unapproved.status_code, 400)
+        # The name is the request's, whatever was sent.
+        inv_id, _ = self._draft(author, lines=[{'sales_request_item_id': sri, 'qty': 1, 'unit_price': 5,
+                                               'description': 'renamed'}])
+        line = author.get('/api/invoices/%d' % inv_id).get_json()
+        self.assertEqual(line['lines'][0]['description'], 'LED Screen')
+
+    def test_serial_from_the_start_and_released_on_cancel(self):
+        author = self._web(self.account)
+        cur = self._cursor()
+        cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice")
+        top = cur.fetchone()['n']
+        first, _ = self._draft(author)
+        got = author.get('/api/invoices/%d' % first).get_json()['invoice']
+        self.assertEqual(got['invoice_number'], top + 1)
+        self.assertEqual(author.post('/api/invoices/%d/cancel' % first).status_code, 200)
+        second, _ = self._draft(author)
+        self.assertEqual(author.get('/api/invoices/%d' % second).get_json()['invoice']['invoice_number'], top + 1)
+
     def test_posting_needs_every_code_and_codes_must_exist(self):
         author, finance = self._web(self.account), self._web(self.finance)
+        prefill = author.get('/api/invoices/from-request/%d' % self.sr).get_json()
+        sri = prefill['lines'][0]['sales_request_item_id']
         bad = author.post('/api/invoices', json={'sales_request_id': self.sr, 'invoice_date': '2026-01-18',
-                                                 'lines': [{'item_code': '77777', 'qty': 1, 'unit_price': 5}]})
+                                                 'lines': [{'sales_request_item_id': sri, 'item_code': '77777', 'qty': 1, 'unit_price': 5}]})
         self.assertEqual(bad.status_code, 400)
-        inv_id, _ = self._draft(author, lines=[{'qty': 1, 'unit_price': 100, 'description': 'no code yet'}])
+        inv_id, _ = self._draft(author, lines=[{'sales_request_item_id': sri, 'qty': 1, 'unit_price': 100}])
         author.post('/api/invoices/%d/submit' % inv_id)
         self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id).status_code, 400)
 
@@ -182,3 +218,52 @@ class InvoicePaymentTest(InvoiceFlowTest):
         self.assertEqual((got['paid'], len(got['payments']), got['can_record_payment']), (78088.0, 1, True))
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
         self.assertEqual((st['debit'], st['credit'], st['closing']), (178088.0, 78088.0, 100000.0))
+
+
+class StatementLayoutTest(InvoiceFlowTest):
+    """George's statement: opening balance, job code, invoice number, cash or bank collections, combined balances."""
+
+    def test_statement_and_combined_balances(self):
+        author, finance = self._web(self.account), self._web(self.finance)
+        self.assertEqual(finance.post('/api/finance/accounts/opening', json={
+            'client_id': self.client_id, 'as_of': '2024-12-31', 'amount': 1000, 'note': 'balance 2025'}).status_code, 200)
+        inv_id, _ = self._draft(author)
+        author.post('/api/invoices/%d/submit' % inv_id)
+        finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98002})
+        cur = self._cursor()
+        cur.execute("""INSERT INTO payment_methods (method_name, method_code, method_type, bank_name, account_number)
+                       VALUES ('Bank T', 'BANK_T_98', 'bank', 'CIB', '1')""")
+        bank = cur.lastrowid
+        cur.execute("""INSERT INTO finance_transactions (transaction_code, transaction_type, amount, payment_method_id,
+                       category_id, client_id, sales_request_id, reference_number, transaction_date, status, added_by)
+                       VALUES ('FT-T98002', 'income', 20000, %s, 1, %s, %s, 'Invoice 98002', '2026-01-25', 'approved', 't')""",
+                    (bank, self.client_id, self.sr))
+        st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
+        kinds = [(e['kind'], e['label'], e['invoice_number'], e['sales_request_id']) for e in st['entries']]
+        self.assertEqual(kinds, [('opening', 'Balance brought forward', None, None),
+                                 ('invoice', 'Invoice 98002', 98002, self.sr),
+                                 ('payment', 'Cheque / bank collection', None, self.sr)])
+        self.assertEqual(st['closing'], 1000 + 178088 - 20000)
+        # The period from 2026: everything before is the opening balance.
+        period = finance.get('/api/finance/accounts/statement?client_id=%d&start=2026-01-20' % self.client_id).get_json()
+        self.assertEqual((period['opening'], len(period['entries'])), (1000 + 178088.0, 1))
+        by_client = finance.get('/api/finance/accounts/balances?group=client').get_json()
+        mine = next(r for r in by_client['rows'] if r['id'] == self.client_id)
+        self.assertEqual((mine['debit'], mine['credit'], mine['closing']), (179088.0, 20000.0, 159088.0))
+        xlsx = finance.get('/api/finance/accounts/statement?format=xlsx&client_id=%d' % self.client_id)
+        self.assertEqual(xlsx.status_code, 200)
+        self.assertEqual(self._web(self.account).post('/api/finance/accounts/opening', json={
+            'client_id': self.client_id, 'as_of': '2024-12-31', 'amount': 1}).status_code, 403)
+
+
+class InvoiceSeriesTest(InvoiceFlowTest):
+    """Finance sets where the series continues; drafts take the next number from there."""
+
+    def test_series_floor(self):
+        finance, author = self._web(self.finance), self._web(self.account)
+        r = finance.post('/api/invoice-series', json={'next_number': 99553})
+        self.assertEqual(r.get_json()['next_number'], 99553)
+        inv_id, _ = self._draft(author)
+        self.assertEqual(author.get('/api/invoices/%d' % inv_id).get_json()['invoice']['invoice_number'], 99553)
+        self.assertEqual(finance.post('/api/invoice-series', json={'next_number': 5}).status_code, 400)  # behind used numbers
+        self.assertEqual(author.post('/api/invoice-series', json={'next_number': 999999}).status_code, 403)

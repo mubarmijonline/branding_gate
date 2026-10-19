@@ -86,6 +86,11 @@ class TranslatorTest(unittest.TestCase):
         'Pending Collection:': 'قيد التحصيل:',                 # trailing punctuation kept
         'EVA pharma': 'EVA pharma',                            # data is left alone
         'Added by George Osama · 1 day(s) ago': 'أضافه George Osama · منذ 1 يوم',   # segments before templates
+        # Arabic puts the minus after the amount; dates and codes keep theirs.
+        'MINUS:−467.50': '467.50-',
+        'MINUS:-EGP 3,200.00': 'EGP 3,200.00-',
+        'MINUS:Awaiting − EGP 500.00': 'Awaiting EGP 500.00-',
+        'MINUS:2026-10-19 SR-5529 FIN202610-59779': '2026-10-19 SR-5529 FIN202610-59779',
     }
 
     def test_matching_rules(self):
@@ -102,7 +107,7 @@ eval(fs.readFileSync(process.argv[1] + '/static/i18n/ar.js', 'utf8'));
 eval(fs.readFileSync(process.argv[1] + '/static/js/bg-i18n.js', 'utf8'));
 const cases = JSON.parse(process.argv[2]);
 const out = {};
-for (const k of Object.keys(cases)) out[k] = bgT(k);
+for (const k of Object.keys(cases)) out[k] = k.startsWith('MINUS:') ? bgMinusAfter(k.slice(6)) : bgT(k);
 process.stdout.write(JSON.stringify(out));
 """
         r = subprocess.run(['node', '-e', script, ROOT, json.dumps(self.CASES)],

@@ -24642,10 +24642,29 @@ def _catalog_by_code(cur):
 
 
 def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, apply_profit_tax):
-    """Replace the invoice's lines and totals from what was sent. Returns (totals, error)."""
+    """Replace the invoice's lines and totals from what was sent. Returns (totals, error).
+
+    Every line is one of the request's client-approved items: what is billed is
+    what the client approved, never a line typed in. The item's name comes from
+    the request, the code from the item list.
+    """
     catalog = _catalog_by_code(cur)
-    clean = []
+    cur.execute("SELECT sales_request_id FROM client_invoice WHERE id = %s", (invoice_id,))
+    sr_id = (cur.fetchone() or {}).get('sales_request_id')
+    cur.execute("""SELECT id, name FROM sales_request_items
+                   WHERE request_id = %s AND approval_status = 'approved'""", (sr_id,))
+    sr_items = {r['id']: r['name'] for r in cur.fetchall()}
+    clean, seen = [], set()
     for n, line in enumerate(lines or [], start=1):
+        try:
+            sri = int(line.get('sales_request_item_id') or 0)
+        except (TypeError, ValueError):
+            sri = 0
+        if sri not in sr_items:
+            return None, 'Line %d is not one of SR-%s\'s client-approved items' % (n, sr_id)
+        if sri in seen:
+            return None, 'Line %d: "%s" is on the invoice twice' % (n, sr_items[sri])
+        seen.add(sri)
         code = str(line.get('item_code') or '').strip()
         item = None
         if code:
@@ -24655,13 +24674,13 @@ def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, appl
         clean.append({
             'catalog_id': item['id'] if item else None,
             'item_code': item['code'] if item else None,
-            'name_ar': (item['name_ar'] if item else (line.get('name_ar') or '')).strip()[:200],
-            'name_en': (item['name_en'] if item else (line.get('name_en') or '')).strip()[:200],
-            'description': (line.get('description') or '').strip()[:500] or None,
+            'name_ar': (item['name_ar'] if item else '')[:200],
+            'name_en': (item['name_en'] if item else '')[:200],
+            'description': (sr_items[sri] or '')[:500] or None,
             'qty': line.get('qty') or 0,
             'unit_price': line.get('unit_price') or 0,
             'cash_discount': line.get('cash_discount') or 0,
-            'sales_request_item_id': line.get('sales_request_item_id') or None,
+            'sales_request_item_id': sri,
         })
     if not clean:
         return None, 'Add at least one line'
@@ -24685,6 +24704,43 @@ def _write_invoice_lines(cur, invoice_id, lines, vat_rate, profit_tax_rate, appl
     """, (totals['subtotal'], totals['cash_discount_total'], totals['vat_total'],
           totals['profit_tax_total'], totals['total'], invoice_id))
     return totals, None
+
+
+def next_invoice_number(cur):
+    """The next serial: after the highest used, and never below where Finance said the series continues."""
+    cur.execute("SELECT next_number FROM invoice_series WHERE id = 1 FOR UPDATE")
+    row = cur.fetchone()
+    floor = row['next_number'] if row else 1
+    cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice")
+    return max(cur.fetchone()['n'] + 1, floor)
+
+
+@app.route('/api/invoice-series', methods=['GET', 'POST'])
+@perm('invoice.view', 'invoice_catalog.edit')
+def invoice_series():
+    """Read, or (Finance) set, the number the next invoice will take."""
+    conn, cur = connection()
+    try:
+        if request.method == 'POST':
+            if not has('invoice_catalog.edit'):
+                abort(403)
+            value = str((request.get_json(silent=True) or {}).get('next_number') or '').strip()
+            if not value.isdigit() or int(value) < 1:
+                return jsonify(success=False, error='Give a whole number'), 400
+            cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice")
+            used = cur.fetchone()['n']
+            if int(value) <= used:
+                return jsonify(success=False, error='Number %d is already used; the series is past it' % used), 400
+            cur.execute("""INSERT INTO invoice_series (id, next_number, updated_by) VALUES (1, %s, %s)
+                           ON DUPLICATE KEY UPDATE next_number = VALUES(next_number), updated_by = VALUES(updated_by)""",
+                        (int(value), session.get('user_id')))
+            conn.commit()
+        number = next_invoice_number(cur)
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, next_number=number)
 
 
 def _invoice_header(data):
@@ -24970,10 +25026,14 @@ def client_invoice_create():
         if not sr:
             return jsonify(success=False, error='Choose the Sales Request this invoice is for'), 400
         assert_scope('sales_request.view', sr['owner_user_id'])
-        cur.execute("""INSERT INTO client_invoice (status, sales_request_id, company_id, client_id, invoice_date,
-                       billing_month, apply_profit_tax, notes, created_by)
-                       VALUES ('draft', %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (sr['id'], sr['company_id'], sr['client_id'], invoice_date, month, 1 if apply_tax else 0,
+        # The invoice carries its serial from the start: the next number in the
+        # series, read under a lock so two drafts never share one. Finance can
+        # still change it when posting.
+        number = next_invoice_number(cur)
+        cur.execute("""INSERT INTO client_invoice (invoice_number, status, sales_request_id, company_id, client_id,
+                       invoice_date, billing_month, apply_profit_tax, notes, created_by)
+                       VALUES (%s, 'draft', %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (number, sr['id'], sr['company_id'], sr['client_id'], invoice_date, month, 1 if apply_tax else 0,
                      notes, session.get('user_id')))
         invoice_id = cur.lastrowid
         totals, error = _write_invoice_lines(cur, invoice_id, data.get('lines'), invoicing.DEFAULT_VAT_RATE,
@@ -24985,7 +25045,7 @@ def client_invoice_create():
     finally:
         cur.close()
         conn.close()
-    return jsonify(success=True, id=invoice_id, total=float(totals['total']))
+    return jsonify(success=True, id=invoice_id, invoice_number=number, total=float(totals['total']))
 
 
 @app.route('/api/invoices/<int:invoice_id>', methods=['PUT'])
@@ -25067,12 +25127,11 @@ def client_invoice_post(invoice_id):
                     (invoice_id,))
         if cur.fetchone()['n']:
             return jsonify(success=False, error='Every line needs an item code before posting'), 400
-        # Serialise numbering: the next number is read under a lock.
-        cur.execute("SELECT COALESCE(MAX(invoice_number), 0) AS n FROM client_invoice FOR UPDATE")
-        next_number = cur.fetchone()['n'] + 1
+        # It keeps the serial it was drafted with unless Finance gives another.
+        next_number = next_invoice_number(cur)
         wanted = str(data.get('invoice_number') or '').strip()
-        number = int(wanted) if wanted.isdigit() else next_number
-        cur.execute("SELECT id FROM client_invoice WHERE invoice_number = %s", (number,))
+        number = int(wanted) if wanted.isdigit() else (inv['invoice_number'] or next_number)
+        cur.execute("SELECT id FROM client_invoice WHERE invoice_number = %s AND id <> %s", (number, invoice_id))
         if cur.fetchone():
             return jsonify(success=False, error='Invoice number %d is already used' % number), 400
         cur.execute("""UPDATE client_invoice SET status = 'posted', invoice_number = %s, posted_by = %s,
@@ -25125,7 +25184,8 @@ def client_invoice_cancel(invoice_id):
             return jsonify(success=False, error='Invoice not found'), 404
         if inv['status'] not in ('draft', 'returned', 'submitted'):
             return jsonify(success=False, error='A %s invoice cannot be cancelled' % inv['status']), 400
-        cur.execute("UPDATE client_invoice SET status = 'cancelled' WHERE id = %s", (invoice_id,))
+        # Never sent to the client, so its number goes back to the series.
+        cur.execute("UPDATE client_invoice SET status = 'cancelled', invoice_number = NULL WHERE id = %s", (invoice_id,))
         conn.commit()
     finally:
         cur.close()
@@ -25133,55 +25193,120 @@ def client_invoice_cancel(invoice_id):
     return jsonify(success=True)
 
 
-def account_statement(cur, company_id=None, client_id=None, start=None, end=None):
+def ledger_entries(cur, company_id=None, client_id=None):
     """
-    Posted invoices (debit) and approved income from the client (credit) in
-    date order with a running balance. With a start date, everything before it
-    is folded into the opening balance.
+    Every entry on client accounts, in date order: balances brought forward,
+    posted invoices (debit) and approved payments from clients (credit). Each
+    carries its company and client so it can be filtered or grouped.
     """
+    where_open, where_inv, where_pay, params = '', '', '', []
     if company_id:
-        inv_where, inv_params = "i.company_id = %s", [company_id]
-        pay_where, pay_params = "COALESCE(sr.company_id, c.parent_company_id) = %s", [company_id]
-    else:
-        inv_where, inv_params = "i.client_id = %s", [client_id]
-        pay_where, pay_params = "c.id = %s", [client_id]
+        where_open, where_inv = ' AND o.company_id = %s', ' AND i.company_id = %s'
+        where_pay = ' AND COALESCE(sr.company_id, c.parent_company_id) = %s'
+        params = [company_id]
+    elif client_id:
+        where_open, where_inv, where_pay = ' AND o.client_id = %s', ' AND i.client_id = %s', ' AND c.id = %s'
+        params = [client_id]
+    entries = []
     cur.execute("""
-        SELECT i.invoice_date AS day, i.posted_at AS at, 'invoice' AS kind, i.id AS ref_id,
-               CONCAT('Invoice ', i.invoice_number) AS document, i.sales_request_id,
-               cl.client_name, i.total AS debit, 0 AS credit
-        FROM client_invoice i LEFT JOIN client cl ON cl.id = i.client_id
-        WHERE i.status = 'posted' AND """ + inv_where, inv_params)
-    rows = [dict(r) for r in cur.fetchall()]
+        SELECT o.as_of AS day, 'opening' AS kind, o.id AS ref_id, NULL AS invoice_number, NULL AS sales_request_id,
+               o.company_id, o.client_id, o.note AS description, NULL AS method_type,
+               GREATEST(o.amount, 0) AS debit, GREATEST(-o.amount, 0) AS credit
+        FROM client_opening_balance o WHERE 1 = 1""" + where_open, params)
+    entries += [dict(r) for r in cur.fetchall()]
     cur.execute("""
-        SELECT ft.transaction_date AS day, ft.approved_at AS at, 'payment' AS kind, ft.id AS ref_id,
-               CONCAT('Payment ', ft.transaction_code) AS document, ft.sales_request_id,
-               c.client_name, 0 AS debit, ft.amount AS credit
+        SELECT i.invoice_date AS day, 'invoice' AS kind, i.id AS ref_id, i.invoice_number, i.sales_request_id,
+               i.company_id, i.client_id, NULL AS method_type,
+               CONCAT_WS(' - ', NULLIF(sr.title, ''),
+                         (SELECT GROUP_CONCAT(l.description ORDER BY l.line_no SEPARATOR ', ')
+                          FROM client_invoice_line l WHERE l.invoice_id = i.id)) AS description,
+               i.total AS debit, 0 AS credit
+        FROM client_invoice i LEFT JOIN sales_request sr ON sr.id = i.sales_request_id
+        WHERE i.status = 'posted'""" + where_inv, params)
+    entries += [dict(r) for r in cur.fetchall()]
+    cur.execute("""
+        SELECT ft.transaction_date AS day, 'payment' AS kind, ft.id AS ref_id, NULL AS invoice_number,
+               ft.sales_request_id, COALESCE(sr.company_id, c.parent_company_id) AS company_id, c.id AS client_id,
+               pm.method_type, COALESCE(NULLIF(ft.reference_number, ''), ft.transaction_code) AS description,
+               0 AS debit, ft.amount AS credit
         FROM finance_transactions ft
         LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
         JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
-        WHERE ft.transaction_type = 'income' AND ft.status = 'approved' AND """ + pay_where, pay_params)
-    rows += [dict(r) for r in cur.fetchall()]
-    rows.sort(key=lambda r: (r['day'], r['kind'] != 'invoice', r['ref_id']))
-    opening = 0.0
-    shown = []
-    for r in rows:
-        amount = float(r['debit'] or 0) - float(r['credit'] or 0)
+        LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+        WHERE ft.transaction_type = 'income' AND ft.status = 'approved'""" + where_pay, params)
+    entries += [dict(r) for r in cur.fetchall()]
+    order = {'opening': 0, 'invoice': 1, 'payment': 2}
+    entries.sort(key=lambda r: (r['day'], order[r['kind']], r['ref_id']))
+    for r in entries:
+        r['debit'], r['credit'] = float(r['debit'] or 0), float(r['credit'] or 0)
+        # How George reads a collection: cash goes to the safe, a cheque to the bank.
+        if r['kind'] == 'payment':
+            r['label'] = 'Cheque / bank collection' if r['method_type'] == 'bank' else 'Cash collection'
+        elif r['kind'] == 'opening':
+            r['label'] = 'Balance brought forward'
+        else:
+            r['label'] = 'Invoice %s' % r['invoice_number']
+    return entries
+
+
+def account_statement(cur, company_id=None, client_id=None, start=None, end=None):
+    """
+    One company's or client's ledger with a running balance. With a start
+    date, everything before it is folded into the opening balance.
+    """
+    opening, shown = 0.0, []
+    for r in ledger_entries(cur, company_id, client_id):
         if start and r['day'] < start:
-            opening += amount
+            opening += r['debit'] - r['credit']
             continue
         if end and r['day'] > end:
             continue
         shown.append(r)
     balance = opening
     for r in shown:
-        r['debit'], r['credit'] = float(r['debit'] or 0), float(r['credit'] or 0)
         balance += r['debit'] - r['credit']
         r['balance'] = balance
         r['day'] = r['day'].isoformat() if r['day'] else None
-        r['at'] = r['at'].isoformat() if r['at'] else None
+    client_names, company_names = {}, {}
+    cur.execute("SELECT id, client_name FROM client")
+    client_names = {r['id']: r['client_name'] for r in cur.fetchall()}
+    for r in shown:
+        r['client_name'] = client_names.get(r['client_id'])
     return {'opening': opening, 'entries': shown,
             'debit': sum(r['debit'] for r in shown), 'credit': sum(r['credit'] for r in shown),
             'closing': balance}
+
+
+def account_balances(cur, group='company', start=None, end=None):
+    """Every company's (or client's) opening, debit, credit and closing for a period."""
+    cur.execute("SELECT id, company_name FROM company")
+    companies = {r['id']: r['company_name'] for r in cur.fetchall()}
+    cur.execute("SELECT id, client_name, parent_company_id FROM client")
+    clients = {r['id']: r for r in cur.fetchall()}
+    rows = {}
+    for e in ledger_entries(cur):
+        key = e['company_id'] if group == 'company' else e['client_id']
+        if key is None:
+            continue
+        row = rows.setdefault(key, {'id': key, 'opening': 0.0, 'debit': 0.0, 'credit': 0.0})
+        if start and e['day'] < start:
+            row['opening'] += e['debit'] - e['credit']
+        elif not end or e['day'] <= end:
+            row['debit'] += e['debit']
+            row['credit'] += e['credit']
+    out = []
+    for key, row in rows.items():
+        if group == 'company':
+            row['name'] = companies.get(key)
+        else:
+            c = clients.get(key) or {}
+            row['name'] = c.get('client_name')
+            row['company_id'] = c.get('parent_company_id')
+            row['company_name'] = companies.get(c.get('parent_company_id'))
+        row['closing'] = row['opening'] + row['debit'] - row['credit']
+        out.append(row)
+    out.sort(key=lambda r: (r.get('company_name') or '', r['name'] or ''))
+    return out
 
 
 @app.route('/api/finance/accounts/statement', methods=['GET'])
@@ -25193,26 +25318,110 @@ def finance_account_statement():
     conn, cur = connection()
     try:
         data = account_statement(cur, f['company_id'], f['client_id'], f['start'], f['end'])
+        party = {}
+        if f['client_id']:
+            cur.execute("""SELECT c.client_name, co.id AS company_id, co.company_name FROM client c
+                           LEFT JOIN company co ON co.id = c.parent_company_id WHERE c.id = %s""", (f['client_id'],))
+            party = cur.fetchone() or {}
+        else:
+            cur.execute("SELECT id AS company_id, company_name FROM company WHERE id = %s", (f['company_id'],))
+            party = cur.fetchone() or {}
     finally:
         cur.close()
         conn.close()
     if request.args.get('format') == 'xlsx':
-        frame = pd.DataFrame([[r['day'], r['document'], ('SR-%s' % r['sales_request_id']) if r['sales_request_id'] else '',
-                               r['client_name'] or '', r['debit'] or None, r['credit'] or None, r['balance']]
-                              for r in data['entries']],
-                             columns=['Date', 'Document', 'SR', 'Client', 'Debit (invoiced)', 'Credit (paid)', 'Balance'])
-        frame.loc[-1] = ['', 'Opening balance', '', '', None, None, data['opening']]
-        frame = frame.sort_index().reset_index(drop=True)
+        # George's sheet: header block, then date, job code, invoice number,
+        # description, debit, credit, balance.
         buffer = BytesIO()
         with ExcelWriter(buffer, engine='openpyxl') as writer:
-            frame.to_excel(writer, sheet_name='Statement', index=False)
-            _autosize_worksheet(writer.sheets['Statement'])
+            head = pd.DataFrame([['اسم الشركة', party.get('company_name') or ''],
+                                 ['كود الشركة', party.get('company_id') or ''],
+                                 ['اسم العميل', party.get('client_name') or 'كل العملاء']])
+            head.to_excel(writer, sheet_name='كشف حساب', index=False, header=False)
+            rows = [[f['start'].isoformat() if f['start'] else '', '', '', 'رصيد أول المدة', None, None, data['opening']]]
+            for r in data['entries']:
+                rows.append([r['day'], r['sales_request_id'] or '', r['invoice_number'] or '',
+                             {'Cash collection': 'تحصيل نقدي (الخزينة)', 'Cheque / bank collection': 'تحصيل بشيك / بنك (البنك)',
+                              'Balance brought forward': 'رصيد مرحّل'}.get(r['label'], '') +
+                             ((' - ' if r['label'] in ('Cash collection', 'Cheque / bank collection', 'Balance brought forward') and r['description'] else '') +
+                              (r['description'] or '')),
+                             r['debit'] or None, r['credit'] or None, r['balance']])
+            rows.append(['', '', '', 'الإجمالي / الرصيد', data['debit'], data['credit'], data['closing']])
+            pd.DataFrame(rows, columns=['التاريخ', 'كود الشغل', 'رقم الفاتورة', 'البيان', 'مدين', 'دائن', 'الرصيد']) \
+                .to_excel(writer, sheet_name='كشف حساب', index=False, startrow=4)
+            sheet = writer.sheets['كشف حساب']
+            sheet.sheet_view.rightToLeft = True
+            _autosize_worksheet(sheet)
         buffer.seek(0)
         return send_file(buffer, as_attachment=True,
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                          download_name='statement_%s_%s.xlsx' % ('company' if f['company_id'] else 'client',
                                                                  f['company_id'] or f['client_id']))
-    return jsonify(success=True, **data)
+    return jsonify(success=True, party=party, **data)
+
+
+@app.route('/api/finance/accounts/balances', methods=['GET'])
+@perm('finance_report.view')
+def finance_account_balances():
+    """All client accounts together (مجمع حسابات العملاء), by company or by client."""
+    f = _accounts_filters(request.args)
+    group = 'client' if request.args.get('group') == 'client' else 'company'
+    conn, cur = connection()
+    try:
+        rows = account_balances(cur, group, f['start'], f['end'])
+    finally:
+        cur.close()
+        conn.close()
+    totals = {k: sum(r[k] for r in rows) for k in ('opening', 'debit', 'credit', 'closing')}
+    if request.args.get('format') == 'xlsx':
+        cols = (['كود الشركة', 'اسم الشركة'] if group == 'company' else ['اسم العميل', 'اسم الشركة'])
+        frame = pd.DataFrame([([r['id'], r['name']] if group == 'company' else [r['name'], r.get('company_name')]) +
+                              [r['opening'], r['debit'], r['credit'], r['closing']] for r in rows],
+                             columns=cols + ['رصيد أول المدة', 'مدين', 'دائن', 'الرصيد'])
+        frame.loc[len(frame)] = ['', 'الإجمالي', totals['opening'], totals['debit'], totals['credit'], totals['closing']]
+        buffer = BytesIO()
+        with ExcelWriter(buffer, engine='openpyxl') as writer:
+            frame.to_excel(writer, sheet_name='مجمع حسابات العملاء', index=False)
+            writer.sheets['مجمع حسابات العملاء'].sheet_view.rightToLeft = True
+            _autosize_worksheet(writer.sheets['مجمع حسابات العملاء'])
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True,
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         download_name='client_balances_by_%s.xlsx' % group)
+    return jsonify(success=True, group=group, rows=rows, totals=totals)
+
+
+@app.route('/api/finance/accounts/opening', methods=['POST'])
+@perm('invoice.post')
+def finance_account_opening():
+    """Finance enters a client's (or company's) balance brought forward."""
+    data = request.get_json(silent=True) or {}
+    try:
+        as_of = datetime.strptime(str(data.get('as_of') or ''), '%Y-%m-%d').date()
+        amount = invoicing.money(data.get('amount'))
+    except (ValueError, ArithmeticError):
+        return jsonify(success=False, error='Date and amount are required'), 400
+    client_id = data.get('client_id') or None
+    company_id = data.get('company_id') or None
+    conn, cur = connection()
+    try:
+        if client_id:
+            cur.execute("SELECT parent_company_id FROM client WHERE id = %s", (client_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error='Client not found'), 404
+            company_id = row['parent_company_id']
+        elif not company_id:
+            return jsonify(success=False, error='Choose a company or a client'), 400
+        cur.execute("""INSERT INTO client_opening_balance (company_id, client_id, as_of, amount, note, created_by)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (company_id, client_id, as_of, amount, (data.get('note') or '').strip()[:300] or None,
+                     session.get('user_id')))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True)
 
 
 @app.route('/api/finance/sales-requests', methods=['GET'])

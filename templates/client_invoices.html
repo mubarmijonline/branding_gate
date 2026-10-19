@@ -58,6 +58,8 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 .iv-next.ok { background: #ecfdf5; color: #065f46; }
 .iv-pay { border: 1px solid var(--iv-border); border-radius: 12px; padding: 12px 14px; margin-top: 14px; }
 .iv-pay h6 { font-weight: 800; margin-bottom: 8px; }
+.iv-series { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid var(--iv-border);
+             border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
 .iv-return { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
 @media (max-width: 992px) { .iv-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 576px) { .iv-shell { padding: 12px; } .iv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr; } }
@@ -104,6 +106,14 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
             <input type="file" id="ivImport" accept=".xlsx,.xls" hidden></label>
           <button class="btn btn-primary" id="ivItemAdd"><i class="fas fa-plus mr-1"></i>Add item</button>
         </div>
+        {% endif %}
+      </div>
+      <div class="iv-series">
+        <i class="fas fa-hashtag"></i> Next invoice number: <b id="ivNextNumber">-</b>
+        {% if 'invoice_catalog.edit' in _p %}
+        <input type="number" id="ivSeriesInput" class="form-control form-control-sm d-inline-block" style="width:130px" min="1" placeholder="e.g. 2553">
+        <button class="btn btn-sm btn-outline-primary" id="ivSeriesSave">Set</button>
+        <span class="iv-sub">Set it once to continue your paper series; new invoices take this number and count up.</span>
         {% endif %}
       </div>
       <div class="iv-sub mb-2">Excel columns: <b>كود</b>, <b>اسم المنتج</b>, <b>code name</b>. Existing codes are updated, new ones added.</div>
@@ -242,26 +252,49 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   });
 
   // ---------- editor ----------
+  // Items come from the Sales Request only: the name is the request's, the
+  // code is picked from Finance's list. Nothing is typed in.
+  var srLines = [];
+  function codeOptions(selected) {
+    return '<option value="">Choose code...</option>' + catalog.filter(function (c) { return c.is_active || String(c.code) === String(selected); })
+      .map(function (c) {
+        return '<option value="' + c.code + '"' + (String(c.code) === String(selected) ? ' selected' : '') + '>' +
+               c.code + ' · ' + esc(c.name_en) + ' · ' + esc(c.name_ar) + '</option>';
+      }).join('');
+  }
   function lineRow(l) {
-    l = l || { qty: 1, unit_price: 0, cash_discount: 0 };
     return '<tr class="iv-line" data-sri="' + (l.sales_request_item_id || '') + '">' +
-      '<td><input class="form-control form-control-sm code" list="ivCodes" value="' + esc(l.item_code || '') + '" placeholder="Code"></td>' +
-      '<td><div class="iv-line-name" data-no-i18n>' + esc(l.name_en || '') + (l.name_ar ? ' · ' + esc(l.name_ar) : '') + '</div>' +
-        '<input class="form-control form-control-sm desc mt-1" value="' + esc(l.description || '') + '" placeholder="Description">' +
+      '<td><select class="form-control form-control-sm code" style="min-width:210px">' + codeOptions(l.item_code) + '</select></td>' +
+      '<td><div class="font-weight-bold" data-no-i18n>' + esc(l.description || '') + '</div>' +
+        '<div class="iv-line-name iv-sub" data-no-i18n></div>' +
         (l.already_on ? '<div class="iv-line-warn"><i class="fas fa-exclamation-triangle"></i> Already on ' + esc(l.already_on) + '</div>' : '') + '</td>' +
       '<td><input type="number" class="form-control form-control-sm qty" min="0" step="0.01" value="' + (l.qty || 0) + '"></td>' +
       '<td><input type="number" class="form-control form-control-sm price" min="0" step="0.01" value="' + (l.unit_price || 0) + '"></td>' +
       '<td><input type="number" class="form-control form-control-sm disc" min="0" step="0.01" value="' + (l.cash_discount || 0) + '"></td>' +
       '<td class="iv-r sv">0.00</td><td class="iv-r vat">0.00</td><td class="iv-r tot">0.00</td>' +
-      '<td><button class="btn btn-sm btn-link text-danger iv-line-del" title="Remove"><i class="fas fa-times"></i></button></td></tr>';
+      '<td><button class="btn btn-sm btn-link text-danger iv-line-del" title="Remove from this invoice"><i class="fas fa-times"></i></button></td></tr>';
   }
+  // The request's approved items not on the invoice, to put back one removed.
+  function drawAddFromSr() {
+    var used = $('#ivLines tr.iv-line').map(function () { return String($(this).data('sri')); }).get();
+    var left = srLines.filter(function (l) { return used.indexOf(String(l.sales_request_item_id)) < 0; });
+    $('#ivAddFromSr').html(left.length ? '<select class="form-control form-control-sm d-inline-block" id="ivAddSel" style="width:auto;min-width:240px">' +
+      '<option value="">Add an item from this SR...</option>' + left.map(function (l) {
+        return '<option value="' + l.sales_request_item_id + '">' + esc(l.description) + '</option>'; }).join('') + '</select>' : '');
+  }
+  $(document).on('change', '#ivAddSel', function () {
+    var id = $(this).val(); if (!id) return;
+    var l = srLines.filter(function (x) { return String(x.sales_request_item_id) === String(id); })[0];
+    if (l) $('#ivLines').append(lineRow(l));
+    drawAddFromSr(); recalc();
+  });
+
   function recalc() {
     var sub = 0, vat = 0;
     $('#ivLines tr.iv-line').each(function () {
-      var tr = $(this), code = tr.find('.code').val().trim();
+      var tr = $(this), code = String(tr.find('.code').val() || '');
       var item = catalog.filter(function (c) { return String(c.code) === code; })[0];
-      tr.find('.iv-line-name').text(item ? item.name_en + ' · ' + item.name_ar : (code ? 'Not on the item list' : 'Choose an item code'))
-        .toggleClass('text-danger', !!code && !item);
+      tr.find('.iv-line-name').text(item ? item.name_en + ' · ' + item.name_ar : 'Choose the item code').toggleClass('text-danger', !item);
       var sv = r2(Number(tr.find('.qty').val() || 0) * Number(tr.find('.price').val() || 0) - Number(tr.find('.disc').val() || 0));
       var v = r2(sv * VAT / 100);
       sub += sv; vat += v;
@@ -274,8 +307,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       '<div class="grand"><span>Total</span><span>EGP ' + money(sub + vat - withhold) + '</span></div>');
   }
   $(document).on('input change', '#ivLines input, #ivProfit', recalc);
-  $(document).on('click', '.iv-line-del', function () { $(this).closest('tr').remove(); recalc(); });
-  $(document).on('click', '#ivAddLine', function () { $('#ivLines').append(lineRow()); recalc(); });
+  $(document).on('click', '.iv-line-del', function () { $(this).closest('tr').remove(); drawAddFromSr(); recalc(); });
 
   // What happens next, said in the window itself.
   function nextStep(inv) {
@@ -326,10 +358,9 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       '<div class="table-responsive"><table class="iv-table iv-lines" style="min-width:980px"><thead><tr><th>Code</th><th>Item</th><th>Qty</th>' +
         '<th>Unit price</th><th>Cash discount</th><th class="iv-r">Sales value</th><th class="iv-r">VAT 14%</th><th class="iv-r">Total</th><th></th></tr></thead>' +
         '<tbody id="ivLines">' + (lines || []).map(lineRow).join('') + '</tbody></table></div>' +
-      (editable ? '<button class="btn btn-sm btn-outline-primary mt-2" id="ivAddLine"><i class="fas fa-plus mr-1"></i>Add line</button>' : '') +
+      (editable ? '<div class="mt-2" id="ivAddFromSr"></div>' : '') +
       '<div class="iv-totals" id="ivTotals"></div>' + (inv ? paymentsHtml(inv) : '') +
-      '<datalist id="ivCodes">' + catalog.filter(function (c) { return c.is_active; }).map(function (c) {
-        return '<option value="' + c.code + '">' + esc(c.name_en + ' · ' + c.name_ar) + '</option>'; }).join('') + '</datalist>';
+      '';
   }
   function partyHtml(p) {
     if (!p) return '<span class="iv-sub">Choose the Sales Request: its client, company and approved items fill the invoice.</span>';
@@ -345,13 +376,13 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       apply_profit_tax: $('#ivProfit').is(':checked'), notes: $('#ivNotes').val(),
       lines: $('#ivLines tr.iv-line').map(function () {
         var tr = $(this);
-        return { item_code: tr.find('.code').val().trim(), description: tr.find('.desc').val(), qty: tr.find('.qty').val(),
+        return { item_code: tr.find('.code').val() || '', qty: tr.find('.qty').val(),
                  unit_price: tr.find('.price').val(), cash_discount: tr.find('.disc').val(),
                  sales_request_item_id: tr.data('sri') || null };
       }).get()
     };
   }
-  function lockEditor(locked) { $('#ivEditorBody input, #ivEditorBody select').prop('disabled', locked); $('.iv-line-del, #ivAddLine').toggle(!locked); }
+  function lockEditor(locked) { $('#ivEditorBody input, #ivEditorBody select').prop('disabled', locked); $('.iv-line-del, #ivAddFromSr').toggle(!locked); }
 
   function openNew() {
     current = null;
@@ -370,9 +401,11 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       .on('change', function () {
         var id = $(this).val(); if (!id) return;
         $.getJSON('/api/invoices/from-request/' + id).done(function (res) {
+          srLines = res.lines || [];
           $('#ivParty').html(partyHtml(res.request));
-          $('#ivLines').html((res.lines || []).map(lineRow).join(''));
-          if (!res.lines.length) Swal.fire('No approved items', 'This request has no client-approved items yet. Add lines by hand.', 'info');
+          $('#ivLines').html(srLines.filter(function (l) { return !l.already_on; }).map(lineRow).join(''));
+          drawAddFromSr();
+          if (!srLines.length) Swal.fire('No approved items', 'This request has no client-approved items yet, so there is nothing to invoice.', 'info');
           recalc();
         }).fail(function (x) { Swal.fire('Error', (x.responseJSON && x.responseJSON.error) || 'Could not load the request', 'error'); });
       });
@@ -382,10 +415,14 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   function openInvoice(id) {
     $.getJSON('/api/invoices/' + id).done(function (res) {
       var inv = res.invoice; current = inv;
-      $('#ivEditorTitle').html((inv.invoice_number ? 'Invoice #' + inv.invoice_number : 'Invoice draft') +
+      $('#ivEditorTitle').html((inv.invoice_number ? 'Invoice #' + inv.invoice_number : 'Invoice') + ' &middot; SR-' + inv.sales_request_id +
         ' <span class="iv-badge ' + inv.status + ' ml-2">' + LABEL[inv.status] + '</span>');
       $('#ivEditorBody').html(editorHtml(inv, inv, res.lines, inv.can_edit));
       recalc(); lockEditor(!inv.can_edit);
+      srLines = [];
+      if (inv.can_edit && inv.sales_request_id) {
+        $.getJSON('/api/invoices/from-request/' + inv.sales_request_id).done(function (r) { srLines = r.lines || []; drawAddFromSr(); });
+      }
       var foot = '<a class="btn btn-light" target="_blank" href="/invoices/' + inv.id + '/print"><i class="fas fa-print mr-1"></i>Print</a>' +
                  '<button class="btn btn-light" data-dismiss="modal">Close</button>';
       if (inv.can_edit && inv.status !== 'posted') foot += '<button class="btn btn-outline-danger" id="ivCancelInv">Cancel invoice</button>';
@@ -415,7 +452,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       if (quiet) return;
       $('#ivEditor').modal('hide');
       Swal.fire(thenSend ? 'Sent to Finance' : 'Saved', thenSend ? 'Finance will post it to the client\'s account.' : '', 'success');
-      load();
+      load(); loadSeries();
     }).fail(function (x) { if (x && x.responseJSON) Swal.fire('Not saved', x.responseJSON.error || 'Try again', 'error'); });
   }
   $(document).on('click', '#ivSaveDraft, #ivSave', function () { save(false); });
@@ -426,11 +463,11 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     $.post('/api/invoices/' + current.id + '/cancel').done(function () { $('#ivEditor').modal('hide'); load(); });
   });
   $(document).on('click', '#ivPost', function () {
-    var next = Math.max.apply(null, [0].concat(invoices.map(function (i) { return i.invoice_number || 0; }))) + 1;
+    var next = current.invoice_number || (Math.max.apply(null, [0].concat(invoices.map(function (i) { return i.invoice_number || 0; }))) + 1);
     $('#ivEditorFoot').html('<div class="d-flex align-items-center flex-wrap" style="gap:8px;width:100%">' +
       '<label class="mb-0 iv-sub font-weight-bold">Invoice number</label>' +
       '<input type="number" id="ivNumber" class="form-control" style="width:140px" value="' + next + '">' +
-      '<span class="iv-sub">Next free number; change it to continue your paper series.</span>' +
+      '<span class="iv-sub">The serial it was drafted with; change it only to fit your paper series.</span>' +
       '<span class="ml-auto"></span><button class="btn btn-light" id="ivBack">Back</button>' +
       '<button class="btn btn-success" id="ivPostConfirm"><i class="fas fa-check mr-1"></i>Post</button></div>');
     $('#ivNumber').trigger('focus');
@@ -495,7 +532,15 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 
   $('#ivEditor').on('hidden.bs.modal', function () { current = null; });
 
-  $(function () { loadItems().always(load); });
+  function loadSeries() { $.getJSON('/api/invoice-series').done(function (r) { $('#ivNextNumber').text(r.next_number); }); }
+  $(document).on('click', '#ivSeriesSave', function () {
+    $.ajax({ url: '/api/invoice-series', method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ next_number: $('#ivSeriesInput').val() }) })
+      .done(function (r) { $('#ivNextNumber').text(r.next_number); $('#ivSeriesInput').val(''); Swal.fire('Saved', 'The next invoice will be #' + r.next_number, 'success'); })
+      .fail(function (x) { Swal.fire('Not saved', (x.responseJSON || {}).error || 'Try again', 'error'); });
+  });
+
+  $(function () { loadItems().always(load); loadSeries(); });
 })();
 </script>
 {% endblock %}

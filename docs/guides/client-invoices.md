@@ -9,6 +9,11 @@ ones added, nothing is deleted. Items can also be added or edited one by one
 (**Add item**, or the pen on a row); untick *Active* to hide an item from new
 invoices without losing it from old ones.
 
+**Set the invoice series once.** On *Invoice Items*, **Next invoice number**:
+enter the number after your last paper invoice (e.g. 2553) and **Set**. Every
+new invoice takes the next number in the series as soon as it is drafted; a
+cancelled draft gives its number back.
+
 **2. Post invoices.**
 You are notified when an account manager sends one. Finance > Client Invoices,
 card **With Finance**, open the invoice:
@@ -31,11 +36,21 @@ approved.
 **4. Print.** Open the invoice > **Print** (the layout of your sample sheet).
 
 **5. Statement of account.** Finance > Client Accounts > open the company or
-the client > tab **Statement of Account**. Posted invoices are debits,
+the client > tab **Statement of Account**: company, company code and client at
+the top, then Date, Job code (SR), Invoice no., Description, Debit, Credit,
+Balance. Collections read *Cash collection (safe)* or *Cheque / bank
+collection (bank)* from the payment method they came into. **Set opening
+balance** enters what the client owed before the system (رصيد أول المدة;
+negative if you owe them). Posted invoices are debits,
 approved payments received are credits, with a running balance. Use *From /
 To* at the top for a period (earlier entries become the opening balance), and
-**Export statement** for Excel. The figures at the top now include
-**Invoiced** and **Balance Due** (invoiced minus collected).
+**Export statement** for Excel (in your sheet's layout, right to left). The
+figures at the top now include **Invoiced** and **Balance Due** (invoiced
+minus collected).
+
+**6. All client accounts together (مجمع حسابات العملاء).** Client Accounts >
+**Combined balances**: every company (or, *By client*, every client) with
+opening, debit, credit and balance for the period, totals, and Excel export.
 
 ## For account managers (Gamal, Sarah, Mariam ...)
 
@@ -43,8 +58,10 @@ To* at the top for a period (earlier entries become the opening balance), and
 2. Choose the **Sales Request**. Its client, company and client-approved items
    fill the invoice, with their prices; a line already on another invoice is
    flagged.
-3. Give every line its **item code** (type the code or pick from the list; the
-   name appears). Adjust quantity, price or cash discount, add or remove lines.
+3. Give every line its **item code** (pick from the list). Lines are the SR's
+   client-approved items only: nothing is typed in. Quantity, price and cash
+   discount can be adjusted; a line can be removed and put back from
+   *Add an item from this SR*.
 4. Set the **invoice date** and **billing month**. Leave **Deduct 1%** ticked
    unless the client does not withhold the commercial profits tax.
 5. **Save draft** to finish later, or **Save and send to Finance**.

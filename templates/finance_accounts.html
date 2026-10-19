@@ -18,7 +18,7 @@
     --ca-border: #e2e8f0;
     --ca-row: #f8fafc;
 }
-.ca-shell { padding: 24px; max-width: 1320px; margin: 0 auto; }
+.ca-shell { padding: 24px; }
 .ca-back { display: inline-flex; align-items: center; gap: 8px; color: var(--ca-muted);
            font-weight: 600; font-size: 14px; margin-bottom: 14px; text-decoration: none; }
 .ca-back:hover { color: var(--ca-primary); text-decoration: none; }
@@ -47,6 +47,14 @@
 .ca-figure.good strong { color: var(--ca-success); }
 .ca-figure.warn strong { color: var(--ca-warning); }
 .ca-figure.bad strong { color: var(--ca-danger); }
+.ca-stmt-head { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-end; padding: 16px 20px; border-bottom: 1px solid var(--ca-border); }
+.ca-stmt-head span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ca-muted); }
+.ca-stmt-head b { font-size: 15px; color: var(--ca-text); }
+.ca-stmt-actions { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ca-input { padding: 8px 10px; border: 1px solid var(--ca-border); border-radius: 10px; font-size: 13px; }
+.ca-stmt-open td { background: #f8fafc; }
+.ca-stmt-total td { background: #eef2ff; border-top: 2px solid var(--ca-primary); }
+.ca-group.active { background: var(--ca-primary-soft); color: var(--ca-primary); border-color: var(--ca-primary); }
 .ca-why { cursor: pointer; transition: box-shadow .2s, border-color .2s; }
 .ca-why:hover, .ca-why:focus { border-color: var(--ca-warning); box-shadow: 0 4px 14px rgba(245,158,11,.18); outline: none; }
 .ca-why-hint { display: block; margin-top: 4px; font-size: 11px; color: #b45309; font-weight: 600; }
@@ -186,6 +194,7 @@
                 {% if not kind %}<input type="search" id="caSearch" placeholder="Search company or client...">{% endif %}
                 <label class="ca-sub">From <input type="date" id="caStart"></label>
                 <label class="ca-sub">To <input type="date" id="caEnd"></label>
+                {% if not kind %}<button class="ca-btn" id="caBalancesBtn" type="button"><i class="fas fa-balance-scale"></i> Combined balances</button>{% endif %}
                 <a class="ca-btn ca-btn-primary" id="caReport" href="#"><i class="fas fa-file-excel"></i> Full Report</a>
             </div>
         </div>
@@ -193,6 +202,19 @@
         <div class="ca-figures" id="caFigures"></div>
     </div>
 
+    {% if not kind %}
+    <div class="ca-card" id="caBalances" style="display:none;">
+        <div class="ca-stmt-head">
+            <div><span>All client accounts</span><b>Combined balances</b></div>
+            <div class="ca-stmt-actions">
+                <button class="ca-btn ca-group active" data-group="company" type="button">By company</button>
+                <button class="ca-btn ca-group" data-group="client" type="button">By client</button>
+                <a class="ca-btn ca-btn-primary" id="caBalancesXlsx" href="#"><i class="fas fa-file-excel"></i> Export</a>
+            </div>
+        </div>
+        <div id="caBalancesBody"><div class="ca-empty"><i class="fas fa-spinner fa-spin"></i></div></div>
+    </div>
+    {% endif %}
     <div id="caUnlinked"></div>
     <div id="caBody"><div class="ca-card ca-empty"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
 </div>
@@ -499,35 +521,96 @@
     // Statement of account: posted invoices (debit), payments received
     // (credit), running balance; the date range folds earlier entries into
     // the opening balance.
+    var CAN_OPENING = {{ ('invoice.post' in _p)|tojson }};
+    var LABEL_AR = { 'Cash collection': 'Cash collection (safe)', 'Cheque / bank collection': 'Cheque / bank collection (bank)' };
     function loadStatement() {
         var q = filterParams();
         $.getJSON('/api/finance/accounts/statement?' + q).done(function (st) {
+            var party = st.party || {};
+            var isCompany = KIND === 'company';
             var rows = (st.entries || []).map(function (e) {
-                var doc = e.kind === 'invoice'
-                    ? '<a href="/invoices/' + e.ref_id + '/print" target="_blank">' + esc(e.document) + '</a>'
-                    : esc(e.document);
-                return '<tr><td>' + day(e.day) + '</td><td>' + doc + '</td>' +
+                var label = e.kind === 'invoice'
+                    ? '<a href="/invoices/' + e.ref_id + '/print" target="_blank">' + esc(e.label) + '</a>'
+                    : '<b>' + esc(LABEL_AR[e.label] || e.label) + '</b>';
+                return '<tr><td>' + day(e.day) + '</td>' +
                     '<td>' + (e.sales_request_id ? '<a href="/sales_request_details/' + e.sales_request_id + '">SR-' + e.sales_request_id + '</a>' : '-') + '</td>' +
-                    (KIND === 'company' ? '<td data-no-i18n>' + esc(e.client_name || '-') + '</td>' : '') +
+                    '<td>' + (e.invoice_number ? '<span class="ca-sub" style="font-weight:700;color:#4f46e5">' + e.invoice_number + '</span>' : '-') + '</td>' +
+                    '<td>' + label + (e.description ? '<div class="ca-sub" data-no-i18n>' + esc(e.description) + '</div>' : '') + '</td>' +
+                    (isCompany ? '<td data-no-i18n>' + esc(e.client_name || '-') + '</td>' : '') +
                     '<td class="r">' + (e.debit ? money(e.debit) : '') + '</td>' +
                     '<td class="r pos">' + (e.credit ? money(e.credit) : '') + '</td>' +
                     '<td class="r"><b class="' + owedClass(e.balance) + '">' + money(e.balance) + '</b></td></tr>';
             }).join('');
-            var cols = KIND === 'company' ? 7 : 6;
+            var cols = isCompany ? 8 : 7;
             $('#ca-statement').html(
-                '<div class="d-flex flex-wrap justify-content-between align-items-center p-3" style="gap:8px">' +
-                  '<div class="ca-sub">Posted invoices are debits, payments received are credits. Use From / To above for a period.</div>' +
-                  '<a class="ca-btn" href="/api/finance/accounts/statement?format=xlsx&' + q + '"><i class="fas fa-file-excel"></i> Export statement</a>' +
-                '</div><div class="ca-scroll"><table class="ca-table"><thead><tr><th>Date</th><th>Document</th><th>SR</th>' +
-                (KIND === 'company' ? '<th>Client</th>' : '') +
-                '<th class="r">Debit (invoiced)</th><th class="r">Credit (paid)</th><th class="r">Balance</th></tr></thead><tbody>' +
-                '<tr><td></td><td colspan="' + (cols - 2) + '"><b>Opening balance</b></td><td class="r"><b>' + money(st.opening) + '</b></td></tr>' +
+                '<div class="ca-stmt-head">' +
+                  '<div><span>Company</span><b data-no-i18n>' + esc(party.company_name || '-') + '</b></div>' +
+                  '<div><span>Company code</span><b>' + esc(party.company_id || '-') + '</b></div>' +
+                  '<div><span>Client</span><b data-no-i18n>' + esc(party.client_name || (isCompany ? 'All clients' : '-')) + '</b></div>' +
+                  '<div class="ca-stmt-actions">' +
+                    (CAN_OPENING ? '<button class="ca-btn" id="caOpeningBtn"><i class="fas fa-flag"></i> Set opening balance</button>' : '') +
+                    '<a class="ca-btn ca-btn-primary" href="/api/finance/accounts/statement?format=xlsx&' + q + '"><i class="fas fa-file-excel"></i> Export statement</a>' +
+                  '</div></div>' +
+                '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>Date</th><th>Job code</th><th>Invoice no.</th><th>Description</th>' +
+                (isCompany ? '<th>Client</th>' : '') +
+                '<th class="r">Debit</th><th class="r">Credit</th><th class="r">Balance</th></tr></thead><tbody>' +
+                '<tr class="ca-stmt-open"><td>' + day($('#caStart').val()) + '</td><td colspan="' + (cols - 2) + '"><b>Opening balance</b></td><td class="r"><b>' + money(st.opening) + '</b></td></tr>' +
                 (rows || '<tr><td colspan="' + cols + '" class="ca-empty">No posted invoices or payments in this period.</td></tr>') +
-                '<tr><td></td><td colspan="' + (cols - 4) + '"><b>Totals / closing balance</b></td><td class="r"><b>' + money(st.debit) + '</b></td>' +
+                '<tr class="ca-stmt-total"><td colspan="' + (cols - 3) + '"><b>Totals / closing balance</b></td><td class="r"><b>' + money(st.debit) + '</b></td>' +
                 '<td class="r pos"><b>' + money(st.credit) + '</b></td><td class="r"><b class="' + owedClass(st.closing) + '">' + money(st.closing) + '</b></td></tr>' +
                 '</tbody></table></div>');
         }).fail(function () { $('#ca-statement').html('<div class="ca-empty">Could not load the statement.</div>'); });
     }
+
+    // Finance enters what the client owed before the system (رصيد أول المدة).
+    $(document).on('click', '#caOpeningBtn', function () {
+        $('#ca-statement .ca-stmt-actions').html(
+            '<input type="date" id="caOpenDate" class="ca-input" value="' + (new Date().getFullYear()) + '-01-01">' +
+            '<input type="number" id="caOpenAmount" class="ca-input" step="0.01" placeholder="Amount (negative if we owe them)">' +
+            '<input id="caOpenNote" class="ca-input" placeholder="Note, e.g. balance 2025">' +
+            '<button class="ca-btn ca-btn-primary" id="caOpenSave">Save</button><button class="ca-btn" id="caOpenCancel">Cancel</button>');
+        $('#caOpenAmount').trigger('focus');
+    });
+    $(document).on('click', '#caOpenCancel', loadStatement);
+    $(document).on('click', '#caOpenSave', function () {
+        var body = { as_of: $('#caOpenDate').val(), amount: $('#caOpenAmount').val(), note: $('#caOpenNote').val() };
+        body[KIND === 'company' ? 'company_id' : 'client_id'] = PARTY_ID;
+        if (!body.amount) { $('#caOpenAmount').trigger('focus'); return; }
+        $.ajax({ url: '/api/finance/accounts/opening', method: 'POST', contentType: 'application/json', data: JSON.stringify(body) })
+            .done(function () { load(); })
+            .fail(function (x) { Swal.fire('Not saved', (x.responseJSON || {}).error || 'Try again', 'error'); });
+    });
+
+    // All client accounts together: by company or by client, for the period.
+    function showBalances(group) {
+        var q = filterParams();
+        $.getJSON('/api/finance/accounts/balances?group=' + group + (q ? '&' + q : '')).done(function (res) {
+            var byClient = group === 'client';
+            var rows = (res.rows || []).map(function (r) {
+                var link = byClient ? '/finance/accounts/client/' + r.id : '/finance/accounts/company/' + r.id;
+                return '<tr><td>' + (byClient ? '' : r.id) + '<a href="' + link + '" data-no-i18n>' + (byClient ? esc(r.name) : '') + '</a></td>' +
+                    '<td data-no-i18n>' + (byClient ? esc(r.company_name || '-') : '<a href="' + link + '">' + esc(r.name) + '</a>') + '</td>' +
+                    '<td class="r">' + money(r.opening) + '</td><td class="r">' + money(r.debit) + '</td>' +
+                    '<td class="r pos">' + money(r.credit) + '</td><td class="r"><b class="' + owedClass(r.closing) + '">' + money(r.closing) + '</b></td></tr>';
+            }).join('');
+            var t = res.totals || {};
+            $('#caBalancesBody').html(
+                '<div class="ca-scroll"><table class="ca-table"><thead><tr><th>' + (byClient ? 'Client' : 'Code') + '</th><th>Company</th>' +
+                '<th class="r">Opening</th><th class="r">Debit</th><th class="r">Credit</th><th class="r">Balance</th></tr></thead><tbody>' +
+                (rows || '<tr><td colspan="6" class="ca-empty">No posted invoices, payments or opening balances yet.</td></tr>') +
+                '<tr class="ca-stmt-total"><td colspan="2"><b>Total</b></td><td class="r"><b>' + money(t.opening) + '</b></td><td class="r"><b>' + money(t.debit) +
+                '</b></td><td class="r pos"><b>' + money(t.credit) + '</b></td><td class="r"><b>' + money(t.closing) + '</b></td></tr></tbody></table></div>');
+            $('#caBalancesXlsx').attr('href', '/api/finance/accounts/balances?format=xlsx&group=' + group + (q ? '&' + q : ''));
+        });
+    }
+    $(document).on('click', '#caBalancesBtn', function () {
+        var open = $('#caBalances').toggle().is(':visible');
+        if (open) showBalances($('.ca-group.active').data('group') || 'company');
+    });
+    $(document).on('click', '.ca-group', function () {
+        $('.ca-group').removeClass('active'); $(this).addClass('active');
+        showBalances($(this).data('group'));
+    });
 
     function requestsTable(clientNames) {
         if (!data.requests.length) return '<div class="ca-empty">No sales requests in this range</div>';
@@ -600,7 +683,10 @@
         $('tr.ca-items[data-for="' + id + '"]').toggle();
         $(this).find('.fa-chevron-right, .fa-chevron-down').toggleClass('fa-chevron-right fa-chevron-down');
     });
-    $('#caStart, #caEnd').on('change', load);
+    $('#caStart, #caEnd').on('change', function () {
+        load();
+        if ($('#caBalances').is(':visible')) showBalances($('.ca-group.active').data('group') || 'company');
+    });
 
     $(load);
 })();

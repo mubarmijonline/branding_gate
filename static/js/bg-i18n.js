@@ -153,14 +153,25 @@
     // through the observer are not translated a second time.
     var written = new WeakMap();
 
+    // Arabic writes the minus after an amount ("467.50-"), not before it.
+    // Only a sign that stands on its own before a number or "EGP amount" moves;
+    // dates (2026-10-19) and codes (SR-5529, FIN202610-59779) are untouched
+    // because their hyphen follows a letter or a digit.
+    var LEADING_MINUS = /(^|[\s(:·|=])[-\u2212]\s?((?:EGP\s?)?\d[\d,]*(?:\.\d+)?%?)(?![\d.,])/g;
+    function minusAfter(text) {
+        return text.indexOf('-') < 0 && text.indexOf('\u2212') < 0 ? text
+            : text.replace(LEADING_MINUS, function (_, before, amount) { return before + amount + '-'; });
+    }
+    window.bgMinusAfter = minusAfter;
+
     function doText(node) {
         var v = node.nodeValue;
-        if (!v || written.get(node) === v || !LATIN.test(v) || !node.parentNode || skipped(node.parentNode)) return;
-        var t = translate(v);
-        if (t == null) return;
+        if (!v || written.get(node) === v || !node.parentNode || skipped(node.parentNode)) return;
+        var t = LATIN.test(v) ? translate(v) : null;
         var lead = v.match(/^\s*/)[0];
         var trail = v.match(/\s*$/)[0];
-        var next = lead + t + trail;
+        var next = minusAfter(t == null ? v : lead + t + trail);
+        if (next === v) return;
         written.set(node, next);
         node.nodeValue = next;
     }

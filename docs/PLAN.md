@@ -314,3 +314,15 @@ Items (catalog with Excel import), and a Statement tab on each client /
 company profile in Client Accounts (posted invoices debit, approved payments
 credit, running balance, date range with opening balance, Excel export).
 Client Accounts gains Invoiced and Balance due.
+
+**Revised 2026-10-19 (George's statement sample, Ahmed's notes):** lines are
+only the SR's client-approved items (server-enforced, name from the SR, no
+typed lines); an invoice takes its serial when drafted, from
+`invoice_series.next_number` (set once by Finance to continue the paper
+series) or the highest used + 1; a cancelled draft releases its number. The
+statement follows George's sheet (Date, Job code, Invoice no., Description,
+Debit, Credit, Balance; cash collections to the safe, cheque / bank to the
+bank by payment-method type) and opens with balances brought forward
+(`client_opening_balance`, set by Finance). Combined balances by company or
+client: `/api/finance/accounts/balances`. Pages are full width. In Arabic the
+minus sign follows the amount (bg-i18n `minusAfter`).
