@@ -45,7 +45,9 @@ EXPECTED = {
     'design_3d_purchasing':   ['admin', 'design_3d'],
     'design_3d_member':       ['design_3d'],
     'operations_manager':     ['admin', 'operations'],
-    'operations_team_leader': ['operations'],
+    # The team leader edits and deletes suppliers too, so sees the Supplier
+    # page on the Admin menu like the Head.
+    'operations_team_leader': ['admin', 'operations'],
     'operations_member':      ['operations'],
     'pricing_manager':        ['pricing'],
     'pricing_specialist':     ['pricing'],

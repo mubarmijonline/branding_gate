@@ -296,3 +296,28 @@ class InventoryOnAPhoneTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SupplierGovernanceTest(unittest.TestCase):
+    """Suppliers: the Head and team leaders edit and delete; members ask to add, the Head approves."""
+
+    def _supplier(self, role):
+        return {code for code in rbac.SEED_MATRIX[role]
+                if code.startswith(('supplier.', 'supplier_request.', 'party_request.'))}
+
+    def test_head_and_leader_edit_and_delete(self):
+        for role in ('operations_manager', 'operations_team_leader'):
+            self.assertTrue({'supplier.edit', 'supplier.delete'} <= self._supplier(role), role)
+
+    def test_member_only_views_and_requests(self):
+        self.assertEqual(self._supplier('operations_member'), {'supplier.view', 'supplier_request.create'})
+
+    def test_only_the_head_approves_operations_requests(self):
+        self.assertIn('party_request.approve_head', self._supplier('operations_manager'))
+        self.assertNotIn('party_request.approve_head', self._supplier('operations_team_leader'))
+
+    def test_page_draws_buttons_by_permission(self):
+        with open('templates/supplier.html', encoding='utf-8') as handle:
+            page = handle.read()
+        self.assertIn('if (SUPPLIER_CAN.edit)', page)
+        self.assertIn('if (SUPPLIER_CAN.remove)', page)

@@ -23,8 +23,8 @@ window.chartPieDemo = function() {
     return false;
 };
 
-// Override any chart initialization
-$(document).ready(function() {
+// Override any chart initialization. This runs in <head>, before jQuery.
+window.addEventListener('DOMContentLoaded', function() {
     // Disable any chart scripts that might be loaded from main.html
     if (typeof Chart !== 'undefined') {
         Chart.defaults.global.responsive = false;
@@ -455,6 +455,10 @@ $(document).ready(function() {
 </div>
 
 <!-- Include DataTables JavaScript at the bottom -->
+{% set _sp = session.get('perms', {}) %}
+<script>
+var SUPPLIER_CAN = { edit: {{ ('supplier.edit' in _sp)|tojson }}, remove: {{ ('supplier.delete' in _sp)|tojson }} };
+</script>
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
@@ -495,8 +499,12 @@ $(document).ready(function() {
                 "data": null,
                 "orderable": false,
                 "render": function(data, type, row) {
-                    return '<button class="btn btn-sm btn-primary edit-btn" data-id="' + row.id + '">Edit</button> ' +
-                           '<button class="btn btn-sm btn-danger delete-btn" data-id="' + row.id + '">Delete</button>';
+                    // Only what this account may do: the Head and team leaders edit
+                    // and delete; members see the supplier and nothing more.
+                    var html = '';
+                    if (SUPPLIER_CAN.edit) html += '<button class="btn btn-sm btn-primary edit-btn" data-id="' + row.id + '">Edit</button> ';
+                    if (SUPPLIER_CAN.remove) html += '<button class="btn btn-sm btn-danger delete-btn" data-id="' + row.id + '">Delete</button>';
+                    return html || '<span class="text-muted">-</span>';
                 }
             }
         ],
