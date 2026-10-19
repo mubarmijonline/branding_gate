@@ -4,7 +4,7 @@
 <title>Invoices</title>
 <style>
 :root { --iv-primary: #4f46e5; --iv-soft: #eef2ff; --iv-border: #e2e8f0; --iv-muted: #64748b; --iv-text: #0f172a; }
-.iv-shell { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.iv-shell { padding: 24px; }
 .iv-card { background: #fff; border: 1px solid var(--iv-border); border-radius: 18px; box-shadow: 0 4px 14px rgba(15,23,42,.05); margin-bottom: 18px; }
 .iv-head { padding: 22px 24px 8px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; }
 .iv-head h1 { font-size: 24px; font-weight: 800; color: var(--iv-text); margin: 0 0 4px; }
@@ -52,6 +52,12 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 .iv-totals { margin-inline-start: auto; width: 360px; max-width: 100%; margin-top: 14px; }
 .iv-totals div { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
 .iv-totals .grand { border-top: 2px solid var(--iv-text); font-size: 17px; font-weight: 800; padding-top: 8px; }
+.iv-next { display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
+.iv-next i { font-size: 18px; margin-top: 2px; }
+.iv-next.info { background: #eef2ff; color: #3730a3; } .iv-next.warn { background: #fff7ed; color: #9a3412; }
+.iv-next.ok { background: #ecfdf5; color: #065f46; }
+.iv-pay { border: 1px solid var(--iv-border); border-radius: 12px; padding: 12px 14px; margin-top: 14px; }
+.iv-pay h6 { font-weight: 800; margin-bottom: 8px; }
 .iv-return { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
 @media (max-width: 992px) { .iv-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 576px) { .iv-shell { padding: 12px; } .iv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } .iv-meta { grid-template-columns: 1fr; } }
@@ -150,6 +156,10 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
                '<span>' + s[1] + '</span><b>' + d.count + '</b><small>EGP ' + money(d.total) + '</small></button>';
       }).join(''));
       draw();
+      if (CAN.post && !catalog.length && !$('#ivEmptyCatalog').length) {
+        $('#ivStages').before('<div class="iv-next warn" id="ivEmptyCatalog"><i class="fas fa-exclamation-triangle"></i><div>' +
+          'The item list is empty. Invoices cannot be posted until their lines have item codes: open <b>Invoice Items</b> and Import Excel.</div></div>');
+      }
       var open = new URLSearchParams(location.search).get('open');
       if (open && !current) openInvoice(+open);
     });
@@ -267,9 +277,41 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   $(document).on('click', '.iv-line-del', function () { $(this).closest('tr').remove(); recalc(); });
   $(document).on('click', '#ivAddLine', function () { $('#ivLines').append(lineRow()); recalc(); });
 
+  // What happens next, said in the window itself.
+  function nextStep(inv) {
+    if (!inv) return '<div class="iv-next info"><i class="fas fa-route"></i><div><b>1. Draft</b> from a Sales Request &rarr; ' +
+      '<b>2. Send to Finance</b> &rarr; <b>3. Finance posts it</b>: it is numbered and goes on the client\'s account and statement.</div></div>';
+    var warn = (CAN.post && inv.status === 'submitted' && !inv.catalog_size)
+      ? '<div class="iv-next warn"><i class="fas fa-exclamation-triangle"></i><div>The item list is empty, so no line has an item code and the invoice cannot be posted. ' +
+        'Load the list first on <b>Invoice Items</b> (Import Excel), then give each line its code here.</div></div>' : '';
+    var msg = {
+      draft: ['info', 'fa-pen', 'Draft: only its author sees changes. <b>Send to Finance</b> when it is ready.'],
+      returned: ['warn', 'fa-undo', 'Returned by Finance: fix what they asked and <b>Send to Finance</b> again.'],
+      submitted: CAN.post
+        ? ['info', 'fa-stamp', 'Waiting for you. Check the lines and codes, then <b>Post to client account</b> (this is the approval: it numbers the invoice and puts it on the client\'s account), or <b>Return</b> it with a reason.']
+        : ['info', 'fa-hourglass-half', 'With Finance. You will be notified when it is posted or returned.'],
+      posted: ['ok', 'fa-check-circle', 'Posted: on the client\'s account and statement. When the client pays, <b>Record payment received</b>; it becomes a Client Payment in Finance and a credit on the statement.'],
+      cancelled: ['warn', 'fa-ban', 'Cancelled: it never reached the client\'s account.']
+    }[inv.status];
+    return warn + (msg ? '<div class="iv-next ' + msg[0] + '"><i class="fas ' + msg[1] + '"></i><div>' + msg[2] + '</div></div>' : '');
+  }
+
+  function paymentsHtml(inv) {
+    if (inv.status !== 'posted') return '';
+    var list = inv.payments || [];
+    return '<div class="iv-pay"><h6><i class="fas fa-hand-holding-usd mr-1"></i>Payments received</h6>' +
+      (list.length ? '<table class="iv-table" style="min-width:0"><tbody>' + list.map(function (p) {
+        return '<tr><td>' + day(p.transaction_date) + '</td><td data-no-i18n>' + esc(p.transaction_code) + '</td><td data-no-i18n>' +
+          esc(p.payment_method_name || '') + '</td><td><span class="iv-badge ' + (p.status === 'approved' ? 'posted' : 'submitted') + '">' +
+          (p.status === 'approved' ? 'Approved' : 'Waiting for approval') + '</span></td><td class="iv-r">' + money(p.amount) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div class="iv-sub">None recorded yet.</div>') +
+      '<div class="d-flex justify-content-between mt-2"><span>Paid <b>' + money(inv.paid) + '</b> of ' + money(inv.total) + '</span>' +
+      '<span>Remaining <b>' + money(Math.max(inv.total - inv.paid, 0)) + '</b></span></div></div>';
+  }
+
   function editorHtml(inv, party, lines, editable) {
     var today = new Date().toISOString().slice(0, 10);
-    return (inv && inv.status === 'returned' && inv.return_reason
+    return nextStep(inv) + (inv && inv.status === 'returned' && inv.return_reason
             ? '<div class="iv-return"><i class="fas fa-undo mr-1"></i>Returned by Finance: <span data-no-i18n>' + esc(inv.return_reason) + '</span></div>' : '') +
       (inv ? '' : '<div class="mb-3"><label class="iv-sub font-weight-bold">Sales Request</label>' +
         '<select id="ivSr" class="form-control" style="width:100%"><option value="">Search an SR...</option></select></div>') +
@@ -285,7 +327,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
         '<th>Unit price</th><th>Cash discount</th><th class="iv-r">Sales value</th><th class="iv-r">VAT 14%</th><th class="iv-r">Total</th><th></th></tr></thead>' +
         '<tbody id="ivLines">' + (lines || []).map(lineRow).join('') + '</tbody></table></div>' +
       (editable ? '<button class="btn btn-sm btn-outline-primary mt-2" id="ivAddLine"><i class="fas fa-plus mr-1"></i>Add line</button>' : '') +
-      '<div class="iv-totals" id="ivTotals"></div>' +
+      '<div class="iv-totals" id="ivTotals"></div>' + (inv ? paymentsHtml(inv) : '') +
       '<datalist id="ivCodes">' + catalog.filter(function (c) { return c.is_active; }).map(function (c) {
         return '<option value="' + c.code + '">' + esc(c.name_en + ' · ' + c.name_ar) + '</option>'; }).join('') + '</datalist>';
   }
@@ -349,6 +391,8 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       if (inv.can_edit && inv.status !== 'posted') foot += '<button class="btn btn-outline-danger" id="ivCancelInv">Cancel invoice</button>';
       if (inv.can_edit) foot += '<button class="btn btn-outline-primary" id="ivSave"><i class="fas fa-save mr-1"></i>Save</button>';
       if (inv.can_submit) foot += '<button class="btn btn-primary" id="ivSend"><i class="fas fa-paper-plane mr-1"></i>Send to Finance</button>';
+      if (inv.can_record_payment && inv.paid < inv.total - 0.005)
+        foot += '<button class="btn btn-success" id="ivPay"><i class="fas fa-hand-holding-usd mr-1"></i>Record payment received</button>';
       if (inv.can_post) foot += '<button class="btn btn-outline-danger" id="ivReturn"><i class="fas fa-undo mr-1"></i>Return</button>' +
                                 '<button class="btn btn-success" id="ivPost"><i class="fas fa-check mr-1"></i>Post to client account</button>';
       $('#ivEditorFoot').html(foot);
@@ -416,6 +460,39 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       .done(function () { $('#ivEditor').modal('hide'); Swal.fire('Returned', '', 'success'); load(); })
       .fail(function (x) { Swal.fire('Not returned', (x.responseJSON || {}).error || 'Try again', 'error'); });
   });
+  // A payment against a posted invoice is a Client Payment in Finance, linked
+  // to the invoice's request and client, with the invoice as its reference.
+  $(document).on('click', '#ivPay', function () {
+    var remaining = r2(current.total - (current.paid || 0));
+    $.getJSON('/api/finance/payment-methods').done(function (pm) {
+      var methods = (pm.payment_methods || []).filter(function (m) { return m.is_active; });
+      $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:repeat(4,minmax(0,1fr))">' +
+        '<div><label>Amount received</label><input type="number" id="ivPayAmount" class="form-control" min="0.01" step="0.01" value="' + remaining + '"></div>' +
+        '<div><label>Received into</label><select id="ivPayMethod" class="form-control">' + methods.map(function (m) {
+          return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Date</label><input type="date" id="ivPayDate" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
+        '<div><label>Note</label><input id="ivPayNote" class="form-control" placeholder="Cheque / transfer no."></div></div>' +
+        '<div class="d-flex justify-content-end" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
+        '<button class="btn btn-success" id="ivPaySave"><i class="fas fa-check mr-1"></i>Record payment</button></div></div>');
+      if (!methods.length) Swal.fire('No payment method', 'Add one in Finance Management > Payment Methods first.', 'warning');
+    });
+  });
+  $(document).on('click', '#ivPaySave', function () {
+    var amount = parseFloat($('#ivPayAmount').val());
+    if (!(amount > 0)) { $('#ivPayAmount').trigger('focus'); return; }
+    var btn = $(this).prop('disabled', true);
+    $.ajax({ url: '/api/finance/transactions', method: 'POST', contentType: 'application/json', data: JSON.stringify({
+      transaction_type: 'income', category_id: 1, amount: amount, payment_method_id: $('#ivPayMethod').val(),
+      sales_request_id: current.sales_request_id, client_id: current.client_id, transaction_date: $('#ivPayDate').val(),
+      reference_number: 'Invoice ' + current.invoice_number,
+      description: 'Payment for invoice ' + current.invoice_number + ($('#ivPayNote').val() ? ' - ' + $('#ivPayNote').val() : '')
+    }) }).done(function (r) {
+      if (!r.success) { btn.prop('disabled', false); Swal.fire('Not recorded', r.error || 'Try again', 'error'); return; }
+      Swal.fire('Payment recorded', 'It is a Client Payment in Finance' + (r.auto_approved ? '.' : ', waiting for approval in Finance Approvals.'), 'success');
+      openInvoice(current.id);
+    }).fail(function (x) { btn.prop('disabled', false); Swal.fire('Not recorded', (x.responseJSON || {}).error || 'Server error', 'error'); });
+  });
+
   $('#ivEditor').on('hidden.bs.modal', function () { current = null; });
 
   $(function () { loadItems().always(load); });

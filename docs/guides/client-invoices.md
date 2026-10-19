@@ -21,9 +21,16 @@ card **With Finance**, open the invoice:
 - or **Return** with what needs fixing; it goes back to its author.
 Every line must have an item code before posting.
 
-**3. Print.** Open the invoice > **Print** (the layout of your sample sheet).
+**3. Record what the client pays.** Open a posted invoice > **Record payment
+received**: amount (the remaining balance is filled in), the payment method it
+came into, date and cheque / transfer number. It becomes a *Client Payment* in
+Finance (linked to the SR and client, referenced "Invoice N"), shows under
+*Payments received* on the invoice, and is a credit on the statement once
+approved.
 
-**4. Statement of account.** Finance > Client Accounts > open the company or
+**4. Print.** Open the invoice > **Print** (the layout of your sample sheet).
+
+**5. Statement of account.** Finance > Client Accounts > open the company or
 the client > tab **Statement of Account**. Posted invoices are debits,
 approved payments received are credits, with a running balance. Use *From /
 To* at the top for a period (earlier entries become the opening balance), and
@@ -60,8 +67,10 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
    راجعها ويمكنك التعديل، ثم "ترحيل إلى حساب العميل" وأكّد رقم الفاتورة (أول رقم متاح،
    غيّره مرة واحدة ليكمل تسلسلكم الحالي مثل 2453) ثم "ترحيل". أو "إرجاع" مع سبب.
    لا يتم الترحيل إلا إذا كان لكل بند كود.
-3. **الطباعة:** افتح الفاتورة > طباعة (بنفس شكل النموذج).
-4. **كشف الحساب:** المالية > حسابات العملاء > افتح الشركة أو العميل > تبويب "كشف الحساب":
+3. **تسجيل التحصيل:** افتح فاتورة مرحّلة > "تسجيل دفعة مستلمة" (المبلغ المتبقي مكتوب تلقائيًا،
+   وطريقة الدفع، والتاريخ، ورقم الشيك أو التحويل). تُسجّل كمدفوعات عملاء في المالية وتظهر في كشف الحساب.
+4. **الطباعة:** افتح الفاتورة > طباعة (بنفس شكل النموذج).
+5. **كشف الحساب:** المالية > حسابات العملاء > افتح الشركة أو العميل > تبويب "كشف الحساب":
    الفواتير المرحّلة مدينة والمدفوعات المعتمدة دائنة مع رصيد متحرك، وتحديد فترة، وتصدير Excel.
    وتظهر بالأعلى "المفوتر" و"الرصيد المستحق".
 

@@ -161,3 +161,24 @@ class InvoiceFlowTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class InvoicePaymentTest(InvoiceFlowTest):
+    """A payment recorded against a posted invoice shows on it and on the statement."""
+
+    def test_record_payment_against_posted_invoice(self):
+        author, finance = self._web(self.account), self._web(self.finance)
+        inv_id, _ = self._draft(author)
+        author.post('/api/invoices/%d/submit' % inv_id)
+        finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98001})
+        cur = self._cursor()
+        cur.execute("SELECT id FROM payment_methods WHERE is_active = 1 ORDER BY id LIMIT 1")
+        pm = cur.fetchone()['id']
+        cur.execute("""INSERT INTO finance_transactions (transaction_code, transaction_type, amount, payment_method_id,
+                       category_id, client_id, sales_request_id, reference_number, transaction_date, status, added_by)
+                       VALUES ('FT-T98001', 'income', 78088, %s, 1, %s, %s, 'Invoice 98001', '2026-01-20', 'approved', 't')""",
+                    (pm, self.client_id, self.sr))
+        got = finance.get('/api/invoices/%d' % inv_id).get_json()['invoice']
+        self.assertEqual((got['paid'], len(got['payments']), got['can_record_payment']), (78088.0, 1, True))
+        st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
+        self.assertEqual((st['debit'], st['credit'], st['closing']), (178088.0, 78088.0, 100000.0))

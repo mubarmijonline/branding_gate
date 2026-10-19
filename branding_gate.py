@@ -24868,11 +24868,28 @@ def client_invoice_get(invoice_id):
         if not _invoice_visible(inv):
             return jsonify(success=False, error='Not yours to open'), 403
         lines = _invoice_lines(cur, invoice_id)
+        # Money received against it: income recorded with this invoice as the
+        # reference (Record payment fills that in).
+        payments = []
+        if inv['invoice_number']:
+            cur.execute("""SELECT ft.id, ft.transaction_code, ft.amount, ft.status, ft.transaction_date,
+                                    pm.method_name AS payment_method_name
+                             FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+                             WHERE ft.transaction_type = 'income' AND ft.reference_number = %s
+                               AND ft.status <> 'rejected' ORDER BY ft.transaction_date""",
+                        ('Invoice %d' % inv['invoice_number'],))
+            payments = [_invoice_dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) AS n FROM invoice_catalog WHERE is_active = 1")
+        catalog_size = cur.fetchone()['n']
     finally:
         cur.close()
         conn.close()
     me = session.get('user_id')
     data = _invoice_dict(inv)
+    data['payments'] = payments
+    data['paid'] = sum(p['amount'] for p in payments if p['status'] == 'approved')
+    data['catalog_size'] = catalog_size
+    data['can_record_payment'] = inv['status'] == 'posted' and has('finance_txn.create')
     data['can_edit'] = ((inv['created_by'] == me and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR)
                         or (has('invoice.post') and inv['status'] in ('draft', 'submitted', 'returned')))
     data['can_submit'] = inv['created_by'] == me and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR
