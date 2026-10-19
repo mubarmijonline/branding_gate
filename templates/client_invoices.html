@@ -69,7 +69,6 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 {% block body %}
 {% set _p = session.get('perms', {}) %}
 <div class="iv-shell">
-  {% if 'finance_report.view' in _p %}{% set clients_tab = 'invoices' %}{% include '_clients_nav.html' %}{% endif %}
   <div class="iv-card">
     <div class="iv-head">
       <div>
@@ -278,7 +277,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
         (Number(l.qty) ? Number(l.cash_discount || 0) / Number(l.qty) : 0) + '">' +
       '<td><span class="iv-num">#' + esc(l.item_code || '') + '</span></td>' +
       '<td><div class="font-weight-bold" data-no-i18n>' + esc(l.description || '') + '</div><div class="iv-sub">Up to ' + max + '</div></td>' +
-      '<td><input type="number" class="form-control form-control-sm qty" min="0" step="0.01" max="' + max + '" value="' + (l.qty || 0) + '"></td>' +
+      '<td><input type="number" class="form-control form-control-sm qty" value="' + (l.qty || 0) + '" disabled></td>' +
       '<td><input type="number" class="form-control form-control-sm price" value="' + (l.unit_price || 0) + '" disabled></td>' +
       '<td><input type="number" class="form-control form-control-sm disc" value="' + (l.cash_discount || 0) + '" disabled></td>' +
       '<td class="iv-r sv">0.00</td><td class="iv-r vat">0.00</td><td class="iv-r tot">0.00</td><td></td></tr>';
@@ -325,7 +324,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     var warn = '';
     var msg = {
       draft: inv.kind === 'refund'
-        ? ['info', 'fa-undo-alt', 'Refund draft: change the quantities if needed, then ' + (CAN.post ? '<b>Post refund</b>.' : '<b>Send to Finance</b>.')]
+        ? ['info', 'fa-undo-alt', 'Refund draft: the ticked items are refunded in full. Remove a line to keep it, then ' + (CAN.post ? '<b>Post refund</b>.' : '<b>Send to Finance</b>.')]
         : ['info', 'fa-pen', 'Draft: only its author sees changes. <b>Send to Finance</b> when it is ready.'],
       returned: ['warn', 'fa-undo', 'Returned by Finance: fix what they asked and <b>Send to Finance</b> again.'],
       submitted: CAN.post
@@ -387,7 +386,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       apply_profit_tax: $('#ivProfit').is(':checked'), notes: $('#ivNotes').val(),
       lines: $('#ivLines tr.iv-line').map(function () {
         var tr = $(this);
-        if (tr.hasClass('iv-refund-line')) return { refund_of_line: tr.data('rol'), qty: tr.find('.qty').val() };
+        if (tr.hasClass('iv-refund-line')) return { refund_of_line: tr.data('rol') };
         return { qty: tr.find('.qty').val(),
                  unit_price: tr.find('.price').val(), cash_discount: tr.find('.disc').val(),
                  sales_request_item_id: tr.data('sri') || null };
@@ -501,12 +500,12 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   $(document).on('click', '#ivBack', function () { openInvoice(current.id); });
   $(document).on('click', '#ivRefund', function () {
     var rows = (current.refundable || []).filter(function (l) { return l.refundable > 0; });
-    $('#ivEditorBody').prepend('<div class="iv-pay" id="ivRefundPick"><h6><i class="fas fa-undo-alt mr-1"></i>Refund: choose the items and quantities</h6>' +
-      '<table class="iv-table" style="min-width:0"><thead><tr><th></th><th>Item</th><th class="iv-r">Invoiced</th><th class="iv-r">Already refunded</th><th>Refund qty</th></tr></thead><tbody>' +
+    $('#ivEditorBody').prepend('<div class="iv-pay" id="ivRefundPick"><h6><i class="fas fa-undo-alt mr-1"></i>Refund: tick the items to refund in full</h6>' +
+      '<table class="iv-table" style="min-width:0"><thead><tr><th></th><th>Item</th><th class="iv-r">Invoiced</th><th class="iv-r">Already refunded</th><th class="iv-r">Refunded now</th><th class="iv-r">With VAT</th></tr></thead><tbody>' +
       rows.map(function (l) {
         return '<tr><td><input type="checkbox" class="iv-rf-on" data-id="' + l.id + '"></td><td data-no-i18n>#' + esc(l.item_code) + ' ' + esc(l.description) + '</td>' +
           '<td class="iv-r">' + l.qty + '</td><td class="iv-r">' + l.refunded + '</td>' +
-          '<td><input type="number" class="form-control form-control-sm iv-rf-qty" data-id="' + l.id + '" min="0" step="0.01" max="' + l.refundable + '" value="' + l.refundable + '" style="width:110px"></td></tr>';
+          '<td class="iv-r"><b>' + l.refundable + '</b></td><td class="iv-r">' + money(l.line_total * l.refundable / l.qty) + '</td></tr>';
       }).join('') + '</tbody></table>' +
       '<input class="form-control mt-2" id="ivRefundNote" placeholder="Reason for the refund">' +
       '<div class="d-flex justify-content-end mt-2" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
@@ -517,7 +516,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   $(document).on('click', '#ivRefundCreate', function () {
     var lines = $('.iv-rf-on:checked').map(function () {
       var id = $(this).data('id');
-      return { refund_of_line: id, qty: $('.iv-rf-qty[data-id="' + id + '"]').val() };
+      return { refund_of_line: id };
     }).get();
     if (!lines.length) { Swal.fire('Choose at least one item to refund', '', 'warning'); return; }
     var btn = $(this).prop('disabled', true);

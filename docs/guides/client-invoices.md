@@ -40,7 +40,7 @@ Finance (linked to the SR and client, referenced "Invoice N"), shows under
 approved.
 
 **Refunds (فاتورة مرتجع).** Open a posted invoice > **Create refund**, tick the
-items and set the quantity to refund (up to what has not been refunded
+items to refund; each ticked item is refunded in full (all of it not refunded
 already), add the reason, **Create refund draft**. It is calculated at the
 invoice's prices, VAT 14% and the 1% if the invoice had it. **Post refund**:
 choose the payment method and the amount paid back to the client (0 if
@@ -95,7 +95,7 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
 ## للمالية (جورج)
 كل ما يخص العملاء في **المالية > العملاء**: حسابات العملاء وكشوف الحساب، الفواتير والمرتجعات، مجمع حسابات العملاء.
 - **الترحيل:** اختر طريقة الدفع والمبلغ المستلم الآن (الإجمالي افتراضيًا، أو 0 إذا لم يدفع العميل)، فيُسجّل في رصيد طريقة الدفع وتقارير المالية.
-- **المرتجع:** من فاتورة مرحّلة > إنشاء مرتجع، اختر البنود والكميات، ثم ترحيل المرتجع مع طريقة الدفع والمبلغ المردود. يظهر دائنًا في كشف الحساب، والمبلغ المردود مدينًا ويُخصم من طريقة الدفع.
+- **المرتجع:** من فاتورة مرحّلة > إنشاء مرتجع، حدّد البنود المرتجعة (كل بند يُرتجع بالكامل)، ثم ترحيل المرتجع مع طريقة الدفع والمبلغ المردود. يظهر دائنًا في كشف الحساب، والمبلغ المردود مدينًا ويُخصم من طريقة الدفع.
 1. **قائمة الأصناف (مرة واحدة):** المالية > فواتير العملاء > أصناف الفاتورة > استيراد Excel
    (أعمدة: كود، اسم المنتج، code name). يمكن الإضافة والتعديل يدويًا لاحقًا.
 2. **ترحيل الفواتير:** يصلك إشعار عند الإرسال. افتح الفاتورة من بطاقة "لدى المالية"،
@@ -114,3 +114,28 @@ Invoice: total before tax + VAT - 1% profits tax (when ticked) = total.
 2. كود كل بند هو رقم البند في الطلب تلقائيًا. يمكن تعديل الكمية أو السعر أو الخصم، وحذف بند وإعادته من بنود الطلب.
 3. حدد تاريخ الفاتورة وشهر المطالبة، واترك "خصم 1%" مفعّلًا إلا إذا كان العميل لا يخصمها.
 4. "حفظ كمسودة" أو "حفظ وإرسال للمالية". عند الإرجاع يصلك السبب، وعند الترحيل يصلك رقم الفاتورة.
+
+
+## Suppliers (Finance > Suppliers)
+
+**Supplier Accounts & Statements** lists every supplier with the balance
+brought forward, purchases (the cost of SR items they supplied, once the client
+approved), what was paid to them, and what we still owe. Pick a period, export
+to Excel (مجمع حسابات الموردين). Click a supplier for its statement: Date, Job
+code (SR), Entry, Description, Debit (paid), Credit (supplied), Balance owed;
+Excel كشف حساب مورد.
+
+- **Record payment:** choose the payment method the money leaves, the amount,
+  the date, optionally the SR and a cheque / transfer reference. It is booked
+  at once as an approved Supplier Payments expense, so it appears in Finance
+  Management and the payment method's balance.
+- **Opening balance:** what we owed the supplier before the system (negative
+  for an advance we had paid).
+
+**الموردون:** من **المالية > الموردون** تظهر حسابات كل الموردين (أول المدة،
+المشتريات، المدفوع، المستحق) ويمكن تصديرها إكسل. اضغط على المورد لكشف حسابه.
+**تسجيل دفعة** يخصم المبلغ من وسيلة الدفع ويظهر في الإدارة المالية كمدفوعات
+موردين. **رصيد أول المدة** لما كان مستحقًا قبل النظام.
+
+The bar at the top of every Finance page links all Finance pages (Overview,
+Management, Approvals, Clients, Suppliers, Expenses).

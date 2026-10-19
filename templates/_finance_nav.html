@@ -1,0 +1,51 @@
+{# One bar across every Finance page, so any of them is one click from the others.
+   Included by main.html on the endpoints in FINANCE_NAV below; each link keeps its own permission. #}
+{% set _ep = request.endpoint %}
+{% set _tab = 'balances' if (_ep == 'finance_accounts_page' and request.args.get('view') == 'balances') else _ep %}
+{% macro tab(endpoint, icon, label, href=None, key=None) -%}
+  <a href="{{ href or url_for(endpoint) }}" class="{{ 'active' if _tab == (key or endpoint) }}"><i class="fas {{ icon }}"></i> {{ label }}</a>
+{%- endmacro %}
+<nav class="fin-nav" aria-label="Finance">
+  <div class="fin-nav-group">
+    <span class="fin-nav-title"><i class="fas fa-coins"></i> Finance</span>
+    {% if 'finance_txn.view' in _p %}
+    {{ tab('finance_section_page', 'fa-tachometer-alt', 'Overview') }}
+    {{ tab('finance_management_page', 'fa-wallet', 'Finance Management') }}
+    {% endif %}
+    {% if can_approve_finance %}{{ tab('finance_approvals', 'fa-check-double', 'Approvals') }}{% endif %}
+  </div>
+  {% if 'finance_report.view' in _p %}
+  <div class="fin-nav-group">
+    <span class="fin-nav-title"><i class="fas fa-users"></i> Clients</span>
+    {{ tab('finance_accounts_page', 'fa-address-book', 'Accounts & Statements') }}
+    {% if 'invoice.view' in _p %}{{ tab('client_invoices_page', 'fa-file-invoice', 'Invoices & Refunds') }}{% endif %}
+    {{ tab('finance_accounts_page', 'fa-balance-scale', 'Combined Balances', url_for('finance_accounts_page') ~ '?view=balances', 'balances') }}
+  </div>
+  <div class="fin-nav-group">
+    <span class="fin-nav-title"><i class="fas fa-truck"></i> Suppliers</span>
+    {{ tab('finance_suppliers_page', 'fa-file-contract', 'Supplier Accounts & Statements') }}
+  </div>
+  {% endif %}
+  <div class="fin-nav-group">
+    <span class="fin-nav-title"><i class="fas fa-receipt"></i> Expenses</span>
+    {{ tab('expense_tracking_page', 'fa-receipt', 'Expense Tracking') }}
+    {% if can_approve_expense_mgr %}{{ tab('expense_tracking_approval_page', 'fa-clipboard-check', 'Expense Approval') }}{% endif %}
+    {% if can_approve_expense_fin %}{{ tab('finance_expense_approval_page', 'fa-file-invoice-dollar', 'Finance Expense Approval') }}{% endif %}
+  </div>
+</nav>
+<style>
+  .fin-nav { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; background: #fff;
+             border-bottom: 1px solid #e2e8f0; padding: 8px 16px; }
+  @media (max-width: 768px) { .fin-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; } }
+  .fin-nav-group { display: flex; gap: 2px; align-items: center; flex: 0 0 auto; padding-inline-end: 14px;
+                   border-inline-end: 1px solid #e2e8f0; }
+  .fin-nav-group:last-child { border-inline-end: none; }
+  .fin-nav-title { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #94a3b8;
+                   padding: 0 8px 0 2px; white-space: nowrap; }
+  .fin-nav a { padding: 7px 12px; border-radius: 9px; font-weight: 600; font-size: 13px; color: #475569;
+               text-decoration: none; white-space: nowrap; }
+  .fin-nav a i { margin-inline-end: 4px; opacity: .75; }
+  .fin-nav a:hover { background: #f1f5f9; color: #0f172a; text-decoration: none; }
+  .fin-nav a.active { background: #eef2ff; color: #4f46e5; }
+  @media print { .fin-nav { display: none; } }
+</style>

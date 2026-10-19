@@ -329,12 +329,37 @@ minus sign follows the amount (bg-i18n `minusAfter`).
 
 **Refunds and money on posting, 2026-10-19:** a refund is a `client_invoice` of
 kind `refund` against a posted invoice (`refund_of`), lines chosen from it with
-quantities up to what is left (`refund_of_line`), at its prices and taxes; own
+each ticked line refunded in full (what is left of it; revised 2026-10-19, no
+partial quantities) (`refund_of_line`), at its prices and taxes; own
 series R-n (`invoice_series` id 2). Posting either kind requires a payment
 method and an amount (default the total, 0 = owed): `book_client_money` books
 an approved Client Payment (income) or Client Refunds (expense) transaction,
 moving the payment method balance with history, so it reaches Finance's
 balances and reports. Statement: refund = credit, refund paid back = debit;
 Client Accounts' Invoiced is net of refunds. Finance > Clients groups Client
-Accounts & Statements, Invoices & Refunds and Combined Balances, with a shared
-tab bar (`_clients_nav.html`).
+Accounts & Statements, Invoices & Refunds and Combined Balances.
+
+# Supplier accounts and one Finance bar, 2026-10-19
+
+**Ask:** the same as Clients, for suppliers: what we owe each one, what we paid,
+a statement and combined balances; and the Finance page links on every Finance
+page.
+
+**Ledger (`supplier_ledger_entries`):** credit (we owe) = balance brought
+forward (`supplier_opening_balance`, set by Finance; negative = advance) + the
+cost (`total_cost`) of SR items with that supplier once the client approved
+them; debit (we paid) = approved expense transactions carrying `supplier_id`
+(Finance's own and staff expenses Finance approved). Balance = credit − debit.
+Credit stock held from the supplier is listed on the statement as goods only.
+
+**Screens:** Finance > Suppliers > Supplier Accounts & Statements
+(`/finance/suppliers`, all suppliers with opening, purchases, paid, owed,
+period filter, Excel مجمع حسابات الموردين) and one statement per supplier
+(`/finance/suppliers/<id>`, Excel كشف حساب مورد). Record payment (perm
+`finance_txn.approve`) books an approved Supplier Payments expense from a
+payment method via `book_client_money(..., supplier_id=)`, so it shows in
+Finance Management. API under `/api/finance/supplier-accounts`.
+
+**Finance bar:** `_finance_nav.html`, included by `main.html` on every Finance
+endpoint (Overview, Management, Approvals; Clients; Suppliers; Expenses), each
+link behind its own permission. Replaces `_clients_nav.html`.

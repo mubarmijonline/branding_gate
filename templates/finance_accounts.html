@@ -180,7 +180,6 @@
 {% block body %}
 {% set _p = session.get('perms', {}) %}
 <div class="ca-shell">
-    {% if not kind or session.get('perms', {}).get('finance_report.view') %}{% set clients_tab = 'accounts' %}{% include '_clients_nav.html' %}{% endif %}
     {% if kind %}
     <a class="ca-back" href="/finance/accounts"><i class="fas fa-arrow-left"></i> All client accounts</a>
     {% endif %}
@@ -693,7 +692,7 @@
     // Opened from "Combined Balances": show that panel straight away.
     if (!KIND && new URLSearchParams(location.search).get('view') === 'balances') {
         $(function () {
-            $('.clients-nav a').removeClass('active').filter('[href$="view=balances"]').addClass('active');
+            $('.fin-nav a').removeClass('active').filter('[href$="view=balances"]').addClass('active');
             $('#caBalancesBtn').trigger('click');
         });
     }

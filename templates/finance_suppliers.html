@@ -1,0 +1,256 @@
+{% extends "main.html" %}
+
+{% block head %}
+<title>Supplier Accounts - Finance</title>
+<style>
+:root { --sp-primary: #0d9488; --sp-soft: rgba(13,148,136,.1); --sp-text: #0f172a; --sp-muted: #64748b;
+        --sp-border: #e2e8f0; --sp-owe: #dc2626; --sp-good: #10b981; }
+.sp-shell { padding: 24px; }
+.sp-card { background: #fff; border: 1px solid var(--sp-border); border-radius: 18px; box-shadow: 0 4px 14px rgba(15,23,42,.05);
+           margin-bottom: 18px; overflow: hidden; }
+.sp-head { padding: 20px 24px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: flex-start; }
+.sp-head h1 { font-size: 22px; font-weight: 700; color: var(--sp-text); margin: 0 0 6px; }
+.sp-head p { color: var(--sp-muted); margin: 0; font-size: 14px; max-width: 720px; }
+.sp-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sp-input { padding: 8px 10px; border: 1px solid var(--sp-border); border-radius: 10px; font-size: 13px; background: #fff; }
+.sp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 10px; font-size: 13px; font-weight: 600;
+          border: 1px solid var(--sp-border); background: #fff; color: var(--sp-text); cursor: pointer; text-decoration: none; }
+.sp-btn:hover { text-decoration: none; border-color: var(--sp-primary); color: var(--sp-primary); }
+.sp-btn-primary { background: var(--sp-primary); border-color: var(--sp-primary); color: #fff; }
+.sp-btn-primary:hover { color: #fff; opacity: .92; }
+.sp-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 0 24px 20px; }
+.sp-figure { border: 1px solid var(--sp-border); border-radius: 14px; padding: 14px; }
+.sp-figure span { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--sp-muted); margin-bottom: 4px; }
+.sp-figure strong { font-size: 18px; color: var(--sp-text); }
+.sp-figure.owe strong { color: var(--sp-owe); }
+.sp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sp-table th { text-align: start; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--sp-muted);
+               background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid var(--sp-border); white-space: nowrap; }
+.sp-table td { padding: 10px 14px; border-bottom: 1px solid var(--sp-border); vertical-align: top; }
+.sp-table .r { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-table tbody tr.sp-row { cursor: pointer; }
+.sp-table tbody tr.sp-row:hover td { background: var(--sp-soft); }
+.sp-table tr.sp-open td { background: #f8fafc; font-weight: 600; }
+.sp-table tr.sp-total td { background: #f0fdfa; border-top: 2px solid var(--sp-primary); font-weight: 700; }
+.owe { color: var(--sp-owe); font-weight: 700; }
+.adv { color: var(--sp-good); font-weight: 700; }
+.sp-name { font-weight: 700; color: var(--sp-text); }
+.sp-sub { color: var(--sp-muted); font-size: 12px; }
+.sp-kind { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.sp-kind.purchase { background: #fef3c7; color: #92400e; }
+.sp-kind.payment { background: #dcfce7; color: #166534; }
+.sp-kind.opening { background: #e0e7ff; color: #3730a3; }
+.sp-form { display: none; padding: 16px 24px; border-top: 1px solid var(--sp-border); background: #f8fafc; }
+.sp-form.open { display: block; }
+.sp-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.sp-form label { font-size: 12px; font-weight: 700; color: var(--sp-muted); margin-bottom: 4px; display: block; }
+.sp-form .sp-input { width: 100%; }
+.sp-back { display: inline-flex; align-items: center; gap: 8px; color: var(--sp-muted); font-weight: 600; font-size: 14px;
+           margin-bottom: 14px; text-decoration: none; }
+.sp-back:hover { color: var(--sp-primary); text-decoration: none; }
+.sp-section-title { padding: 14px 24px; font-weight: 700; border-bottom: 1px solid var(--sp-border); margin: 0; font-size: 15px; }
+.sp-empty { padding: 30px; text-align: center; color: var(--sp-muted); }
+.sp-scroll { overflow-x: auto; }
+@media (max-width: 900px) {
+  .sp-shell { padding: 14px; }
+  .sp-figures, .sp-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+{% set _p = session.get('perms', {}) %}
+<div class="sp-shell">
+  {% if supplier_id %}
+  <a class="sp-back" href="{{ url_for('finance_suppliers_page') }}"><i class="fas fa-arrow-left"></i> All supplier accounts</a>
+  {% endif %}
+
+  <div class="sp-card">
+    <div class="sp-head">
+      <div>
+        <h1 id="spTitle">{% if supplier_id %}Supplier statement{% else %}Supplier Accounts{% endif %}</h1>
+        <p id="spIntro">{% if supplier_id %}Everything we owe this supplier and everything paid to them, with the balance after each entry.{% else %}What we owe every supplier: the cost of SR items they supplied (once the client approved), less what Finance paid them. Click a supplier for its statement.{% endif %}</p>
+      </div>
+      <div class="sp-tools">
+        <input type="date" class="sp-input" id="spStart" title="From">
+        <input type="date" class="sp-input" id="spEnd" title="To">
+        {% if not supplier_id %}<input type="search" class="sp-input" id="spSearch" placeholder="Search suppliers">{% endif %}
+        <button class="sp-btn" id="spApply"><i class="fas fa-filter"></i> Apply</button>
+        <a class="sp-btn" id="spExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+        {% if supplier_id and 'finance_txn.approve' in _p %}
+        <button class="sp-btn sp-btn-primary" data-form="spPayForm"><i class="fas fa-money-bill-wave"></i> Record payment</button>
+        <button class="sp-btn" data-form="spOpenForm"><i class="fas fa-flag"></i> Opening balance</button>
+        {% endif %}
+      </div>
+    </div>
+    <div class="sp-figures" id="spFigures"></div>
+
+    {% if supplier_id and 'finance_txn.approve' in _p %}
+    <div class="sp-form" id="spPayForm">
+      <div class="sp-form-grid">
+        <div><label>Paid from <span class="text-danger">*</span></label><select class="sp-input" id="spPayMethod"></select></div>
+        <div><label>Amount <span class="text-danger">*</span></label><input type="number" class="sp-input" id="spPayAmount" min="0" step="0.01"></div>
+        <div><label>Date</label><input type="date" class="sp-input" id="spPayDate"></div>
+        <div><label>For SR (optional)</label><input type="number" class="sp-input" id="spPaySr" placeholder="e.g. 785"></div>
+        <div style="grid-column: span 2"><label>Reference (cheque / transfer no.)</label><input class="sp-input" id="spPayRef" maxlength="100"></div>
+        <div style="grid-column: span 2"><label>Notes</label><input class="sp-input" id="spPayNotes" maxlength="500"></div>
+      </div>
+      <div class="sp-sub mt-2">The money leaves the payment method now and shows in Finance Management as a Supplier Payment.</div>
+      <div class="d-flex justify-content-end mt-2" style="gap:8px">
+        <button class="sp-btn" data-form="spPayForm">Cancel</button>
+        <button class="sp-btn sp-btn-primary" id="spPaySave"><i class="fas fa-check"></i> Save payment</button>
+      </div>
+    </div>
+    <div class="sp-form" id="spOpenForm">
+      <div class="sp-form-grid">
+        <div><label>As of <span class="text-danger">*</span></label><input type="date" class="sp-input" id="spOpenDate"></div>
+        <div><label>Amount we owed <span class="text-danger">*</span></label><input type="number" class="sp-input" id="spOpenAmount" step="0.01"></div>
+        <div style="grid-column: span 2"><label>Note</label><input class="sp-input" id="spOpenNote" maxlength="300"></div>
+      </div>
+      <div class="sp-sub mt-2">What we owed this supplier before the system. Negative if we had paid them in advance.</div>
+      <div class="d-flex justify-content-end mt-2" style="gap:8px">
+        <button class="sp-btn" data-form="spOpenForm">Cancel</button>
+        <button class="sp-btn sp-btn-primary" id="spOpenSave"><i class="fas fa-check"></i> Save</button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="sp-card"><div class="sp-scroll" id="spBody"><div class="sp-empty">Loading...</div></div></div>
+  <div id="spStock"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var SUPPLIER_ID = {{ (supplier_id or 0)|tojson }};
+  var rows = [];
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(v) { return 'EGP ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function amt(v) { return v ? money(v) : '-'; }
+  function owed(v) { return '<span class="' + (v > 0.005 ? 'owe' : (v < -0.005 ? 'adv' : '')) + '">' + money(v) + '</span>'; }
+  function params() {
+    var q = new URLSearchParams();
+    if ($('#spStart').val()) q.set('start', $('#spStart').val());
+    if ($('#spEnd').val()) q.set('end', $('#spEnd').val());
+    return q;
+  }
+  function figures(list) {
+    $('#spFigures').html(list.map(function (f) {
+      return '<div class="sp-figure ' + (f[2] || '') + '"><span>' + f[0] + '</span><strong>' + money(f[1]) + '</strong></div>';
+    }).join(''));
+  }
+
+  function renderList() {
+    var term = ($('#spSearch').val() || '').toLowerCase();
+    var shown = rows.filter(function (r) {
+      return !term || [r.supplier_name, r.company_name, r.supplier_type, r.id].join(' ').toLowerCase().indexOf(term) >= 0;
+    });
+    if (!shown.length) { $('#spBody').html('<div class="sp-empty">No suppliers match.</div>'); return; }
+    $('#spBody').html('<table class="sp-table"><thead><tr><th>Code</th><th>Supplier</th><th>Type</th>' +
+      '<th class="r">Opening</th><th class="r">Purchases</th><th class="r">Paid</th><th class="r">We owe</th></tr></thead><tbody>' +
+      shown.map(function (r) {
+        return '<tr class="sp-row" data-id="' + r.id + '"><td>' + r.id + '</td>' +
+          '<td><div class="sp-name" data-no-i18n>' + esc(r.company_name || r.supplier_name) + '</div>' +
+          (r.company_name ? '<div class="sp-sub" data-no-i18n>' + esc(r.supplier_name) + (r.primary_phone ? ' &middot; ' + esc(r.primary_phone) : '') + '</div>' : '') + '</td>' +
+          '<td class="sp-sub" data-no-i18n>' + esc(r.supplier_type || '-') + '</td>' +
+          '<td class="r">' + amt(r.opening) + '</td><td class="r">' + amt(r.credit) + '</td><td class="r">' + amt(r.debit) + '</td>' +
+          '<td class="r">' + owed(r.closing) + '</td></tr>';
+      }).join('') + '</tbody></table>');
+  }
+
+  function loadList() {
+    var q = params();
+    $('#spExcel').attr('href', '/api/finance/supplier-accounts?' + q.toString() + '&format=xlsx');
+    $.getJSON('/api/finance/supplier-accounts?' + q.toString()).done(function (res) {
+      rows = res.rows || [];
+      var t = res.totals;
+      figures([['Opening balances', t.opening], ['Purchases', t.credit], ['Paid to suppliers', t.debit], ['We owe in total', t.closing, 'owe']]);
+      renderList();
+    }).fail(function () { $('#spBody').html('<div class="sp-empty">Could not load supplier accounts.</div>'); });
+  }
+
+  function loadStatement() {
+    var q = params();
+    $('#spExcel').attr('href', '/api/finance/supplier-accounts/' + SUPPLIER_ID + '/statement?' + q.toString() + '&format=xlsx');
+    $.getJSON('/api/finance/supplier-accounts/' + SUPPLIER_ID + '/statement?' + q.toString()).done(function (res) {
+      var s = res.supplier;
+      $('#spTitle').html('<span data-no-i18n>' + esc(s.company_name || s.supplier_name) + '</span>');
+      $('#spIntro').html((s.company_name ? '<span data-no-i18n>' + esc(s.supplier_name) + '</span> &middot; ' : '') +
+        (s.primary_phone ? '<span data-no-i18n>' + esc(s.primary_phone) + '</span> &middot; ' : '') + 'Supplier code ' + s.id);
+      figures([['Opening', res.opening], ['Purchases', res.credit], ['Paid', res.debit], ['We owe', res.closing, 'owe']]);
+      var body = '<table class="sp-table"><thead><tr><th>Date</th><th>Job code</th><th>Entry</th><th>Description</th>' +
+        '<th class="r">Debit (paid)</th><th class="r">Credit (supplied)</th><th class="r">Balance owed</th></tr></thead><tbody>' +
+        '<tr class="sp-open"><td>' + esc($('#spStart').val() || '') + '</td><td></td><td colspan="4">Opening balance</td><td class="r">' + owed(res.opening) + '</td></tr>';
+      body += res.entries.map(function (e) {
+        return '<tr><td>' + esc(e.day || '') + '</td>' +
+          '<td>' + (e.sales_request_id ? '<a href="/sales_request_details/' + e.sales_request_id + '">SR-' + e.sales_request_id + '</a>' : '') + '</td>' +
+          '<td><span class="sp-kind ' + e.kind + '">' + esc(e.label) + '</span></td>' +
+          '<td data-no-i18n>' + esc(e.description || '') + '</td>' +
+          '<td class="r">' + amt(e.debit) + '</td><td class="r">' + amt(e.credit) + '</td><td class="r">' + owed(e.balance) + '</td></tr>';
+      }).join('');
+      if (!res.entries.length) body += '<tr><td colspan="7" class="sp-empty">Nothing in this period.</td></tr>';
+      body += '<tr class="sp-total"><td colspan="4">Total / balance owed</td><td class="r">' + money(res.debit) + '</td><td class="r">' +
+        money(res.credit) + '</td><td class="r">' + owed(res.closing) + '</td></tr></tbody></table>';
+      $('#spBody').html(body);
+      var stock = res.credit_stock || [];
+      $('#spStock').html(stock.length ? '<div class="sp-card"><h3 class="sp-section-title"><i class="fas fa-boxes mr-1"></i> Stock held on credit from this supplier</h3>' +
+        '<div class="sp-scroll"><table class="sp-table"><thead><tr><th>Item</th><th>Received</th><th class="r">Received qty</th><th class="r">Sold</th>' +
+        '<th class="r">Remaining</th><th class="r">Agreed cost</th><th>Payment</th></tr></thead><tbody>' +
+        stock.map(function (c) {
+          return '<tr><td data-no-i18n>' + esc(c.item_name) + ' <span class="sp-sub">' + esc(c.item_code || '') + '</span></td>' +
+            '<td>' + esc((c.received_date || '').slice(0, 10)) + '</td><td class="r">' + c.quantity_received + '</td><td class="r">' + c.quantity_sold +
+            '</td><td class="r">' + c.quantity_remaining + '</td><td class="r">' + amt(c.agreed_cost_per_item) + '</td><td>' + esc(c.payment_status || '-') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '');
+    }).fail(function (x) {
+      $('#spBody').html('<div class="sp-empty">' + esc((x.responseJSON && x.responseJSON.error) || 'Could not load the statement.') + '</div>');
+    });
+  }
+
+  var load = SUPPLIER_ID ? loadStatement : loadList;
+  $('#spApply').on('click', load);
+  $('#spSearch').on('input', renderList);
+  $(document).on('click', '.sp-row', function () { location.href = '/finance/suppliers/' + $(this).data('id'); });
+  $(document).on('click', '[data-form]', function () {
+    var id = $(this).data('form');
+    $('.sp-form').not('#' + id).removeClass('open');
+    $('#' + id).toggleClass('open');
+    if (id === 'spPayForm' && $('#spPayForm').hasClass('open')) {   // fresh balances each time
+      $.getJSON('/api/finance/payment-methods').done(function (pm) {
+        $('#spPayMethod').html('<option value="">Choose payment method...</option>' +
+          (pm.payment_methods || []).filter(function (m) { return m.is_active; }).map(function (m) {
+            return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) +
+              ' (' + money(m.current_balance) + ')</option>';
+          }).join(''));
+      });
+    }
+  });
+
+  function post(url, body, done) {
+    $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body) })
+      .done(function () { $('.sp-form').removeClass('open'); Swal.fire(done, '', 'success'); loadStatement(); })
+      .fail(function (x) { Swal.fire('Not saved', (x.responseJSON && x.responseJSON.error) || 'Please try again', 'error'); });
+  }
+  $('#spPaySave').on('click', function () {
+    if (!$('#spPayMethod').val()) { $('#spPayMethod').trigger('focus'); return; }
+    if (!(Number($('#spPayAmount').val()) > 0)) { $('#spPayAmount').trigger('focus'); return; }
+    post('/api/finance/supplier-accounts/' + SUPPLIER_ID + '/payment', {
+      payment_method_id: $('#spPayMethod').val(), amount: $('#spPayAmount').val(), date: $('#spPayDate').val() || null,
+      sales_request_id: $('#spPaySr').val() || null, reference: $('#spPayRef').val(), notes: $('#spPayNotes').val()
+    }, 'Payment recorded');
+  });
+  $('#spOpenSave').on('click', function () {
+    if (!$('#spOpenDate').val() || $('#spOpenAmount').val() === '') { $('#spOpenDate').trigger('focus'); return; }
+    post('/api/finance/supplier-accounts/' + SUPPLIER_ID + '/opening', {
+      as_of: $('#spOpenDate').val(), amount: $('#spOpenAmount').val(), note: $('#spOpenNote').val()
+    }, 'Opening balance saved');
+  });
+  load();
+})();
+</script>
+{% endblock %}

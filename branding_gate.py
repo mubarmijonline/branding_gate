@@ -24731,7 +24731,7 @@ def invoice_label(inv):
 
 
 def book_client_money(cur, transaction_type, amount, payment_method_id, category_id, client_id,
-                      sales_request_id, reference, description, day=None):
+                      sales_request_id, reference, description, day=None, supplier_id=None, note=None):
     """
     An approved finance transaction for money a client paid (income) or was
     paid back (expense), the way Finance's own approval books one: the payment
@@ -24758,11 +24758,11 @@ def book_client_money(cur, transaction_type, amount, payment_method_id, category
     who, uid = session.get('name') or session.get('username') or 'System', session.get('user_id')
     cur.execute("""
         INSERT INTO finance_transactions
-        (transaction_code, transaction_type, amount, payment_method_id, category_id, client_id, sales_request_id,
-         description, reference_number, transaction_date, status, serial_number, added_by, added_by_user_id,
-         approved_by, approved_by_user_id, approved_at, balance_before, balance_after)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
-    """, (code, transaction_type, amount, payment_method_id, category_id, client_id, sales_request_id,
+        (transaction_code, transaction_type, amount, payment_method_id, category_id, client_id, supplier_id,
+         sales_request_id, description, reference_number, transaction_date, status, serial_number, added_by,
+         added_by_user_id, approved_by, approved_by_user_id, approved_at, balance_before, balance_after)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
+    """, (code, transaction_type, amount, payment_method_id, category_id, client_id, supplier_id, sales_request_id,
           description, reference, day or datetime.now().date(), serial, who, uid, who, uid, before, after))
     trans_id = cur.lastrowid
     cur.execute("UPDATE payment_methods SET current_balance = %s, updated_at = NOW() WHERE id = %s", (after, payment_method_id))
@@ -24772,7 +24772,8 @@ def book_client_money(cur, transaction_type, amount, payment_method_id, category
                 (payment_method_id, transaction_type, amount if transaction_type == 'income' else -amount,
                  before, after, trans_id, '%s %s' % (reference, code), who))
     cur.execute("""INSERT INTO finance_approval_log (transaction_id, action, action_by, action_by_user_id, notes, previous_status, new_status)
-                   VALUES (%s, 'approved', %s, %s, %s, NULL, 'approved')""", (trans_id, who, uid, 'Booked when %s was posted' % reference))
+                   VALUES (%s, 'approved', %s, %s, %s, NULL, 'approved')""",
+                (trans_id, who, uid, note or 'Booked when %s was posted' % reference))
     return trans_id, None
 
 
@@ -25113,27 +25114,31 @@ def _refundable(cur, original_id, except_refund=None):
 
 
 def _write_refund_lines(cur, refund_id, original, lines):
-    """A refund's lines: chosen lines of the original, at its prices, up to what is left to refund."""
+    """
+    A refund's lines: chosen lines of the original, each refunded whole --
+    everything of it not refunded yet -- at the invoice's prices and taxes.
+    """
     available = _refundable(cur, original['id'], except_refund=refund_id)
-    clean = []
+    clean, seen = [], set()
     for n, line in enumerate(lines or [], start=1):
         try:
             line_id = int(line.get('refund_of_line') or 0)
-            qty = Decimal(str(line.get('qty') or 0))
-        except (TypeError, ValueError, ArithmeticError):
-            return None, 'Line %d: quantity must be a number' % n
+        except (TypeError, ValueError):
+            line_id = 0
         src = available.get(line_id)
         if not src:
             return None, 'Line %d is not on invoice %s' % (n, original['invoice_number'])
-        if qty <= 0:
+        if line_id in seen:
             continue
-        if float(qty) > src['refundable'] + 1e-9:
-            return None, '"%s": at most %g can still be refunded' % (src['description'], src['refundable'])
+        seen.add(line_id)
+        if src['refundable'] <= 1e-9:
+            return None, '"%s" is already refunded' % src['description']
+        qty = Decimal(str(src['refundable']))
         share = qty / Decimal(str(src['qty'])) if src['qty'] else Decimal(0)
         clean.append({'src': src, 'qty': qty, 'unit_price': src['unit_price'],
                       'cash_discount': invoicing.money(Decimal(str(src['cash_discount'] or 0)) * share)})
     if not clean:
-        return None, 'Choose at least one item and quantity to refund'
+        return None, 'Choose at least one item to refund'
     totals = invoicing.compute_invoice(clean, original['vat_rate'], original['profit_tax_rate'],
                                        bool(original['apply_profit_tax']))
     cur.execute("DELETE FROM client_invoice_line WHERE invoice_id = %s", (refund_id,))
@@ -25662,6 +25667,255 @@ def finance_account_opening():
                        VALUES (%s, %s, %s, %s, %s, %s)""",
                     (company_id, client_id, as_of, amount, (data.get('note') or '').strip()[:300] or None,
                      session.get('user_id')))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True)
+
+
+# ============================================================================
+# SUPPLIER ACCOUNTS -- what we owe each supplier and what we paid them
+# ============================================================================
+
+SUPPLIER_PAYMENT_CATEGORY_CODE = 'SUPPLIER_PAYMENT'
+
+
+def supplier_ledger_entries(cur, supplier_id=None):
+    """
+    Every entry on supplier accounts, in date order. From the supplier's side:
+    credit is what we came to owe (balance brought forward, the cost of SR items
+    they supplied once the client approved them), debit is what we paid them
+    (approved expenses carrying the supplier -- Finance's own payments and staff
+    expenses Finance approved). Balance = credit - debit = what we still owe.
+    """
+    where, params = '', []
+    if supplier_id:
+        where, params = ' AND {0}.supplier_id = %s', [supplier_id]
+    entries = []
+    cur.execute("""
+        SELECT o.as_of AS day, 'opening' AS kind, o.id AS ref_id, o.supplier_id, NULL AS sales_request_id,
+               o.note AS description, NULL AS method_type,
+               GREATEST(-o.amount, 0) AS debit, GREATEST(o.amount, 0) AS credit
+        FROM supplier_opening_balance o WHERE 1 = 1""" + where.format('o'), params)
+    entries += [dict(r) for r in cur.fetchall()]
+    # ponytail: an SR item's cost is owed once the client approves it; add a
+    # supplier bill/receipt step if Finance needs to owe on delivery instead.
+    cur.execute("""
+        SELECT DATE(COALESCE(i.supplier_received_date, i.client_approval_date, sr.created_at)) AS day,
+               'purchase' AS kind, i.id AS ref_id, i.supplier_id, i.request_id AS sales_request_id,
+               CONCAT_WS(' - ', i.name, NULLIF(sr.title, '')) AS description, NULL AS method_type,
+               0 AS debit, COALESCE(i.total_cost, i.qty * i.cost_per_item, 0) AS credit
+        FROM sales_request_items i JOIN sales_request sr ON sr.id = i.request_id
+        WHERE i.approval_status = 'approved'""" + where.format('i'), params)
+    entries += [dict(r) for r in cur.fetchall()]
+    cur.execute("""
+        SELECT ft.transaction_date AS day, 'payment' AS kind, ft.id AS ref_id, ft.supplier_id, ft.sales_request_id,
+               CONCAT_WS(' - ', COALESCE(NULLIF(ft.reference_number, ''), ft.transaction_code), NULLIF(ft.description, ''))
+                   AS description,
+               pm.method_type, ft.amount AS debit, 0 AS credit
+        FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+        WHERE ft.transaction_type = 'expense' AND ft.status = 'approved'""" + where.format('ft'), params)
+    entries += [dict(r) for r in cur.fetchall()]
+    order = {'opening': 0, 'purchase': 1, 'payment': 2}
+    entries.sort(key=lambda r: (r['day'], order[r['kind']], r['ref_id']))
+    for r in entries:
+        r['debit'], r['credit'] = float(r['debit'] or 0), float(r['credit'] or 0)
+        r['label'] = {'opening': 'Balance brought forward',
+                      'purchase': 'Supplied on SR-%s' % r['sales_request_id'],
+                      'payment': 'Bank payment' if r['method_type'] == 'bank' else 'Cash payment'}[r['kind']]
+    return entries
+
+
+def supplier_statement(cur, supplier_id, start=None, end=None):
+    """One supplier's ledger with a running balance owed; before `start` folds into the opening."""
+    opening, shown = 0.0, []
+    for r in supplier_ledger_entries(cur, supplier_id):
+        if start and r['day'] < start:
+            opening += r['credit'] - r['debit']
+        elif not end or r['day'] <= end:
+            shown.append(r)
+    balance = opening
+    for r in shown:
+        balance += r['credit'] - r['debit']
+        r['balance'] = balance
+        r['day'] = r['day'].isoformat() if r['day'] else None
+    return {'opening': opening, 'entries': shown, 'debit': sum(r['debit'] for r in shown),
+            'credit': sum(r['credit'] for r in shown), 'closing': balance}
+
+
+def supplier_balances(cur, start=None, end=None):
+    """Every supplier's opening, purchases (credit), payments (debit) and what we owe, for a period."""
+    cur.execute("SELECT id, supplier_name, company_name, supplier_type, status, primary_phone FROM supplier")
+    rows = {r['id']: dict(r, opening=0.0, credit=0.0, debit=0.0) for r in cur.fetchall()}
+    for e in supplier_ledger_entries(cur):
+        row = rows.get(e['supplier_id'])
+        if row is None:
+            continue
+        if end and e['day'] > end:
+            continue
+        if (start and e['day'] < start) or e['kind'] == 'opening':   # brought forward, by date or by entry
+            row['opening'] += e['credit'] - e['debit']
+        else:
+            row['credit'] += e['credit']
+            row['debit'] += e['debit']
+    out = list(rows.values())
+    for r in out:
+        r['closing'] = r['opening'] + r['credit'] - r['debit']
+    out.sort(key=lambda r: (-abs(r['closing']), (r['company_name'] or r['supplier_name'] or '').lower()))
+    return out
+
+
+@app.route('/finance/suppliers', methods=['GET'])
+@app.route('/finance/suppliers/<int:supplier_id>', methods=['GET'])
+@perm('finance_report.view')
+def finance_suppliers_page(supplier_id=None):
+    """Supplier Accounts: what we owe every supplier, and one statement each."""
+    return render_template('finance_suppliers.html', supplier_id=supplier_id)
+
+
+@app.route('/api/finance/supplier-accounts', methods=['GET'])
+@perm('finance_report.view')
+def finance_supplier_balances():
+    """All supplier accounts together (مجمع حسابات الموردين) for a period, JSON or Excel."""
+    f = _accounts_filters(request.args)
+    conn, cur = connection()
+    try:
+        rows = supplier_balances(cur, f['start'], f['end'])
+    finally:
+        cur.close()
+        conn.close()
+    totals = {k: sum(r[k] for r in rows) for k in ('opening', 'credit', 'debit', 'closing')}
+    if request.args.get('format') == 'xlsx':
+        frame = pd.DataFrame([[r['id'], r['company_name'] or '', r['supplier_name'], r['opening'], r['credit'],
+                               r['debit'], r['closing']] for r in rows],
+                             columns=['كود المورد', 'الشركة', 'اسم المورد', 'رصيد أول المدة', 'مشتريات (دائن)',
+                                      'مدفوعات (مدين)', 'المستحق للمورد'])
+        frame.loc[len(frame)] = ['', '', 'الإجمالي', totals['opening'], totals['credit'], totals['debit'], totals['closing']]
+        buffer = BytesIO()
+        with ExcelWriter(buffer, engine='openpyxl') as writer:
+            frame.to_excel(writer, sheet_name='مجمع حسابات الموردين', index=False)
+            writer.sheets['مجمع حسابات الموردين'].sheet_view.rightToLeft = True
+            _autosize_worksheet(writer.sheets['مجمع حسابات الموردين'])
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name='supplier_balances.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return jsonify(success=True, rows=rows, totals=totals,
+                   can_pay=has('finance_txn.approve'))
+
+
+@app.route('/api/finance/supplier-accounts/<int:supplier_id>/statement', methods=['GET'])
+@perm('finance_report.view')
+def finance_supplier_statement(supplier_id):
+    f = _accounts_filters(request.args)
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM supplier WHERE id = %s", (supplier_id,))
+        supplier = cur.fetchone()
+        if not supplier:
+            return jsonify(success=False, error='Supplier not found'), 404
+        data = supplier_statement(cur, supplier_id, f['start'], f['end'])
+        # Stock held on credit from them: goods, not money, until they bill it.
+        cur.execute("""SELECT c.id, i.item_name, i.item_code, c.quantity_received, c.quantity_sold, c.quantity_remaining,
+                              c.agreed_cost_per_item, c.amount_due, c.amount_paid, c.payment_status, c.received_date
+                       FROM inventory_credit_items c JOIN inventory_items i ON i.id = c.item_id
+                       WHERE c.supplier_id = %s ORDER BY c.received_date DESC, c.id DESC""", (supplier_id,))
+        credit_stock = [{k: (float(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, 'isoformat') else v)
+                         for k, v in r.items()} for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+    supplier = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in supplier.items()}
+    if request.args.get('format') == 'xlsx':
+        head = pd.DataFrame([['اسم المورد', supplier['supplier_name']], ['الشركة', supplier.get('company_name') or ''],
+                             ['كود المورد', supplier['id']]])
+        rows = [[f['start'].isoformat() if f['start'] else '', '', 'رصيد أول المدة', None, None, data['opening']]]
+        names = {'Balance brought forward': 'رصيد مرحّل', 'Cash payment': 'سداد نقدي (الخزينة)',
+                 'Bank payment': 'سداد بشيك / تحويل (البنك)'}
+        for r in data['entries']:
+            label = names.get(r['label']) or 'توريد على SR-%s' % r['sales_request_id']
+            rows.append([r['day'], r['sales_request_id'] or '', label + (' - ' + r['description'] if r['description'] else ''),
+                         r['debit'] or None, r['credit'] or None, r['balance']])
+        rows.append(['', '', 'الإجمالي / المستحق', data['debit'], data['credit'], data['closing']])
+        body = pd.DataFrame(rows, columns=['التاريخ', 'كود الشغل', 'البيان', 'مدين (مدفوعات)', 'دائن (مشتريات)', 'الرصيد المستحق'])
+        buffer = BytesIO()
+        with ExcelWriter(buffer, engine='openpyxl') as writer:
+            head.to_excel(writer, sheet_name='كشف حساب مورد', index=False, header=False)
+            body.to_excel(writer, sheet_name='كشف حساب مورد', index=False, startrow=4)
+            writer.sheets['كشف حساب مورد'].sheet_view.rightToLeft = True
+            _autosize_worksheet(writer.sheets['كشف حساب مورد'])
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name='supplier_statement_%d.xlsx' % supplier_id,
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return jsonify(success=True, supplier=supplier, credit_stock=credit_stock,
+                   can_pay=has('finance_txn.approve'), **data)
+
+
+@app.route('/api/finance/supplier-accounts/<int:supplier_id>/payment', methods=['POST'])
+@perm('finance_txn.approve')
+def finance_supplier_payment(supplier_id):
+    """
+    Finance pays a supplier: an approved Supplier Payments expense out of a
+    payment method, so it shows in Finance Management and on their statement.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = invoicing.money(data.get('amount'))
+        day = datetime.strptime(str(data.get('date')), '%Y-%m-%d').date() if data.get('date') else datetime.now().date()
+    except (ValueError, ArithmeticError):
+        return jsonify(success=False, error='Amount and date must be valid'), 400
+    if amount <= 0:
+        return jsonify(success=False, error='Enter the amount paid'), 400
+    method_id = data.get('payment_method_id')
+    if not method_id:
+        return jsonify(success=False, error='Choose the payment method the money leaves'), 400
+    sr_id = data.get('sales_request_id') or None
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, supplier_name, company_name FROM supplier WHERE id = %s", (supplier_id,))
+        supplier = cur.fetchone()
+        if not supplier:
+            return jsonify(success=False, error='Supplier not found'), 404
+        if sr_id:
+            cur.execute("SELECT id FROM sales_request WHERE id = %s", (sr_id,))
+            if not cur.fetchone():
+                return jsonify(success=False, error='SR-%s not found' % sr_id), 400
+        cur.execute("SELECT id FROM finance_categories WHERE category_code = %s", (SUPPLIER_PAYMENT_CATEGORY_CODE,))
+        cat = cur.fetchone()
+        name = supplier['company_name'] or supplier['supplier_name']
+        reference = (data.get('reference') or '').strip()[:100] or 'Supplier payment - %s' % name
+        trans_id, error = book_client_money(
+            cur, 'expense', amount, method_id, cat['id'] if cat else 10, None, sr_id, reference,
+            (data.get('notes') or '').strip()[:500] or 'Payment to %s' % name, day,
+            supplier_id=supplier_id, note='Supplier payment recorded on the supplier account')
+        if error:
+            conn.rollback()
+            return jsonify(success=False, error=error), 400
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, transaction_id=trans_id)
+
+
+@app.route('/api/finance/supplier-accounts/<int:supplier_id>/opening', methods=['POST'])
+@perm('finance_txn.approve')
+def finance_supplier_opening(supplier_id):
+    """Finance enters what we owed a supplier before the system (negative: an advance they hold)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        as_of = datetime.strptime(str(data.get('as_of') or ''), '%Y-%m-%d').date()
+        amount = invoicing.money(data.get('amount'))
+    except (ValueError, ArithmeticError):
+        return jsonify(success=False, error='Date and amount are required'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id FROM supplier WHERE id = %s", (supplier_id,))
+        if not cur.fetchone():
+            return jsonify(success=False, error='Supplier not found'), 404
+        cur.execute("""INSERT INTO supplier_opening_balance (supplier_id, as_of, amount, note, created_by)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (supplier_id, as_of, amount, (data.get('note') or '').strip()[:300] or None, session.get('user_id')))
         conn.commit()
     finally:
         cur.close()

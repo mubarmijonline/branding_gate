@@ -306,15 +306,16 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
         self.assertEqual((st['debit'], st['credit'], st['closing']), (178088.0, 178088.0, 0.0))
 
-    def test_refund_chosen_items_and_quantities(self):
+    def test_refund_chosen_items_in_full(self):
         finance = self._web(self.finance)
         inv_id = self._posted(98300, 0)                          # owed, not paid
         got = finance.get('/api/invoices/%d' % inv_id).get_json()['invoice']
         stage = next(l for l in got['refundable'] if l['description'] == 'stage')
         self.assertTrue(got['can_refund'])
-        too_much = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': [{'refund_of_line': stage['id'], 'qty': 2}]})
-        self.assertEqual(too_much.status_code, 400)
-        r = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': [{'refund_of_line': stage['id'], 'qty': 1}],
+        none = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': []})
+        self.assertEqual(none.status_code, 400)
+        # A ticked item is refunded whole; a partial quantity sent is ignored.
+        r = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': [{'refund_of_line': stage['id'], 'qty': 0.5}],
                                                                   'notes': 'stage not used'})
         self.assertEqual(r.status_code, 200, r.get_json())
         refund = r.get_json()
