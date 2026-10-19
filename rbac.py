@@ -488,8 +488,8 @@ SEED_MATRIX = {
             'supplier.view': 'all',
             'supplier.create': 'all',
             'supplier.edit': 'all',
-            # Suppliers: the Head and the team leader edit and delete; members
-            # only ask for one to be added, and the Head alone approves that.
+            # Suppliers: only the Head edits and deletes, and only the Head
+            # approves a request to add one. Leaders and members ask.
             'supplier.delete': 'all',
             'inventory.view': 'all',
             'inventory.create': 'all',
@@ -534,9 +534,9 @@ SEED_MATRIX = {
             'approved_item.view': 'all',
             'approved_item.edit': 'all',
             'supplier_report.view': 'all',
+            # Sees suppliers and asks for new ones; editing and deleting a
+            # supplier is the Head's alone.
             'supplier.view': 'all',
-            'supplier.edit': 'all',
-            'supplier.delete': 'all',
             'inventory.view': 'all',
             'inventory.create': 'all',
             'inventory.edit': 'all',

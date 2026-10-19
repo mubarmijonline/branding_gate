@@ -299,18 +299,20 @@ if __name__ == '__main__':
 
 
 class SupplierGovernanceTest(unittest.TestCase):
-    """Suppliers: the Head and team leaders edit and delete; members ask to add, the Head approves."""
+    """Suppliers: only the Head edits and deletes, and only the Head approves a request to add."""
 
     def _supplier(self, role):
         return {code for code in rbac.SEED_MATRIX[role]
                 if code.startswith(('supplier.', 'supplier_request.', 'party_request.'))}
 
-    def test_head_and_leader_edit_and_delete(self):
-        for role in ('operations_manager', 'operations_team_leader'):
-            self.assertTrue({'supplier.edit', 'supplier.delete'} <= self._supplier(role), role)
+    def test_only_the_head_edits_and_deletes(self):
+        self.assertTrue({'supplier.edit', 'supplier.delete'} <= self._supplier('operations_manager'))
+        for role in ('operations_team_leader', 'operations_member'):
+            self.assertFalse({'supplier.edit', 'supplier.delete'} & self._supplier(role), role)
 
-    def test_member_only_views_and_requests(self):
-        self.assertEqual(self._supplier('operations_member'), {'supplier.view', 'supplier_request.create'})
+    def test_leader_and_member_only_view_and_request(self):
+        for role in ('operations_team_leader', 'operations_member'):
+            self.assertEqual(self._supplier(role), {'supplier.view', 'supplier_request.create'}, role)
 
     def test_only_the_head_approves_operations_requests(self):
         self.assertIn('party_request.approve_head', self._supplier('operations_manager'))
