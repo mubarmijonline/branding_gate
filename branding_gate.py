@@ -22142,6 +22142,57 @@ def set_payment_method_balance(method_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/finance/payment-methods/transfer', methods=['POST'])
+@perm('finance_txn.approve')
+def transfer_between_payment_methods():
+    """
+    Money moved from one payment method to another (the safe to the bank, one
+    bank to another). Two approved transactions: out of the source, posted to
+    the target's account (1101 cash / 1102 bank), and into the target, posted
+    to the source's. Neither is income or expense.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = invoicing.money(data.get('amount'))
+        day = datetime.strptime(str(data.get('date')), '%Y-%m-%d').date() if data.get('date') else datetime.now().date()
+        source, target = int(data.get('from_id') or 0), int(data.get('to_id') or 0)
+    except (ValueError, ArithmeticError, TypeError):
+        return jsonify(success=False, error='Amount, date and both payment methods are required'), 400
+    if amount <= 0:
+        return jsonify(success=False, error='Enter the amount moved'), 400
+    if not source or not target or source == target:
+        return jsonify(success=False, error='Choose two different payment methods'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, method_name, method_type FROM payment_methods WHERE id IN (%s, %s)", (source, target))
+        methods = {r['id']: r for r in cur.fetchall()}
+        if len(methods) != 2:
+            return jsonify(success=False, error='Payment method not found'), 404
+        cur.execute("SELECT id, account_code FROM finance_categories WHERE account_code IN ('1101', '1102')")
+        accounts = {r['account_code']: r['id'] for r in cur.fetchall()}
+        account_of = lambda m: accounts['1102' if m['method_type'] == 'bank' else '1101']
+        src, dst = methods[source], methods[target]
+        reference = (data.get('reference') or '').strip()[:100] or 'Transfer %s -> %s' % (src['method_name'], dst['method_name'])
+        description = (data.get('description') or '').strip()[:500] or reference
+        note = 'Transfer between payment methods'
+        out_id, error = book_client_money(cur, 'expense', amount, source, account_of(dst), None, None,
+                                          reference, description, day, note=note)
+        if error:
+            conn.rollback()
+            return jsonify(success=False, error=error), 400
+        in_id, error = book_client_money(cur, 'income', amount, target, account_of(src), None, None,
+                                         reference, description, day, note=note)
+        if error:
+            conn.rollback()
+            return jsonify(success=False, error=error), 400
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, out_id=out_id, in_id=in_id,
+                   message='%s moved from %s to %s' % (f'{float(amount):,.2f}', src['method_name'], dst['method_name']))
+
+
 @app.route('/api/finance/payment-methods/<int:method_id>/history', methods=['GET'])
 @perm('finance_master.view')
 def get_payment_method_history(method_id):
@@ -23376,6 +23427,7 @@ def get_finance_statistics():
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance_transactions 
             WHERE status = 'approved' AND transaction_type = 'income'
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
         """)
         total_income = float(cur.fetchone()['total'] or 0)
         
@@ -23384,6 +23436,7 @@ def get_finance_statistics():
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance_transactions 
             WHERE status = 'approved' AND transaction_type = 'expense'
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
         """)
         total_expense = float(cur.fetchone()['total'] or 0)
         
@@ -23398,6 +23451,7 @@ def get_finance_statistics():
             WHERE status = 'approved' 
             AND transaction_type = 'income'
             AND DATE(transaction_date) BETWEEN %s AND %s
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
         """, (month_start, month_end))
         month_income = float(cur.fetchone()['total'] or 0)
         
@@ -23408,6 +23462,7 @@ def get_finance_statistics():
             WHERE status = 'approved' 
             AND transaction_type = 'expense'
             AND DATE(transaction_date) BETWEEN %s AND %s
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
         """, (month_start, month_end))
         month_expense = float(cur.fetchone()['total'] or 0)
         

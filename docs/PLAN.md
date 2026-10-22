@@ -404,3 +404,10 @@ the next free one under the parent, editable, unique, must start with the
 parent's code), rename, re-code and delete non-system ones. Classes and the
 mapped system accounts cannot be renamed or deleted. The Categories tab shows
 the same chart.
+
+**Transfers between payment methods (2026-10-22):** in Add Income / Add Expense
+the Account list also offers the other payment methods (Finance approvers only).
+Saving books an approved transfer (`/api/finance/payment-methods/transfer`): out
+of the source method posted to the target's account (1101 / 1102), into the
+target posted to the source's. The tree shows it on both methods' rows; the
+income and expense totals leave postings to 1101 / 1102 out.

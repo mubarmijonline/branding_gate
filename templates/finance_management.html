@@ -3831,11 +3831,64 @@ function populateCategoryDropdown(type) {
     });
     if (open !== null) options += '</optgroup>';
     $('#transCategory').html(options).trigger('change.select2');
+    refreshTransferOptions();
     $('#transSubcategory').html('<option value=""></option>');
+}
+
+// The tree's code for a payment method row: 1101/1102 + its place among methods of its kind.
+function paymentMethodCode(pm) {
+    const base = pm.method_type === 'bank' ? '1102' : '1101';
+    const same = paymentMethods.filter(m => (m.method_type === 'bank') === (pm.method_type === 'bank'))
+        .sort((a, b) => (b.is_active - a.is_active) || (a.id - b.id));
+    return base + String(same.findIndex(m => m.id === pm.id) + 1).padStart(2, '0');
+}
+
+// The other payment methods as accounts: in Add Income the money comes from
+// one of them, in Add Expense it goes to one. Either way it is a transfer.
+function refreshTransferOptions() {
+    const sel = $('#transCategory');
+    sel.find('optgroup.trans-transfer').remove();
+    const income = $('#transactionType').val() === 'income';
+    const others = paymentMethods.filter(m => m.is_active && String(m.id) !== String($('#transPaymentMethod').val()));
+    if (!others.length || !(window.USER_PERMS || {})['finance_txn.approve']) return;   // booked approved at once
+    const group = $('<optgroup class="trans-transfer"></optgroup>')
+        .attr('label', income ? 'Transfer from another payment method' : 'Transfer to another payment method');
+    others.forEach(m => group.append($('<option></option>').val('pm:' + m.id)
+        .text((income ? 'From ' : 'To ') + paymentMethodCode(m) + ' ' + m.method_name + ' (' + formatCurrency(m.current_balance) + ')')));
+    sel.find('option').first().after(group);
+    sel.trigger('change.select2');
+}
+
+// A transfer: out of one payment method, into the other.
+function submitTransfer(data) {
+    const other = String(data.category_id).slice(3);
+    const income = data.transaction_type === 'income';
+    fetch('/api/finance/payment-methods/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            from_id: income ? other : data.payment_method_id, to_id: income ? data.payment_method_id : other,
+            amount: data.amount, date: data.transaction_date, reference: data.reference_number,
+            description: data.description || data.notes
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            $('#addTransactionModal').modal('hide');
+            Swal.fire('Transfer recorded', result.message, 'success');
+            loadTransactions();
+            loadStatistics();
+            loadPaymentMethods();
+        } else {
+            Swal.fire('Error', result.error, 'error');
+        }
+    });
 }
 
 // Where the money is recorded in the tree: 11 > 1101 cash or 1102 bank > the method.
 function showPaymentPath() {
+    refreshTransferOptions();
     const pm = paymentMethods.find(m => String(m.id) === String($('#transPaymentMethod').val()));
     if (!pm) { $('#transPmPath').empty(); return; }
     const code = pm.method_type === 'bank' ? '1102' : '1101';
@@ -3927,10 +3980,13 @@ function submitTransaction() {
         notes: $('#transNotes').val()
     };
     
-    if (!data.amount || !data.payment_method_id || !data.category_id) {
-        Swal.fire('Error', 'Please fill in all required fields', 'error');
+    const missing = [[data.amount, 'Amount'], [data.payment_method_id, 'Payment Method'], [data.category_id, 'Account']]
+        .filter(f => !f[0]).map(f => f[1]);
+    if (missing.length) {
+        Swal.fire('Missing: ' + missing.join(', '), 'Fill in the fields marked *.', 'warning');
         return;
     }
+    if (String(data.category_id).startsWith('pm:')) { submitTransfer(data); return; }
     
     fetch('/api/finance/transactions', {
         method: 'POST',

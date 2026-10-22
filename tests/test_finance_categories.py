@@ -146,6 +146,28 @@ class FinanceCategoriesTest(unittest.TestCase):
         listed = self.web.get('/api/finance/transactions?status=approved&category_ids=%d' % self.ids['62']).get_json()
         self.assertEqual([t['amount'] for t in listed['transactions'] if t['id'] == r.get_json()['id']], [300.0])
 
+    def test_transfer_between_payment_methods(self):
+        cur = self._cursor()
+        cur.execute("""INSERT INTO payment_methods (method_name, method_code, method_type, current_balance, bank_name, account_number)
+                       VALUES ('Chart Bank T', 'CHART_BANK_T', 'bank', 0, 'CIB', '1')""")
+        bank = cur.lastrowid
+        balance = lambda pm: (cur.execute("SELECT current_balance FROM payment_methods WHERE id = %s", (pm,)),
+                              float(cur.fetchone()['current_balance']))[1]
+        stats_before = self.web.get('/api/finance/statistics').get_json()
+        move = lambda **kw: self.web.post('/api/finance/payment-methods/transfer', json=dict(date='2026-10-20', **kw))
+        self.assertEqual(move(from_id=self.pm, to_id=self.pm, amount=10).status_code, 400)          # same method
+        self.assertEqual(move(from_id=self.pm, to_id=bank, amount=999999).status_code, 400)         # more than it holds
+        r = move(from_id=self.pm, to_id=bank, amount=1000, reference='DEP 1')
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertEqual((balance(self.pm), balance(bank)), (99000.0, 1000.0))
+        tree = self._tree()
+        box = next(k for k in branding_gate.chart_find(tree, '1101')['children'] if k['id'] == 'pm-%d' % self.pm)
+        bnk = next(k for k in branding_gate.chart_find(tree, '1102')['children'] if k['id'] == 'pm-%d' % bank)
+        self.assertEqual((box['money_out'], bnk['money_in']), (1000.0, 1000.0))
+        stats = self.web.get('/api/finance/statistics').get_json()
+        # A transfer is neither income nor expense.
+        self.assertEqual((stats['total_income'], stats['total_expense']), (stats_before['total_income'], stats_before['total_expense']))
+
     def test_income_statement_counts_posted_invoices_on_sales(self):
         cur = self._cursor()
         cur.execute("SELECT id, client_id, company_id FROM sales_request ORDER BY id LIMIT 1")
