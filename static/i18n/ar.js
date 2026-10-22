@@ -205,6 +205,7 @@ window.BG_AR = {
 "Alexandria": "الإسكندرية",
 "All": "الكل",
 "All (flat)": "الكل (بدون تدرج)",
+"All Accounts": "كل الحسابات",
 "All Approved": "الكل معتمد",
 "All Categories": "كل الفئات",
 "All Caught Up!": "لا يوجد شيء معلق!",

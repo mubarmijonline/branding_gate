@@ -1327,11 +1327,7 @@ body.finance-surface {
                         <select id="filterCategory" class="filter-multi" multiple="multiple">
                         </select>
                     </div>
-                    <div class="filter-select2-wrap">
-                        <select id="filterSubcategory" class="filter-multi" multiple="multiple">
-                        </select>
-                    </div>
-                    <div class="filter-select2-wrap">
+<div class="filter-select2-wrap">
                         <select id="filterPaymentMethod" class="filter-multi" multiple="multiple">
                         </select>
                     </div>
@@ -1366,8 +1362,7 @@ body.finance-surface {
                         <th>Code</th>
                         <th>Date</th>
                         <th>Type</th>
-                        <th>Category</th>
-                        <th>Sub-Category</th>
+                        <th>Account</th>
                         <th>SR</th>
                         <th>Client</th>
                         <th>Company</th>
@@ -1461,8 +1456,7 @@ body.finance-surface {
                         <th>Code</th>
                         <th>Date</th>
                         <th>Type</th>
-                        <th>Category</th>
-                        <th>Sub-Category</th>
+                        <th>Account</th>
                         <th>SR</th>
                         <th>Client</th>
                         <th>Company</th>
@@ -1616,7 +1610,7 @@ body.finance-surface {
                                             <th>Code</th>
                                             <th>Date</th>
                                             <th>Type</th>
-                                            <th>Category</th>
+                                            <th>Account</th>
                                             <th>Description</th>
                                             <th>SR</th>
                                             <th>Company</th>
@@ -1988,7 +1982,7 @@ body.finance-surface {
                         <th>Code</th>
                         <th>Date</th>
                         <th>Type</th>
-                        <th>Category</th>
+                        <th>Account</th>
                         <th>Description</th>
                         <th style="color: var(--success);">Plus (+)</th>
                         <th style="color: var(--danger);">Minus (-)</th>
@@ -2665,8 +2659,7 @@ $(document).ready(function() {
     });
     
     // Initialize Select2 multi-select for filter dropdowns
-    $('#filterCategory').select2({ placeholder: 'All Categories', allowClear: true, width: '100%' });
-    $('#filterSubcategory').select2({ placeholder: 'All Sub-Categories', allowClear: true, width: '100%' });
+    $('#filterCategory').select2({ placeholder: 'All Accounts', allowClear: true, width: '100%' });
     $('#filterPaymentMethod').select2({ placeholder: 'All Payment Methods', allowClear: true, width: '100%' });
     $('#filterClient').select2({ placeholder: 'All Clients', allowClear: true, width: '100%' });
     $('#filterSupplier').select2({ placeholder: 'All Suppliers', allowClear: true, width: '100%' });
@@ -2729,14 +2722,9 @@ $(document).ready(function() {
     
     // Filter changes - multi-select via Select2
     $('#filterType').change(loadApprovedTransactions);
-    $('#filterPaymentMethod, #filterCategory, #filterSubcategory, #filterClient, #filterSupplier').on('change', loadApprovedTransactions);
+    $('#filterPaymentMethod, #filterCategory, #filterClient, #filterSupplier').on('change', loadApprovedTransactions);
     $('#filterStartDate, #filterEndDate').change(loadApprovedTransactions);
     
-    // Category filter changes subcategory options (multi-select aware)
-    $('#filterCategory').on('change', function() {
-        loadFilterSubcategories($(this).val());
-    });
-
     // Report search filters
     $('#reportClientSearch').on('input', function() {
         filterReportTable('clientReportBody', $(this).val());
@@ -2899,8 +2887,7 @@ function renderPendingApprovals(transactions) {
             '</div>' +
             '<div class="pending-card-amount ' + t.transaction_type + '">' + amountLabel + ': ' + formatCurrency(t.amount) + '</div>' +
             '<div class="pending-card-body">' +
-                '<div class="field"><label>Category</label><span>' + (t.category_name || '-') + '</span></div>' +
-                (t.subcategory_name ? '<div class="field"><label>Sub-Category</label><span>' + t.subcategory_name + '</span></div>' : '') +
+                '<div class="field"><label>Account</label><span>' + accountLabel(t) + '</span></div>' +
                 '<div class="field"><label>SR</label><span>' + (t.request_number ? '<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">' + t.request_number + '</span>' : '-') + '</span></div>' +
                 '<div class="field"><label>Client</label><span>' + (t.client_name || '-') + '</span></div>' +
                 '<div class="field"><label>Company</label><span>' + (t.company_name || '-') + '</span></div>' +
@@ -3126,14 +3113,9 @@ function loadApprovedTransactions() {
     var pmVals = $('#filterPaymentMethod').val();
     if (pmVals && pmVals.length) params.append('payment_method_ids', pmVals.join(','));
     
-    // If subcategory is selected, use it; otherwise use category (both multi-select)
-    var subCatVals = $('#filterSubcategory').val();
+    // Accounts (a group finds everything posted under it)
     var catVals = $('#filterCategory').val();
-    if (subCatVals && subCatVals.length) {
-        params.append('category_ids', subCatVals.join(','));
-    } else if (catVals && catVals.length) {
-        params.append('category_ids', catVals.join(','));
-    }
+    if (catVals && catVals.length) params.append('category_ids', catVals.join(','));
     
     var clientVals = $('#filterClient').val();
     if (clientVals && clientVals.length) params.append('client_ids', clientVals.join(','));
@@ -3162,10 +3144,12 @@ function loadFilterDropdowns() {
             if (data.success) {
                 var sel = $('#filterCategory');
                 sel.empty();
-                (data.categories || []).forEach(c => {
-                    if (!c.parent_id) {
-                        sel.append(`<option value="${c.id}">${c.category_name}</option>`);
-                    }
+                // Each group and the accounts under it, with their codes.
+                (data.categories || []).forEach(g => {
+                    sel.append($('<option></option>').val(g.id).text(g.account_code + ' ' + g.category_name));
+                    (g.subcategories || []).forEach(a => {
+                        sel.append($('<option></option>').val(a.id).text('\u00a0\u00a0\u00a0' + '\u00a0\u00a0'.repeat(a.depth || 0) + a.account_code + ' ' + a.category_name));
+                    });
                 });
                 sel.trigger('change.select2');
             }
@@ -3198,32 +3182,10 @@ function loadFilterDropdowns() {
         });
 }
 
-function loadFilterSubcategories(parentIds) {
-    var sel = $('#filterSubcategory');
-    sel.empty();
-    // parentIds is an array from multi-select
-    if (!parentIds || !parentIds.length) {
-        sel.trigger('change.select2');
-        return;
-    }
-    fetch('/api/finance/categories')
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                (data.categories || []).forEach(c => {
-                    if (parentIds.indexOf(String(c.parent_id)) > -1) {
-                        sel.append(`<option value="${c.id}">${c.category_name}</option>`);
-                    }
-                });
-                sel.trigger('change.select2');
-            }
-        });
-}
-
 function clearAllFilters() {
     $('#filterType').val('');
     // Clear multi-select Select2 filters
-    $('#filterCategory, #filterSubcategory, #filterPaymentMethod, #filterClient, #filterSupplier').val(null).trigger('change');
+    $('#filterCategory, #filterPaymentMethod, #filterClient, #filterSupplier').val(null).trigger('change');
     $('#filterStartDate, #filterEndDate').val('');
     loadApprovedTransactions();
 }
@@ -3667,6 +3629,12 @@ function loadDeclinedTransactions() {
 function isTransferLeg(t) {
     return /^110[12] /.test(t.category_name || '');
 }
+// The account a transaction is under; a transfer leg names where the money went or came from.
+function accountLabel(t) {
+    const name = escHtml(t.category_name || '-');
+    if (!isTransferLeg(t)) return name;
+    return (t.transaction_type === 'income' ? 'From ' : 'To ') + name;
+}
 function typeBadge(t) {
     if (isTransferLeg(t)) {
         return '<span class="type-badge transfer" title="' + escHtml(t.reference_number || 'Transfer between payment methods') + '"><i class="fas fa-exchange-alt mr-1"></i>' +
@@ -3680,7 +3648,7 @@ function renderApprovedTransactions(transactions) {
     tbody.empty();
     
     if (transactions.length === 0) {
-        tbody.html('<tr><td colspan="16" style="text-align: center; padding: 40px; color: var(--muted);">No approved transactions found</td></tr>');
+        tbody.html('<tr><td colspan="15" style="text-align: center; padding: 40px; color: var(--muted);">No approved transactions found</td></tr>');
         return;
     }
     
@@ -3693,8 +3661,7 @@ function renderApprovedTransactions(transactions) {
                 <td><code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px;">${t.transaction_code}</code></td>
                 <td>${t.transaction_date || '-'}</td>
                 <td>${typeBadge(t)}</td>
-                <td><strong>${t.category_name || '-'}</strong></td>
-                <td>${t.subcategory_name || '-'}</td>
+                <td><strong>${accountLabel(t)}</strong></td>
                 <td>${t.request_number ? `<span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${t.request_number}</span>` : '-'}</td>
                 <td>${t.client_name || '-'}</td>
                 <td>${t.company_name || '-'}</td>
@@ -3722,7 +3689,7 @@ function renderDeclinedTransactions(transactions) {
     tbody.empty();
     
     if (transactions.length === 0) {
-        tbody.html('<tr><td colspan="15" style="text-align: center; padding: 40px; color: var(--muted);">No declined transactions found</td></tr>');
+        tbody.html('<tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--muted);">No declined transactions found</td></tr>');
         return;
     }
     
@@ -3734,8 +3701,7 @@ function renderDeclinedTransactions(transactions) {
                 <td><code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px;">${t.transaction_code}</code></td>
                 <td>${t.transaction_date || '-'}</td>
                 <td>${typeBadge(t)}</td>
-                <td><strong>${t.category_name || '-'}</strong></td>
-                <td>${t.subcategory_name || '-'}</td>
+                <td><strong>${accountLabel(t)}</strong></td>
                 <td>${t.request_number ? `<span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${t.request_number}</span>` : '-'}</td>
                 <td>${t.client_name || '-'}</td>
                 <td>${t.company_name || '-'}</td>
@@ -4068,15 +4034,9 @@ function viewTransaction(id) {
                             <p>${t.payment_method_name || '-'}</p>
                         </div>
                         <div class="form-group-modern">
-                            <label>Category</label>
-                            <p>${t.category_name || '-'}</p>
+                            <label>Account</label>
+                            <p>${accountLabel(t)}</p>
                         </div>
-                        ${t.subcategory_name ? `
-                        <div class="form-group-modern">
-                            <label>Sub-Category</label>
-                            <p>${t.subcategory_name}</p>
-                        </div>
-                        ` : ''}
                         <div class="form-group-modern">
                             <label>Sales Request</label>
                             <p>${t.request_number ? `<span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">${t.request_number}</span>` : '-'}</p>
@@ -4965,7 +4925,7 @@ function renderEntityTransactions(transactions, entityType) {
                 <td><code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${t.transaction_code}</code></td>
                 <td>${t.transaction_date || '-'}</td>
                 <td><span class="type-badge ${t.transaction_type}" style="font-size: 11px;">${t.transaction_type === 'income' ? '+ Income' : '- Expense'}</span></td>
-                <td><strong>${t.category_name || '-'}</strong>${t.subcategory_name ? `<br><small style="color: var(--muted);">${t.subcategory_name}</small>` : ''}</td>
+                <td><strong>${accountLabel(t)}</strong></td>
                 <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.description || '-'}</td>
                 <td>${t.request_number ? `<span class="badge badge-info">${t.request_number}</span>` : '-'}</td>
                 <td>${t.company_name || '-'}</td>
