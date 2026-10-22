@@ -22759,13 +22759,16 @@ def get_finance_transactions():
         
         cur.execute(query, params)
         transactions = cur.fetchall()
+        # Posted invoices and refunds are approved entries too (on 1103, no cash).
+        documents = []
+        cash_only = transaction_type or payment_method_id or payment_method_ids or supplier_id or supplier_ids
+        if status == 'approved' and not cash_only and not offset:
+            documents = posted_invoice_rows(cur, start_date, end_date, client_ids or client_id, sales_request_id,
+                                            category_ids or category_id)
         cur.close()
         conn.close()
         
-        return jsonify({
-            'success': True,
-            'total': total,
-            'transactions': [{
+        rows = [{
                 'id': t['id'],
                 'serial_number': t['serial_number'],
                 'transaction_code': t['transaction_code'],
@@ -22800,7 +22803,10 @@ def get_finance_transactions():
                 'balance_after': float(t['balance_after']) if t['balance_after'] else None,
                 'company_name': t.get('company_name')
             } for t in transactions]
-        })
+        if documents:
+            rows = sorted(rows + documents, key=lambda r: (r['transaction_date'] or '', r.get('approved_at') or ''),
+                          reverse=True)
+        return jsonify({'success': True, 'total': total + len(documents), 'transactions': rows})
     except Exception as e:
         print(f"Error getting transactions: {str(e)}")
         import traceback
@@ -22809,6 +22815,66 @@ def get_finance_transactions():
 
 
 CLIENT_PAYMENTS_CATEGORY_ID = 1
+
+
+def posted_invoice_rows(cur, start=None, end=None, client_ids=None, sales_request_id=None, account_ids=None):
+    """
+    Posted invoices and refunds as rows of the transactions list: Finance
+    approved them, they sit on 1103 (and 4101 / 4102, 2103, the withholding
+    account), and no money moved. Filters as the list's.
+    """
+    # ponytail: merged into the first page only; page them with the rest if the list ever pages.
+    if account_ids:
+        wanted = set(chart_with_descendants(cur, [int(x) for x in str(account_ids).split(',') if x.strip().isdigit()]))
+        cur.execute("SELECT id FROM finance_categories WHERE account_code IN ('1103', '4101', '4102', '2103', %s)",
+                    (WITHHOLDING_TAX_ACCOUNT,))
+        if not wanted & {r['id'] for r in cur.fetchall()}:
+            return []
+    q = """SELECT i.id, i.kind, i.invoice_number, i.invoice_date, i.total, i.sales_request_id, i.client_id, i.posted_at,
+                  c.client_name, co.company_name, sr.title, u.name AS posted_by_name, o.invoice_number AS refund_of_number
+           FROM client_invoice i
+           LEFT JOIN client c ON c.id = i.client_id LEFT JOIN company co ON co.id = i.company_id
+           LEFT JOIN sales_request sr ON sr.id = i.sales_request_id LEFT JOIN user u ON u.id = i.posted_by
+           LEFT JOIN client_invoice o ON o.id = i.refund_of
+           WHERE i.status = 'posted'"""
+    params = []
+    if start:
+        q += " AND i.invoice_date >= %s"
+        params.append(start)
+    if end:
+        q += " AND i.invoice_date <= %s"
+        params.append(end)
+    ids = [int(x) for x in str(client_ids or '').split(',') if x.strip().isdigit()]
+    if ids:
+        q += " AND i.client_id IN (%s)" % ','.join(['%s'] * len(ids))
+        params += ids
+    if sales_request_id:
+        q += " AND i.sales_request_id = %s"
+        params.append(sales_request_id)
+    cur.execute(q, params)
+    documents = cur.fetchall()
+    cur.execute("SELECT CONCAT(account_code, ' ', category_name) AS n FROM finance_categories WHERE account_code = '1103'")
+    clients_account = (cur.fetchone() or {}).get('n') or '1103'
+    out = []
+    for i in documents:
+        label = invoice_label(i)
+        out.append({
+            'id': None, 'invoice_id': i['id'], 'kind': i['kind'], 'serial_number': None,
+            'transaction_code': label, 'transaction_type': i['kind'], 'amount': float(i['total'] or 0),
+            'payment_method_id': None, 'payment_method_name': None,
+            'category_id': None, 'category_name': clients_account, 'subcategory_id': None, 'subcategory_name': None,
+            'client_id': i['client_id'], 'client_name': i['client_name'], 'company_name': i['company_name'],
+            'supplier_id': None, 'supplier_name': None,
+            'sales_request_id': i['sales_request_id'],
+            'request_number': 'SR-%s' % i['sales_request_id'] if i['sales_request_id'] else None,
+            'description': ('Refund of invoice %s' % i['refund_of_number']) if i['kind'] == 'refund'
+                           else ' - '.join(x for x in (label, i['title']) if x),
+            'reference_number': label,
+            'transaction_date': i['invoice_date'].isoformat() if i['invoice_date'] else None,
+            'status': 'approved', 'approved_by': i['posted_by_name'],
+            'approved_at': i['posted_at'].isoformat() if i['posted_at'] else None,
+        })
+    return out
 
 
 def link_transaction_to_request(cur, category_id, client_id, sales_request_id):
@@ -23487,9 +23553,9 @@ def get_finance_statistics():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# Where the 1% commercial-profits tax a client withholds is booked: 1107
-# (ضريبة الخصم والتحصيل, ours to claim back). Change to '2104' if Finance books it there.
-WITHHOLDING_TAX_ACCOUNT = '1107'
+# Where the 1% commercial-profits tax a client withholds is booked: 2104
+# (ضريبة الخصم والتحصيل المستحقة), as Finance books it (Ahmed, 2026-10-22).
+WITHHOLDING_TAX_ACCOUNT = '2104'
 
 
 def chart_journal(cur, start=None, end=None):
@@ -23506,18 +23572,21 @@ def chart_journal(cur, start=None, end=None):
       1%; 4101 credit the subtotal, 2103 the VAT. A posted refund: the reverse
       on 4102.
 
-    Lines: {account (code), debit, credit, method (payment method id or None)}.
+    Lines: {account (code), debit, credit, method (payment method id or None),
+    day, ref, description, source ('txn' / 'invoice', id)}.
     """
     cur.execute("SELECT id, account_code, category_code FROM finance_categories")
     cats = {r['id']: r for r in cur.fetchall()}
     lines = []
+    src = {}
 
     def line(code, debit=0.0, credit=0.0, method=None):
         if debit or credit:
-            lines.append({'account': code, 'debit': float(debit), 'credit': float(credit), 'method': method})
+            lines.append(dict(src, account=code, debit=float(debit), credit=float(credit), method=method))
 
-    q = """SELECT ft.transaction_type, ft.amount, COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id) AS account_id,
-                  ft.payment_method_id, pm.method_type
+    q = """SELECT ft.id, ft.transaction_code, ft.transaction_date, ft.description, ft.reference_number,
+                  ft.transaction_type, ft.amount, COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id) AS account_id,
+                  ft.payment_method_id, pm.method_type, pm.method_name
            FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
            WHERE ft.status = 'approved'"""
     params = []
@@ -23529,6 +23598,8 @@ def chart_journal(cur, start=None, end=None):
         params.append(end)
     cur.execute(q, params)
     for t in cur.fetchall():
+        src = {'day': t['transaction_date'], 'ref': t['transaction_code'], 'source': ('txn', t['id']),
+               'description': ' - '.join(x for x in (t['reference_number'], t['description'], t['method_name']) if x)}
         amount = float(t['amount'] or 0)
         cash = '1102' if t['method_type'] == 'bank' else '1101'
         cat = cats.get(t['account_id']) or {}
@@ -23543,16 +23614,20 @@ def chart_journal(cur, start=None, end=None):
                 refund_paid = cat.get('category_code') == CLIENT_REFUNDS_CATEGORY_CODE
                 line('1103' if refund_paid else (code or '?'), debit=amount)
 
-    q = """SELECT kind, subtotal, vat_total, profit_tax_total, total FROM client_invoice WHERE status = 'posted'"""
+    q = """SELECT i.id, i.kind, i.invoice_number, i.invoice_date, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
+                  i.sales_request_id, c.client_name
+           FROM client_invoice i LEFT JOIN client c ON c.id = i.client_id WHERE i.status = 'posted'"""
     params = []
     if start:
-        q += " AND invoice_date >= %s"
+        q += " AND i.invoice_date >= %s"
         params.append(start)
     if end:
-        q += " AND invoice_date <= %s"
+        q += " AND i.invoice_date <= %s"
         params.append(end)
     cur.execute(q, params)
     for inv in cur.fetchall():
+        src = {'day': inv['invoice_date'], 'ref': invoice_label(inv), 'source': ('invoice', inv['id']),
+               'description': ' - '.join(x for x in (inv['client_name'], 'SR-%s' % inv['sales_request_id']) if x)}
         sub, vat = float(inv['subtotal'] or 0), float(inv['vat_total'] or 0)
         tax, total = float(inv['profit_tax_total'] or 0), float(inv['total'] or 0)
         if inv['kind'] == 'refund':
@@ -23685,6 +23760,59 @@ def get_finance_tree():
     credit = sum(c['credit'] for c in classes)
     return jsonify(success=True, classes=classes, debit=debit, credit=credit,
                    balanced=abs(debit - credit) < 0.005, can_edit=has('finance_master.edit'))
+
+
+@app.route('/api/finance/tree/ledger', methods=['GET'])
+@perm('finance_txn.view')
+def finance_tree_ledger():
+    """
+    Every journal line behind one row of the Finance Tree -- an account with all
+    under it (by code), or a payment method -- with a running balance on the
+    account's normal side. JSON, or Excel with format=xlsx.
+    """
+    code = (request.args.get('code') or '').strip()
+    method = request.args.get('method')
+    start, end = request.args.get('start_date') or None, request.args.get('end_date') or None
+    if not (code.isdigit() or (method or '').isdigit()):
+        return jsonify(success=False, error='Choose an account'), 400
+    conn, cur = connection()
+    try:
+        journal = chart_journal(cur, start, end)
+        cur.execute("SELECT account_code, category_name FROM finance_categories WHERE account_code IS NOT NULL")
+        names = {r['account_code']: r['category_name'] for r in cur.fetchall()}
+        title = names.get(code, '')
+        if method:
+            cur.execute("SELECT method_name, method_type FROM payment_methods WHERE id = %s", (method,))
+            pm = cur.fetchone() or {}
+            title, code = pm.get('method_name', ''), ('1102' if pm.get('method_type') == 'bank' else '1101')
+    finally:
+        cur.close()
+        conn.close()
+    mine = [l for l in journal if (str(l['method']) == str(method) if method else str(l['account']).startswith(code))]
+    mine.sort(key=lambda l: (l['day'] or datetime.min.date(), l['ref'] or ''))
+    debit_normal = code[:1] in finance_chart.DEBIT_NORMAL
+    balance, rows = 0.0, []
+    for l in mine:
+        balance += (l['debit'] - l['credit']) if debit_normal else (l['credit'] - l['debit'])
+        rows.append({'day': l['day'].isoformat() if l['day'] else None, 'ref': l['ref'], 'account': l['account'],
+                     'account_name': names.get(l['account'], ''), 'description': l['description'],
+                     'debit': l['debit'], 'credit': l['credit'], 'balance': balance,
+                     'source': l['source'][0], 'source_id': l['source'][1]})
+    totals = {'debit': sum(r['debit'] for r in rows), 'credit': sum(r['credit'] for r in rows), 'balance': balance}
+    if request.args.get('format') == 'xlsx':
+        frame = pd.DataFrame([[r['day'], r['ref'], '%s %s' % (r['account'], r['account_name']), r['description'],
+                               r['debit'] or None, r['credit'] or None, r['balance']] for r in rows],
+                             columns=['التاريخ', 'المرجع', 'الحساب', 'البيان', 'مدين', 'دائن', 'الرصيد'])
+        frame.loc[len(frame)] = ['', '', '', 'الإجمالي', totals['debit'], totals['credit'], totals['balance']]
+        buffer = BytesIO()
+        with ExcelWriter(buffer, engine='openpyxl') as writer:
+            frame.to_excel(writer, sheet_name='دفتر الأستاذ', index=False)
+            writer.sheets['دفتر الأستاذ'].sheet_view.rightToLeft = True
+            _autosize_worksheet(writer.sheets['دفتر الأستاذ'])
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name='ledger_%s.xlsx' % (method and 'pm%s' % method or code),
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return jsonify(success=True, code=code, title=title, rows=rows, **totals)
 
 
 # ----------------------- HELPER: Get Clients and Suppliers for Dropdowns -----------------------
@@ -25077,10 +25205,12 @@ def client_invoices_page():
     conn, cur = connection()
     try:
         refund_category = _refund_category_id(cur)
+        cur.execute("SELECT category_name FROM finance_categories WHERE account_code = %s", (WITHHOLDING_TAX_ACCOUNT,))
+        withholding = {'code': WITHHOLDING_TAX_ACCOUNT, 'name': (cur.fetchone() or {}).get('category_name', '')}
     finally:
         cur.close()
         conn.close()
-    return render_template('client_invoices.html', refund_category_id=refund_category)
+    return render_template('client_invoices.html', refund_category_id=refund_category, withholding=withholding)
 
 
 @app.route('/invoices/<int:invoice_id>/print', methods=['GET'])

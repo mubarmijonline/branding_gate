@@ -296,12 +296,12 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98200})   # no payment method
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual((r.get_json()['amount'], self._pm_balance()), (0.0, before))       # no money moved
-        # In the Finance Tree, as double entry: Dr 1103 178,088 + Dr 1107 1,576 = Cr 4101 157,600 + Cr 2103 22,064.
+        # In the Finance Tree, as double entry: Dr 1103 178,088 + Dr 2104 1,576 = Cr 4101 157,600 + Cr 2103 22,064.
         tree = finance.get('/api/finance/tree').get_json()
         self.assertTrue(tree['balanced'])
         moved = lambda code, side: round(branding_gate.chart_find(tree['classes'], code)[side]
                                          - branding_gate.chart_find(tree_before['classes'], code)[side], 2)
-        self.assertEqual([moved('1103', 'debit'), moved('1107', 'debit'), moved('4101', 'credit'), moved('2103', 'credit'),
+        self.assertEqual([moved('1103', 'debit'), moved('2104', 'debit'), moved('4101', 'credit'), moved('2103', 'credit'),
                           moved('1103', 'credit'), moved('1101', 'debit')],
                          [178088.0, 1576.0, 157600.0, 22064.0, 0.0, 0.0])
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()

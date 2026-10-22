@@ -437,3 +437,10 @@ method. The client's money is collected later with Record payment received
 (Client Payment: Dr cash / Cr 1103); a posted refund is paid back with Pay back
 to client (Client Refund: Dr 1103 / Cr cash). The post API still books money if
 a payment method is sent.
+
+**Daily Journal and ledgers (2026-10-22, Ahmed):** the 1% withheld is booked on
+2104 (`WITHHOLDING_TAX_ACCOUNT`), not 1107. The Approved Transactions tab is the
+Daily Journal (دفتر اليومية): approved transactions plus posted invoices and
+refunds (shown "On account", amount muted, opening the invoice). Any row of the
+Finance Tree opens its ledger (`/api/finance/tree/ledger`: every journal line
+under that code or payment method, running balance, Excel).

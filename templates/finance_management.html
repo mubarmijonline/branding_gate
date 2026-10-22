@@ -758,6 +758,10 @@ body.finance-surface {
 .chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
 .type-badge.transfer { background: #eef2ff; color: #4f46e5; }
 .chart-bal { color: #0f172a; }
+#chartTree .chart-row:not(.chart-entity) { cursor: pointer; }
+.ledger-totals { display: flex; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ledger-totals div { border: 1px solid var(--border); border-radius: 12px; padding: 8px 14px; min-width: 160px; }
+.ledger-totals span { display: block; font-size: 11px; text-transform: uppercase; color: var(--muted); }
 .chart-search-wrap { position: relative; display: inline-flex; align-items: center; }
 .chart-search-wrap i { position: absolute; inset-inline-start: 12px; color: var(--muted); font-size: 13px; }
 .finance-toolbar .filters .chart-search-wrap input.chart-search { padding-inline-start: 36px; min-width: 300px; font-size: 14px; border: 2px solid var(--primary-soft, #e0e7ff); }
@@ -1276,7 +1280,7 @@ body.finance-surface {
         <!-- Tabs -->
         <div class="finance-tabs">
             <button class="finance-tab active" data-tab="approved-transactions">
-                <i class="fas fa-check-circle mr-2"></i> Approved Transactions
+                <i class="fas fa-book mr-2"></i> Daily Journal
             </button>
             {% if session.get('user_role') in ['admin', 'finance'] %}
             <button class="finance-tab" data-tab="pending-approvals">
@@ -1318,7 +1322,7 @@ body.finance-surface {
             </button>
         </div>
         
-        <!-- Tab: Approved Transactions -->
+        <!-- Tab: Daily Journal (approved transactions and posted invoices) -->
         <div class="tab-panel active" id="tab-approved-transactions">
             <div class="finance-toolbar">
                 <div class="filters" style="flex-wrap: wrap; gap: 8px;">
@@ -2316,6 +2320,30 @@ body.finance-surface {
                 <button type="button" class="btn-pill btn-pill-primary" id="catSubmitBtn" onclick="submitCategory()">
                     <i class="fas fa-plus"></i> Add Category
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ledger of one Finance Tree row -->
+<div class="modal fade" id="ledgerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ledgerTitle">Ledger</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <div class="ledger-totals" id="ledgerTotals"></div>
+                <div style="overflow-x: auto; max-height: 60vh;"><table class="finance-table" style="margin: 0;">
+                    <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Description</th>
+                        <th style="text-align:end">Debit</th><th style="text-align:end">Credit</th><th style="text-align:end">Balance</th></tr></thead>
+                    <tbody id="ledgerBody"></tbody>
+                </table></div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn-pill btn-pill-outline" id="ledgerExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+                <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -3646,6 +3674,10 @@ function accountLabel(t) {
     return (t.transaction_type === 'income' ? 'From ' : 'To ') + name;
 }
 function typeBadge(t) {
+    if (t.kind === 'invoice' || t.kind === 'refund') {
+        return '<span class="type-badge transfer" title="Posted by Finance: on the client\'s account, no money moved"><i class="fas fa-file-invoice mr-1"></i>' +
+               (t.kind === 'invoice' ? 'Invoice' : 'Refund') + '</span>';
+    }
     if (isTransferLeg(t)) {
         return '<span class="type-badge transfer" title="' + escHtml(t.reference_number || 'Transfer between payment methods') + '"><i class="fas fa-exchange-alt mr-1"></i>' +
                (t.transaction_type === 'income' ? 'Transfer in' : 'Transfer out') + '</span>';
@@ -3663,8 +3695,12 @@ function renderApprovedTransactions(transactions) {
     }
     
     transactions.forEach(t => {
-        const plusAmount = t.transaction_type === 'income' ? `<strong style="color: var(--success);">${formatCurrency(t.amount)}</strong>` : '-';
-        const minusAmount = t.transaction_type === 'expense' ? `<strong style="color: var(--danger);">${formatCurrency(t.amount)}</strong>` : '-';
+        const doc = t.kind === 'invoice' || t.kind === 'refund';
+        // An invoice adds to what the client owes, a refund takes off it; neither is cash.
+        const plusAmount = t.transaction_type === 'income' ? `<strong style="color: var(--success);">${formatCurrency(t.amount)}</strong>`
+            : (t.kind === 'invoice' ? `<span style="color: var(--muted);" title="On the client's account (1103)">${formatCurrency(t.amount)}</span>` : '-');
+        const minusAmount = t.transaction_type === 'expense' ? `<strong style="color: var(--danger);">${formatCurrency(t.amount)}</strong>`
+            : (t.kind === 'refund' ? `<span style="color: var(--muted);" title="Credited to the client (1103)">${formatCurrency(t.amount)}</span>` : '-');
         tbody.append(`
             <tr>
                 <td><span style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%); color: white; padding: 4px 10px; border-radius: 6px; font-weight: 700;">${t.serial_number || '-'}</span></td>
@@ -3679,15 +3715,14 @@ function renderApprovedTransactions(transactions) {
                 <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.description || '-'}</td>
                 <td>${plusAmount}</td>
                 <td>${minusAmount}</td>
-                <td>${t.payment_method_name || '-'}</td>
+                <td>${doc ? '<span style="color: var(--muted);">On account</span>' : (t.payment_method_name || '-')}</td>
                 <td>
                     <span style="color: var(--success);">${t.approved_by || '-'}</span>
                     ${t.approved_at ? `<br><small style="color: var(--muted);">${t.approved_at.split('T')[0]}</small>` : ''}
                 </td>
                 <td>
-                    <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewTransaction(${t.id})">
-                        <i class="fas fa-eye"></i>
-                    </button>
+                    ${doc ? `<a class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" href="/invoices?open=${t.invoice_id}" target="_blank" title="Open the invoice"><i class="fas fa-eye"></i></a>`
+                          : `<button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewTransaction(${t.id})"><i class="fas fa-eye"></i></button>`}
                 </td>
             </tr>
         `);
@@ -4606,6 +4641,37 @@ $(document).on('click', '.chart-toggle', function(e) {
     $(this).closest('.chart-tree, .category-tree').find('[data-chart-parent="' + id + '"]').first().toggle();
     $(this).toggleClass('closed');
 });
+// A row of the tree opens its ledger: every entry behind the number.
+$(document).on('click', '#chartTree .chart-row:not(.chart-entity)', function(e) {
+    if ($(e.target).closest('.tree-actions, .chart-toggle').length) return;
+    openLedger(treeCats[$(this).attr('data-chart-id')]);
+});
+function openLedger(node) {
+    if (!node) return;
+    const q = new URLSearchParams();
+    if (node.method) q.set('method', String(node.id).replace('pm-', '')); else q.set('code', node.code);
+    if ($('#treeStartDate').val()) q.set('start_date', $('#treeStartDate').val());
+    if ($('#treeEndDate').val()) q.set('end_date', $('#treeEndDate').val());
+    $('#ledgerTitle').html('<bdi>' + escHtml(node.code + ' ' + node.name) + '</bdi>');
+    $('#ledgerBody').html('<tr><td colspan="7" style="text-align:center; padding: 30px;">Loading...</td></tr>');
+    $('#ledgerTotals').empty();
+    $('#ledgerExcel').attr('href', '/api/finance/tree/ledger?' + q.toString() + '&format=xlsx');
+    $('#ledgerModal').modal('show');
+    fetch('/api/finance/tree/ledger?' + q.toString()).then(r => r.json()).then(function(d) {
+        if (!d.success) { $('#ledgerBody').html('<tr><td colspan="7">' + escHtml(d.error) + '</td></tr>'); return; }
+        $('#ledgerTotals').html('<div><span>Debit</span><b>' + formatCurrency(d.debit) + '</b></div><div><span>Credit</span><b>' +
+            formatCurrency(d.credit) + '</b></div><div><span>Balance</span><b>' + formatCurrency(d.balance) + '</b></div>');
+        $('#ledgerBody').html(d.rows.length ? d.rows.map(function(r) {
+            const ref = r.source === 'invoice'
+                ? '<a href="/invoices?open=' + r.source_id + '" target="_blank">' + escHtml(r.ref) + '</a>'
+                : '<a href="#" onclick="viewTransaction(' + r.source_id + '); return false;">' + escHtml(r.ref) + '</a>';
+            return '<tr><td>' + escHtml(r.day || '') + '</td><td>' + ref + '</td><td><bdi>' + escHtml(r.account + ' ' + r.account_name) +
+                '</bdi></td><td>' + escHtml(r.description || '') + '</td><td style="text-align:end">' + (r.debit ? formatCurrency(r.debit) : '') +
+                '</td><td style="text-align:end">' + (r.credit ? formatCurrency(r.credit) : '') + '</td><td style="text-align:end"><b>' +
+                formatCurrency(r.balance) + '</b></td></tr>';
+        }).join('') : '<tr><td colspan="7" style="text-align:center; padding: 30px; color: var(--muted);">No entries in this period</td></tr>');
+    });
+}
 $(document).on('click', '[data-tree-sub]', function(e) {
     e.stopPropagation();
     openAddAccountModal(treeCats[$(this).data('tree-sub')]);

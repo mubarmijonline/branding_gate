@@ -142,7 +142,8 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 
 <script>
 (function () {
-  var REFUND_CATEGORY_ID = {{ refund_category_id|tojson }};   // Client Refunds: money paid back to a client
+  var REFUND_CATEGORY_ID = {{ refund_category_id|tojson }};
+  var WITHHOLDING = {{ withholding|tojson }};   // where the 1% withheld is booked   // Client Refunds: money paid back to a client
   var CAN = { create: {{ ('invoice.create' in _p)|tojson }}, post: {{ ('invoice.post' in _p)|tojson }},
               editItems: {{ ('invoice_catalog.edit' in _p)|tojson }} };
   var STAGES = [['', 'All'], ['draft', 'Draft'], ['submitted', 'With Finance'], ['returned', 'Returned'], ['posted', 'Posted'], ['refund', 'Refunds']];
@@ -489,8 +490,8 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     };
     var lines = refund
       ? row('4102', 'مردودات ومسموحات المبيعات', t.subtotal, 0) + row('2103', 'ضريبة القيمة المضافة للمبيعات', t.vat_total, 0) +
-        row('1103', 'العملاء', 0, t.total) + (t.profit_tax_total ? row('1107', 'ضريبة الخصم والتحصيل', 0, t.profit_tax_total) : '')
-      : row('1103', 'العملاء', t.total, 0) + (t.profit_tax_total ? row('1107', 'ضريبة الخصم والتحصيل', t.profit_tax_total, 0) : '') +
+        row('1103', 'العملاء', 0, t.total) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, 0, t.profit_tax_total) : '')
+      : row('1103', 'العملاء', t.total, 0) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, t.profit_tax_total, 0) : '') +
         row('4101', 'المبيعات', 0, t.subtotal) + row('2103', 'ضريبة القيمة المضافة للمبيعات', 0, t.vat_total);
     $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:minmax(0,220px) 1fr">' +
       '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '"></div>' +

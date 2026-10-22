@@ -111,7 +111,7 @@ SYSTEM_IDS = {
 }
 # Further accounts the system reads or books by code (invoices: 1107, 2103, 4101);
 # they cannot be renamed or deleted.
-SYSTEM_CODES = {'1', '2', '3', '4', '5', '6', '1101', '1102', '1107', '1110', '2103', '4101'} | set(SYSTEM_IDS.values())
+SYSTEM_CODES = {'1', '2', '3', '4', '5', '6', '1101', '1102', '1107', '1110', '2103', '2104', '4101'} | set(SYSTEM_IDS.values())
 
 CLASS_TYPE = {'1': 'asset', '2': 'liability', '3': 'equity', '4': 'income', '5': 'expense', '6': 'expense'}
 # Debit-normal classes grow with money out; credit-normal ones with money in.

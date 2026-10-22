@@ -197,15 +197,24 @@ class FinanceCategoriesTest(unittest.TestCase):
                        VALUES ('invoice', 99901, %s, %s, %s, '2026-10-20', '2026-10', 1000, 140, 10, 1130, 'posted', 1),
                               ('invoice', 99902, %s, %s, %s, '2026-10-20', '2026-10', 5000, 700, 50, 5650, 'submitted', 1)""",
                     (sr['id'], sr['company_id'], sr['client_id']) * 2)
-        got = self.web.get('/api/finance/income-statement?period=custom&start_date=2026-10-01&end_date=2026-10-31').get_json()
+        got = self.web.get('/api/finance/income-statement?period=custom&start_date=2026-10-20&end_date=2026-10-20').get_json()
         sales = next(g for g in got['income']['categories'] if g['name'].startswith('41 '))
         self.assertEqual(sales['total'], 1000.0)
         # Posted (not submitted) invoice: Dr 1103 total, Dr 1107 1%; Cr 4101 before tax, Cr 2103 VAT.
         got = self.web.get('/api/finance/tree?start_date=2026-10-20&end_date=2026-10-20').get_json()
         find = lambda code: branding_gate.chart_find(got['classes'], code)
-        self.assertEqual((find('1103')['debit'], find('1107')['debit'], find('4101')['credit'], find('2103')['credit']),
+        self.assertEqual((find('1103')['debit'], find('2104')['debit'], find('4101')['credit'], find('2103')['credit']),
                          (1130.0, 10.0, 1000.0, 140.0))
         self.assertTrue(got['balanced'])
+        # Its ledger on 1103 and on class 4, and the Daily Journal lists it (not the submitted one).
+        led = self.web.get('/api/finance/tree/ledger?code=1103&start_date=2026-10-20&end_date=2026-10-20').get_json()
+        self.assertEqual([(r['ref'], r['debit'], r['balance']) for r in led['rows']], [('Invoice 99901', 1130.0, 1130.0)])
+        self.assertEqual(self.web.get('/api/finance/tree/ledger?code=4&start_date=2026-10-20&end_date=2026-10-20').get_json()['balance'], 1000.0)
+        self.assertEqual(self.web.get('/api/finance/tree/ledger?code=4&format=xlsx').status_code, 200)
+        journal = self.web.get('/api/finance/transactions?status=approved&start_date=2026-10-20&end_date=2026-10-20').get_json()
+        self.assertEqual([t['transaction_code'] for t in journal['transactions'] if t.get('kind')], ['Invoice 99901'])
+        self.assertFalse(any(t.get('kind') for t in self.web.get(
+            '/api/finance/transactions?status=approved&type=income&start_date=2026-10-20').get_json()['transactions']))
         # SR supplier costs are not booked until Finance pays: 2101 holds only supplier payments.
         cur.execute("SELECT COALESCE(SUM(amount), 0) s FROM finance_transactions WHERE status = 'approved' AND category_id = 10")
         self.assertEqual(branding_gate.chart_find(self._tree(), '2101')['debit'], float(cur.fetchone()['s']))
