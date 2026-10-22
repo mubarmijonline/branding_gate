@@ -140,9 +140,10 @@ class FinanceCategoriesTest(unittest.TestCase):
         self.assertEqual(find('3101')['value'], 5000.0)                                    # equity grows with money in
         self.assertNotIn('live', find('1101'))
         box = next(k for k in find('1101')['children'] if k['id'] == 'pm-%d' % self.pm)          # its payment method
-        self.assertEqual((box['money_in'], box['money_out'], box['code'][:4]), (5000.0, 300.0, '1101'))
+        self.assertEqual((box['debit'], box['credit'], box['code'][:4]), (5000.0, 300.0, '1101'))
         self.assertFalse(any(k['id'] == 'pm-%d' % self.pm for k in find('1102')['children']))   # cash, not bank
-        self.assertEqual(find('11')['money_in'], 0.0)                                          # not counted twice
+        self.assertEqual((find('11')['debit'], find('1')['value']), (5000.0, 4700.0))         # cash rolls up into assets
+        self.assertEqual(sum(c['debit'] for c in tree), sum(c['credit'] for c in tree))        # double entry balances
         listed = self.web.get('/api/finance/transactions?status=approved&category_ids=%d' % self.ids['62']).get_json()
         self.assertEqual([t['amount'] for t in listed['transactions'] if t['id'] == r.get_json()['id']], [300.0])
 
@@ -163,7 +164,7 @@ class FinanceCategoriesTest(unittest.TestCase):
         tree = self._tree()
         box = next(k for k in branding_gate.chart_find(tree, '1101')['children'] if k['id'] == 'pm-%d' % self.pm)
         bnk = next(k for k in branding_gate.chart_find(tree, '1102')['children'] if k['id'] == 'pm-%d' % bank)
-        self.assertEqual((box['money_out'], bnk['money_in']), (1000.0, 1000.0))
+        self.assertEqual((box['credit'], bnk['debit']), (1000.0, 1000.0))
         stats = self.web.get('/api/finance/statistics').get_json()
         # A transfer is neither income nor expense.
         self.assertEqual((stats['total_income'], stats['total_expense']), (stats_before['total_income'], stats_before['total_expense']))
@@ -192,17 +193,22 @@ class FinanceCategoriesTest(unittest.TestCase):
         cur.execute("SELECT id, client_id, company_id FROM sales_request ORDER BY id LIMIT 1")
         sr = cur.fetchone()
         cur.execute("""INSERT INTO client_invoice (kind, invoice_number, sales_request_id, company_id, client_id, invoice_date,
-                           billing_month, subtotal, vat_total, total, status, created_by)
-                       VALUES ('invoice', 99901, %s, %s, %s, '2026-10-20', '2026-10', 1000, 140, 1130, 'posted', 1)""",
-                    (sr['id'], sr['company_id'], sr['client_id']))
+                           billing_month, subtotal, vat_total, profit_tax_total, total, status, created_by)
+                       VALUES ('invoice', 99901, %s, %s, %s, '2026-10-20', '2026-10', 1000, 140, 10, 1130, 'posted', 1),
+                              ('invoice', 99902, %s, %s, %s, '2026-10-20', '2026-10', 5000, 700, 50, 5650, 'submitted', 1)""",
+                    (sr['id'], sr['company_id'], sr['client_id']) * 2)
         got = self.web.get('/api/finance/income-statement?period=custom&start_date=2026-10-01&end_date=2026-10-31').get_json()
         sales = next(g for g in got['income']['categories'] if g['name'].startswith('41 '))
         self.assertEqual(sales['total'], 1000.0)
-        # The tree counts only approved finance transactions: no invoice, no SR supplier cost.
-        tree = self._tree(start_date='2026-10-01')
-        self.assertEqual(branding_gate.chart_find(tree, '4101')['value'], 0.0)
+        # Posted (not submitted) invoice: Dr 1103 total, Dr 1107 1%; Cr 4101 before tax, Cr 2103 VAT.
+        got = self.web.get('/api/finance/tree?start_date=2026-10-20&end_date=2026-10-20').get_json()
+        find = lambda code: branding_gate.chart_find(got['classes'], code)
+        self.assertEqual((find('1103')['debit'], find('1107')['debit'], find('4101')['credit'], find('2103')['credit']),
+                         (1130.0, 10.0, 1000.0, 140.0))
+        self.assertTrue(got['balanced'])
+        # SR supplier costs are not booked until Finance pays: 2101 holds only supplier payments.
         cur.execute("SELECT COALESCE(SUM(amount), 0) s FROM finance_transactions WHERE status = 'approved' AND category_id = 10")
-        self.assertEqual(branding_gate.chart_find(self._tree(), '2101')['money_out'], float(cur.fetchone()['s']))
+        self.assertEqual(branding_gate.chart_find(self._tree(), '2101')['debit'], float(cur.fetchone()['s']))
 
 
 if __name__ == '__main__':

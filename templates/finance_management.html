@@ -734,7 +734,7 @@ body.finance-surface {
 }
 /* Chart of accounts: one row per class, group and account, indented by depth. */
 .chart-tree, .category-tree { padding: 6px 0; }
-.chart-head { display: grid; grid-template-columns: 90px 1fr 130px 130px 110px; gap: 10px; padding: 10px 20px; font-size: 11px;
+.chart-head { display: grid; grid-template-columns: 90px 1fr 130px 130px 130px 110px; gap: 10px; padding: 10px 20px; font-size: 11px;
               font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
 .chart-head-r { text-align: end; }
 .chart-row { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid #f1f5f9;
@@ -757,14 +757,18 @@ body.finance-surface {
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
 .chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
 .type-badge.transfer { background: #eef2ff; color: #4f46e5; }
+.chart-bal { color: #0f172a; }
+.chart-search-wrap { position: relative; display: inline-flex; align-items: center; }
+.chart-search-wrap i { position: absolute; inset-inline-start: 12px; color: var(--muted); font-size: 13px; }
+.finance-toolbar .filters .chart-search-wrap input.chart-search { padding-inline-start: 36px; min-width: 300px; font-size: 14px; border: 2px solid var(--primary-soft, #e0e7ff); }
 .trans-path { margin-top: 6px; font-size: 12px; color: #047857; }
 .chart-note { padding: 12px 20px;font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
 .chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
-.chart-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.chart-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .chart-summary div { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
 .chart-summary span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .chart-summary b { font-size: 20px; }
-@media (max-width: 768px) { .chart-summary { grid-template-columns: 1fr; } .chart-meta { display: none; } .chart-value { width: 90px; font-size: 12px; } .chart-head { grid-template-columns: 60px 1fr 90px 90px 110px; } }
+@media (max-width: 768px) { .chart-summary { grid-template-columns: 1fr; } .chart-meta { display: none; } .chart-value { width: 90px; font-size: 12px; } .chart-head { grid-template-columns: 60px 1fr 90px 90px 90px 110px; } }
 /* Finance Tree editing: a category's actions sit after its total. */
 .tree-actions { display: inline-flex; gap: 4px; align-items: center; }
 .tree-act { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted);
@@ -1511,12 +1515,17 @@ body.finance-surface {
         <div class="tab-panel" id="tab-finance-tree">
             <div class="finance-toolbar">
                 <div class="filters">
+                    <div class="chart-search-wrap"><i class="fas fa-search"></i>
+                        <input type="search" id="treeSearch" class="chart-search" placeholder="Search code or account name"></div>
                     <input type="date" id="treeStartDate">
                     <input type="date" id="treeEndDate">
                     <button class="btn-pill btn-pill-outline" onclick="loadFinanceTree()">
                         <i class="fas fa-filter"></i> Apply Filter
                     </button>
-                    <input type="search" id="treeSearch" class="chart-search" placeholder="Search code or account name">
+                </div>
+                <div class="actions">
+                    <button class="btn-pill btn-pill-outline" onclick="expandChart('#chartTree', true)"><i class="fas fa-angle-double-down"></i> Expand all</button>
+                    <button class="btn-pill btn-pill-outline" onclick="expandChart('#chartTree', false)"><i class="fas fa-angle-double-up"></i> Collapse all</button>
                 </div>
             </div>
 
@@ -1524,11 +1533,12 @@ body.finance-surface {
                 <div><span>Revenue (4)</span><b id="chartRevenue">EGP 0.00</b></div>
                 <div><span>Cost of sales and expenses (5, 6)</span><b id="chartCosts">EGP 0.00</b></div>
                 <div><span>Net profit</span><b id="chartNet">EGP 0.00</b></div>
+                <div><span>Debit = Credit</span><b id="chartBalanced">-</b></div>
             </div>
             <div class="finance-card">
-                <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Money in</span><span class="chart-head-r">Money out</span></div>
+                <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Debit</span><span class="chart-head-r">Credit</span><span class="chart-head-r">Balance</span></div>
                 <div id="chartTree" class="chart-tree"></div>
-                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Only approved finance transactions count, each under the account it was posted to. Every payment method is listed under 1101 (cash) or 1102 (bank) with the money through it and its current balance; those are not added into their group again.</div>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Double entry from what Finance approved: each transaction debits and credits its payment method and its account; each posted invoice debits 1103 (total) and 1107 (1% withheld) and credits 4101 (before tax) and 2103 (VAT); a refund the reverse on 4102. Balance is on the account's normal side. Payment methods sit under 1101 (cash) and 1102 (bank).</div>
             </div>
         </div>
 
@@ -4530,10 +4540,11 @@ function chartRows(nodes, depth, withAmounts, cls) {
         const c = cls || n.code.charAt(0);
         const meta = withAmounts && n.count ? `<span class="chart-meta" title="Transactions">${n.count}</span>` : '';
         const cell = v => `<span class="chart-value">${v ? formatCurrency(v) : '-'}</span>`;
-        const value = withAmounts ? cell(n.money_in) + cell(n.money_out) : '';
+        const value = withAmounts ? cell(n.debit) + cell(n.credit) +
+            `<span class="chart-value chart-bal${n.value < 0 ? ' neg' : ''}">${n.debit || n.credit ? formatCurrency(n.value) : '-'}</span>` : '';
         let html = `<div class="chart-row depth-${Math.min(depth, 3)}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
                          style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
-            <span class="chart-toggle">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
+            <span class="chart-toggle${n.children.length ? ' closed' : ''}">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
             <span class="chart-code">${escHtml(n.code)}</span>
             <span class="chart-name">${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}</span>
             ${meta}${value}${treeActions(n, depth)}
@@ -4543,10 +4554,10 @@ function chartRows(nodes, depth, withAmounts, cls) {
             html += `<div class="chart-row chart-entity" onclick="${open}" style="padding-inline-start:${12 + (depth + 1) * 22}px">
                 <span class="chart-toggle"></span><span class="chart-code"><i class="fas ${ent.entity_type === 'client' ? 'fa-user' : 'fa-truck'}"></i></span>
                 <span class="chart-name">${escHtml(ent.name)}</span>
-                <span class="chart-meta">${ent.count}</span><span class="chart-value">${ent.entity_type === 'client' ? formatCurrency(ent.total) : '-'}</span><span class="chart-value">${ent.entity_type === 'client' ? '-' : formatCurrency(ent.total)}</span></div>`;
+                <span class="chart-meta">${ent.count}</span><span class="chart-value">${ent.entity_type === 'client' ? '-' : formatCurrency(ent.total)}</span><span class="chart-value">${ent.entity_type === 'client' ? formatCurrency(ent.total) : '-'}</span><span class="chart-value">-</span></div>`;
         });
         if (n.children.length) {
-            html += `<div class="chart-children" data-chart-parent="${n.id}">${chartRows(n.children, depth + 1, withAmounts, c)}</div>`;
+            html += `<div class="chart-children" data-chart-parent="${n.id}" style="display: none;">${chartRows(n.children, depth + 1, withAmounts, c)}</div>`;
         }
         return html;
     }).join('');
@@ -4557,19 +4568,34 @@ function renderChart(container, classes, withAmounts) {
                                      : '<div class="empty-state" style="padding: 30px;">No accounts</div>');
 }
 
-// Rows matching the search, with the groups and classes above them.
+// Open or close every branch (the tree starts closed, showing the classes).
+function expandChart(container, open) {
+    $(container).find('.chart-row').show();
+    $(container).find('.chart-children').toggle(open);
+    $(container).find('.chart-toggle').has('i').toggleClass('closed', !open);
+}
+
+// Rows matching the search, opened down to them, with what is under a matching group.
 function filterChart(container, term) {
     term = (term || '').trim().toLowerCase();
     const $rows = $(container).find('.chart-row').not('.chart-entity');
-    if (!term) { $rows.show(); $(container).find('.chart-entity').show(); return; }
+    if (!term) { expandChart(container, false); return; }
     $rows.hide();
     $(container).find('.chart-entity').hide();
-    $(container).find('.chart-children').show();
+    $(container).find('.chart-children').hide();
+    $(container).find('.chart-toggle').has('i').addClass('closed');
     $rows.filter(function() { return String($(this).attr('data-search')).indexOf(term) >= 0; }).each(function() {
+        const $kids = $(container).find('[data-chart-parent="' + $(this).attr('data-chart-id') + '"]').first();
+        $kids.find('.chart-row').show();
         let id = $(this).attr('data-chart-id');
         while (id) {
             $(container).find('.chart-row[data-chart-id="' + id + '"]').show();
-            id = treeCats[id] && treeCats[id].parent_id;
+            const parent = treeCats[id] && treeCats[id].parent_id;
+            if (parent) {
+                $(container).find('[data-chart-parent="' + parent + '"]').first().show();
+                $(container).find('.chart-row[data-chart-id="' + parent + '"] .chart-toggle').removeClass('closed');
+            }
+            id = parent;
         }
     });
 }
@@ -4603,6 +4629,9 @@ function renderFinanceTree(data) {
     $('#chartCosts').text(formatCurrency(costs));
     $('#chartNet').text(formatCurrency(revenue - costs))
         .css('color', revenue - costs >= 0 ? 'var(--finance-income)' : 'var(--finance-expense)');
+    $('#chartBalanced').html(data.balanced
+        ? '<span style="color: var(--finance-income);"><i class="fas fa-check-circle"></i> ' + formatCurrency(data.debit) + '</span>'
+        : '<span style="color: var(--finance-expense);"><i class="fas fa-exclamation-triangle"></i> ' + formatCurrency(data.debit - data.credit) + '</span>');
 }
 
 // ============================================

@@ -23487,29 +23487,63 @@ def get_finance_statistics():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def chart_movements(cur, start=None, end=None):
-    """Approved money in and out per account for a period: {account id: {money_in, money_out, count}}."""
-    q = """SELECT COALESCE(NULLIF(subcategory_id, 0), category_id) AS account_id,
-                  SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE 0 END) AS money_in,
-                  SUM(CASE WHEN transaction_type = 'expense' THEN amount ELSE 0 END) AS money_out,
-                  COUNT(*) AS n
-           FROM finance_transactions WHERE status = 'approved'"""
+# Where the 1% commercial-profits tax a client withholds is booked: 1107
+# (ضريبة الخصم والتحصيل, ours to claim back). Change to '2104' if Finance books it there.
+WITHHOLDING_TAX_ACCOUNT = '1107'
+
+
+def chart_journal(cur, start=None, end=None):
+    """
+    Every approved event as balanced debit and credit lines on the chart
+    (double entry, derived each time from the records themselves):
+
+    - a finance transaction: money in debits its payment method's account
+      (1101 cash / 1102 bank) and credits the account chosen; money out the
+      reverse. A transfer leg (posted to 1101/1102) is only its own side. A
+      refund paid back to a client debits 1103, the credit note having
+      already taken 4102.
+    - a posted invoice: 1103 debit the total and the withholding account the
+      1%; 4101 credit the subtotal, 2103 the VAT. A posted refund: the reverse
+      on 4102.
+
+    Lines: {account (code), debit, credit, method (payment method id or None)}.
+    """
+    cur.execute("SELECT id, account_code, category_code FROM finance_categories")
+    cats = {r['id']: r for r in cur.fetchall()}
+    lines = []
+
+    def line(code, debit=0.0, credit=0.0, method=None):
+        if debit or credit:
+            lines.append({'account': code, 'debit': float(debit), 'credit': float(credit), 'method': method})
+
+    q = """SELECT ft.transaction_type, ft.amount, COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id) AS account_id,
+                  ft.payment_method_id, pm.method_type
+           FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+           WHERE ft.status = 'approved'"""
     params = []
     if start:
-        q += " AND transaction_date >= %s"
+        q += " AND ft.transaction_date >= %s"
         params.append(start)
     if end:
-        q += " AND transaction_date <= %s"
+        q += " AND ft.transaction_date <= %s"
         params.append(end)
-    cur.execute(q + " GROUP BY account_id", params)
-    return {r['account_id']: {'money_in': float(r['money_in'] or 0), 'money_out': float(r['money_out'] or 0),
-                              'count': int(r['n'])} for r in cur.fetchall()}
+    cur.execute(q, params)
+    for t in cur.fetchall():
+        amount = float(t['amount'] or 0)
+        cash = '1102' if t['method_type'] == 'bank' else '1101'
+        cat = cats.get(t['account_id']) or {}
+        code = cat.get('account_code')
+        if t['transaction_type'] == 'income':
+            line(cash, debit=amount, method=t['payment_method_id'])
+            if code not in ('1101', '1102'):
+                line(code or '?', credit=amount)
+        else:
+            line(cash, credit=amount, method=t['payment_method_id'])
+            if code not in ('1101', '1102'):
+                refund_paid = cat.get('category_code') == CLIENT_REFUNDS_CATEGORY_CODE
+                line('1103' if refund_paid else (code or '?'), debit=amount)
 
-
-def chart_sales(cur, start=None, end=None):
-    """Posted invoices' and refunds' subtotals (before VAT) for a period: what 4101 and 4102 earn."""
-    q = """SELECT kind, COALESCE(SUM(subtotal), 0) AS s, COUNT(*) AS n FROM client_invoice
-           WHERE status = 'posted'"""
+    q = """SELECT kind, subtotal, vat_total, profit_tax_total, total FROM client_invoice WHERE status = 'posted'"""
     params = []
     if start:
         q += " AND invoice_date >= %s"
@@ -23517,97 +23551,87 @@ def chart_sales(cur, start=None, end=None):
     if end:
         q += " AND invoice_date <= %s"
         params.append(end)
-    cur.execute(q + " GROUP BY kind", params)
-    got = {r['kind']: (float(r['s']), int(r['n'])) for r in cur.fetchall()}
-    return {'4101': got.get('invoice', (0.0, 0)), '4102': got.get('refund', (0.0, 0))}
+    cur.execute(q, params)
+    for inv in cur.fetchall():
+        sub, vat = float(inv['subtotal'] or 0), float(inv['vat_total'] or 0)
+        tax, total = float(inv['profit_tax_total'] or 0), float(inv['total'] or 0)
+        if inv['kind'] == 'refund':
+            line('4102', debit=sub)
+            line('2103', debit=vat)
+            line('1103', credit=total)
+            line(WITHHOLDING_TAX_ACCOUNT, credit=tax)
+        else:
+            line('1103', debit=total)
+            line(WITHHOLDING_TAX_ACCOUNT, debit=tax)
+            line('4101', credit=sub)
+            line('2103', credit=vat)
+    return lines
 
 
-def chart_tree(cur, start=None, end=None, sales=False):
+def chart_tree(cur, start=None, end=None):
     """
-    The chart as nested nodes with the approved finance transactions posted to
-    each account: money in, money out and a value on the account's normal side
-    (assets, costs, expenses: out - in; liabilities, equity, revenue: in - out),
-    rolled up to groups and classes. Only what Finance approved counts. With
-    `sales` (the income statement), 4101 and 4102 also earn from posted
-    invoices and refunds.
+    The chart as nested nodes with each account's debit, credit and balance
+    (on its normal side: assets, costs, expenses debit - credit; liabilities,
+    equity, revenue credit - debit) from the journal, rolled up to groups and
+    classes. Every payment method is a row under 1101 or 1102.
     """
     rows = chart_accounts(cur)
-    moves = chart_movements(cur, start, end)
-    sales = chart_sales(cur, start, end) if sales else {'4101': (0.0, 0), '4102': (0.0, 0)}
+    by_code = {r['account_code']: rid for rid, r in rows.items() if r['account_code']}
+    journal = chart_journal(cur, start, end)
+    sums, by_method = {}, {}
+    for l in journal:
+        acc = sums.setdefault(l['account'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+        acc['debit'] += l['debit']
+        acc['credit'] += l['credit']
+        acc['count'] += 1
+        if l['method']:
+            m = by_method.setdefault(l['method'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+            m['debit'] += l['debit']
+            m['credit'] += l['credit']
+            m['count'] += 1
+
+    cur.execute("""SELECT id, method_name, method_type, bank_name, account_number, current_balance, is_active
+                   FROM payment_methods ORDER BY is_active DESC, id""")
+    methods = cur.fetchall()
+
+    def method_rows(code, parent_id):
+        kind = 'bank' if code == '1102' else 'cash'
+        mine = [m for m in methods if (m['method_type'] or 'cash') == kind]
+        out = []
+        # ponytail: the row code is its place under the account (110201, 110202);
+        # it is not stored, so closing a method can renumber the ones after it.
+        for n, m in enumerate(mine, start=1):
+            s_ = by_method.get(m['id'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+            out.append({'id': 'pm-%d' % m['id'], 'code': '%s%02d' % (code, n), 'name': m['method_name'],
+                        'type': 'asset', 'parent_id': parent_id, 'is_system': True, 'method': True,
+                        'is_active': bool(m['is_active']),
+                        'description': ' - '.join(x for x in (m['bank_name'], m['account_number']) if x),
+                        'balance': float(m['current_balance'] or 0),
+                        'debit': s_['debit'], 'credit': s_['credit'], 'count': s_['count'],
+                        'value': s_['debit'] - s_['credit'], 'children': []})
+        return out
 
     def build(rid):
         r = rows[rid]
         code = r['account_code'] or ''
-        m = moves.get(rid, {'money_in': 0.0, 'money_out': 0.0, 'count': 0})
-        kids = [build(c) for c in r['children']]
-        debit = code[:1] in finance_chart.DEBIT_NORMAL
-        own = (m['money_out'] - m['money_in']) if debit else (m['money_in'] - m['money_out'])
-        count = m['count']
-        if code == '4101':
-            own += sales['4101'][0]
-            count += sales['4101'][1]
-        elif code == '4102' and sales['4102'][1]:
-            # ponytail: on the income statement a refund counts as its credit
-            # note; the cash paid back settles the client's account, so it is
-            # not counted twice.
-            own = -sales['4102'][0]
-            count += sales['4102'][1]
-        node = {'id': rid, 'code': code, 'name': r['category_name'], 'type': r['category_type'],
+        if code in ('1101', '1102'):
+            kids = method_rows(code, rid)
+            own = {'debit': 0.0, 'credit': 0.0, 'count': 0}
+        else:
+            kids = [build(c) for c in r['children']]
+            own = sums.get(code, {'debit': 0.0, 'credit': 0.0, 'count': 0})
+        debit = own['debit'] + sum(k['debit'] for k in kids)
+        credit = own['credit'] + sum(k['credit'] for k in kids)
+        normal_debit = code[:1] in finance_chart.DEBIT_NORMAL
+        return {'id': rid, 'code': code, 'name': r['category_name'], 'type': r['category_type'],
                 'parent_id': r['parent_id'], 'is_system': bool(r['is_system']),
-                'description': r['description'] or '',
-                'money_in': m['money_in'] + sum(k['money_in'] for k in kids),
-                'money_out': m['money_out'] + sum(k['money_out'] for k in kids),
-                'count': count + sum(k['count'] for k in kids),
-                'value': own + sum(k['value'] for k in kids), 'children': kids}
-        return node
+                'description': r['description'] or '', 'debit': debit, 'credit': credit,
+                'count': own['count'] + sum(k['count'] for k in kids),
+                'value': (debit - credit) if normal_debit else (credit - debit), 'children': kids,
+                'methods_total': code in ('1101', '1102')}
 
     classes = [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
-    chart_payment_methods(cur, classes, start, end)
     return classes
-
-
-def chart_payment_methods(cur, classes, start=None, end=None):
-    """
-    Every payment method as a row under 1101 (cash) or 1102 (bank), with the
-    approved money in and out through it. Built from payment_methods each
-    time, so a new, renamed or closed method shows at once.
-    """
-    dates, params = '', []
-    if start:
-        dates += " AND ft.transaction_date >= %s"
-        params.append(start)
-    if end:
-        dates += " AND ft.transaction_date <= %s"
-        params.append(end)
-    cur.execute("""SELECT pm.id, pm.method_name, pm.method_type, pm.bank_name, pm.account_number, pm.current_balance,
-                          pm.is_active,
-                          COALESCE(SUM(CASE WHEN ft.transaction_type = 'income' THEN ft.amount END), 0) AS money_in,
-                          COALESCE(SUM(CASE WHEN ft.transaction_type = 'expense' THEN ft.amount END), 0) AS money_out,
-                          COUNT(ft.id) AS n
-                   FROM payment_methods pm
-                   LEFT JOIN finance_transactions ft ON ft.payment_method_id = pm.id AND ft.status = 'approved'""" + dates + """
-                   GROUP BY pm.id ORDER BY pm.is_active DESC, pm.id""", params)
-    methods = cur.fetchall()
-    for code, kind in (('1101', 'cash'), ('1102', 'bank')):
-        node = chart_find(classes, code)
-        if not node:
-            continue
-        mine = [m for m in methods if (m['method_type'] or 'cash') == kind]
-        # ponytail: the row code is its place under the account (110201, 110202);
-        # it is not stored, so closing a method can renumber the ones after it.
-        node['children'] = [{
-            'id': 'pm-%d' % m['id'], 'code': '%s%02d' % (code, n), 'name': m['method_name'], 'type': 'asset',
-            'parent_id': node['id'], 'is_system': True, 'method': True, 'is_active': bool(m['is_active']),
-            'description': ' - '.join(x for x in (m['bank_name'], m['account_number']) if x),
-            'balance': float(m['current_balance'] or 0),
-            'money_in': float(m['money_in']), 'money_out': float(m['money_out']), 'count': int(m['n']),
-            'value': float(m['money_in']) - float(m['money_out']), 'children': []}
-            for n, m in enumerate(mine, start=1)]
-        # Shown on the account, not added into its group: each of these
-        # transactions is already counted under the account it was posted to.
-        for key in ('money_in', 'money_out', 'count'):
-            node[key] = sum(k[key] for k in node['children'])
-        node['methods_total'] = True
 
 
 def chart_find(nodes, code):
@@ -23657,8 +23681,10 @@ def get_finance_tree():
         node = chart_find(classes, code)
         if node and entities:
             node['entities'] = entities
-    return jsonify(success=True, classes=classes,
-                   can_edit=has('finance_master.edit'))
+    debit = sum(c['debit'] for c in classes)
+    credit = sum(c['credit'] for c in classes)
+    return jsonify(success=True, classes=classes, debit=debit, credit=credit,
+                   balanced=abs(debit - credit) < 0.005, can_edit=has('finance_master.edit'))
 
 
 # ----------------------- HELPER: Get Clients and Suppliers for Dropdowns -----------------------
@@ -26234,7 +26260,7 @@ def get_income_statement():
         
         # By chart group: revenue (class 4) against costs and expenses (5, 6),
         # each group with the accounts under it.
-        classes = chart_tree(cur, start, end, sales=True)
+        classes = chart_tree(cur, start, end)
 
         def statement_groups(class_codes):
             groups = []
@@ -26543,7 +26569,7 @@ def get_finance_analytics():
         daily_data = cur.fetchall()
         
         # Revenue and spending by chart group (class 4; classes 5 and 6).
-        chart = chart_tree(cur, start_date, end_date, sales=True)
+        chart = chart_tree(cur, start_date, end_date)
 
         def by_group(class_codes):
             rows = [{'category_name': '%s %s' % (g['code'], g['name']), 'total': g['value']}

@@ -109,8 +109,9 @@ SYSTEM_IDS = {
     44: '111002',  # Internal Transfer (custody settled)
     46: '4102',    # Client Refunds
 }
-# Further accounts the system reads by code; they cannot be renamed or deleted.
-SYSTEM_CODES = {'1', '2', '3', '4', '5', '6', '1101', '1102', '1110', '4101'} | set(SYSTEM_IDS.values())
+# Further accounts the system reads or books by code (invoices: 1107, 2103, 4101);
+# they cannot be renamed or deleted.
+SYSTEM_CODES = {'1', '2', '3', '4', '5', '6', '1101', '1102', '1107', '1110', '2103', '4101'} | set(SYSTEM_IDS.values())
 
 CLASS_TYPE = {'1': 'asset', '2': 'liability', '3': 'equity', '4': 'income', '5': 'expense', '6': 'expense'}
 # Debit-normal classes grow with money out; credit-normal ones with money in.

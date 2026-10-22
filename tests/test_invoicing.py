@@ -295,9 +295,19 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={
             'invoice_number': 98200, 'payment_method_id': self.pm, 'amount': 999999}).status_code, 400)  # over the total
         before = self._pm_balance()
+        tree_before = finance.get('/api/finance/tree').get_json()
         r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98200, 'payment_method_id': self.pm})
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual(round(self._pm_balance() - before, 2), 178088.0)        # the full total, received
+        # In the Finance Tree, as double entry: Dr 1103 178,088 + Dr 1107 1,576 = Cr 4101 157,600 + Cr 2103 22,064;
+        # the payment: Dr cash 178,088 / Cr 1103 178,088.
+        tree = finance.get('/api/finance/tree').get_json()
+        self.assertTrue(tree['balanced'])
+        moved = lambda code, side: round(branding_gate.chart_find(tree['classes'], code)[side]
+                                         - branding_gate.chart_find(tree_before['classes'], code)[side], 2)
+        self.assertEqual([moved('1103', 'debit'), moved('1107', 'debit'), moved('4101', 'credit'), moved('2103', 'credit'),
+                          moved('1103', 'credit'), moved('1101', 'debit')],
+                         [178088.0, 1576.0, 157600.0, 22064.0, 178088.0, 178088.0])
         cur = self._cursor()
         cur.execute("SELECT transaction_type, category_id, status, reference_number FROM finance_transactions WHERE id = %s",
                     (r.get_json()['transaction_id'],))

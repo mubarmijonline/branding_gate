@@ -419,3 +419,14 @@ bare balance change. The balance sheet's equity shows Capital (class 3 net) and
 its earnings, like the income/expense cards, leave capital and transfers out, so
 cash on one side equals capital on the other. Ahmed's 100,000 opening on
 Branding Gate CIB (history row 264, no transaction) was re-booked this way.
+
+**Double entry in the tree (2026-10-22):** the tree reads a journal derived on
+the fly from approved records (`chart_journal`), so Σ debit = Σ credit always:
+a transaction debits / credits its payment method's account (1101 / 1102, each
+method a row) against the account chosen; a transfer leg is only its own side;
+a refund paid back debits 1103. A posted invoice: Dr 1103 total, Dr 1107 the
+1% withheld (`WITHHOLDING_TAX_ACCOUNT`; Ahmed named 2104, to confirm), Cr 4101
+before tax, Cr 2103 VAT; a posted refund the reverse on 4102. Columns Debit /
+Credit / Balance (normal side); the tree opens collapsed to the six classes,
+with search opening the branches it matches, and expand / collapse all. Still
+outside the journal: supplier costs on SRs (no Finance approval step yet).
