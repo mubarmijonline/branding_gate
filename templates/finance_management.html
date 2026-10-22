@@ -732,6 +732,15 @@ body.finance-surface {
     border-color: var(--primary);
     background: rgba(99,102,241,0.02);
 }
+/* Finance Tree editing: a category's actions sit after its total. */
+#tab-finance-tree .finance-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tree-add { padding: 6px 12px; font-size: 12px; }
+.tree-actions { display: inline-flex; gap: 4px; align-items: center; }
+.tree-act { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted);
+            font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.tree-act:hover { border-color: var(--primary); color: var(--primary); }
+.tree-act.danger:hover { border-color: var(--danger); color: var(--danger); }
+.tree-sys { font-size: 9px; font-weight: 700; letter-spacing: .05em; background: #f1f5f9; color: var(--muted); padding: 2px 6px; border-radius: 4px; }
 .category-item.income { border-left: 4px solid var(--success); }
 .category-item.expense { border-left: 4px solid var(--danger); }
 .category-item .cat-name {
@@ -1504,6 +1513,9 @@ body.finance-surface {
                                 </span>
                                 Income
                             </h1>
+                            {% if 'finance_master.edit' in session.get('perms', {}) %}
+                            <button class="btn-pill btn-pill-outline tree-add" onclick="openAddCategoryModal('income')"><i class="fas fa-plus"></i> Category</button>
+                            {% endif %}
                         </div>
                         <div style="padding: 20px;" id="incomeTree">
                             <!-- Income tree loaded via JS -->
@@ -1522,6 +1534,9 @@ body.finance-surface {
                                 </span>
                                 Expenses
                             </h1>
+                            {% if 'finance_master.edit' in session.get('perms', {}) %}
+                            <button class="btn-pill btn-pill-outline tree-add" onclick="openAddCategoryModal('expense')"><i class="fas fa-plus"></i> Category</button>
+                            {% endif %}
                         </div>
                         <div style="padding: 20px;" id="expenseTree">
                             <!-- Expense tree loaded via JS -->
@@ -2291,6 +2306,7 @@ body.finance-surface {
             <div class="modal-body">
                 <form id="categoryForm">
                     <input type="hidden" id="catType" value="income">
+                    <input type="hidden" id="catId" value="">
                     <div class="form-group-modern">
                         <label>Category Name *</label>
                         <input type="text" class="form-control" id="catName" required placeholder="Category name">
@@ -2309,7 +2325,7 @@ body.finance-surface {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn-pill btn-pill-primary" onclick="submitCategory()">
+                <button type="button" class="btn-pill btn-pill-primary" id="catSubmitBtn" onclick="submitCategory()">
                     <i class="fas fa-plus"></i> Add Category
                 </button>
             </div>
@@ -3133,9 +3149,12 @@ function renderCategory(container, cat, type) {
                 ${subCount > 0 ? `<span style="font-size: 10px; background: var(--primary-soft); color: var(--primary); padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${subCount} sub</span>` : ''}
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="openAddSubcategoryModal(${cat.id}, '${type}')">
+                    <i class="fas fa-plus"></i> Sub
+                </button>
                 ${!cat.is_system ? `
-                    <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="openAddSubcategoryModal(${cat.id}, '${type}')">
-                        <i class="fas fa-plus"></i> Sub
+                    <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" data-cat-edit="${cat.id}" title="Edit">
+                        <i class="fas fa-pen"></i>
                     </button>
                     <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="deleteCategory(${cat.id}, '${cat.category_name}', ${subCount})">
                         <i class="fas fa-trash"></i>
@@ -3153,10 +3172,11 @@ function renderCategory(container, cat, type) {
             subList.append(`
                 <div class="subcategory-item">
                     <span>${sub.category_name}</span>
-                    ${!sub.is_system ? `
+                    ${!sub.is_system ? `<span style="display:flex;gap:6px">
+                        <button class="btn-pill btn-pill-outline" style="padding: 4px 8px; font-size: 10px;" data-cat-edit="${sub.id}" title="Edit"><i class="fas fa-pen"></i></button>
                         <button class="btn-pill btn-pill-outline" style="padding: 4px 8px; font-size: 10px; color: var(--danger); border-color: var(--danger);" onclick="deleteCategory(${sub.id}, '${sub.category_name}', 0)">
                             <i class="fas fa-trash"></i>
-                        </button>
+                        </button></span>
                     ` : ''}
                 </div>
             `);
@@ -4354,7 +4374,15 @@ function viewPaymentMethodHistory(methodId) {
 }
 
 // Category Functions
+// The category modal adds (no #catId) or renames (#catId set; type and parent fixed).
+function categoryModalMode(editing) {
+    $('#catId').val('');
+    $('#catParent').prop('disabled', editing);
+    $('#catSubmitBtn').html(editing ? '<i class="fas fa-save"></i> Save' : '<i class="fas fa-plus"></i> Add Category');
+}
+
 function openAddCategoryModal(type) {
+    categoryModalMode(false);
     $('#catType').val(type);
     $('#categoryModalTitle').text(`Add ${type === 'income' ? 'Income' : 'Expense'} Category`);
     
@@ -4370,6 +4398,7 @@ function openAddCategoryModal(type) {
 }
 
 function openAddSubcategoryModal(parentId, type) {
+    categoryModalMode(false);
     $('#catType').val(type);
     $('#categoryModalTitle').text(`Add Sub-Category`);
     
@@ -4384,7 +4413,30 @@ function openAddSubcategoryModal(parentId, type) {
     $('#addCategoryModal').modal('show');
 }
 
+function openEditCategoryModal(cat) {
+    categoryModalMode(true);
+    $('#catId').val(cat.id);
+    $('#catType').val(cat.type);
+    $('#categoryModalTitle').text(cat.parent_id ? 'Edit Sub-Category' : 'Edit Category');
+    const parent = cat.parent_id ? (allCategories.find(c => c.id == cat.parent_id) || {}) : null;
+    $('#catParent').html(parent ? `<option>${escHtml(parent.category_name || '')}</option>` : '<option>None (Root Category)</option>');
+    $('#catName').val(cat.name);
+    $('#catDescription').val(cat.description || '');
+    $('#addCategoryModal').modal('show');
+}
+
+function escHtml(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// After any change: the Categories tab, the dropdowns and the Finance Tree all re-read.
+function refreshCategoryViews() {
+    loadCategories();
+    if ($('#tab-finance-tree').is(':visible')) loadFinanceTree();
+}
+
 function submitCategory() {
+    const editId = $('#catId').val();
     const data = {
         category_name: $('#catName').val(),
         category_type: $('#catType').val(),
@@ -4397,8 +4449,8 @@ function submitCategory() {
         return;
     }
     
-    fetch('/api/finance/categories', {
-        method: 'POST',
+    fetch(editId ? `/api/finance/categories/${editId}` : '/api/finance/categories', {
+        method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
@@ -4406,8 +4458,8 @@ function submitCategory() {
     .then(result => {
         if (result.success) {
             $('#addCategoryModal').modal('hide');
-            Swal.fire('Success', 'Category added', 'success');
-            loadCategories();
+            Swal.fire('Success', editId ? 'Category saved' : 'Category added', 'success');
+            refreshCategoryViews();
         } else {
             Swal.fire('Error', result.error, 'error');
         }
@@ -4467,7 +4519,7 @@ function deleteCategory(catId, catName, subCount) {
                             text: result.message,
                             icon: 'success'
                         });
-                        loadCategories();
+                        refreshCategoryViews();
                     } else {
                         Swal.fire('Error | خطأ', result.error, 'error');
                     }
@@ -4494,6 +4546,44 @@ function loadFinanceTree() {
         });
     
 }
+
+var CAN_EDIT_CATEGORIES = !!(window.USER_PERMS || {})['finance_master.edit'];
+var treeCats = {};
+
+// Add sub / edit / delete on a Finance Tree row. System categories (the ones the
+// system books into) keep their name but still take sub-categories.
+function treeActions(cat, isSub) {
+    if (!CAN_EDIT_CATEGORIES) return '';
+    treeCats[cat.id] = cat;
+    let html = '<span class="tree-actions">';
+    if (!isSub) html += `<button class="tree-act" data-tree-sub="${cat.id}" title="Add sub-category"><i class="fas fa-plus"></i></button>`;
+    if (!cat.is_system) {
+        html += `<button class="tree-act" data-tree-edit="${cat.id}" title="Edit"><i class="fas fa-pen"></i></button>` +
+                `<button class="tree-act danger" data-tree-del="${cat.id}" title="Delete"><i class="fas fa-trash"></i></button>`;
+    } else if (!isSub) {
+        html += '<span class="tree-sys" title="Used by the system: cannot be renamed or deleted">SYSTEM</span>';
+    }
+    return html + '</span>';
+}
+
+$(document).on('click', '[data-tree-sub]', function (e) {
+    e.stopPropagation();
+    const cat = treeCats[$(this).data('tree-sub')];
+    openAddSubcategoryModal(cat.id, cat.type);
+});
+$(document).on('click', '[data-tree-edit]', function (e) {
+    e.stopPropagation();
+    openEditCategoryModal(treeCats[$(this).data('tree-edit')]);
+});
+$(document).on('click', '[data-tree-del]', function (e) {
+    e.stopPropagation();
+    const cat = treeCats[$(this).data('tree-del')];
+    deleteCategory(cat.id, cat.name, (cat.children || []).length);
+});
+$(document).on('click', '[data-cat-edit]', function () {
+    const c = allCategories.find(x => x.id == $(this).data('cat-edit'));
+    if (c) openEditCategoryModal({ id: c.id, name: c.category_name, type: c.category_type, parent_id: c.parent_id, description: c.description });
+});
 
 function renderFinanceTree(data) {
     // Helper to render entity list under a category
@@ -4522,8 +4612,10 @@ function renderFinanceTree(data) {
     data.income.categories.forEach(cat => {
         const div = $(`
             <div class="category-item income">
-                <span class="cat-name">${cat.name}</span>
-                <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>
+                <span class="cat-name">${escHtml(cat.name)}</span>
+                <span style="display:flex;align-items:center;gap:10px">
+                    <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>${treeActions(cat, false)}
+                </span>
             </div>
         `);
         incomeTree.append(div);
@@ -4533,8 +4625,10 @@ function renderFinanceTree(data) {
             cat.children.forEach(sub => {
                 subList.append(`
                     <div class="subcategory-item">
-                        <span>${sub.name}</span>
-                        <span style="color: var(--finance-income); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>
+                        <span>${escHtml(sub.name)}</span>
+                        <span style="display:flex;align-items:center;gap:10px">
+                            <span style="color: var(--finance-income); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>${treeActions(sub, true)}
+                        </span>
                     </div>
                 `);
             });
@@ -4554,8 +4648,10 @@ function renderFinanceTree(data) {
     data.expense.categories.forEach(cat => {
         const div = $(`
             <div class="category-item expense">
-                <span class="cat-name">${cat.name}</span>
-                <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>
+                <span class="cat-name">${escHtml(cat.name)}</span>
+                <span style="display:flex;align-items:center;gap:10px">
+                    <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>${treeActions(cat, false)}
+                </span>
             </div>
         `);
         expenseTree.append(div);
@@ -4565,8 +4661,10 @@ function renderFinanceTree(data) {
             cat.children.forEach(sub => {
                 subList.append(`
                     <div class="subcategory-item">
-                        <span>${sub.name}</span>
-                        <span style="color: var(--finance-expense); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>
+                        <span>${escHtml(sub.name)}</span>
+                        <span style="display:flex;align-items:center;gap:10px">
+                            <span style="color: var(--finance-expense); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>${treeActions(sub, true)}
+                        </span>
                     </div>
                 `);
             });

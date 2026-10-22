@@ -22249,6 +22249,15 @@ def get_finance_categories():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def finance_category_name_taken(cur, name, category_type, parent_id, exclude_id=None):
+    """An active category of the same type and parent already has this name (case and spacing ignored)."""
+    cur.execute("""SELECT id FROM finance_categories
+                   WHERE is_active = TRUE AND category_type = %s AND parent_id <=> %s AND id <> %s
+                     AND LOWER(TRIM(category_name)) = LOWER(TRIM(%s))""",
+                (category_type, parent_id or None, exclude_id or 0, name))
+    return cur.fetchone() is not None
+
+
 @app.route('/api/finance/categories', methods=['POST'])
 @perm('finance_master.edit')
 def add_finance_category():
@@ -22283,6 +22292,11 @@ def add_finance_category():
             conn.close()
             return jsonify({'success': False, 'error': 'Category type is required for root categories'}), 400
         
+        if finance_category_name_taken(cur, category_name, category_type, parent_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '"%s" already exists here' % category_name}), 409
+
         # Generate category code
         code_base = category_name.upper().replace(' ', '_')[:20]
         category_code = f"{code_base}_{int(datetime.now().timestamp())}"
@@ -22328,8 +22342,16 @@ def update_finance_category(cat_id):
             conn.close()
             return jsonify({'success': False, 'error': 'Cannot modify system categories'}), 400
         
-        category_name = data.get('category_name', cat['category_name'])
+        category_name = (data.get('category_name') or cat['category_name']).strip()
         description = data.get('description', cat['description'])
+        if not category_name:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Category name is required'}), 400
+        if finance_category_name_taken(cur, category_name, cat['category_type'], cat['parent_id'], cat_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '"%s" already exists here' % category_name}), 409
         is_active = data.get('is_active', cat['is_active'])
         display_order = data.get('display_order', cat['display_order'])
         
@@ -23335,7 +23357,7 @@ def get_finance_tree():
         
         # Get all categories with transaction totals
         query = """
-            SELECT fc.id, fc.category_name, fc.parent_id, fc.category_type,
+            SELECT fc.id, fc.category_name, fc.parent_id, fc.category_type, fc.is_system, fc.description,
                    COALESCE(SUM(CASE WHEN ft.status = 'approved' THEN ft.amount ELSE 0 END), 0) as total_amount,
                    COUNT(CASE WHEN ft.status = 'approved' THEN 1 END) as transaction_count
             FROM finance_categories fc
@@ -23352,7 +23374,7 @@ def get_finance_tree():
         
         query += """
             WHERE fc.is_active = TRUE
-            GROUP BY fc.id, fc.category_name, fc.parent_id, fc.category_type
+            GROUP BY fc.id, fc.category_name, fc.parent_id, fc.category_type, fc.is_system, fc.description
             ORDER BY fc.category_type, fc.display_order, fc.category_name
         """
         
@@ -23411,6 +23433,9 @@ def get_finance_tree():
                 'id': cat['id'],
                 'name': cat['category_name'],
                 'type': cat['category_type'],
+                'parent_id': cat['parent_id'],
+                'is_system': bool(cat['is_system']),
+                'description': cat['description'] or '',
                 'total': float(cat['total_amount']),
                 'count': cat['transaction_count'],
                 'children': []
