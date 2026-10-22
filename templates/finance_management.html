@@ -756,6 +756,7 @@ body.finance-surface {
 .chart-value.neg { color: var(--finance-expense); }
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
 .chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
+.type-badge.transfer { background: #eef2ff; color: #4f46e5; }
 .trans-path { margin-top: 6px; font-size: 12px; color: #047857; }
 .chart-note { padding: 12px 20px;font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
 .chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
@@ -3589,7 +3590,7 @@ function loadReportDetail(type, id, name) {
                         <td><span style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%); color: white; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">${t.serial_number || '-'}</span></td>
                         <td><code style="background: #f1f5f9; padding: 3px 6px; border-radius: 4px; font-size: 12px;">${t.transaction_code || '-'}</code></td>
                         <td style="font-size: 12px;">${t.transaction_date || '-'}</td>
-                        <td><span class="type-badge ${t.transaction_type}">${t.transaction_type === 'income' ? '+ Income' : '- Expense'}</span></td>
+                        <td>${typeBadge(t)}</td>
                         <td style="font-size: 12px;">${t.category_name || '-'}</td>
                         <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; font-size: 12px;">${t.description || '-'}</td>
                         <td>${plusAmt}</td>
@@ -3662,6 +3663,18 @@ function loadDeclinedTransactions() {
         });
 }
 
+// A leg posted to 1101 / 1102 is half of a transfer between payment methods, not income or expense.
+function isTransferLeg(t) {
+    return /^110[12] /.test(t.category_name || '');
+}
+function typeBadge(t) {
+    if (isTransferLeg(t)) {
+        return '<span class="type-badge transfer" title="' + escHtml(t.reference_number || 'Transfer between payment methods') + '"><i class="fas fa-exchange-alt mr-1"></i>' +
+               (t.transaction_type === 'income' ? 'Transfer in' : 'Transfer out') + '</span>';
+    }
+    return '<span class="type-badge ' + t.transaction_type + '">' + (t.transaction_type === 'income' ? '+ Income' : '- Expense') + '</span>';
+}
+
 function renderApprovedTransactions(transactions) {
     const tbody = $('#approvedTransactionsBody');
     tbody.empty();
@@ -3679,7 +3692,7 @@ function renderApprovedTransactions(transactions) {
                 <td><span style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%); color: white; padding: 4px 10px; border-radius: 6px; font-weight: 700;">${t.serial_number || '-'}</span></td>
                 <td><code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px;">${t.transaction_code}</code></td>
                 <td>${t.transaction_date || '-'}</td>
-                <td><span class="type-badge ${t.transaction_type}">${t.transaction_type === 'income' ? '+ Income' : '- Expense'}</span></td>
+                <td>${typeBadge(t)}</td>
                 <td><strong>${t.category_name || '-'}</strong></td>
                 <td>${t.subcategory_name || '-'}</td>
                 <td>${t.request_number ? `<span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${t.request_number}</span>` : '-'}</td>
@@ -3720,7 +3733,7 @@ function renderDeclinedTransactions(transactions) {
             <tr>
                 <td><code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px;">${t.transaction_code}</code></td>
                 <td>${t.transaction_date || '-'}</td>
-                <td><span class="type-badge ${t.transaction_type}">${t.transaction_type === 'income' ? '+ Income' : '- Expense'}</span></td>
+                <td>${typeBadge(t)}</td>
                 <td><strong>${t.category_name || '-'}</strong></td>
                 <td>${t.subcategory_name || '-'}</td>
                 <td>${t.request_number ? `<span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${t.request_number}</span>` : '-'}</td>

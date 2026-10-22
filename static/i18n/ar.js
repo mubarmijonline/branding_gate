@@ -3370,6 +3370,8 @@ window.BG_AR = {
 "Transfer between payment methods": "تحويل بين وسائل الدفع",
 "Transfer failed": "فشل التحويل",
 "Transfer from another payment method": "تحويل من وسيلة دفع أخرى",
+"Transfer in": "تحويل وارد",
+"Transfer out": "تحويل صادر",
 "Transfer recorded": "تم تسجيل التحويل",
 "Transfer to another payment method": "تحويل إلى وسيلة دفع أخرى",
 "Transfer {0} -> {1}": "تحويل {0} ← {1}",
