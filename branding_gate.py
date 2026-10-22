@@ -22021,18 +22021,16 @@ def add_payment_method():
              opening_balance, current_balance, created_by)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (method_name, method_code, method_type, description, account_number, bank_name,
-              opening_balance, opening_balance, session.get('user_name')))
+              opening_balance, 0, session.get('user_name')))
         
         method_id = cur.lastrowid
         
-        # Record opening balance in history
-        if opening_balance > 0:
-            cur.execute("""
-                INSERT INTO payment_method_balance_history
-                (payment_method_id, previous_balance, change_amount, new_balance, 
-                 change_type, description, created_by)
-                VALUES (%s, 0, %s, %s, 'opening_balance', 'Initial opening balance', %s)
-            """, (method_id, opening_balance, opening_balance, session.get('user_name')))
+        # The opening money is the owners' capital: booked on 3101, it moves the balance.
+        if opening_balance:
+            _, capital_error = book_capital(cur, method_id, opening_balance, 'Opening balance - %s' % method_name)
+            if capital_error:
+                conn.rollback()
+                return jsonify({'success': False, 'error': capital_error}), 400
         
         conn.commit()
         cur.close()
@@ -22117,19 +22115,15 @@ def set_payment_method_balance(method_id):
         old_balance = float(method['current_balance'] or 0)
         change_amount = new_balance - old_balance
         
-        # Update balance
-        cur.execute("""
-            UPDATE payment_methods SET current_balance = %s WHERE id = %s
-        """, (new_balance, method_id))
-        
-        # Record in history
-        cur.execute("""
-            INSERT INTO payment_method_balance_history
-            (payment_method_id, previous_balance, change_amount, new_balance, 
-             change_type, description, created_by)
-            VALUES (%s, %s, %s, %s, 'adjustment', %s, %s)
-        """, (method_id, old_balance, change_amount, new_balance, reason, 
-              session.get('user_name')))
+        # Money put in or taken out by the owners: booked on 3101 so the
+        # balance sheet's capital side moves with the cash.
+        if abs(change_amount) > 0.004:
+            _, capital_error = book_capital(cur, method_id, change_amount, reason or 'Balance adjustment')
+            if capital_error:
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': capital_error}), 400
         
         conn.commit()
         cur.close()
@@ -23427,7 +23421,7 @@ def get_finance_statistics():
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance_transactions 
             WHERE status = 'approved' AND transaction_type = 'income'
-            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102') OR account_code LIKE '3%%')
         """)
         total_income = float(cur.fetchone()['total'] or 0)
         
@@ -23436,7 +23430,7 @@ def get_finance_statistics():
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance_transactions 
             WHERE status = 'approved' AND transaction_type = 'expense'
-            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102') OR account_code LIKE '3%%')
         """)
         total_expense = float(cur.fetchone()['total'] or 0)
         
@@ -23451,7 +23445,7 @@ def get_finance_statistics():
             WHERE status = 'approved' 
             AND transaction_type = 'income'
             AND DATE(transaction_date) BETWEEN %s AND %s
-            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102') OR account_code LIKE '3%%')
         """, (month_start, month_end))
         month_income = float(cur.fetchone()['total'] or 0)
         
@@ -23462,7 +23456,7 @@ def get_finance_statistics():
             WHERE status = 'approved' 
             AND transaction_type = 'expense'
             AND DATE(transaction_date) BETWEEN %s AND %s
-            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102'))
+            AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories WHERE account_code IN ('1101', '1102') OR account_code LIKE '3%%')
         """, (month_start, month_end))
         month_expense = float(cur.fetchone()['total'] or 0)
         
@@ -24989,6 +24983,20 @@ def book_client_money(cur, transaction_type, amount, payment_method_id, category
     return trans_id, None
 
 
+def book_capital(cur, method_id, change, reason):
+    """
+    An opening balance or balance adjustment on a payment method, booked as an
+    approved transaction on 3101 (capital): money in when it rises, out when it
+    falls. Returns (transaction_id, error).
+    """
+    cur.execute("SELECT id FROM finance_categories WHERE account_code = '3101'")
+    capital = cur.fetchone()
+    amount = abs(float(change))
+    return book_client_money(cur, 'income' if change > 0 else 'expense', amount, method_id,
+                             capital['id'] if capital else 4, None, None, reason[:100], reason[:500],
+                             note='Capital: %s' % reason[:200])
+
+
 def _refund_category_id(cur):
     cur.execute("SELECT id FROM finance_categories WHERE category_code = %s", (CLIENT_REFUNDS_CATEGORY_CODE,))
     row = cur.fetchone()
@@ -26329,14 +26337,24 @@ def get_balance_sheet():
         """, (start_dt, end_dt))
         accounts_receivable = float(cur.fetchone()['total'])
         
-        # Total income in date range (approved)
+        # Capital: what the owners put in (or took out) through the equity accounts (class 3).
+        not_earnings = """ AND COALESCE(category_id, 0) NOT IN (SELECT id FROM finance_categories
+                                WHERE account_code LIKE '3%%' OR account_code IN ('1101', '1102'))"""
+        cur.execute("""
+            SELECT COALESCE(SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE -amount END), 0) AS total
+            FROM finance_transactions
+            WHERE status = 'approved' AND transaction_date <= %s
+            AND category_id IN (SELECT id FROM finance_categories WHERE account_code LIKE '3%%')
+        """, (end_dt,))
+        capital = float(cur.fetchone()['total'])
+
+        # Total income in date range (approved); capital and transfers are not earnings
         cur.execute("""
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance_transactions
             WHERE transaction_type = 'income' 
             AND status = 'approved'
-            AND transaction_date BETWEEN %s AND %s
-        """, (start_dt, end_dt))
+            AND transaction_date BETWEEN %s AND %s""" + not_earnings, (start_dt, end_dt))
         period_income = float(cur.fetchone()['total'])
         
         # Total expenses in date range (approved)
@@ -26345,8 +26363,7 @@ def get_balance_sheet():
             FROM finance_transactions
             WHERE transaction_type = 'expense' 
             AND status = 'approved'
-            AND transaction_date BETWEEN %s AND %s
-        """, (start_dt, end_dt))
+            AND transaction_date BETWEEN %s AND %s""" + not_earnings, (start_dt, end_dt))
         period_expense = float(cur.fetchone()['total'])
         
         # Historical totals (before start_date)
@@ -26356,8 +26373,7 @@ def get_balance_sheet():
                 COALESCE(SUM(CASE WHEN transaction_type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
             FROM finance_transactions
             WHERE status = 'approved'
-            AND transaction_date < %s
-        """, (start_dt,))
+            AND transaction_date < %s""" + not_earnings, (start_dt,))
         historical = cur.fetchone()
         historical_retained = float(historical['total_income']) - float(historical['total_expense'])
         
@@ -26391,7 +26407,7 @@ def get_balance_sheet():
         # so they reduce equity to keep the balance sheet balanced
         current_period_net = period_income - period_expense
         retained_earnings = historical_retained + current_period_net
-        total_equity = total_opening_balance + retained_earnings - user_balances_owed
+        total_equity = capital + retained_earnings - user_balances_owed
         
         cur.close()
         conn.close()
@@ -26422,6 +26438,7 @@ def get_balance_sheet():
                 'total': total_liabilities
             },
             'equity': {
+                'capital': capital,
                 'opening_balance': total_opening_balance,
                 'historical_retained': historical_retained,
                 'current_period_net': current_period_net,

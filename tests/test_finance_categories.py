@@ -134,7 +134,7 @@ class FinanceCategoriesTest(unittest.TestCase):
         self.assertEqual(income.status_code, 200, income.get_json())
         self._cursor().execute("UPDATE finance_transactions SET status = 'approved' WHERE id IN (%s, %s)",
                                (r.get_json()['id'], income.get_json()['id']))
-        tree = self._tree(start_date='2026-10-01', end_date='2026-10-31')
+        tree = self._tree(start_date='2026-10-20', end_date='2026-10-20')          # the test's own day
         find = lambda code: branding_gate.chart_find(tree, code)
         self.assertEqual((find('6212')['value'], find('62')['value'], find('6')['value']), (300.0, 300.0, 300.0))
         self.assertEqual(find('3101')['value'], 5000.0)                                    # equity grows with money in
@@ -167,6 +167,25 @@ class FinanceCategoriesTest(unittest.TestCase):
         stats = self.web.get('/api/finance/statistics').get_json()
         # A transfer is neither income nor expense.
         self.assertEqual((stats['total_income'], stats['total_expense']), (stats_before['total_income'], stats_before['total_expense']))
+
+    def test_opening_balance_is_capital_and_the_balance_sheet_balances(self):
+        before = self.web.get('/api/finance/balance-sheet').get_json()
+        r = self.web.post('/api/finance/payment-methods', json={'method_name': 'Chart Opening Bank T', 'method_type': 'bank',
+                                                              'bank_name': 'CIB', 'account_number': '77', 'opening_balance': 40000})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        pm = r.get_json()['id']
+        adj = self.web.post('/api/finance/payment-methods/%d/set-balance' % pm, json={'balance': 45000, 'reason': 'Owner deposit'})
+        self.assertEqual(adj.status_code, 200, adj.get_json())
+        rows = self._rows("""SELECT ft.transaction_type, ft.amount, fc.account_code FROM finance_transactions ft
+                             JOIN finance_categories fc ON fc.id = ft.category_id WHERE ft.payment_method_id = %s ORDER BY ft.id""", (pm,))
+        self.assertEqual([(x['transaction_type'], float(x['amount']), x['account_code']) for x in rows],
+                         [('income', 40000.0, '3101'), ('income', 5000.0, '3101')])
+        self.assertEqual(float(self._rows("SELECT current_balance FROM payment_methods WHERE id = %s", (pm,))[0]['current_balance']), 45000.0)
+        after = self.web.get('/api/finance/balance-sheet').get_json()
+        self.assertEqual(round(after['assets']['total'] - before['assets']['total'], 2), 45000.0)
+        self.assertEqual(round(after['equity']['capital'] - before['equity']['capital'], 2), 45000.0)
+        self.assertEqual(after['equity']['current_period_net'], before['equity']['current_period_net'])   # not income
+        self.assertEqual(round(after['total_liabilities_and_equity'] - before['total_liabilities_and_equity'], 2), 45000.0)
 
     def test_income_statement_counts_posted_invoices_on_sales(self):
         cur = self._cursor()

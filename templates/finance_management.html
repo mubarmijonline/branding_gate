@@ -5172,7 +5172,7 @@ function renderBalanceSheet(data) {
     // Equity
     html += '<div class="statement-section" style="margin-top: 24px;">';
     html += '<h4 class="statement-section-title" style="color: var(--finance-income);"><i class="fas fa-landmark mr-2"></i>Equity</h4>';
-    html += '<div class="statement-row"><span class="statement-label">Opening Balance (Payment Methods)</span><span class="statement-value">' + formatCurrency(data.equity.opening_balance) + '</span></div>';
+    html += '<div class="statement-row"><span class="statement-label">Capital (3101 <bdi>راس المال</bdi>, opening balances included)</span><span class="statement-value">' + formatCurrency(data.equity.capital) + '</span></div>';
     html += '<div class="statement-row"><span class="statement-label">Prior Period Retained Earnings</span><span class="statement-value">' + formatCurrency(data.equity.historical_retained) + '</span></div>';
     var netColor = data.equity.current_period_net >= 0 ? 'var(--finance-income)' : 'var(--finance-expense)';
     html += '<div class="statement-row"><span class="statement-label">Current Period Net Income</span><span class="statement-value" style="color: ' + netColor + ';">' + formatCurrency(data.equity.current_period_net) + '</span></div>';

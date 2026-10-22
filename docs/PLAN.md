@@ -411,3 +411,11 @@ Saving books an approved transfer (`/api/finance/payment-methods/transfer`): out
 of the source method posted to the target's account (1101 / 1102), into the
 target posted to the source's. The tree shows it on both methods' rows; the
 income and expense totals leave postings to 1101 / 1102 out.
+
+**Opening balances are capital (2026-10-22):** a payment method's opening amount
+and any later balance adjustment are booked as an approved transaction on 3101
+راس المال (`book_capital`: in when the balance rises, out when it falls), not a
+bare balance change. The balance sheet's equity shows Capital (class 3 net) and
+its earnings, like the income/expense cards, leave capital and transfers out, so
+cash on one side equals capital on the other. Ahmed's 100,000 opening on
+Branding Gate CIB (history row 264, no transaction) was re-booked this way.
