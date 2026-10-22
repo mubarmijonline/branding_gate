@@ -139,6 +139,10 @@ class FinanceCategoriesTest(unittest.TestCase):
         self.assertEqual((find('6212')['value'], find('62')['value'], find('6')['value']), (300.0, 300.0, 300.0))
         self.assertEqual(find('3101')['value'], 5000.0)                                    # equity grows with money in
         self.assertNotIn('live', find('1101'))
+        box = next(k for k in find('1101')['children'] if k['id'] == 'pm-%d' % self.pm)          # its payment method
+        self.assertEqual((box['money_in'], box['money_out'], box['code'][:4]), (5000.0, 300.0, '1101'))
+        self.assertFalse(any(k['id'] == 'pm-%d' % self.pm for k in find('1102')['children']))   # cash, not bank
+        self.assertEqual(find('11')['money_in'], 0.0)                                          # not counted twice
         listed = self.web.get('/api/finance/transactions?status=approved&category_ids=%d' % self.ids['62']).get_json()
         self.assertEqual([t['amount'] for t in listed['transactions'] if t['id'] == r.get_json()['id']], [300.0])
 

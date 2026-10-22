@@ -392,7 +392,7 @@ category comes from a request (add transaction, staff expense approval single
 and bulk, expense-tracking approval). The single staff-expense approval no
 longer defaults to the deleted Operational Expenses; a category is required.
 
-**Values in the tree (revised 2026-10-22, Ahmed):** only approved finance transactions, each under the account it was posted to: money in and money out per account, rolled up to group and class. No figures derived from SRs, invoices or live balances (those were showing supplier SR costs on 2101 before anything was paid). The income statement still counts posted invoices on 4101 and refunds on 4102.
+**Values in the tree (revised 2026-10-22, Ahmed):** only approved finance transactions, each under the account it was posted to: money in and money out per account, rolled up to group and class. No figures derived from SRs, invoices or live balances (those were showing supplier SR costs on 2101 before anything was paid). The income statement still counts posted invoices on 4101 and refunds on 4102. Every payment method is a row under 1101 (cash) or 1102 (bank), built from payment_methods each time, with the approved money through it and its current balance; + on 1101 / 1102 adds a payment method of that kind.
 
 **Reports:** the income statement and analytics roll up by group over classes
 4 (revenue) and 5-6 (costs and expenses). 4101 Sales also counts posted

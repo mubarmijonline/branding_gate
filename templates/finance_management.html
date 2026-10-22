@@ -754,6 +754,8 @@ body.finance-surface {
 .chart-value { font-weight: 700; white-space: nowrap; width: 130px; flex: none; text-align: end; font-variant-numeric: tabular-nums; }
 .chart-row .tree-actions { width: 110px; flex: none; justify-content: flex-end; }
 .chart-value.neg { color: var(--finance-expense); }
+.chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
+.chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
 .chart-note { padding: 12px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
 .chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
 .chart-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -1530,7 +1532,7 @@ body.finance-surface {
             <div class="finance-card">
                 <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Money in</span><span class="chart-head-r">Money out</span></div>
                 <div id="chartTree" class="chart-tree"></div>
-                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Only approved finance transactions count, each under the account it was posted to. Cash and bank balances are on the Payment Methods tab.</div>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Only approved finance transactions count, each under the account it was posted to. Every payment method is listed under 1101 (cash) or 1102 (bank) with the money through it and its current balance; those are not added into their group again.</div>
             </div>
         </div>
 
@@ -4136,8 +4138,9 @@ function togglePaymentMethodBankFields() {
 }
 $(document).on('change', '#pmType', togglePaymentMethodBankFields);
 
-function openAddPaymentMethodModal() {
+function openAddPaymentMethodModal(type) {
     $('#paymentMethodForm')[0].reset();
+    if (type) $('#pmType').val(type);
     $('#pmId').val('');
     $('#pmModalTitle').text('Add Payment Method');
     $('#pmOpeningGroup').show();
@@ -4209,6 +4212,7 @@ function submitPaymentMethod() {
             Swal.fire('Success', id ? 'Payment method updated' : 'Payment method added', 'success');
             loadPaymentMethods();
             loadStatistics();
+            refreshCategoryViews();
         } else {
             Swal.fire('Error', result.error, 'error');
         }
@@ -4448,7 +4452,13 @@ var CHART_CLASS_COLORS = { '1': '#2563eb', '2': '#dc2626', '3': '#7c3aed', '4': 
 // Add under / edit / delete on a chart row. Classes and the accounts the
 // system books into keep their name and code but still take accounts under them.
 function treeActions(node, depth) {
-    if (!CAN_EDIT_CATEGORIES) return '<span class="tree-actions"></span>';
+    if (!CAN_EDIT_CATEGORIES || node.method) return '<span class="tree-actions"></span>';
+    if (node.methods_total) {
+        // Cash and bank hold the payment methods: + adds one of that kind.
+        const kind = node.code === '1102' ? 'bank' : 'cash';
+        return `<span class="tree-actions"><button class="tree-act" onclick="openAddPaymentMethodModal('${kind}')" title="Add a ${kind} payment method"><i class="fas fa-plus"></i></button>` +
+               '<span class="tree-sys" title="Used by the system: cannot be renamed or deleted">SYSTEM</span></span>';
+    }
     let html = `<span class="tree-actions"><button class="tree-act" data-tree-sub="${node.id}" title="Add account under it"><i class="fas fa-plus"></i></button>`;
     const holdsSystem = n => n.children.some(k => k.is_system || holdsSystem(k));
     if (!node.is_system) {
@@ -4471,7 +4481,7 @@ function chartRows(nodes, depth, withAmounts, cls) {
                          style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
             <span class="chart-toggle">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
             <span class="chart-code">${escHtml(n.code)}</span>
-            <span class="chart-name">${escHtml(n.name)}</span>
+            <span class="chart-name">${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}</span>
             ${meta}${value}${treeActions(n, depth)}
         </div>`;
         (withAmounts ? (n.entities || []) : []).forEach(function(ent) {

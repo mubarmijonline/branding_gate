@@ -23512,7 +23512,53 @@ def chart_tree(cur, start=None, end=None, sales=False):
                 'value': own + sum(k['value'] for k in kids), 'children': kids}
         return node
 
-    return [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
+    classes = [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
+    chart_payment_methods(cur, classes, start, end)
+    return classes
+
+
+def chart_payment_methods(cur, classes, start=None, end=None):
+    """
+    Every payment method as a row under 1101 (cash) or 1102 (bank), with the
+    approved money in and out through it. Built from payment_methods each
+    time, so a new, renamed or closed method shows at once.
+    """
+    dates, params = '', []
+    if start:
+        dates += " AND ft.transaction_date >= %s"
+        params.append(start)
+    if end:
+        dates += " AND ft.transaction_date <= %s"
+        params.append(end)
+    cur.execute("""SELECT pm.id, pm.method_name, pm.method_type, pm.bank_name, pm.account_number, pm.current_balance,
+                          pm.is_active,
+                          COALESCE(SUM(CASE WHEN ft.transaction_type = 'income' THEN ft.amount END), 0) AS money_in,
+                          COALESCE(SUM(CASE WHEN ft.transaction_type = 'expense' THEN ft.amount END), 0) AS money_out,
+                          COUNT(ft.id) AS n
+                   FROM payment_methods pm
+                   LEFT JOIN finance_transactions ft ON ft.payment_method_id = pm.id AND ft.status = 'approved'""" + dates + """
+                   GROUP BY pm.id ORDER BY pm.is_active DESC, pm.id""", params)
+    methods = cur.fetchall()
+    for code, kind in (('1101', 'cash'), ('1102', 'bank')):
+        node = chart_find(classes, code)
+        if not node:
+            continue
+        mine = [m for m in methods if (m['method_type'] or 'cash') == kind]
+        # ponytail: the row code is its place under the account (110201, 110202);
+        # it is not stored, so closing a method can renumber the ones after it.
+        node['children'] = [{
+            'id': 'pm-%d' % m['id'], 'code': '%s%02d' % (code, n), 'name': m['method_name'], 'type': 'asset',
+            'parent_id': node['id'], 'is_system': True, 'method': True, 'is_active': bool(m['is_active']),
+            'description': ' - '.join(x for x in (m['bank_name'], m['account_number']) if x),
+            'balance': float(m['current_balance'] or 0),
+            'money_in': float(m['money_in']), 'money_out': float(m['money_out']), 'count': int(m['n']),
+            'value': float(m['money_in']) - float(m['money_out']), 'children': []}
+            for n, m in enumerate(mine, start=1)]
+        # Shown on the account, not added into its group: each of these
+        # transactions is already counted under the account it was posted to.
+        for key in ('money_in', 'money_out', 'count'):
+            node[key] = sum(k[key] for k in node['children'])
+        node['methods_total'] = True
 
 
 def chart_find(nodes, code):
