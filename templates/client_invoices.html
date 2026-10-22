@@ -315,8 +315,25 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       '<div><span>VAT 14%</span><b>' + money(vat) + '</b></div>' +
       '<div><span>Commercial profits tax 1%</span><b>' + (withhold ? '−' + money(withhold) : '0.00') + '</b></div>' +
       '<div class="grand"><span>Total</span><span>EGP ' + money(sub + vat - withhold) + '</span></div>');
+    var figures = { subtotal: r2(sub), vat_total: r2(vat), profit_tax_total: withhold, total: r2(sub + vat - withhold) };
+    if ($('#ivBooking').length) $('#ivBooking').html(bookingRows(figures));   // the posting preview follows the window
+    return figures;
   }
   $(document).on('input change', '#ivLines input, #ivProfit', recalc);
+
+  // The entry posting books, from the figures in the window (what Post saves first).
+  function bookingRows(t) {
+    var refund = current && current.kind === 'refund';
+    var row = function (code, name, dr, cr) {
+      return '<tr><td><b>' + code + '</b> <bdi>' + name + '</bdi></td><td class="iv-r">' + (dr ? money(dr) : '') +
+             '</td><td class="iv-r">' + (cr ? money(cr) : '') + '</td></tr>';
+    };
+    return refund
+      ? row('4102', 'مردودات ومسموحات المبيعات', t.subtotal, 0) + row('2103', 'ضريبة القيمة المضافة للمبيعات', t.vat_total, 0) +
+        row('1103', 'العملاء', 0, t.total) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, 0, t.profit_tax_total) : '')
+      : row('1103', 'العملاء', t.total, 0) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, t.profit_tax_total, 0) : '') +
+        row('4101', 'المبيعات', 0, t.subtotal) + row('2103', 'ضريبة القيمة المضافة للمبيعات', 0, t.vat_total);
+  }
   $(document).on('click', '.iv-line-del', function () { $(this).closest('tr').remove(); drawAddFromSr(); recalc(); });
 
   // What happens next, said in the window itself.
@@ -484,19 +501,11 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
   $(document).on('click', '#ivPost', function () {
     var refund = current.kind === 'refund';
     var next = current.invoice_number || 1;
-    var t = current, row = function (code, name, dr, cr) {
-      return '<tr><td><b>' + code + '</b> <bdi>' + name + '</bdi></td><td class="iv-r">' + (dr ? money(dr) : '') +
-             '</td><td class="iv-r">' + (cr ? money(cr) : '') + '</td></tr>';
-    };
-    var lines = refund
-      ? row('4102', 'مردودات ومسموحات المبيعات', t.subtotal, 0) + row('2103', 'ضريبة القيمة المضافة للمبيعات', t.vat_total, 0) +
-        row('1103', 'العملاء', 0, t.total) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, 0, t.profit_tax_total) : '')
-      : row('1103', 'العملاء', t.total, 0) + (t.profit_tax_total ? row(WITHHOLDING.code, WITHHOLDING.name, t.profit_tax_total, 0) : '') +
-        row('4101', 'المبيعات', 0, t.subtotal) + row('2103', 'ضريبة القيمة المضافة للمبيعات', 0, t.vat_total);
+    var t = $('#ivLines tr.iv-line').length ? recalc() : current;
     $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:minmax(0,220px) 1fr">' +
       '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '"></div>' +
-      '<div><label>Booked in the Finance Tree</label><table class="iv-table" style="min-width:0"><thead><tr><th>Account</th><th class="iv-r">Debit</th><th class="iv-r">Credit</th></tr></thead><tbody>' +
-      lines + '</tbody></table></div></div>' +
+      '<div><label>Booked in the Finance Tree</label><table class="iv-table" style="min-width:0"><thead><tr><th>Account</th><th class="iv-r">Debit</th><th class="iv-r">Credit</th></tr></thead>' +
+      '<tbody id="ivBooking">' + bookingRows(t) + '</tbody></table></div></div>' +
       '<div class="iv-sub mb-2">' + (refund ? 'The refund is credited to the client. Pay the money back later with <b>Pay back to client</b>.'
             : 'The invoice goes on the client\'s account (1103). When the client pays, use <b>Record payment received</b>.') + '</div>' +
       '<div class="d-flex justify-content-end" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
