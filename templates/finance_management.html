@@ -756,7 +756,8 @@ body.finance-surface {
 .chart-value.neg { color: var(--finance-expense); }
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
 .chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
-.chart-note { padding: 12px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+.trans-path { margin-top: 6px; font-size: 12px; color: #047857; }
+.chart-note { padding: 12px 20px;font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
 .chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
 .chart-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .chart-summary div { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
@@ -2028,20 +2029,21 @@ body.finance-surface {
                     <div class="form-row">
                         <div class="form-group-modern">
                             <label>Payment Method *</label>
-                            <select class="form-control" id="transPaymentMethod" required>
+                            <select class="form-control" id="transPaymentMethod" required style="height:auto; padding-top:10px; padding-bottom:10px; line-height:1.4;">
                                 <option value="">Select Payment Method</option>
                             </select>
+                            <div class="trans-path" id="transPmPath"></div>
                         </div>
                         <div class="form-group-modern">
-                            <label>Account group *</label>
-                            <select class="form-control" id="transCategory" required>
-                                <option value="">Select account group</option>
+                            <label>Account *</label>
+                            <select class="form-control select2" id="transCategory" required>
+                                <option value="">Select account</option>
                             </select>
                         </div>
                     </div>
                     
                     <div class="form-row">
-                        <div class="form-group-modern">
+                        <div class="form-group-modern" style="display: none;">
                             <label>Account *</label>
                             <select class="form-control" id="transSubcategory">
                                 <option value="">Select account</option>
@@ -2745,9 +2747,9 @@ $(document).ready(function() {
     $('#categorySearch').on('input', function() { filterChart('#categoriesTree', $(this).val()); });
     $('#treeSearch').on('input', function() { filterChart('#chartTree', $(this).val()); });
 
-    // Group change - list its accounts; either change re-checks for the loan accounts.
-    $('#transCategory').change(function() { loadSubcategories($(this).val()); });
-    $('#transCategory, #transSubcategory').change(function() {
+    // The account change re-checks for the loan accounts.
+    $('#transPaymentMethod').change(showPaymentPath);
+    $('#transCategory').change(function() {
         var catId = transAccountId();
         updateSRLabel();
 
@@ -3035,13 +3037,17 @@ function renderPaymentMethodsGrid() {
 
 function populatePaymentMethodDropdowns() {
     // Modal dropdown (single select)
+    // Grouped the way the tree holds them: cash under 1101, banks under 1102.
     var modalOptions = '<option value="">Select Payment Method</option>';
-    paymentMethods.forEach(function(pm) {
-        if (pm.is_active) {
-            modalOptions += '<option value="' + pm.id + '">' + pm.method_name + '</option>';
-        }
+    [['1101', 'cash'], ['1102', 'bank']].forEach(function(pair) {
+        var mine = paymentMethods.filter(function(pm) { return pm.is_active && (pm.method_type === 'bank') === (pair[1] === 'bank'); });
+        if (!mine.length) return;
+        modalOptions += '<optgroup label="' + escHtml(pair[0] + ' ' + (chartAccountName(pair[0]) || (pair[1] === 'bank' ? 'Bank' : 'Cash'))) + '">';
+        mine.forEach(function(pm) { modalOptions += '<option value="' + pm.id + '">' + escHtml(pm.method_name) + '</option>'; });
+        modalOptions += '</optgroup>';
     });
     $('#transPaymentMethod').html(modalOptions);
+    showPaymentPath();
     
     // Filter dropdown (multi-select via Select2)
     var filterSel = $('#filterPaymentMethod');
@@ -3077,6 +3083,7 @@ function loadAllCategories() {
                 });
                 console.log('Loaded categories:', categories.length, 'All (flat):', allCategories.length);
                 renderCategoriesTree();
+                if (paymentMethods.length) populatePaymentMethodDropdowns();   // group labels come from the chart
             } else {
                 console.error('Failed to load categories:', data.error);
             }
@@ -3783,39 +3790,58 @@ function loadSalesRequests(clientId = null) {
         });
 }
 
-// The account a transaction posts to: the account picked under the group, or a group that is itself an account.
+// The account a transaction posts to (one list of every account).
 function transAccountId() {
-    return $('#transSubcategory').val() || $('#transCategory').val();
+    return $('#transCategory').val();
 }
 
-// Accounts under the chosen group, indented by depth, with their codes.
-function loadSubcategories(parentId) {
-    var group = categories.find(function(c) { return c.id == parentId; });
-    var subs = (group && group.subcategories) || [];
-    var options = subs.length ? '<option value="">Select account</option>'
-                              : '<option value="">(this is the account)</option>';
-    subs.forEach(function(s) {
-        options += '<option value="' + s.id + '">' + '&nbsp;&nbsp;'.repeat(s.depth || 0) +
-                   escHtml(s.account_code + ' ' + s.category_name) + '</option>';
-    });
-    $('#transSubcategory').html(options);
+// Cash and bank are the payment method's side, so they are not offered as the account.
+var PAYMENT_ACCOUNTS = ['1101', '1102'];
+
+function chartAccountName(code) {
+    for (const g of categories) {
+        if (g.account_code === code) return g.category_name;
+        const hit = (g.subcategories || []).find(s => s.account_code === code);
+        if (hit) return hit.category_name;
+    }
+    return '';
 }
 
-// The chart's groups for the transaction form, under their class. Any account
-// can take money in or out (a capital deposit, a supplier payment, a refund).
+// Every account the money can be for, under its group (or its class, for an
+// account that sits straight under one), searchable.
 function populateCategoryDropdown(type) {
-    var options = '<option value="">Select account group</option>', cls = null;
-    categories.forEach(function(g) {
-        if (g.class_code !== cls) {
-            if (cls !== null) options += '</optgroup>';
-            options += '<optgroup label="' + escHtml(g.class_code + ' ' + g.class_name) + '">';
-            cls = g.class_code;
+    let options = '<option value="">Select account</option>', open = null;
+    const add = (label, html) => {
+        if (label !== open) {
+            if (open !== null) options += '</optgroup>';
+            options += '<optgroup label="' + escHtml(label) + '">';
+            open = label;
         }
-        options += '<option value="' + g.id + '">' + escHtml(g.account_code + ' ' + g.category_name) + '</option>';
+        options += html;
+    };
+    categories.forEach(function(g) {
+        if (g.subcategories.length) {
+            g.subcategories.filter(a => PAYMENT_ACCOUNTS.indexOf(a.account_code) < 0).forEach(function(a) {
+                add(g.account_code + ' ' + g.category_name,
+                    '<option value="' + a.id + '">' + '\u00a0\u00a0'.repeat(a.depth || 0) + escHtml(a.account_code + ' ' + a.category_name) + '</option>');
+            });
+        } else if (PAYMENT_ACCOUNTS.indexOf(g.account_code) < 0) {
+            add(g.class_code + ' ' + g.class_name, '<option value="' + g.id + '">' + escHtml(g.account_code + ' ' + g.category_name) + '</option>');
+        }
     });
-    if (cls !== null) options += '</optgroup>';
-    $('#transCategory').html(options);
-    $('#transSubcategory').html('<option value="">Select account</option>');
+    if (open !== null) options += '</optgroup>';
+    $('#transCategory').html(options).trigger('change.select2');
+    $('#transSubcategory').html('<option value=""></option>');
+}
+
+// Where the money is recorded in the tree: 11 > 1101 cash or 1102 bank > the method.
+function showPaymentPath() {
+    const pm = paymentMethods.find(m => String(m.id) === String($('#transPaymentMethod').val()));
+    if (!pm) { $('#transPmPath').empty(); return; }
+    const code = pm.method_type === 'bank' ? '1102' : '1101';
+    const step = t => '<bdi>' + escHtml(t) + '</bdi>';
+    $('#transPmPath').html('<i class="fas fa-sitemap mr-1"></i>Recorded under ' + step('11 ' + chartAccountName('11')) +
+        ' &rsaquo; ' + step(code + ' ' + chartAccountName(code)) + ' &rsaquo; <b>' + step(pm.method_name) + '</b>');
 }
 
 // Open Add Income Modal
@@ -3827,6 +3853,8 @@ function openAddIncomeModal() {
     $('#supplierGroup').hide();
     populateCategoryDropdown('income');
     $('#transactionForm')[0].reset();
+    $('#transCategory').trigger('change.select2');
+    $('#transPmPath').empty();
     $('#transDate').val(new Date().toISOString().split('T')[0]);
     // Reset loan user section
     resetLoanUserSection();
@@ -3842,6 +3870,8 @@ function openAddExpenseModal() {
     $('#supplierGroup').show();
     populateCategoryDropdown('expense');
     $('#transactionForm')[0].reset();
+    $('#transCategory').trigger('change.select2');
+    $('#transPmPath').empty();
     $('#transDate').val(new Date().toISOString().split('T')[0]);
     // Reset loan user section
     resetLoanUserSection();
@@ -3856,12 +3886,7 @@ function submitTransaction() {
     const salesRequestId = $('#transSR').val();
     const categoryId = transAccountId();
     const loanUserId = $('#transLoanUser').val();
-    const group = categories.find(c => c.id == $('#transCategory').val());
-    if (group && group.subcategories.length && !$('#transSubcategory').val()) {
-        Swal.fire('Choose the account', 'Pick the account under ' + group.account_code + ' ' + group.category_name + '.', 'warning');
-        return;
-    }
-    
+
     // Check if this is a loan category (Loan=11, Pay Loan=3)
     const isLoanCategory = (categoryId == '11' || categoryId == '3');
     

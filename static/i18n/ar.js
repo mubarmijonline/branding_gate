@@ -2572,6 +2572,7 @@ window.BG_AR = {
 "Recorded": "تم التسجيل",
 "Recorded as a purchase, like every later movement.": "يُسجل كعملية شراء، مثل كل حركة لاحقة.",
 "Recorded as {0}": "مسجّل كـ {0}",
+"Recorded under": "يُسجل تحت",
 "Recosting": "إعادة التكلفة",
 "Red Sea": "البحر الأحمر",
 "Ref": "المرجع",
