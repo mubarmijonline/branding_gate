@@ -530,7 +530,7 @@
             var isCompany = KIND === 'company';
             var rows = (st.entries || []).map(function (e) {
                 var label = (e.kind === 'invoice' || e.kind === 'refund')
-                    ? '<a href="/invoices/' + e.ref_id + '/print" target="_blank">' + esc(e.label) + '</a>'
+                    ? '<a href="#" data-invoice-id="' + e.ref_id + '">' + esc(e.label) + '</a>'
                     : '<b>' + esc(LABEL_AR[e.label] || e.label) + '</b>';
                 return '<tr><td>' + day(e.day) + '</td>' +
                     '<td>' + (e.sales_request_id ? '<a href="/sales_request_details/' + e.sales_request_id + '">SR-' + e.sales_request_id + '</a>' : '-') + '</td>' +

@@ -25428,6 +25428,7 @@ def client_invoice_get(invoice_id):
     data['can_submit'] = inv['created_by'] == me and inv['status'] in INVOICE_EDITABLE_BY_AUTHOR
     data['can_post'] = has('invoice.post') and (inv['status'] == 'submitted' or (
         inv['status'] in ('draft', 'returned') and inv['created_by'] == me))
+    data['withholding_account'] = WITHHOLDING_TAX_ACCOUNT
     return jsonify(success=True, invoice=data, lines=lines)
 
 

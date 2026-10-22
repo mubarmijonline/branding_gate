@@ -1542,7 +1542,7 @@ body.finance-surface {
             <div class="finance-card">
                 <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Debit</span><span class="chart-head-r">Credit</span><span class="chart-head-r">Balance</span></div>
                 <div id="chartTree" class="chart-tree"></div>
-                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Double entry from what Finance approved: each transaction debits and credits its payment method and its account; each posted invoice debits 1103 (total) and 1107 (1% withheld) and credits 4101 (before tax) and 2103 (VAT); a refund the reverse on 4102. Balance is on the account's normal side. Payment methods sit under 1101 (cash) and 1102 (bank).</div>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Double entry from what Finance approved: each transaction debits and credits its payment method and its account; each posted invoice debits 1103 (total) and 2104 (1% withheld) and credits 4101 (before tax) and 2103 (VAT); a refund the reverse on 4102. Balance is on the account's normal side. Payment methods sit under 1101 (cash) and 1102 (bank).</div>
             </div>
         </div>
 
@@ -3721,7 +3721,7 @@ function renderApprovedTransactions(transactions) {
                     ${t.approved_at ? `<br><small style="color: var(--muted);">${t.approved_at.split('T')[0]}</small>` : ''}
                 </td>
                 <td>
-                    ${doc ? `<a class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" href="/invoices?open=${t.invoice_id}" target="_blank" title="Open the invoice"><i class="fas fa-eye"></i></a>`
+                    ${doc ? `<button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" data-invoice-id="${t.invoice_id}" title="Open the invoice"><i class="fas fa-eye"></i></button>`
                           : `<button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewTransaction(${t.id})"><i class="fas fa-eye"></i></button>`}
                 </td>
             </tr>
@@ -4663,7 +4663,7 @@ function openLedger(node) {
             formatCurrency(d.credit) + '</b></div><div><span>Balance</span><b>' + formatCurrency(d.balance) + '</b></div>');
         $('#ledgerBody').html(d.rows.length ? d.rows.map(function(r) {
             const ref = r.source === 'invoice'
-                ? '<a href="/invoices?open=' + r.source_id + '" target="_blank">' + escHtml(r.ref) + '</a>'
+                ? '<a href="#" data-invoice-id="' + r.source_id + '">' + escHtml(r.ref) + '</a>'
                 : '<a href="#" onclick="viewTransaction(' + r.source_id + '); return false;">' + escHtml(r.ref) + '</a>';
             return '<tr><td>' + escHtml(r.day || '') + '</td><td>' + ref + '</td><td><bdi>' + escHtml(r.account + ' ' + r.account_name) +
                 '</bdi></td><td>' + escHtml(r.description || '') + '</td><td style="text-align:end">' + (r.debit ? formatCurrency(r.debit) : '') +
