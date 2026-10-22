@@ -731,11 +731,11 @@ function renderUserExpensesForFinance(expenses) {
     var categoryOptions = '<option value="">-- Select Category --</option>';
     financeCategories.forEach(function(cat) {
         if (cat.category_type === 'expense') {
-            categoryOptions += '<option value="' + cat.id + '" data-parent-id="">' + cat.category_name + '</option>';
+            categoryOptions += '<option value="' + cat.id + '" data-parent-id="">' + (cat.account_code ? cat.account_code + ' ' : '') + cat.category_name + '</option>';
             // Add subcategories - these store parent_id so we know the main category
             if (cat.subcategories && cat.subcategories.length > 0) {
                 cat.subcategories.forEach(function(sub) {
-                    categoryOptions += '<option value="' + sub.id + '" data-parent-id="' + cat.id + '">&nbsp;&nbsp;↳ ' + sub.category_name + '</option>';
+                    categoryOptions += '<option value="' + sub.id + '" data-parent-id="' + cat.id + '">&nbsp;&nbsp;↳ ' + (sub.account_code ? sub.account_code + ' ' : '') + sub.category_name + '</option>';
                 });
             }
         }

@@ -363,3 +363,51 @@ Finance Management. API under `/api/finance/supplier-accounts`.
 **Finance bar:** `_finance_nav.html`, included by `main.html` on every Finance
 endpoint (Overview, Management, Approvals; Clients; Suppliers; Expenses), each
 link behind its own permission. Replaces `_clients_nav.html`.
+
+# Chart of accounts replaces the Finance Tree, 2026-10-22
+
+**Ask:** replace the income/expense category tree with Branding Gate's chart of
+accounts (دليل الحسابات), with its codes. Decided with Ahmed: the chart sits over
+the existing cash entries (no double entry); the system's own bookings map to:
+client payment → 1103 العملاء, supplier payment → 2101 الموردين, custody,
+staff loan and loan repayment → 1110 سلف وعهد للموظفين, opening balance → 3101
+راس المال, client refund → 4102 مردودات ومسموحات المبيعات, other income → 4201.
+
+**Chart:** `finance_chart.py` holds the sheet (classes 1-6, groups, accounts),
+with two fixes: قروض بنكية is 2201 (the sheet repeated 2101), and spelling
+(البيعية، الأثاث، المستحقة). `finance_categories` gains `account_code`
+(unique) and `category_type` gains asset / liability / equity (class 1 asset,
+2 liability, 3 equity, 4 income, 5-6 expense). The system rows keep their ids
+(1, 2, 3, 4, 10, 11, 16, 44, 46) and become their accounts, so every booking in
+the code is unchanged; custody and loans become four sub-accounts of 1110
+(111001 صرف عهدة = 16, 111002 تسوية عهدة = 44, 111003 سلف = 11, 111004 سداد سلف
+= 3). The old non-system categories are removed (no transactions use them
+after the 2026-10-22 reset).
+
+**Posting:** a transaction posts to one leaf account: `category_id` = the
+account, `subcategory_id` NULL. Pickers keep their two-level shape (group, then
+account); `posting_account()` turns any (category, sub-category) pair into the
+leaf and refuses a group that has accounts under it. Applied wherever a
+category comes from a request (add transaction, staff expense approval single
+and bulk, expense-tracking approval). The single staff-expense approval no
+longer defaults to the deleted Operational Expenses; a category is required.
+
+**Values in the tree:** each account shows money in, money out and its net on
+its normal side (assets, costs and expenses: out − in; liabilities, equity and
+revenue: in − out), rolled up through groups and classes. Five accounts show
+the live balance the system already keeps instead: 1101 the cash payment
+methods, 1102 the bank ones, 1103 what clients owe (client accounts), 2101 what
+we owe suppliers (supplier accounts), 1110 custody held by staff plus staff
+loans outstanding. Live balances are as of now; the date filter applies to
+movements.
+
+**Reports:** the income statement and analytics roll up by group over classes
+4 (revenue) and 5-6 (costs and expenses). 4101 Sales also counts posted
+invoices (subtotal) and 4102 posted refunds (minus), since client payments now
+go to 1103, not to revenue. The balance sheet is unchanged.
+
+**Editing:** add an account or sub-account under any node (code suggested as
+the next free one under the parent, editable, unique, must start with the
+parent's code), rename, re-code and delete non-system ones. Classes and the
+mapped system accounts cannot be renamed or deleted. The Categories tab shows
+the same chart.

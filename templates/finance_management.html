@@ -732,9 +732,37 @@ body.finance-surface {
     border-color: var(--primary);
     background: rgba(99,102,241,0.02);
 }
+/* Chart of accounts: one row per class, group and account, indented by depth. */
+.chart-tree, .category-tree { padding: 6px 0; }
+.chart-head { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; padding: 10px 20px; font-size: 11px;
+              font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+.chart-head-r { text-align: end; }
+.chart-row { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid #f1f5f9;
+             border-inline-start: 3px solid transparent; }
+.chart-row:hover { background: #f8fafc; }
+.chart-row.depth-0 { background: color-mix(in srgb, var(--cls) 9%, #fff); border-inline-start-color: var(--cls); font-weight: 800; font-size: 15px; }
+.chart-row.depth-1 { font-weight: 700; border-inline-start-color: color-mix(in srgb, var(--cls) 45%, #fff); }
+.chart-row.depth-2, .chart-row.depth-3 { font-size: 13.5px; }
+.chart-toggle { width: 16px; color: var(--muted); cursor: pointer; font-size: 11px; flex: none; }
+.chart-toggle.closed i { transform: rotate(-90deg); }
+[dir=rtl] .chart-toggle.closed i { transform: rotate(90deg); }
+.chart-code { min-width: 62px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--cls, #475569); flex: none; }
+.chart-entity .chart-code { color: var(--muted); }
+.chart-entity { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.chart-name { flex: 1 1 auto; min-width: 0; }
+.chart-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.chart-value { font-weight: 700; white-space: nowrap; min-width: 120px; text-align: end; font-variant-numeric: tabular-nums; }
+.chart-value.neg { color: var(--finance-expense); }
+.chart-live { font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; background: #fef3c7; color: #92400e;
+              padding: 1px 6px; border-radius: 4px; }
+.chart-note { padding: 12px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+.chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
+.chart-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.chart-summary div { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.chart-summary span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.chart-summary b { font-size: 20px; }
+@media (max-width: 768px) { .chart-summary { grid-template-columns: 1fr; } .chart-meta { display: none; } .chart-value { min-width: 0; } }
 /* Finance Tree editing: a category's actions sit after its total. */
-#tab-finance-tree .finance-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.tree-add { padding: 6px 12px; font-size: 12px; }
 .tree-actions { display: inline-flex; gap: 4px; align-items: center; }
 .tree-act { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted);
             font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
@@ -1470,22 +1498,13 @@ body.finance-surface {
         <div class="tab-panel" id="tab-categories">
             <div class="finance-toolbar">
                 <div class="filters">
-                    <select id="categoryTypeFilter">
-                        <option value="">All Categories</option>
-                        <option value="income">Income Categories</option>
-                        <option value="expense">Expense Categories</option>
-                    </select>
+                    <input type="search" id="categorySearch" class="chart-search" placeholder="Search code or account name">
                 </div>
-                <div class="actions">
-                    <button class="btn-pill btn-pill-success" onclick="openAddCategoryModal('income')">
-                        <i class="fas fa-plus"></i> Add Income Category
-                    </button>
-                    <button class="btn-pill btn-pill-danger" onclick="openAddCategoryModal('expense')">
-                        <i class="fas fa-plus"></i> Add Expense Category
-                    </button>
+                <div class="actions" style="color: var(--muted); font-size: 13px;">
+                    {% if 'finance_master.edit' in session.get('perms', {}) %}<i class="fas fa-info-circle mr-1"></i>Use <b>+</b> on any row to add an account under it.{% endif %}
                 </div>
             </div>
-            
+
             <div class="category-tree" id="categoriesTree">
                 <!-- Categories loaded via JS -->
             </div>
@@ -1500,61 +1519,20 @@ body.finance-surface {
                     <button class="btn-pill btn-pill-outline" onclick="loadFinanceTree()">
                         <i class="fas fa-filter"></i> Apply Filter
                     </button>
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="finance-card" style="margin-bottom: 20px;">
-                        <div class="finance-header" style="background: linear-gradient(to right, rgba(16,185,129,0.1), transparent);">
-                            <h1 style="font-size: 20px;">
-                                <span class="badge-dot" style="background: var(--success-soft); color: var(--success);">
-                                    <i class="fas fa-arrow-down"></i>
-                                </span>
-                                Income
-                            </h1>
-                            {% if 'finance_master.edit' in session.get('perms', {}) %}
-                            <button class="btn-pill btn-pill-outline tree-add" onclick="openAddCategoryModal('income')"><i class="fas fa-plus"></i> Category</button>
-                            {% endif %}
-                        </div>
-                        <div style="padding: 20px;" id="incomeTree">
-                            <!-- Income tree loaded via JS -->
-                        </div>
-                        <div style="padding: 16px 20px; border-top: 2px solid var(--border); background: var(--success-soft);">
-                            <strong style="font-size: 18px; color: var(--finance-income);">Total: <span id="totalIncomeTree">EGP 0.00</span></strong>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="finance-card" style="margin-bottom: 20px;">
-                        <div class="finance-header" style="background: linear-gradient(to right, rgba(239,68,68,0.1), transparent);">
-                            <h1 style="font-size: 20px;">
-                                <span class="badge-dot" style="background: var(--danger-soft); color: var(--danger);">
-                                    <i class="fas fa-arrow-up"></i>
-                                </span>
-                                Expenses
-                            </h1>
-                            {% if 'finance_master.edit' in session.get('perms', {}) %}
-                            <button class="btn-pill btn-pill-outline tree-add" onclick="openAddCategoryModal('expense')"><i class="fas fa-plus"></i> Category</button>
-                            {% endif %}
-                        </div>
-                        <div style="padding: 20px;" id="expenseTree">
-                            <!-- Expense tree loaded via JS -->
-                        </div>
-                        <div style="padding: 16px 20px; border-top: 2px solid var(--border); background: var(--danger-soft);">
-                            <strong style="font-size: 18px; color: var(--finance-expense);">Total: <span id="totalExpenseTree">EGP 0.00</span></strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="finance-card">
-                <div style="padding: 24px; text-align: center; background: linear-gradient(135deg, rgba(99,102,241,0.05), rgba(16,185,129,0.05));">
-                    <h2 style="font-size: 16px; color: var(--muted); margin-bottom: 8px;">NET BALANCE</h2>
-                    <h1 style="font-size: 36px; font-weight: 800;" id="netBalanceTree">EGP 0.00</h1>
+                    <input type="search" id="treeSearch" class="chart-search" placeholder="Search code or account name">
                 </div>
             </div>
 
+            <div class="chart-summary">
+                <div><span>Revenue (4)</span><b id="chartRevenue">EGP 0.00</b></div>
+                <div><span>Cost of sales and expenses (5, 6)</span><b id="chartCosts">EGP 0.00</b></div>
+                <div><span>Net profit</span><b id="chartNet">EGP 0.00</b></div>
+            </div>
+            <div class="finance-card">
+                <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Balance / net</span></div>
+                <div id="chartTree" class="chart-tree"></div>
+                <div class="chart-note"><i class="fas fa-bolt mr-1"></i><b>live</b>: the balance the system keeps today (cash, bank, clients, suppliers, staff custody and loans). Other accounts show the period's movements: money out minus in for assets, costs and expenses; in minus out for liabilities, equity and revenue. Sales (4101) and returns (4102) come from posted invoices and refunds.</div>
+            </div>
         </div>
 
         <!-- Tab: Client Payments -->
@@ -2054,18 +2032,18 @@ body.finance-surface {
                             </select>
                         </div>
                         <div class="form-group-modern">
-                            <label>Category *</label>
+                            <label>Account group *</label>
                             <select class="form-control" id="transCategory" required>
-                                <option value="">Select Category</option>
+                                <option value="">Select account group</option>
                             </select>
                         </div>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group-modern">
-                            <label>Sub-Category</label>
+                            <label>Account *</label>
                             <select class="form-control" id="transSubcategory">
-                                <option value="">Select Sub-Category (Optional)</option>
+                                <option value="">Select account</option>
                             </select>
                         </div>
                         <div class="form-group-modern">
@@ -2308,14 +2286,16 @@ body.finance-surface {
                     <input type="hidden" id="catType" value="income">
                     <input type="hidden" id="catId" value="">
                     <div class="form-group-modern">
-                        <label>Category Name *</label>
-                        <input type="text" class="form-control" id="catName" required placeholder="Category name">
+                        <label>Account name *</label>
+                        <input type="text" class="form-control" id="catName" required placeholder="Account name">
                     </div>
                     <div class="form-group-modern">
-                        <label>Parent Category (for sub-category)</label>
-                        <select class="form-control" id="catParent">
-                            <option value="">None (Root Category)</option>
-                        </select>
+                        <label>Under</label>
+                        <select class="form-control" id="catParent" disabled></select>
+                    </div>
+                    <div class="form-group-modern">
+                        <label>Account code</label>
+                        <input type="text" class="form-control" id="catCode" inputmode="numeric" placeholder="Next free code">
                     </div>
                     <div class="form-group-modern">
                         <label>Description</label>
@@ -2761,16 +2741,15 @@ $(document).ready(function() {
         filterReportTable('supplierReportBody', $(this).val());
     });
     
-    // Category type filter
-    $('#categoryTypeFilter').change(function() {
-        renderCategoriesTree();
-    });
-    
-    // Category change - load subcategories and check for loan categories
-    $('#transCategory').change(function() {
-        var catId = $(this).val();
-        loadSubcategories(catId);
-        
+    $('#categorySearch').on('input', function() { filterChart('#categoriesTree', $(this).val()); });
+    $('#treeSearch').on('input', function() { filterChart('#chartTree', $(this).val()); });
+
+    // Group change - list its accounts; either change re-checks for the loan accounts.
+    $('#transCategory').change(function() { loadSubcategories($(this).val()); });
+    $('#transCategory, #transSubcategory').change(function() {
+        var catId = transAccountId();
+        updateSRLabel();
+
         // Check if this is a Loan (id=11) or Pay Loan (id=3) category
         var isLoanCategory = (catId == '11' || catId == '3');
         if (isLoanCategory) {
@@ -2817,8 +2796,7 @@ $(document).ready(function() {
         }
         updateSRLabel();
     });
-    $('#transCategory').change(updateSRLabel);
-    
+
     // /finance_management#payment-methods (linked from Finance Approvals) opens that tab.
     if (location.hash) {
         var wanted = location.hash.slice(1);
@@ -2833,7 +2811,7 @@ function updateSRLabel() {
     var type = $('#transactionType').val();
     var hasEntity = (type === 'income' && $('#transClient').val()) || 
                    (type === 'expense' && $('#transSupplier').val()) ||
-                   $('#transCategory').val() == CLIENT_PAYMENTS_CATEGORY_ID;
+                   transAccountId() == CLIENT_PAYMENTS_CATEGORY_ID;
     
     if (hasEntity) {
         $('#srLabel').html('Related Sales Request <span style="color: var(--danger);">*</span>');
@@ -3113,76 +3091,14 @@ function loadCategories() {
 }
 
 function renderCategoriesTree() {
-    var tree = $('#categoriesTree');
-    tree.empty();
-    
-    var typeFilter = $('#categoryTypeFilter').val();
-    
-    // Filter by type if specified
-    var displayCategories = categories;
-    if (typeFilter) {
-        displayCategories = categories.filter(function(c) { return c.category_type === typeFilter; });
-    }
-    
-    // Group by type
-    var incomeCategories = displayCategories.filter(function(c) { return c.category_type === 'income'; });
-    var expenseCategories = displayCategories.filter(function(c) { return c.category_type === 'expense'; });
-    
-    if (incomeCategories.length > 0) {
-        tree.append('<h4 style="color: var(--finance-income); margin: 16px 0 12px;"><i class="fas fa-arrow-down mr-2"></i>Income Categories</h4>');
-        incomeCategories.forEach(cat => renderCategory(tree, cat, 'income'));
-    }
-    
-    if (expenseCategories.length > 0) {
-        tree.append('<h4 style="color: var(--finance-expense); margin: 24px 0 12px;"><i class="fas fa-arrow-up mr-2"></i>Expense Categories</h4>');
-        expenseCategories.forEach(cat => renderCategory(tree, cat, 'expense'));
-    }
-}
-
-function renderCategory(container, cat, type) {
-    const subCount = cat.subcategories ? cat.subcategories.length : 0;
-    const div = $(`
-        <div class="category-item ${type}">
-            <div>
-                <span class="cat-name">${cat.category_name}</span>
-                ${cat.is_system ? '<span style="font-size: 10px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">SYSTEM | نظام</span>' : ''}
-                ${subCount > 0 ? `<span style="font-size: 10px; background: var(--primary-soft); color: var(--primary); padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${subCount} sub</span>` : ''}
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" onclick="openAddSubcategoryModal(${cat.id}, '${type}')">
-                    <i class="fas fa-plus"></i> Sub
-                </button>
-                ${!cat.is_system ? `
-                    <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px;" data-cat-edit="${cat.id}" title="Edit">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button class="btn-pill btn-pill-outline" style="padding: 6px 10px; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="deleteCategory(${cat.id}, '${cat.category_name}', ${subCount})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                ` : ''}
-            </div>
-        </div>
-    `);
-    container.append(div);
-    
-    // Subcategories
-    if (cat.subcategories && cat.subcategories.length > 0) {
-        const subList = $('<div class="subcategory-list"></div>');
-        cat.subcategories.forEach(sub => {
-            subList.append(`
-                <div class="subcategory-item">
-                    <span>${sub.category_name}</span>
-                    ${!sub.is_system ? `<span style="display:flex;gap:6px">
-                        <button class="btn-pill btn-pill-outline" style="padding: 4px 8px; font-size: 10px;" data-cat-edit="${sub.id}" title="Edit"><i class="fas fa-pen"></i></button>
-                        <button class="btn-pill btn-pill-outline" style="padding: 4px 8px; font-size: 10px; color: var(--danger); border-color: var(--danger);" onclick="deleteCategory(${sub.id}, '${sub.category_name}', 0)">
-                            <i class="fas fa-trash"></i>
-                        </button></span>
-                    ` : ''}
-                </div>
-            `);
+    fetch('/api/finance/tree')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                renderChart('#categoriesTree', data.classes, false);
+                filterChart('#categoriesTree', $('#categorySearch').val());
+            }
         });
-        container.append(subList);
-    }
 }
 
 // Load Transactions
@@ -3866,46 +3782,39 @@ function loadSalesRequests(clientId = null) {
         });
 }
 
-// Load Subcategories
+// The account a transaction posts to: the account picked under the group, or a group that is itself an account.
+function transAccountId() {
+    return $('#transSubcategory').val() || $('#transCategory').val();
+}
+
+// Accounts under the chosen group, indented by depth, with their codes.
 function loadSubcategories(parentId) {
-    var parentCat = null;
-    for (var i = 0; i < categories.length; i++) {
-        if (categories[i].id == parentId) {
-            parentCat = categories[i];
-            break;
-        }
-    }
-    
-    var options = '<option value="">Select Sub-Category (Optional)</option>';
-    
-    if (parentCat && parentCat.subcategories && parentCat.subcategories.length > 0) {
-        parentCat.subcategories.forEach(function(s) {
-            options += '<option value="' + s.id + '">' + s.category_name + '</option>';
-        });
-    }
-    
+    var group = categories.find(function(c) { return c.id == parentId; });
+    var subs = (group && group.subcategories) || [];
+    var options = subs.length ? '<option value="">Select account</option>'
+                              : '<option value="">(this is the account)</option>';
+    subs.forEach(function(s) {
+        options += '<option value="' + s.id + '">' + '&nbsp;&nbsp;'.repeat(s.depth || 0) +
+                   escHtml(s.account_code + ' ' + s.category_name) + '</option>';
+    });
     $('#transSubcategory').html(options);
 }
 
-// Populate Category Dropdown for Transaction Form
+// The chart's groups for the transaction form, under their class. Any account
+// can take money in or out (a capital deposit, a supplier payment, a refund).
 function populateCategoryDropdown(type) {
-    console.log('Populating category dropdown for type:', type);
-    console.log('Available categories:', categories);
-    
-    // Filter root categories by type (categories that have no parent_id)
-    var filteredCats = categories.filter(function(c) { 
-        return c.category_type === type && !c.parent_id; 
+    var options = '<option value="">Select account group</option>', cls = null;
+    categories.forEach(function(g) {
+        if (g.class_code !== cls) {
+            if (cls !== null) options += '</optgroup>';
+            options += '<optgroup label="' + escHtml(g.class_code + ' ' + g.class_name) + '">';
+            cls = g.class_code;
+        }
+        options += '<option value="' + g.id + '">' + escHtml(g.account_code + ' ' + g.category_name) + '</option>';
     });
-    
-    console.log('Filtered categories:', filteredCats);
-    
-    var options = '<option value="">Select Category</option>';
-    filteredCats.forEach(function(c) {
-        options += '<option value="' + c.id + '">' + c.category_name + '</option>';
-    });
-    
+    if (cls !== null) options += '</optgroup>';
     $('#transCategory').html(options);
-    $('#transSubcategory').html('<option value="">Select Sub-Category (Optional)</option>');
+    $('#transSubcategory').html('<option value="">Select account</option>');
 }
 
 // Open Add Income Modal
@@ -3944,8 +3853,13 @@ function submitTransaction() {
     const clientId = $('#transClient').val();
     const supplierId = $('#transSupplier').val();
     const salesRequestId = $('#transSR').val();
-    const categoryId = $('#transCategory').val();
+    const categoryId = transAccountId();
     const loanUserId = $('#transLoanUser').val();
+    const group = categories.find(c => c.id == $('#transCategory').val());
+    if (group && group.subcategories.length && !$('#transSubcategory').val()) {
+        Swal.fire('Choose the account', 'Pick the account under ' + group.account_code + ' ' + group.category_name + '.', 'warning');
+        return;
+    }
     
     // Check if this is a loan category (Loan=11, Pay Loan=3)
     const isLoanCategory = (categoryId == '11' || categoryId == '3');
@@ -4374,54 +4288,34 @@ function viewPaymentMethodHistory(methodId) {
 }
 
 // Category Functions
-// The category modal adds (no #catId) or renames (#catId set; type and parent fixed).
+// The account modal adds under a node (no #catId) or edits one (#catId set; its place is fixed).
 function categoryModalMode(editing) {
     $('#catId').val('');
-    $('#catParent').prop('disabled', editing);
-    $('#catSubmitBtn').html(editing ? '<i class="fas fa-save"></i> Save' : '<i class="fas fa-plus"></i> Add Category');
+    $('#catCode').val('');
+    $('#catSubmitBtn').html(editing ? '<i class="fas fa-save"></i> Save' : '<i class="fas fa-plus"></i> Add account');
 }
 
-function openAddCategoryModal(type) {
+function openAddAccountModal(parent) {
     categoryModalMode(false);
-    $('#catType').val(type);
-    $('#categoryModalTitle').text(`Add ${type === 'income' ? 'Income' : 'Expense'} Category`);
-    
-    // Populate parent categories
-    const parentCats = categories.filter(c => c.category_type === type && !c.parent_id);
-    const options = '<option value="">None (Root Category)</option>' + 
-        parentCats.map(c => `<option value="${c.id}">${c.category_name}</option>`).join('');
-    $('#catParent').html(options);
-    
-    $('#categoryForm')[0].reset();
-    $('#catType').val(type);
-    $('#addCategoryModal').modal('show');
-}
-
-function openAddSubcategoryModal(parentId, type) {
-    categoryModalMode(false);
-    $('#catType').val(type);
-    $('#categoryModalTitle').text(`Add Sub-Category`);
-    
-    // Set parent
-    const parentCats = categories.filter(c => c.category_type === type && !c.parent_id);
-    const options = '<option value="">None (Root Category)</option>' + 
-        parentCats.map(c => `<option value="${c.id}" ${c.id == parentId ? 'selected' : ''}>${c.category_name}</option>`).join('');
-    $('#catParent').html(options);
-    
+    $('#catType').val(parent.type);
+    $('#categoryModalTitle').text('Add account under ' + parent.code + ' ' + parent.name);
+    $('#catParent').html('<option value="' + parent.id + '">' + escHtml(parent.code + ' ' + parent.name) + '</option>');
+    $('#catCode').attr('placeholder', 'Next free code under ' + parent.code);
     $('#catName').val('');
     $('#catDescription').val('');
     $('#addCategoryModal').modal('show');
 }
 
-function openEditCategoryModal(cat) {
+function openEditCategoryModal(node) {
     categoryModalMode(true);
-    $('#catId').val(cat.id);
-    $('#catType').val(cat.type);
-    $('#categoryModalTitle').text(cat.parent_id ? 'Edit Sub-Category' : 'Edit Category');
-    const parent = cat.parent_id ? (allCategories.find(c => c.id == cat.parent_id) || {}) : null;
-    $('#catParent').html(parent ? `<option>${escHtml(parent.category_name || '')}</option>` : '<option>None (Root Category)</option>');
-    $('#catName').val(cat.name);
-    $('#catDescription').val(cat.description || '');
+    $('#catId').val(node.id);
+    $('#catType').val(node.type);
+    $('#categoryModalTitle').text('Edit account ' + node.code);
+    const parent = treeCats[node.parent_id];
+    $('#catParent').html('<option>' + escHtml(parent ? parent.code + ' ' + parent.name : '') + '</option>');
+    $('#catCode').val(node.code);
+    $('#catName').val(node.name);
+    $('#catDescription').val(node.description || '');
     $('#addCategoryModal').modal('show');
 }
 
@@ -4441,6 +4335,7 @@ function submitCategory() {
         category_name: $('#catName').val(),
         category_type: $('#catType').val(),
         parent_id: $('#catParent').val() || null,
+        account_code: $('#catCode').val().trim(),
         description: $('#catDescription').val()
     };
     
@@ -4458,7 +4353,7 @@ function submitCategory() {
     .then(result => {
         if (result.success) {
             $('#addCategoryModal').modal('hide');
-            Swal.fire('Success', editId ? 'Category saved' : 'Category added', 'success');
+            Swal.fire('Success', editId ? 'Account saved' : result.message, 'success');
             refreshCategoryViews();
         } else {
             Swal.fire('Error', result.error, 'error');
@@ -4549,141 +4444,102 @@ function loadFinanceTree() {
 
 var CAN_EDIT_CATEGORIES = !!(window.USER_PERMS || {})['finance_master.edit'];
 var treeCats = {};
+var CHART_CLASS_COLORS = { '1': '#2563eb', '2': '#dc2626', '3': '#7c3aed', '4': '#059669', '5': '#d97706', '6': '#db2777' };
 
-// Add sub / edit / delete on a Finance Tree row. System categories (the ones the
-// system books into) keep their name but still take sub-categories.
-function treeActions(cat, isSub) {
+// Add under / edit / delete on a chart row. Classes and the accounts the
+// system books into keep their name and code but still take accounts under them.
+function treeActions(node, depth) {
     if (!CAN_EDIT_CATEGORIES) return '';
-    treeCats[cat.id] = cat;
-    let html = '<span class="tree-actions">';
-    if (!isSub) html += `<button class="tree-act" data-tree-sub="${cat.id}" title="Add sub-category"><i class="fas fa-plus"></i></button>`;
-    if (!cat.is_system) {
-        html += `<button class="tree-act" data-tree-edit="${cat.id}" title="Edit"><i class="fas fa-pen"></i></button>` +
-                `<button class="tree-act danger" data-tree-del="${cat.id}" title="Delete"><i class="fas fa-trash"></i></button>`;
-    } else if (!isSub) {
+    let html = `<span class="tree-actions"><button class="tree-act" data-tree-sub="${node.id}" title="Add account under it"><i class="fas fa-plus"></i></button>`;
+    const holdsSystem = n => n.children.some(k => k.is_system || holdsSystem(k));
+    if (!node.is_system) {
+        html += `<button class="tree-act" data-tree-edit="${node.id}" title="Edit"><i class="fas fa-pen"></i></button>`;
+        if (!holdsSystem(node)) html += `<button class="tree-act danger" data-tree-del="${node.id}" title="Delete"><i class="fas fa-trash"></i></button>`;
+    } else if (depth > 0) {
         html += '<span class="tree-sys" title="Used by the system: cannot be renamed or deleted">SYSTEM</span>';
     }
     return html + '</span>';
 }
 
-$(document).on('click', '[data-tree-sub]', function (e) {
+function chartRows(nodes, depth, withAmounts, cls) {
+    return nodes.map(function(n) {
+        treeCats[n.id] = n;
+        const c = cls || n.code.charAt(0);
+        const meta = withAmounts && n.count
+            ? `<span class="chart-meta">in ${formatCurrency(n.money_in)} &middot; out ${formatCurrency(n.money_out)} &middot; ${n.count}</span>` : '';
+        const value = withAmounts ? `<span class="chart-value${n.value < 0 ? ' neg' : ''}">${formatCurrency(n.value)}</span>` : '';
+        let html = `<div class="chart-row depth-${Math.min(depth, 3)}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
+                         style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
+            <span class="chart-toggle">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
+            <span class="chart-code">${escHtml(n.code)}</span>
+            <span class="chart-name">${escHtml(n.name)}${n.live ? ' <span class="chart-live" title="The balance the system keeps, as of today">live</span>' : ''}</span>
+            ${meta}${value}${treeActions(n, depth)}
+        </div>`;
+        (withAmounts ? (n.entities || []) : []).forEach(function(ent) {
+            const open = ent.entity_type === 'client' ? `openClientDetail(${ent.id})` : `openSupplierDetail(${ent.id})`;
+            html += `<div class="chart-row chart-entity" onclick="${open}" style="padding-inline-start:${12 + (depth + 1) * 22}px">
+                <span class="chart-toggle"></span><span class="chart-code"><i class="fas ${ent.entity_type === 'client' ? 'fa-user' : 'fa-truck'}"></i></span>
+                <span class="chart-name">${escHtml(ent.name)}</span>
+                <span class="chart-meta">${ent.count}</span><span class="chart-value">${formatCurrency(ent.total)}</span></div>`;
+        });
+        if (n.children.length) {
+            html += `<div class="chart-children" data-chart-parent="${n.id}">${chartRows(n.children, depth + 1, withAmounts, c)}</div>`;
+        }
+        return html;
+    }).join('');
+}
+
+function renderChart(container, classes, withAmounts) {
+    $(container).html(classes.length ? chartRows(classes, 0, withAmounts)
+                                     : '<div class="empty-state" style="padding: 30px;">No accounts</div>');
+}
+
+// Rows matching the search, with the groups and classes above them.
+function filterChart(container, term) {
+    term = (term || '').trim().toLowerCase();
+    const $rows = $(container).find('.chart-row').not('.chart-entity');
+    if (!term) { $rows.show(); $(container).find('.chart-entity').show(); return; }
+    $rows.hide();
+    $(container).find('.chart-entity').hide();
+    $(container).find('.chart-children').show();
+    $rows.filter(function() { return String($(this).attr('data-search')).indexOf(term) >= 0; }).each(function() {
+        let id = $(this).attr('data-chart-id');
+        while (id) {
+            $(container).find('.chart-row[data-chart-id="' + id + '"]').show();
+            id = treeCats[id] && treeCats[id].parent_id;
+        }
+    });
+}
+
+$(document).on('click', '.chart-toggle', function(e) {
     e.stopPropagation();
-    const cat = treeCats[$(this).data('tree-sub')];
-    openAddSubcategoryModal(cat.id, cat.type);
+    const id = $(this).closest('.chart-row').attr('data-chart-id');
+    $(this).closest('.chart-tree, .category-tree').find('[data-chart-parent="' + id + '"]').first().toggle();
+    $(this).toggleClass('closed');
 });
-$(document).on('click', '[data-tree-edit]', function (e) {
+$(document).on('click', '[data-tree-sub]', function(e) {
+    e.stopPropagation();
+    openAddAccountModal(treeCats[$(this).data('tree-sub')]);
+});
+$(document).on('click', '[data-tree-edit]', function(e) {
     e.stopPropagation();
     openEditCategoryModal(treeCats[$(this).data('tree-edit')]);
 });
-$(document).on('click', '[data-tree-del]', function (e) {
+$(document).on('click', '[data-tree-del]', function(e) {
     e.stopPropagation();
-    const cat = treeCats[$(this).data('tree-del')];
-    deleteCategory(cat.id, cat.name, (cat.children || []).length);
-});
-$(document).on('click', '[data-cat-edit]', function () {
-    const c = allCategories.find(x => x.id == $(this).data('cat-edit'));
-    if (c) openEditCategoryModal({ id: c.id, name: c.category_name, type: c.category_type, parent_id: c.parent_id, description: c.description });
+    const node = treeCats[$(this).data('tree-del')];
+    deleteCategory(node.id, node.code + ' ' + node.name, node.children.length);
 });
 
 function renderFinanceTree(data) {
-    // Helper to render entity list under a category
-    function renderEntities(container, entities, colorVar, entityType) {
-        if (!entities || entities.length === 0) return;
-        const entList = $('<div class="subcategory-list" style="margin-left: 12px; border-left: 2px solid ' + colorVar + ';"></div>');
-        entities.forEach(ent => {
-            const icon = entityType === 'client' ? 'fa-user' : 'fa-truck';
-            const clickFn = entityType === 'client' ? `openClientDetail(${ent.id})` : `openSupplierDetail(${ent.id})`;
-            entList.append(`
-                <div class="subcategory-item" style="cursor: pointer; padding: 6px 12px; transition: background 0.15s;" 
-                     onclick="${clickFn}"
-                     onmouseover="this.style.background='rgba(99,102,241,0.05)'" onmouseout="this.style.background=''">
-                    <span><i class="fas ${icon} mr-1" style="font-size: 11px; opacity: 0.6;"></i>${ent.name}</span>
-                    <span style="color: ${colorVar}; font-weight: 600;">${formatCurrency(ent.total)} (${ent.count})</span>
-                </div>
-            `);
-        });
-        container.append(entList);
-    }
-
-    // Income tree
-    const incomeTree = $('#incomeTree');
-    incomeTree.empty();
-    
-    data.income.categories.forEach(cat => {
-        const div = $(`
-            <div class="category-item income">
-                <span class="cat-name">${escHtml(cat.name)}</span>
-                <span style="display:flex;align-items:center;gap:10px">
-                    <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>${treeActions(cat, false)}
-                </span>
-            </div>
-        `);
-        incomeTree.append(div);
-        
-        if (cat.children && cat.children.length > 0) {
-            const subList = $('<div class="subcategory-list"></div>');
-            cat.children.forEach(sub => {
-                subList.append(`
-                    <div class="subcategory-item">
-                        <span>${escHtml(sub.name)}</span>
-                        <span style="display:flex;align-items:center;gap:10px">
-                            <span style="color: var(--finance-income); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>${treeActions(sub, true)}
-                        </span>
-                    </div>
-                `);
-            });
-            incomeTree.append(subList);
-        }
-        
-        // Show clients under Client Payments category
-        if (cat.entities && cat.entities.length > 0) {
-            renderEntities(incomeTree, cat.entities, 'var(--finance-income)', cat.entities[0].entity_type);
-        }
-    });
-    
-    // Expense tree
-    const expenseTree = $('#expenseTree');
-    expenseTree.empty();
-    
-    data.expense.categories.forEach(cat => {
-        const div = $(`
-            <div class="category-item expense">
-                <span class="cat-name">${escHtml(cat.name)}</span>
-                <span style="display:flex;align-items:center;gap:10px">
-                    <span class="cat-total">${formatCurrency(cat.total)} (${cat.count})</span>${treeActions(cat, false)}
-                </span>
-            </div>
-        `);
-        expenseTree.append(div);
-        
-        if (cat.children && cat.children.length > 0) {
-            const subList = $('<div class="subcategory-list"></div>');
-            cat.children.forEach(sub => {
-                subList.append(`
-                    <div class="subcategory-item">
-                        <span>${escHtml(sub.name)}</span>
-                        <span style="display:flex;align-items:center;gap:10px">
-                            <span style="color: var(--finance-expense); font-weight: 600;">${formatCurrency(sub.total)} (${sub.count})</span>${treeActions(sub, true)}
-                        </span>
-                    </div>
-                `);
-            });
-            expenseTree.append(subList);
-        }
-        
-        // Show suppliers under Supplier Payments category
-        if (cat.entities && cat.entities.length > 0) {
-            renderEntities(expenseTree, cat.entities, 'var(--finance-expense)', cat.entities[0].entity_type);
-        }
-    });
-    
-    // Totals
-    $('#totalIncomeTree').text(formatCurrency(data.income.total));
-    $('#totalExpenseTree').text(formatCurrency(data.expense.total));
-    
-    const netBalance = data.net;
-    $('#netBalanceTree').text(formatCurrency(netBalance))
-        .css('color', netBalance >= 0 ? 'var(--finance-income)' : 'var(--finance-expense)');
+    renderChart('#chartTree', data.classes, true);
+    filterChart('#chartTree', $('#treeSearch').val());
+    const value = code => (data.classes.find(c => c.code === code) || { value: 0 }).value;
+    const revenue = value('4'), costs = value('5') + value('6');
+    $('#chartRevenue').text(formatCurrency(revenue));
+    $('#chartCosts').text(formatCurrency(costs));
+    $('#chartNet').text(formatCurrency(revenue - costs))
+        .css('color', revenue - costs >= 0 ? 'var(--finance-income)' : 'var(--finance-expense)');
 }
 
 // ============================================

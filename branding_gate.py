@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 import rbac
 import targets as targets_lib
 import invoicing
+import finance_chart
 from decimal import Decimal
 import costing
 import org_chart_pdf
@@ -22183,70 +22184,129 @@ def get_payment_method_history(method_id):
 
 # ----------------------- FINANCE CATEGORIES -----------------------
 
+# ---------------------------------------------------------------------------
+# The chart of accounts (finance_chart.py). Each finance_categories row is a
+# class, group or account with its code; a transaction posts to one leaf.
+# ---------------------------------------------------------------------------
+
+def chart_accounts(cur):
+    """Active chart rows by id, each with the ids of its children, in chart order."""
+    cur.execute("""SELECT id, category_name, category_code, account_code, parent_id, category_type, description,
+                          is_system, display_order
+                   FROM finance_categories WHERE is_active = TRUE
+                   ORDER BY display_order, account_code, category_name""")
+    rows = {r['id']: dict(r, children=[]) for r in cur.fetchall()}
+    for r in rows.values():
+        if r['parent_id'] in rows:
+            rows[r['parent_id']]['children'].append(r['id'])
+    return rows
+
+
+def posting_account(cur, category_id, subcategory_id=None):
+    """
+    (account id, error): the leaf account a transaction posts to. Pickers send a
+    group and an account under it; the account wins. A group that has accounts
+    under it cannot take a posting itself.
+    """
+    target = subcategory_id or category_id
+    try:
+        target = int(target)
+    except (TypeError, ValueError):
+        return None, 'Choose an account'
+    cur.execute("""SELECT f.id, f.category_name, f.account_code, f.is_active,
+                          (SELECT COUNT(*) FROM finance_categories c WHERE c.parent_id = f.id AND c.is_active = TRUE) AS kids
+                   FROM finance_categories f WHERE f.id = %s""", (target,))
+    row = cur.fetchone()
+    if not row or not row['is_active']:
+        return None, 'Account not found'
+    if row['kids']:
+        return None, 'Choose an account under %s %s' % (row['account_code'] or '', row['category_name'])
+    return row['id'], None
+
+
+def chart_with_descendants(cur, ids):
+    """The given accounts and every account under them (a filter on a group finds its accounts' postings)."""
+    rows = chart_accounts(cur)
+    out, stack = set(), [i for i in ids if i in rows]
+    while stack:
+        rid = stack.pop()
+        if rid not in out:
+            out.add(rid)
+            stack += rows[rid]['children']
+    return sorted(out | set(ids))
+
+
+def _chart_item(r):
+    return {'id': r['id'], 'category_name': r['category_name'], 'category_code': r['category_code'],
+            'account_code': r['account_code'], 'parent_id': r['parent_id'], 'category_type': r['category_type'],
+            'description': r['description'], 'is_system': bool(r['is_system']), 'is_active': True,
+            'display_order': r['display_order']}
+
+
 @app.route('/api/finance/categories', methods=['GET'])
 @perm('finance_master.view')
 def get_finance_categories():
-    """Get all finance categories (hierarchical)"""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    
+    """
+    The chart for pickers, two levels deep the way every picker reads it: each
+    group (a class's child) with every account under it, at any depth. A
+    class's direct account (3101) is its own group with nothing under it.
+    ?type= keeps one kind (income = revenue, expense = costs and expenses).
+    """
+    category_type = request.args.get('type')
+    conn, cur = connection()
     try:
-        category_type = request.args.get('type')  # 'income' or 'expense'
-        parent_only = request.args.get('parent_only', 'false').lower() == 'true'
-        
-        conn, cur = connection()
-        
-        query = """
-            SELECT id, category_name, category_code, parent_id, category_type,
-                   description, is_system, is_active, display_order
-            FROM finance_categories
-            WHERE is_active = TRUE
-        """
-        params = []
-        
-        if category_type:
-            query += " AND category_type = %s"
-            params.append(category_type)
-        
-        if parent_only:
-            query += " AND parent_id IS NULL"
-        
-        query += " ORDER BY category_type, display_order, category_name"
-        
-        cur.execute(query, params)
-        categories = cur.fetchall()
+        rows = chart_accounts(cur)
+    finally:
         cur.close()
         conn.close()
-        
-        # Build hierarchical structure
-        cat_dict = {}
-        root_cats = []
-        
-        for cat in categories:
-            cat_data = {
-                'id': cat['id'],
-                'category_name': cat['category_name'],
-                'category_code': cat['category_code'],
-                'parent_id': cat['parent_id'],
-                'category_type': cat['category_type'],
-                'description': cat['description'],
-                'is_system': bool(cat['is_system']),
-                'is_active': bool(cat['is_active']),
-                'display_order': cat['display_order'],
-                'subcategories': []
-            }
-            cat_dict[cat['id']] = cat_data
-        
-        for cat in categories:
-            if cat['parent_id'] and cat['parent_id'] in cat_dict:
-                cat_dict[cat['parent_id']]['subcategories'].append(cat_dict[cat['id']])
-            elif not cat['parent_id']:
-                root_cats.append(cat_dict[cat['id']])
-        
-        return jsonify({'success': True, 'categories': root_cats})
-    except Exception as e:
-        print(f"Error getting categories: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+
+    def leaves(rid, depth=0):
+        out = []
+        for cid in rows[rid]['children']:
+            child = rows[cid]
+            if child['children']:
+                out += leaves(cid, depth + 1)
+            else:
+                out.append(dict(_chart_item(child), parent_id=None, depth=depth))
+        return out
+
+    groups = []
+    for cls in (r for r in rows.values() if r['parent_id'] not in rows):
+        for gid in cls['children']:
+            group = rows[gid]
+            if category_type and group['category_type'] != category_type:
+                continue
+            item = dict(_chart_item(group), parent_id=None, class_code=cls['account_code'],
+                        class_name=cls['category_name'], subcategories=[])
+            for leaf in leaves(gid):
+                leaf['parent_id'] = gid
+                item['subcategories'].append(leaf)
+            groups.append(item)
+    return jsonify({'success': True, 'categories': groups})
+
+
+def chart_code_for(cur, parent_id, wanted=None, exclude_id=None):
+    """
+    (code, error) for an account under `parent_id`: the one asked for, if it is
+    digits, starts with the parent's code and is free; otherwise the next free
+    code under the parent.
+    """
+    cur.execute("SELECT account_code FROM finance_categories WHERE id = %s", (parent_id,))
+    parent = cur.fetchone()
+    if not parent or not parent['account_code']:
+        return None, 'Parent account not found'
+    pcode = parent['account_code']
+    wanted = str(wanted or '').strip()
+    if wanted:
+        if not wanted.isdigit() or not wanted.startswith(pcode) or wanted == pcode:
+            return None, 'The code must be digits starting with %s' % pcode
+        cur.execute("SELECT id FROM finance_categories WHERE account_code = %s AND id <> %s", (wanted, exclude_id or 0))
+        if cur.fetchone():
+            return None, 'Code %s is already used' % wanted
+        return wanted, None
+    cur.execute("SELECT account_code FROM finance_categories WHERE parent_id = %s AND account_code IS NOT NULL",
+                (parent_id,))
+    return finance_chart.next_code(pcode, [r['account_code'] for r in cur.fetchall()]), None
 
 
 def finance_category_name_taken(cur, name, category_type, parent_id, exclude_id=None):
@@ -22292,28 +22352,36 @@ def add_finance_category():
             conn.close()
             return jsonify({'success': False, 'error': 'Category type is required for root categories'}), 400
         
+        if not parent_id:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Choose where the account goes in the chart'}), 400
         if finance_category_name_taken(cur, category_name, category_type, parent_id):
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '"%s" already exists here' % category_name}), 409
+        account_code, code_error = chart_code_for(cur, parent_id, data.get('account_code'))
+        if code_error:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': code_error}), 400
 
-        # Generate category code
-        code_base = category_name.upper().replace(' ', '_')[:20]
-        category_code = f"{code_base}_{int(datetime.now().timestamp())}"
-        
         cur.execute("""
             INSERT INTO finance_categories 
-            (category_name, category_code, parent_id, category_type, description, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (category_name, category_code, parent_id, category_type, description, 
-              session.get('user_name')))
+            (category_name, category_code, account_code, parent_id, category_type, description, created_by, display_order)
+            VALUES (%s, %s, %s, %s, %s, %s, %s,
+                    (SELECT o FROM (SELECT COALESCE(MAX(display_order), 0) AS o FROM finance_categories
+                                    WHERE parent_id = %s OR id = %s) x))
+        """, (category_name, 'ACC_' + account_code, account_code, parent_id, category_type, description,
+              session.get('name'), parent_id, parent_id))
         
         cat_id = cur.lastrowid
         conn.commit()
         cur.close()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Category added', 'id': cat_id})
+        return jsonify({'success': True, 'message': 'Account %s added' % account_code, 'id': cat_id,
+                        'account_code': account_code})
     except Exception as e:
         print(f"Error adding category: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -22355,11 +22423,18 @@ def update_finance_category(cat_id):
         is_active = data.get('is_active', cat['is_active'])
         display_order = data.get('display_order', cat['display_order'])
         
+        account_code = cat['account_code']
+        if data.get('account_code') and str(data['account_code']).strip() != (account_code or '') and cat['parent_id']:
+            account_code, code_error = chart_code_for(cur, cat['parent_id'], data['account_code'], cat_id)
+            if code_error:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': code_error}), 400
         cur.execute("""
             UPDATE finance_categories 
-            SET category_name = %s, description = %s, is_active = %s, display_order = %s
+            SET category_name = %s, description = %s, is_active = %s, display_order = %s, account_code = %s
             WHERE id = %s
-        """, (category_name, description, is_active, display_order, cat_id))
+        """, (category_name, description, is_active, display_order, account_code, cat_id))
         
         conn.commit()
         cur.close()
@@ -22417,6 +22492,15 @@ def delete_finance_category(cat_id):
         
         # All category IDs to soft delete (parent + all subcategories)
         all_ids = [cat_id] + subcategory_ids
+        placeholders = ','.join(['%s'] * len(all_ids))
+        cur.execute("SELECT account_code, category_name FROM finance_categories WHERE is_system = 1 AND id IN (%s)" % placeholders,
+                    all_ids)
+        held = cur.fetchone()
+        if held:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'It holds %s %s, which the system books into'
+                            % (held['account_code'] or '', held['category_name'])}), 400
         deleted_count = len(all_ids)
         
         # Soft delete - set is_active = FALSE for all
@@ -22483,7 +22567,7 @@ def get_finance_transactions():
         query = """
             SELECT ft.*, ft.serial_number,
                    pm.method_name as payment_method_name,
-                   fc.category_name,
+                   CONCAT_WS(' ', fc.account_code, fc.category_name) as category_name,
                    fsc.category_name as subcategory_name,
                    COALESCE(c.client_name, sr_client.client_name) as client_name,
                    COALESCE(ft.client_id, sr.client_id) as resolved_client_id,
@@ -22529,7 +22613,7 @@ def get_finance_transactions():
             params.append(payment_method_id)
         # Category: multi-select or single
         if category_ids:
-            cat_list = [int(x) for x in category_ids.split(',') if x.strip().isdigit()]
+            cat_list = chart_with_descendants(cur, [int(x) for x in category_ids.split(',') if x.strip().isdigit()])
             if cat_list:
                 placeholders = ','.join(['%s'] * len(cat_list))
                 query += f" AND (ft.category_id IN ({placeholders}) OR ft.subcategory_id IN ({placeholders}))"
@@ -22587,7 +22671,7 @@ def get_finance_transactions():
             count_query += " AND ft.payment_method_id = %s"
             count_params.append(payment_method_id)
         if category_ids:
-            cat_list_c = [int(x) for x in category_ids.split(',') if x.strip().isdigit()]
+            cat_list_c = chart_with_descendants(cur, [int(x) for x in category_ids.split(',') if x.strip().isdigit()])
             if cat_list_c:
                 ph = ','.join(['%s'] * len(cat_list_c))
                 count_query += f" AND (ft.category_id IN ({ph}) OR ft.subcategory_id IN ({ph}))"
@@ -22727,6 +22811,18 @@ def add_finance_transaction():
         transaction_date = data.get('transaction_date', datetime.now().strftime('%Y-%m-%d'))
         notes = data.get('notes', '')
         
+        # The account it posts to: a picker's group + account becomes the account.
+        if category_id or subcategory_id:
+            conn_a, cur_a = connection()
+            try:
+                category_id, account_error = posting_account(cur_a, category_id, subcategory_id)
+            finally:
+                cur_a.close()
+                conn_a.close()
+            if account_error:
+                return jsonify({'success': False, 'error': account_error}), 400
+            subcategory_id = None
+
         # Check if this is a loan-related category (Loan=11, Pay Loan=3)
         is_loan_category = str(category_id) in ['11', '3']
         loan_type = 'loan' if str(category_id) == '11' else 'pay_loan' if str(category_id) == '3' else None
@@ -22939,7 +23035,7 @@ def get_finance_transaction(trans_id):
         cur.execute("""
             SELECT ft.*,
                    pm.method_name as payment_method_name,
-                   fc.category_name,
+                   CONCAT_WS(' ', fc.account_code, fc.category_name) as category_name,
                    fsc.category_name as subcategory_name,
                    COALESCE(c.client_name, sr_client.client_name) as client_name,
                    COALESCE(ft.client_id, sr.client_id) as resolved_client_id,
@@ -23342,142 +23438,155 @@ def get_finance_statistics():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def chart_movements(cur, start=None, end=None):
+    """Approved money in and out per account for a period: {account id: {money_in, money_out, count}}."""
+    q = """SELECT COALESCE(NULLIF(subcategory_id, 0), category_id) AS account_id,
+                  SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE 0 END) AS money_in,
+                  SUM(CASE WHEN transaction_type = 'expense' THEN amount ELSE 0 END) AS money_out,
+                  COUNT(*) AS n
+           FROM finance_transactions WHERE status = 'approved'"""
+    params = []
+    if start:
+        q += " AND transaction_date >= %s"
+        params.append(start)
+    if end:
+        q += " AND transaction_date <= %s"
+        params.append(end)
+    cur.execute(q + " GROUP BY account_id", params)
+    return {r['account_id']: {'money_in': float(r['money_in'] or 0), 'money_out': float(r['money_out'] or 0),
+                              'count': int(r['n'])} for r in cur.fetchall()}
+
+
+def chart_sales(cur, start=None, end=None):
+    """Posted invoices' and refunds' subtotals (before VAT) for a period: what 4101 and 4102 earn."""
+    q = """SELECT kind, COALESCE(SUM(subtotal), 0) AS s, COUNT(*) AS n FROM client_invoice
+           WHERE status = 'posted'"""
+    params = []
+    if start:
+        q += " AND invoice_date >= %s"
+        params.append(start)
+    if end:
+        q += " AND invoice_date <= %s"
+        params.append(end)
+    cur.execute(q + " GROUP BY kind", params)
+    got = {r['kind']: (float(r['s']), int(r['n'])) for r in cur.fetchall()}
+    return {'4101': got.get('invoice', (0.0, 0)), '4102': got.get('refund', (0.0, 0))}
+
+
+def chart_live_balances(cur):
+    """
+    The accounts whose balance the system already keeps, as of now: the cash
+    and bank payment methods, what clients owe, what we owe suppliers, and
+    custody plus loans held by staff.
+    """
+    cur.execute("""SELECT method_type, COALESCE(SUM(current_balance), 0) AS s FROM payment_methods
+                   WHERE is_active = 1 GROUP BY method_type""")
+    methods = {r['method_type']: float(r['s']) for r in cur.fetchall()}
+    cur.execute("SELECT COALESCE(SUM(balance), 0) AS s FROM user_finance_balances")
+    custody = float(cur.fetchone()['s'])
+    cur.execute("SELECT COALESCE(SUM(current_balance), 0) AS s FROM user_loans")
+    loans = float(cur.fetchone()['s'])
+    return {
+        '1101': methods.get('cash', 0.0),
+        '1102': methods.get('bank', 0.0),
+        '1103': sum(e['debit'] - e['credit'] for e in ledger_entries(cur)),
+        '2101': sum(e['credit'] - e['debit'] for e in supplier_ledger_entries(cur)),
+        '1110': custody + loans,
+    }
+
+
+def chart_tree(cur, start=None, end=None, live=True):
+    """
+    The chart as nested nodes with money in, money out and a value on the
+    account's normal side (assets, costs, expenses: out - in; liabilities,
+    equity, revenue: in - out), rolled up to groups and classes. 4101 and 4102
+    earn from posted invoices and refunds; with `live`, the accounts the
+    system keeps a balance for show that balance instead.
+    """
+    rows = chart_accounts(cur)
+    moves = chart_movements(cur, start, end)
+    sales = chart_sales(cur, start, end)
+    balances = chart_live_balances(cur) if live else {}
+
+    def build(rid):
+        r = rows[rid]
+        code = r['account_code'] or ''
+        m = moves.get(rid, {'money_in': 0.0, 'money_out': 0.0, 'count': 0})
+        kids = [build(c) for c in r['children']]
+        debit = code[:1] in finance_chart.DEBIT_NORMAL
+        own = (m['money_out'] - m['money_in']) if debit else (m['money_in'] - m['money_out'])
+        count = m['count']
+        if code == '4101':
+            own += sales['4101'][0]
+            count += sales['4101'][1]
+        elif code == '4102':
+            # ponytail: a refund counts as its credit note; the cash paid back
+            # settles the client's account (1103), so it is not counted twice.
+            own = -sales['4102'][0]
+            count += sales['4102'][1]
+        node = {'id': rid, 'code': code, 'name': r['category_name'], 'type': r['category_type'],
+                'parent_id': r['parent_id'], 'is_system': bool(r['is_system']),
+                'description': r['description'] or '',
+                'money_in': m['money_in'] + sum(k['money_in'] for k in kids),
+                'money_out': m['money_out'] + sum(k['money_out'] for k in kids),
+                'count': count + sum(k['count'] for k in kids),
+                'value': own + sum(k['value'] for k in kids), 'children': kids}
+        if code in balances:
+            node['value'], node['live'] = balances[code], True
+        return node
+
+    return [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
+
+
+def chart_find(nodes, code):
+    for n in nodes:
+        if n['code'] == code:
+            return n
+        hit = chart_find(n['children'], code)
+        if hit:
+            return hit
+    return None
+
+
 @app.route('/api/finance/tree', methods=['GET'])
 @perm('finance_txn.view')
 def get_finance_tree():
-    """Get finance tree - categories with transaction totals"""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    
+    """The chart of accounts with each account's movements and balance for a period."""
+    start = request.args.get('start_date') or None
+    end = request.args.get('end_date') or None
+    conn, cur = connection()
     try:
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
-        conn, cur = connection()
-        
-        # Get all categories with transaction totals
-        query = """
-            SELECT fc.id, fc.category_name, fc.parent_id, fc.category_type, fc.is_system, fc.description,
-                   COALESCE(SUM(CASE WHEN ft.status = 'approved' THEN ft.amount ELSE 0 END), 0) as total_amount,
-                   COUNT(CASE WHEN ft.status = 'approved' THEN 1 END) as transaction_count
-            FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON (
-                (fc.id = ft.subcategory_id) OR
-                (fc.id = ft.category_id AND (ft.subcategory_id IS NULL OR ft.subcategory_id = 0))
-            )
-        """
-        
-        params = []
-        if start_date or end_date:
-            query += " AND ft.transaction_date BETWEEN %s AND %s"
-            params.extend([start_date or '1900-01-01', end_date or '2100-12-31'])
-        
-        query += """
-            WHERE fc.is_active = TRUE
-            GROUP BY fc.id, fc.category_name, fc.parent_id, fc.category_type, fc.is_system, fc.description
-            ORDER BY fc.category_type, fc.display_order, fc.category_name
-        """
-        
-        cur.execute(query, params)
-        categories = cur.fetchall()
-        
-        # Get client breakdowns for Client Payments category (id=1)
-        # Resolve client from Sales Request when ft.client_id is NULL
-        client_query = """
-            SELECT c.id, c.client_name,
-                   COALESCE(SUM(ft.amount), 0) as total_amount,
-                   COUNT(*) as transaction_count
-            FROM finance_transactions ft
-            LEFT JOIN sales_request sr ON ft.sales_request_id = sr.id
-            INNER JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
-            WHERE ft.status = 'approved'
-              AND ft.category_id = 1
-        """
-        client_params = []
-        if start_date or end_date:
-            client_query += " AND ft.transaction_date BETWEEN %s AND %s"
-            client_params.extend([start_date or '1900-01-01', end_date or '2100-12-31'])
-        client_query += " GROUP BY c.id, c.client_name HAVING transaction_count > 0 ORDER BY total_amount DESC"
-        cur.execute(client_query, client_params)
-        client_breakdowns = [{'id': r['id'], 'name': r['client_name'], 'total': float(r['total_amount']), 'count': r['transaction_count'], 'entity_type': 'client'} for r in cur.fetchall()]
-        
-        # Get supplier breakdowns for Supplier Payments category (id=10)
-        # Resolve supplier from ft.supplier_id, filtered to category 10 only
-        supplier_query = """
-            SELECT s.id, s.company_name,
-                   COALESCE(SUM(ft.amount), 0) as total_amount,
-                   COUNT(*) as transaction_count
-            FROM finance_transactions ft
-            INNER JOIN supplier s ON s.id = ft.supplier_id
-            WHERE ft.status = 'approved'
-              AND ft.category_id = 10
-        """
-        supplier_params = []
-        if start_date or end_date:
-            supplier_query += " AND ft.transaction_date BETWEEN %s AND %s"
-            supplier_params.extend([start_date or '1900-01-01', end_date or '2100-12-31'])
-        supplier_query += " GROUP BY s.id, s.company_name HAVING transaction_count > 0 ORDER BY total_amount DESC"
-        cur.execute(supplier_query, supplier_params)
-        supplier_breakdowns = [{'id': r['id'], 'name': r['company_name'], 'total': float(r['total_amount']), 'count': r['transaction_count'], 'entity_type': 'supplier'} for r in cur.fetchall()]
-        
+        classes = chart_tree(cur, start, end)
+        # Who the client collections and supplier payments were with.
+        dates, params = '', []
+        if start:
+            dates += " AND ft.transaction_date >= %s"
+            params.append(start)
+        if end:
+            dates += " AND ft.transaction_date <= %s"
+            params.append(end)
+        cur.execute("""SELECT c.id, c.client_name AS name, SUM(ft.amount) AS total, COUNT(*) AS n
+                       FROM finance_transactions ft LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
+                       JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
+                       WHERE ft.status = 'approved' AND ft.category_id = 1""" + dates +
+                    " GROUP BY c.id, c.client_name ORDER BY total DESC", params)
+        clients = [{'id': r['id'], 'name': r['name'], 'total': float(r['total']), 'count': r['n'], 'entity_type': 'client'}
+                   for r in cur.fetchall()]
+        cur.execute("""SELECT s.id, COALESCE(s.company_name, s.supplier_name) AS name, SUM(ft.amount) AS total, COUNT(*) AS n
+                       FROM finance_transactions ft JOIN supplier s ON s.id = ft.supplier_id
+                       WHERE ft.status = 'approved' AND ft.category_id = 10""" + dates +
+                    " GROUP BY s.id, name ORDER BY total DESC", params)
+        suppliers = [{'id': r['id'], 'name': r['name'], 'total': float(r['total']), 'count': r['n'], 'entity_type': 'supplier'}
+                     for r in cur.fetchall()]
+    finally:
         cur.close()
         conn.close()
-        
-        # Build tree structure
-        income_tree = []
-        expense_tree = []
-        cat_dict = {}
-        
-        for cat in categories:
-            cat_data = {
-                'id': cat['id'],
-                'name': cat['category_name'],
-                'type': cat['category_type'],
-                'parent_id': cat['parent_id'],
-                'is_system': bool(cat['is_system']),
-                'description': cat['description'] or '',
-                'total': float(cat['total_amount']),
-                'count': cat['transaction_count'],
-                'children': []
-            }
-            cat_dict[cat['id']] = cat_data
-        
-        for cat in categories:
-            if cat['parent_id'] and cat['parent_id'] in cat_dict:
-                cat_dict[cat['parent_id']]['children'].append(cat_dict[cat['id']])
-                cat_dict[cat['parent_id']]['total'] += cat_dict[cat['id']]['total']
-            elif not cat['parent_id']:
-                if cat['category_type'] == 'income':
-                    income_tree.append(cat_dict[cat['id']])
-                else:
-                    expense_tree.append(cat_dict[cat['id']])
-        
-        # Attach client breakdowns to Client Payments category (id=1)
-        if 1 in cat_dict:
-            cat_dict[1]['entities'] = client_breakdowns
-        
-        # Attach supplier breakdowns to Supplier Payments category (id=10)
-        if 10 in cat_dict:
-            cat_dict[10]['entities'] = supplier_breakdowns
-        
-        total_income = sum(c['total'] for c in income_tree)
-        total_expense = sum(c['total'] for c in expense_tree)
-        
-        return jsonify({
-            'success': True,
-            'income': {
-                'total': total_income,
-                'categories': income_tree
-            },
-            'expense': {
-                'total': total_expense,
-                'categories': expense_tree
-            },
-            'net': total_income - total_expense
-        })
-    except Exception as e:
-        print(f"Error getting finance tree: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    for code, entities in (('1103', clients), ('2101', suppliers)):
+        node = chart_find(classes, code)
+        if node and entities:
+            node['entities'] = entities
+    return jsonify(success=True, classes=classes,
+                   can_edit=has('finance_master.edit'))
 
 
 # ----------------------- HELPER: Get Clients and Suppliers for Dropdowns -----------------------
@@ -26037,75 +26146,31 @@ def get_income_statement():
             start = result['min_date'] if result['min_date'] else today
             end = today
         
-        # Get income by category
-        cur.execute("""
-            SELECT 
-                fc.id as category_id,
-                fc.category_name,
-                fc.parent_id,
-                COALESCE(SUM(ft.amount), 0) as total
-            FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON (ft.category_id = fc.id OR ft.subcategory_id = fc.id)
-                AND ft.transaction_type = 'income'
-                AND ft.status = 'approved'
-                AND ft.transaction_date BETWEEN %s AND %s
-            WHERE fc.category_type = 'income' AND fc.is_active = 1
-            GROUP BY fc.id, fc.category_name, fc.parent_id
-            ORDER BY fc.parent_id, fc.category_name
-        """, (start, end))
-        income_categories = cur.fetchall()
-        
-        # Get expense by category
-        cur.execute("""
-            SELECT 
-                fc.id as category_id,
-                fc.category_name,
-                fc.parent_id,
-                COALESCE(SUM(ft.amount), 0) as total
-            FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON (ft.category_id = fc.id OR ft.subcategory_id = fc.id)
-                AND ft.transaction_type = 'expense'
-                AND ft.status = 'approved'
-                AND ft.transaction_date BETWEEN %s AND %s
-            WHERE fc.category_type = 'expense' AND fc.is_active = 1
-            GROUP BY fc.id, fc.category_name, fc.parent_id
-            ORDER BY fc.parent_id, fc.category_name
-        """, (start, end))
-        expense_categories = cur.fetchall()
-        
-        # Organize hierarchically
-        def organize_categories(categories):
-            roots = []
-            children_map = {}
-            
-            for cat in categories:
-                cat_dict = {
-                    'id': cat['category_id'],
-                    'name': cat['category_name'],
-                    'total': float(cat['total']),
-                    'children': []
-                }
-                
-                if cat['parent_id'] is None:
-                    roots.append(cat_dict)
-                else:
-                    if cat['parent_id'] not in children_map:
-                        children_map[cat['parent_id']] = []
-                    children_map[cat['parent_id']].append(cat_dict)
-            
-            # Attach children
-            for root in roots:
-                if root['id'] in children_map:
-                    root['children'] = children_map[root['id']]
-                    # Add children totals to parent
-                    for child in root['children']:
-                        root['total'] += child['total']
-            
-            return roots
-        
-        income_tree = organize_categories(income_categories)
-        expense_tree = organize_categories(expense_categories)
-        
+        # By chart group: revenue (class 4) against costs and expenses (5, 6),
+        # each group with the accounts under it.
+        classes = chart_tree(cur, start, end, live=False)
+
+        def statement_groups(class_codes):
+            groups = []
+            for cls in classes:
+                if cls['code'] not in class_codes:
+                    continue
+                for group in cls['children']:
+                    leaves, stack = [], list(group['children'])
+                    while stack:
+                        node = stack.pop(0)
+                        if node['children']:
+                            stack = node['children'] + stack
+                        else:
+                            leaves.append({'id': node['id'], 'name': '%s %s' % (node['code'], node['name']),
+                                           'total': node['value']})
+                    groups.append({'id': group['id'], 'name': '%s %s' % (group['code'], group['name']),
+                                   'total': group['value'], 'children': leaves})
+            return groups
+
+        income_tree = statement_groups({'4'})
+        expense_tree = statement_groups({'5', '6'})
+
         total_income = sum(cat['total'] for cat in income_tree)
         total_expense = sum(cat['total'] for cat in expense_tree)
         net_income = total_income - total_expense
@@ -26382,41 +26447,16 @@ def get_finance_analytics():
         """, (start_date, end_date))
         daily_data = cur.fetchall()
         
-        # Income by category
-        cur.execute("""
-            SELECT 
-                fc.category_name,
-                COALESCE(SUM(ft.amount), 0) as total
-            FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON ft.category_id = fc.id
-                AND ft.transaction_type = 'income'
-                AND ft.status = 'approved'
-                AND ft.transaction_date BETWEEN %s AND %s
-            WHERE fc.category_type = 'income' AND fc.is_active = 1 AND fc.parent_id IS NULL
-            GROUP BY fc.id, fc.category_name
-            HAVING total > 0
-            ORDER BY total DESC
-            LIMIT 10
-        """, (start_date, end_date))
-        income_by_category = cur.fetchall()
-        
-        # Expense by category
-        cur.execute("""
-            SELECT 
-                fc.category_name,
-                COALESCE(SUM(ft.amount), 0) as total
-            FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON ft.category_id = fc.id
-                AND ft.transaction_type = 'expense'
-                AND ft.status = 'approved'
-                AND ft.transaction_date BETWEEN %s AND %s
-            WHERE fc.category_type = 'expense' AND fc.is_active = 1 AND fc.parent_id IS NULL
-            GROUP BY fc.id, fc.category_name
-            HAVING total > 0
-            ORDER BY total DESC
-            LIMIT 10
-        """, (start_date, end_date))
-        expense_by_category = cur.fetchall()
+        # Revenue and spending by chart group (class 4; classes 5 and 6).
+        chart = chart_tree(cur, start_date, end_date, live=False)
+
+        def by_group(class_codes):
+            rows = [{'category_name': '%s %s' % (g['code'], g['name']), 'total': g['value']}
+                    for c in chart if c['code'] in class_codes for g in c['children'] if g['value'] > 0]
+            return sorted(rows, key=lambda r: -r['total'])[:10]
+
+        income_by_category = by_group({'4'})
+        expense_by_category = by_group({'5', '6'})
         
         # Monthly comparison (last 6 months) - with readable month names
         cur.execute("""
@@ -28669,7 +28709,9 @@ def finance_approve_user_expense(expense_id):
         payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
         if pm_error:
             return jsonify({'success': False, 'error': pm_error}), 400
-        category_id = int(data.get('category_id') or 13)  # Operational Expenses unless chosen
+        category_id, account_error = posting_account(cur, data.get('category_id'), data.get('subcategory_id'))
+        if account_error:
+            return jsonify({'success': False, 'error': account_error}), 400
         
         # Get payment method balance
         cur.execute("SELECT current_balance FROM payment_methods WHERE id = %s", (payment_method_id,))
@@ -28780,8 +28822,11 @@ def finance_approve_expenses_bulk():
             if not category_id:
                 continue  # Skip if no category selected
             
-            category_id = int(category_id)
-            subcategory_id = int(subcategory_id) if subcategory_id else None
+            category_id, account_error = posting_account(cur, category_id, subcategory_id)
+            if account_error:
+                conn.rollback()
+                return jsonify({'success': False, 'error': account_error}), 400
+            subcategory_id = None
             
             # Get expense details
             cur.execute("""
@@ -29830,8 +29875,11 @@ def finance_approve_expense_tracking(tracking_id):
             item_id = item['id']
             item_cat = items_map[str(item_id)]
             item_amount = float(item['amount'])
-            category_id = item_cat.get('category_id')
-            subcategory_id = item_cat.get('subcategory_id')
+            category_id, account_error = posting_account(cur, item_cat.get('category_id'), item_cat.get('subcategory_id'))
+            if account_error:
+                conn.rollback()
+                return jsonify({'success': False, 'error': account_error}), 400
+            subcategory_id = None
             
             # Update item with category
             cur.execute("""

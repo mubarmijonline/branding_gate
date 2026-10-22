@@ -370,7 +370,7 @@ function openFinanceApprovalModal(trackingId) {
 function renderItemsWithCategories(items) {
     let categoryOptions = '<option value="">Select Category</option>';
     expenseCategories.forEach(cat => {
-        categoryOptions += `<option value="${cat.id}">${cat.category_name}</option>`;
+        categoryOptions += `<option value="${cat.id}">${cat.account_code || ''} ${cat.category_name}</option>`;
     });
     
     let html = '';
@@ -416,7 +416,7 @@ function loadSubcategories(itemId) {
     
     let options = '<option value="">None</option>';
     subcategories.forEach(sub => {
-        options += `<option value="${sub.id}">${sub.category_name}</option>`;
+        options += `<option value="${sub.id}">${sub.account_code || ''} ${sub.category_name}</option>`;
     });
     
     subcategorySelect.html(options).prop('disabled', subcategories.length === 0);

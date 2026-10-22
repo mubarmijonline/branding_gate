@@ -1,9 +1,11 @@
 """
-Finance categories, managed from the Categories tab and the Finance Tree.
+The chart of accounts (Finance Tree), its editing and its postings.
 
-Finance adds categories and sub-categories (system ones take subs too),
-renames non-system ones, and cannot create a second category with the same
-name under the same parent. Rollback-based.
+The chart is seeded from finance_chart.py with Finance's codes; the system's own
+rows sit on their mapped accounts; Finance adds accounts under any node (next
+free code, or a valid one of its own), renames and re-codes non-system ones;
+names are unique under a parent; a transaction posts to one leaf account and
+rolls up through its group and class. Rollback-based.
 """
 
 import unittest
@@ -12,6 +14,7 @@ import MySQLdb
 import MySQLdb.cursors
 
 import branding_gate
+import finance_chart
 
 
 class _RollbackConnection:
@@ -19,6 +22,19 @@ class _RollbackConnection:
     def commit(self): pass
     def rollback(self): pass
     def close(self): pass
+
+
+class ChartUnitTest(unittest.TestCase):
+
+    def test_codes(self):
+        codes = {c for c, _ in finance_chart.CHART}
+        self.assertEqual(len(codes), len(finance_chart.CHART))                  # no code twice (2201, not 2101)
+        self.assertEqual(finance_chart.parent_code('111003', codes), '1110')
+        self.assertEqual(finance_chart.parent_code('3101', codes), '3')
+        self.assertIsNone(finance_chart.parent_code('6', codes))
+        self.assertEqual(finance_chart.next_code('62', ['6201', '6214']), '6215')
+        self.assertEqual(finance_chart.next_code('1110', []), '111001')
+        self.assertEqual(finance_chart.next_code('6', ['61', '64']), '65')
 
 
 class FinanceCategoriesTest(unittest.TestCase):
@@ -31,7 +47,7 @@ class FinanceCategoriesTest(unittest.TestCase):
         self.addCleanup(self._undo)
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self.raw.cursor(MySQLdb.cursors.DictCursor))
         branding_gate.app.config['TESTING'] = True
-        cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
+        cur = self._cursor()
         cur.execute("""SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
                        WHERE u.is_active = 1 AND r.code = 'finance_manager' ORDER BY u.id LIMIT 1""")
         uid = cur.fetchone()['id']
@@ -40,41 +56,104 @@ class FinanceCategoriesTest(unittest.TestCase):
         with self.web.session_transaction() as s:
             s.update({'user_id': uid, 'mobile': 'm', 'email': 'e', 'username': 'u', 'name': 'T',
                       'roles': [role], 'perms': perms, 'role_code': role})
+        cur.execute("""INSERT INTO payment_methods (method_name, method_code, method_type, current_balance)
+                       VALUES ('Chart Box T', 'CHART_BOX_T', 'cash', 100000)""")
+        self.pm = cur.lastrowid
+        self.ids = {r['account_code']: r['id'] for r in self._rows("SELECT id, account_code FROM finance_categories WHERE is_active = 1")}
 
     def _undo(self):
         branding_gate.connection = self.original
         self.raw.rollback()
         self.raw.close()
 
-    def _add(self, name, **extra):
-        return self.web.post('/api/finance/categories', json=dict(category_name=name, category_type='expense', **extra))
+    def _cursor(self):
+        return self.raw.cursor(MySQLdb.cursors.DictCursor)
 
-    def test_add_rename_and_no_duplicates(self):
-        r = self._add('Cat Test Rent')
+    def _rows(self, sql, params=()):
+        cur = self._cursor()
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+    def _add(self, name, parent_code, **extra):
+        return self.web.post('/api/finance/categories',
+                             json=dict(category_name=name, parent_id=self.ids[parent_code], **extra))
+
+    def _tree(self, **args):
+        return self.web.get('/api/finance/tree', query_string=args).get_json()['classes']
+
+    def test_seeded_with_codes_and_system_rows_on_their_accounts(self):
+        self.assertEqual(len([c for c, _ in finance_chart.CHART if c in self.ids]), len(finance_chart.CHART))
+        for row_id, code in finance_chart.SYSTEM_IDS.items():
+            self.assertEqual(self.ids[code], row_id, code)
+        classes = self._tree()
+        self.assertEqual([c['code'] for c in classes], ['1', '2', '3', '4', '5', '6'])
+        self.assertEqual(self._rows("SELECT COUNT(*) n FROM finance_categories WHERE is_active = 1 AND account_code IS NULL")[0]['n'], 0)
+
+    def test_add_recode_rename_and_no_duplicates(self):
+        r = self._add('Chart T Rent Store', '62')
         self.assertEqual(r.status_code, 200, r.get_json())
-        root = r.get_json()['id']
-        self.assertEqual(self._add('  cat test RENT ').status_code, 409)              # same name, same level
-        sub = self._add('Cat Test Office', parent_id=root).get_json()['id']
-        self.assertEqual(self._add('cat test office', parent_id=root).status_code, 409)
-        self.assertEqual(self._add('Cat Test Office').status_code, 200)               # another level is fine
-        # Rename: refused onto a sibling's name, accepted otherwise.
-        self.assertEqual(self._add('Cat Test Warehouse', parent_id=root).status_code, 200)
-        self.assertEqual(self.web.put('/api/finance/categories/%d' % sub, json={'category_name': 'Cat Test Warehouse'}).status_code, 409)
-        self.assertEqual(self.web.put('/api/finance/categories/%d' % sub, json={'category_name': 'Cat Test HQ'}).status_code, 200)
-        tree = self.web.get('/api/finance/tree').get_json()
-        node = next(c for c in tree['expense']['categories'] if c['id'] == root)
-        self.assertEqual(sorted(c['name'] for c in node['children']), ['Cat Test HQ', 'Cat Test Warehouse'])
-        self.assertFalse(node['is_system'])
-        # Delete takes the subs with it, and the name is free again.
-        self.assertEqual(self.web.delete('/api/finance/categories/%d' % root).status_code, 200)
-        self.assertEqual(self._add('Cat Test Rent').status_code, 200)
-
-    def test_system_categories_take_subs_but_keep_their_name(self):
-        tree = self.web.get('/api/finance/tree').get_json()
-        supplier_payments = next(c for c in tree['expense']['categories'] if c['id'] == 10)
-        self.assertTrue(supplier_payments['is_system'])
-        self.assertEqual(self._add('Cat Test Printing', parent_id=10).status_code, 200)
+        self.assertEqual(r.get_json()['account_code'], '6215')                  # next after 6214
+        acc = r.get_json()['id']
+        self.assertEqual(self._add('  chart t RENT store ', '62').status_code, 409)
+        self.assertEqual(self._add('Chart T Bad', '62', account_code='6101').status_code, 400)   # not under 62
+        self.assertEqual(self._add('Chart T Bad', '62', account_code='6201').status_code, 400)   # taken
+        sub = self._add('Chart T Branch', '62', account_code='6230').get_json()
+        self.assertEqual(sub['account_code'], '6230')
+        put = self.web.put('/api/finance/categories/%d' % acc, json={'category_name': 'Chart T Warehouse', 'account_code': '6231'})
+        self.assertEqual(put.status_code, 200, put.get_json())
+        self.assertEqual(self.web.put('/api/finance/categories/%d' % acc, json={'category_name': 'Chart T Branch'}).status_code, 409)
+        node = branding_gate.chart_find(self._tree(), '6231')
+        self.assertEqual(node['name'], 'Chart T Warehouse')
+        # System accounts keep their name; deleting a group takes its accounts.
         self.assertEqual(self.web.put('/api/finance/categories/10', json={'category_name': 'Renamed'}).status_code, 400)
+        self.assertEqual(self._add('Chart T Printing', '2101').status_code, 200)          # still takes sub-accounts
+        self.assertEqual(self.web.delete('/api/finance/categories/%d' % acc).status_code, 200)
+        self.assertEqual(self.web.delete('/api/finance/categories/%d' % self.ids['11']).status_code, 400)   # holds 1101, 1103...
+        self.assertIsNone(branding_gate.chart_find(self._tree(), '6231'))
+
+    def test_posting_goes_to_the_leaf_and_rolls_up(self):
+        picker = self.web.get('/api/finance/categories').get_json()['categories']
+        g62 = next(g for g in picker if g['account_code'] == '62')
+        self.assertIn('6212', [s['account_code'] for s in g62['subcategories']])
+        g11 = next(g for g in picker if g['account_code'] == '11')
+        self.assertIn('111003', [s['account_code'] for s in g11['subcategories']])        # sub-accounts listed too
+        self.assertIn('3101', [g['account_code'] for g in picker])                          # a class's own account
+        self.assertEqual({g['class_code'] for g in self.web.get('/api/finance/categories?type=expense').get_json()['categories']},
+                         {'5', '6'})
+        post = lambda **kw: self.web.post('/api/finance/transactions', json=dict(
+            transaction_type='expense', amount=300, payment_method_id=self.pm, transaction_date='2026-10-20', **kw))
+        self.assertEqual(post(category_id=self.ids['62']).status_code, 400)                 # a group with accounts
+        r = post(category_id=self.ids['62'], subcategory_id=self.ids['6212'])
+        self.assertEqual(r.status_code, 200, r.get_json())
+        row = self._rows("SELECT category_id, subcategory_id FROM finance_transactions WHERE id = %s",
+                         (r.get_json()['id'],))[0]
+        self.assertEqual((row['category_id'], row['subcategory_id']), (self.ids['6212'], None))
+        income = self.web.post('/api/finance/transactions', json=dict(
+            transaction_type='income', amount=5000, payment_method_id=self.pm, transaction_date='2026-10-20',
+            category_id=self.ids['3101']))
+        self.assertEqual(income.status_code, 200, income.get_json())
+        self._cursor().execute("UPDATE finance_transactions SET status = 'approved' WHERE id IN (%s, %s)",
+                               (r.get_json()['id'], income.get_json()['id']))
+        tree = self._tree(start_date='2026-10-01', end_date='2026-10-31')
+        find = lambda code: branding_gate.chart_find(tree, code)
+        self.assertEqual((find('6212')['value'], find('62')['value'], find('6')['value']), (300.0, 300.0, 300.0))
+        self.assertEqual(find('3101')['value'], 5000.0)                                    # equity grows with money in
+        self.assertTrue(find('1101')['live'])
+        listed = self.web.get('/api/finance/transactions?status=approved&category_ids=%d' % self.ids['62']).get_json()
+        self.assertEqual([t['amount'] for t in listed['transactions'] if t['id'] == r.get_json()['id']], [300.0])
+
+    def test_income_statement_counts_posted_invoices_on_sales(self):
+        cur = self._cursor()
+        cur.execute("SELECT id, client_id, company_id FROM sales_request ORDER BY id LIMIT 1")
+        sr = cur.fetchone()
+        cur.execute("""INSERT INTO client_invoice (kind, invoice_number, sales_request_id, company_id, client_id, invoice_date,
+                           billing_month, subtotal, vat_total, total, status, created_by)
+                       VALUES ('invoice', 99901, %s, %s, %s, '2026-10-20', '2026-10', 1000, 140, 1130, 'posted', 1)""",
+                    (sr['id'], sr['company_id'], sr['client_id']))
+        got = self.web.get('/api/finance/income-statement?period=custom&start_date=2026-10-01&end_date=2026-10-31').get_json()
+        sales = next(g for g in got['income']['categories'] if g['name'].startswith('41 '))
+        self.assertEqual(sales['total'], 1000.0)
+        self.assertEqual(branding_gate.chart_find(self._tree(start_date='2026-10-01'), '4101')['value'], 1000.0)
 
 
 if __name__ == '__main__':

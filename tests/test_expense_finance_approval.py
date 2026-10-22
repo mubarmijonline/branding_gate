@@ -54,6 +54,11 @@ class ExpenseFinanceApprovalTest(unittest.TestCase):
         self.raw.rollback()
         self.raw.close()
 
+    def account(self, code):
+        cur = self._cursor()
+        cur.execute("SELECT id FROM finance_categories WHERE account_code = %s", (code,))
+        return cur.fetchone()['id']
+
     def _cursor(self):
         return self.raw.cursor(MySQLdb.cursors.DictCursor)
 
@@ -76,7 +81,7 @@ class ExpenseFinanceApprovalTest(unittest.TestCase):
     def test_a_missing_category_refuses_the_whole_batch(self):
         r = self._web().post('/api/finance/expense-approvals/finance-approve-bulk', json={
             'payment_method_id': self.pm,
-            'expenses': [{'id': self.lines[0], 'amount': 100, 'category_id': 13},
+            'expenses': [{'id': self.lines[0], 'amount': 100, 'category_id': self.account('6212')},
                          {'id': self.lines[1], 'amount': 100}]})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.get_json()['missing_category'], [str(self.lines[1])])
@@ -88,7 +93,8 @@ class ExpenseFinanceApprovalTest(unittest.TestCase):
     def test_approve_all_records_on_the_chosen_method(self):
         r = self._web().post('/api/finance/expense-approvals/finance-approve-bulk', json={
             'payment_method_id': self.pm,
-            'expenses': [{'id': i, 'amount': 100, 'category_id': 13, 'subcategory_id': 41} for i in self.lines]})
+            'expenses': [{'id': i, 'amount': 100, 'category_id': self.account('62'), 'subcategory_id': self.account('6212')}
+                         for i in self.lines]})
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual(r.get_json()['approved_count'], 2)
         cur = self._cursor()
