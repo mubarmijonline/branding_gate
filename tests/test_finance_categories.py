@@ -138,7 +138,7 @@ class FinanceCategoriesTest(unittest.TestCase):
         find = lambda code: branding_gate.chart_find(tree, code)
         self.assertEqual((find('6212')['value'], find('62')['value'], find('6')['value']), (300.0, 300.0, 300.0))
         self.assertEqual(find('3101')['value'], 5000.0)                                    # equity grows with money in
-        self.assertTrue(find('1101')['live'])
+        self.assertNotIn('live', find('1101'))
         listed = self.web.get('/api/finance/transactions?status=approved&category_ids=%d' % self.ids['62']).get_json()
         self.assertEqual([t['amount'] for t in listed['transactions'] if t['id'] == r.get_json()['id']], [300.0])
 
@@ -153,7 +153,11 @@ class FinanceCategoriesTest(unittest.TestCase):
         got = self.web.get('/api/finance/income-statement?period=custom&start_date=2026-10-01&end_date=2026-10-31').get_json()
         sales = next(g for g in got['income']['categories'] if g['name'].startswith('41 '))
         self.assertEqual(sales['total'], 1000.0)
-        self.assertEqual(branding_gate.chart_find(self._tree(start_date='2026-10-01'), '4101')['value'], 1000.0)
+        # The tree counts only approved finance transactions: no invoice, no SR supplier cost.
+        tree = self._tree(start_date='2026-10-01')
+        self.assertEqual(branding_gate.chart_find(tree, '4101')['value'], 0.0)
+        cur.execute("SELECT COALESCE(SUM(amount), 0) s FROM finance_transactions WHERE status = 'approved' AND category_id = 10")
+        self.assertEqual(branding_gate.chart_find(self._tree(), '2101')['money_out'], float(cur.fetchone()['s']))
 
 
 if __name__ == '__main__':

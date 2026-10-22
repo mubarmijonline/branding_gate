@@ -734,7 +734,7 @@ body.finance-surface {
 }
 /* Chart of accounts: one row per class, group and account, indented by depth. */
 .chart-tree, .category-tree { padding: 6px 0; }
-.chart-head { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; padding: 10px 20px; font-size: 11px;
+.chart-head { display: grid; grid-template-columns: 90px 1fr 130px 130px 110px; gap: 10px; padding: 10px 20px; font-size: 11px;
               font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
 .chart-head-r { text-align: end; }
 .chart-row { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid #f1f5f9;
@@ -751,17 +751,16 @@ body.finance-surface {
 .chart-entity { cursor: pointer; font-size: 12.5px; color: var(--muted); }
 .chart-name { flex: 1 1 auto; min-width: 0; }
 .chart-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.chart-value { font-weight: 700; white-space: nowrap; min-width: 120px; text-align: end; font-variant-numeric: tabular-nums; }
+.chart-value { font-weight: 700; white-space: nowrap; width: 130px; flex: none; text-align: end; font-variant-numeric: tabular-nums; }
+.chart-row .tree-actions { width: 110px; flex: none; justify-content: flex-end; }
 .chart-value.neg { color: var(--finance-expense); }
-.chart-live { font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; background: #fef3c7; color: #92400e;
-              padding: 1px 6px; border-radius: 4px; }
 .chart-note { padding: 12px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
 .chart-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px; }
 .chart-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .chart-summary div { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
 .chart-summary span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .chart-summary b { font-size: 20px; }
-@media (max-width: 768px) { .chart-summary { grid-template-columns: 1fr; } .chart-meta { display: none; } .chart-value { min-width: 0; } }
+@media (max-width: 768px) { .chart-summary { grid-template-columns: 1fr; } .chart-meta { display: none; } .chart-value { width: 90px; font-size: 12px; } .chart-head { grid-template-columns: 60px 1fr 90px 90px 110px; } }
 /* Finance Tree editing: a category's actions sit after its total. */
 .tree-actions { display: inline-flex; gap: 4px; align-items: center; }
 .tree-act { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted);
@@ -1529,9 +1528,9 @@ body.finance-surface {
                 <div><span>Net profit</span><b id="chartNet">EGP 0.00</b></div>
             </div>
             <div class="finance-card">
-                <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Balance / net</span></div>
+                <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Money in</span><span class="chart-head-r">Money out</span></div>
                 <div id="chartTree" class="chart-tree"></div>
-                <div class="chart-note"><i class="fas fa-bolt mr-1"></i><b>live</b>: the balance the system keeps today (cash, bank, clients, suppliers, staff custody and loans). Other accounts show the period's movements: money out minus in for assets, costs and expenses; in minus out for liabilities, equity and revenue. Sales (4101) and returns (4102) come from posted invoices and refunds.</div>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Only approved finance transactions count, each under the account it was posted to. Cash and bank balances are on the Payment Methods tab.</div>
             </div>
         </div>
 
@@ -4449,7 +4448,7 @@ var CHART_CLASS_COLORS = { '1': '#2563eb', '2': '#dc2626', '3': '#7c3aed', '4': 
 // Add under / edit / delete on a chart row. Classes and the accounts the
 // system books into keep their name and code but still take accounts under them.
 function treeActions(node, depth) {
-    if (!CAN_EDIT_CATEGORIES) return '';
+    if (!CAN_EDIT_CATEGORIES) return '<span class="tree-actions"></span>';
     let html = `<span class="tree-actions"><button class="tree-act" data-tree-sub="${node.id}" title="Add account under it"><i class="fas fa-plus"></i></button>`;
     const holdsSystem = n => n.children.some(k => k.is_system || holdsSystem(k));
     if (!node.is_system) {
@@ -4465,14 +4464,14 @@ function chartRows(nodes, depth, withAmounts, cls) {
     return nodes.map(function(n) {
         treeCats[n.id] = n;
         const c = cls || n.code.charAt(0);
-        const meta = withAmounts && n.count
-            ? `<span class="chart-meta">in ${formatCurrency(n.money_in)} &middot; out ${formatCurrency(n.money_out)} &middot; ${n.count}</span>` : '';
-        const value = withAmounts ? `<span class="chart-value${n.value < 0 ? ' neg' : ''}">${formatCurrency(n.value)}</span>` : '';
+        const meta = withAmounts && n.count ? `<span class="chart-meta" title="Transactions">${n.count}</span>` : '';
+        const cell = v => `<span class="chart-value">${v ? formatCurrency(v) : '-'}</span>`;
+        const value = withAmounts ? cell(n.money_in) + cell(n.money_out) : '';
         let html = `<div class="chart-row depth-${Math.min(depth, 3)}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
                          style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
             <span class="chart-toggle">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
             <span class="chart-code">${escHtml(n.code)}</span>
-            <span class="chart-name">${escHtml(n.name)}${n.live ? ' <span class="chart-live" title="The balance the system keeps, as of today">live</span>' : ''}</span>
+            <span class="chart-name">${escHtml(n.name)}</span>
             ${meta}${value}${treeActions(n, depth)}
         </div>`;
         (withAmounts ? (n.entities || []) : []).forEach(function(ent) {
@@ -4480,7 +4479,7 @@ function chartRows(nodes, depth, withAmounts, cls) {
             html += `<div class="chart-row chart-entity" onclick="${open}" style="padding-inline-start:${12 + (depth + 1) * 22}px">
                 <span class="chart-toggle"></span><span class="chart-code"><i class="fas ${ent.entity_type === 'client' ? 'fa-user' : 'fa-truck'}"></i></span>
                 <span class="chart-name">${escHtml(ent.name)}</span>
-                <span class="chart-meta">${ent.count}</span><span class="chart-value">${formatCurrency(ent.total)}</span></div>`;
+                <span class="chart-meta">${ent.count}</span><span class="chart-value">${ent.entity_type === 'client' ? formatCurrency(ent.total) : '-'}</span><span class="chart-value">${ent.entity_type === 'client' ? '-' : formatCurrency(ent.total)}</span></div>`;
         });
         if (n.children.length) {
             html += `<div class="chart-children" data-chart-parent="${n.id}">${chartRows(n.children, depth + 1, withAmounts, c)}</div>`;

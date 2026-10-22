@@ -23473,40 +23473,18 @@ def chart_sales(cur, start=None, end=None):
     return {'4101': got.get('invoice', (0.0, 0)), '4102': got.get('refund', (0.0, 0))}
 
 
-def chart_live_balances(cur):
+def chart_tree(cur, start=None, end=None, sales=False):
     """
-    The accounts whose balance the system already keeps, as of now: the cash
-    and bank payment methods, what clients owe, what we owe suppliers, and
-    custody plus loans held by staff.
-    """
-    cur.execute("""SELECT method_type, COALESCE(SUM(current_balance), 0) AS s FROM payment_methods
-                   WHERE is_active = 1 GROUP BY method_type""")
-    methods = {r['method_type']: float(r['s']) for r in cur.fetchall()}
-    cur.execute("SELECT COALESCE(SUM(balance), 0) AS s FROM user_finance_balances")
-    custody = float(cur.fetchone()['s'])
-    cur.execute("SELECT COALESCE(SUM(current_balance), 0) AS s FROM user_loans")
-    loans = float(cur.fetchone()['s'])
-    return {
-        '1101': methods.get('cash', 0.0),
-        '1102': methods.get('bank', 0.0),
-        '1103': sum(e['debit'] - e['credit'] for e in ledger_entries(cur)),
-        '2101': sum(e['credit'] - e['debit'] for e in supplier_ledger_entries(cur)),
-        '1110': custody + loans,
-    }
-
-
-def chart_tree(cur, start=None, end=None, live=True):
-    """
-    The chart as nested nodes with money in, money out and a value on the
-    account's normal side (assets, costs, expenses: out - in; liabilities,
-    equity, revenue: in - out), rolled up to groups and classes. 4101 and 4102
-    earn from posted invoices and refunds; with `live`, the accounts the
-    system keeps a balance for show that balance instead.
+    The chart as nested nodes with the approved finance transactions posted to
+    each account: money in, money out and a value on the account's normal side
+    (assets, costs, expenses: out - in; liabilities, equity, revenue: in - out),
+    rolled up to groups and classes. Only what Finance approved counts. With
+    `sales` (the income statement), 4101 and 4102 also earn from posted
+    invoices and refunds.
     """
     rows = chart_accounts(cur)
     moves = chart_movements(cur, start, end)
-    sales = chart_sales(cur, start, end)
-    balances = chart_live_balances(cur) if live else {}
+    sales = chart_sales(cur, start, end) if sales else {'4101': (0.0, 0), '4102': (0.0, 0)}
 
     def build(rid):
         r = rows[rid]
@@ -23519,9 +23497,10 @@ def chart_tree(cur, start=None, end=None, live=True):
         if code == '4101':
             own += sales['4101'][0]
             count += sales['4101'][1]
-        elif code == '4102':
-            # ponytail: a refund counts as its credit note; the cash paid back
-            # settles the client's account (1103), so it is not counted twice.
+        elif code == '4102' and sales['4102'][1]:
+            # ponytail: on the income statement a refund counts as its credit
+            # note; the cash paid back settles the client's account, so it is
+            # not counted twice.
             own = -sales['4102'][0]
             count += sales['4102'][1]
         node = {'id': rid, 'code': code, 'name': r['category_name'], 'type': r['category_type'],
@@ -23531,8 +23510,6 @@ def chart_tree(cur, start=None, end=None, live=True):
                 'money_out': m['money_out'] + sum(k['money_out'] for k in kids),
                 'count': count + sum(k['count'] for k in kids),
                 'value': own + sum(k['value'] for k in kids), 'children': kids}
-        if code in balances:
-            node['value'], node['live'] = balances[code], True
         return node
 
     return [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
@@ -26148,7 +26125,7 @@ def get_income_statement():
         
         # By chart group: revenue (class 4) against costs and expenses (5, 6),
         # each group with the accounts under it.
-        classes = chart_tree(cur, start, end, live=False)
+        classes = chart_tree(cur, start, end, sales=True)
 
         def statement_groups(class_codes):
             groups = []
@@ -26448,7 +26425,7 @@ def get_finance_analytics():
         daily_data = cur.fetchall()
         
         # Revenue and spending by chart group (class 4; classes 5 and 6).
-        chart = chart_tree(cur, start_date, end_date, live=False)
+        chart = chart_tree(cur, start_date, end_date, sales=True)
 
         def by_group(class_codes):
             rows = [{'category_name': '%s %s' % (g['code'], g['name']), 'total': g['value']}

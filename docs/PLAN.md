@@ -392,14 +392,7 @@ category comes from a request (add transaction, staff expense approval single
 and bulk, expense-tracking approval). The single staff-expense approval no
 longer defaults to the deleted Operational Expenses; a category is required.
 
-**Values in the tree:** each account shows money in, money out and its net on
-its normal side (assets, costs and expenses: out − in; liabilities, equity and
-revenue: in − out), rolled up through groups and classes. Five accounts show
-the live balance the system already keeps instead: 1101 the cash payment
-methods, 1102 the bank ones, 1103 what clients owe (client accounts), 2101 what
-we owe suppliers (supplier accounts), 1110 custody held by staff plus staff
-loans outstanding. Live balances are as of now; the date filter applies to
-movements.
+**Values in the tree (revised 2026-10-22, Ahmed):** only approved finance transactions, each under the account it was posted to: money in and money out per account, rolled up to group and class. No figures derived from SRs, invoices or live balances (those were showing supplier SR costs on 2101 before anything was paid). The income statement still counts posted invoices on 4101 and refunds on 4102.
 
 **Reports:** the income statement and analytics roll up by group over classes
 4 (revenue) and 5-6 (costs and expenses). 4101 Sales also counts posted
