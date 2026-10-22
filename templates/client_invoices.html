@@ -142,6 +142,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
 
 <script>
 (function () {
+  var REFUND_CATEGORY_ID = {{ refund_category_id|tojson }};   // Client Refunds: money paid back to a client
   var CAN = { create: {{ ('invoice.create' in _p)|tojson }}, post: {{ ('invoice.post' in _p)|tojson }},
               editItems: {{ ('invoice_catalog.edit' in _p)|tojson }} };
   var STAGES = [['', 'All'], ['draft', 'Draft'], ['submitted', 'With Finance'], ['returned', 'Returned'], ['posted', 'Posted'], ['refund', 'Refunds']];
@@ -441,8 +442,10 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       if (inv.can_edit) foot += '<button class="btn btn-outline-primary" id="ivSave"><i class="fas fa-save mr-1"></i>Save</button>';
       if (inv.can_submit) foot += '<button class="btn btn-primary" id="ivSend"><i class="fas fa-paper-plane mr-1"></i>Send to Finance</button>';
       if (inv.can_refund) foot += '<button class="btn btn-outline-warning" id="ivRefund"><i class="fas fa-undo-alt mr-1"></i>Create refund</button>';
-      if (inv.can_record_payment && inv.kind === 'invoice' && inv.paid < inv.total - 0.005)
-        foot += '<button class="btn btn-success" id="ivPay"><i class="fas fa-hand-holding-usd mr-1"></i>Record payment received</button>';
+      if (inv.can_record_payment && inv.paid < inv.total - 0.005)
+        foot += inv.kind === 'refund'
+          ? '<button class="btn btn-warning" id="ivPay"><i class="fas fa-hand-holding-usd mr-1"></i>Pay back to client</button>'
+          : '<button class="btn btn-success" id="ivPay"><i class="fas fa-hand-holding-usd mr-1"></i>Record payment received</button>';
       if (inv.can_post) foot += (inv.status === 'submitted' ? '<button class="btn btn-outline-danger" id="ivReturn"><i class="fas fa-undo mr-1"></i>Return</button>' : '') +
                                 '<button class="btn btn-success" id="ivPost"><i class="fas fa-check mr-1"></i>' + (inv.kind === 'refund' ? 'Post refund' : 'Post to client account') + '</button>';
       $('#ivEditorFoot').html(foot);
@@ -475,27 +478,29 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     if (!confirm('Cancel this invoice? It will not reach the client\'s account.')) return;
     $.post('/api/invoices/' + current.id + '/cancel').done(function () { $('#ivEditor').modal('hide'); load(); });
   });
-  // Posting books the money that moves with it, in a payment method, so it
-  // reaches Finance's balances and reports; 0 posts it as owed.
+  // Posting is the approval: numbered and on the client's account (1103).
+  // Money is collected (or paid back) afterwards with Record payment.
   $(document).on('click', '#ivPost', function () {
     var refund = current.kind === 'refund';
     var next = current.invoice_number || 1;
-    $.getJSON('/api/finance/payment-methods').done(function (pm) {
-      var methods = (pm.payment_methods || []).filter(function (m) { return m.is_active; });
-      $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:repeat(3,minmax(0,1fr))">' +
-        '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '"></div>' +
-        '<div><label>' + (refund ? 'Paid back from' : 'Received into') + ' <span class="text-danger">*</span></label><select id="ivPostMethod" class="form-control">' +
-          '<option value="">Choose payment method...</option>' + methods.map(function (m) {
-            return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) +
-                   ' (' + money(m.current_balance) + ')</option>'; }).join('') + '</select></div>' +
-        '<div><label>' + (refund ? 'Amount paid back now' : 'Amount received now') + '</label><input type="number" id="ivPostAmount" class="form-control" min="0" step="0.01" value="' + r2(current.total) + '"></div></div>' +
-        '<div class="iv-sub mb-2">' + (refund ? 'The refund is credited to the client. Money paid back comes out of the payment method.'
-              : 'The invoice goes on the client\'s account. Money received goes into the payment method and Finance\'s reports. Put 0 if the client has not paid yet; collect it later with Record payment received.') + '</div>' +
-        '<div class="d-flex justify-content-end" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
-        '<button class="btn btn-success" id="ivPostConfirm"><i class="fas fa-check mr-1"></i>Post</button></div></div>');
-      $('#ivPostMethod').trigger('focus');
-      if (!methods.length) Swal.fire('No payment method', 'Add one in Finance Management > Payment Methods first.', 'warning');
-    });
+    var t = current, row = function (code, name, dr, cr) {
+      return '<tr><td><b>' + code + '</b> <bdi>' + name + '</bdi></td><td class="iv-r">' + (dr ? money(dr) : '') +
+             '</td><td class="iv-r">' + (cr ? money(cr) : '') + '</td></tr>';
+    };
+    var lines = refund
+      ? row('4102', 'مردودات ومسموحات المبيعات', t.subtotal, 0) + row('2103', 'ضريبة القيمة المضافة للمبيعات', t.vat_total, 0) +
+        row('1103', 'العملاء', 0, t.total) + (t.profit_tax_total ? row('1107', 'ضريبة الخصم والتحصيل', 0, t.profit_tax_total) : '')
+      : row('1103', 'العملاء', t.total, 0) + (t.profit_tax_total ? row('1107', 'ضريبة الخصم والتحصيل', t.profit_tax_total, 0) : '') +
+        row('4101', 'المبيعات', 0, t.subtotal) + row('2103', 'ضريبة القيمة المضافة للمبيعات', 0, t.vat_total);
+    $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:minmax(0,220px) 1fr">' +
+      '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '"></div>' +
+      '<div><label>Booked in the Finance Tree</label><table class="iv-table" style="min-width:0"><thead><tr><th>Account</th><th class="iv-r">Debit</th><th class="iv-r">Credit</th></tr></thead><tbody>' +
+      lines + '</tbody></table></div></div>' +
+      '<div class="iv-sub mb-2">' + (refund ? 'The refund is credited to the client. Pay the money back later with <b>Pay back to client</b>.'
+            : 'The invoice goes on the client\'s account (1103). When the client pays, use <b>Record payment received</b>.') + '</div>' +
+      '<div class="d-flex justify-content-end" style="gap:8px"><button class="btn btn-light" id="ivBack">Back</button>' +
+      '<button class="btn btn-success" id="ivPostConfirm"><i class="fas fa-check mr-1"></i>Post</button></div></div>');
+    $('#ivNumber').trigger('focus');
   });
   $(document).on('click', '#ivBack', function () { openInvoice(current.id); });
   $(document).on('click', '#ivRefund', function () {
@@ -526,13 +531,11 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       .fail(function (x) { btn.prop('disabled', false); Swal.fire('Not created', (x.responseJSON || {}).error || 'Try again', 'error'); });
   });
   $(document).on('click', '#ivPostConfirm', function () {
-    if (!$('#ivPostMethod').val()) { $('#ivPostMethod').trigger('focus'); Swal.fire('Choose the payment method', '', 'warning'); return; }
     var btn = $(this).prop('disabled', true);
     // Whatever Finance corrected in the window is saved first, then posted.
     save(false, true).then(function () {
       return $.ajax({ url: '/api/invoices/' + current.id + '/post', method: 'POST', contentType: 'application/json',
-                      data: JSON.stringify({ invoice_number: $('#ivNumber').val(), payment_method_id: $('#ivPostMethod').val(),
-                                             amount: $('#ivPostAmount').val() }) });
+                      data: JSON.stringify({ invoice_number: $('#ivNumber').val() }) });
     }).done(function (r) {
       var refund = current.kind === 'refund';
       $('#ivEditor').modal('hide');
@@ -564,8 +567,8 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     $.getJSON('/api/finance/payment-methods').done(function (pm) {
       var methods = (pm.payment_methods || []).filter(function (m) { return m.is_active; });
       $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:repeat(4,minmax(0,1fr))">' +
-        '<div><label>Amount received</label><input type="number" id="ivPayAmount" class="form-control" min="0.01" step="0.01" value="' + remaining + '"></div>' +
-        '<div><label>Received into</label><select id="ivPayMethod" class="form-control">' + methods.map(function (m) {
+        '<div><label>' + (current.kind === 'refund' ? 'Amount paid back' : 'Amount received') + '</label><input type="number" id="ivPayAmount" class="form-control" min="0.01" step="0.01" value="' + remaining + '"></div>' +
+        '<div><label>' + (current.kind === 'refund' ? 'Paid from' : 'Received into') + '</label><select id="ivPayMethod" class="form-control">' + methods.map(function (m) {
           return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) + '</option>'; }).join('') + '</select></div>' +
         '<div><label>Date</label><input type="date" id="ivPayDate" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
         '<div><label>Note</label><input id="ivPayNote" class="form-control" placeholder="Cheque / transfer no."></div></div>' +
@@ -578,11 +581,15 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     var amount = parseFloat($('#ivPayAmount').val());
     if (!(amount > 0)) { $('#ivPayAmount').trigger('focus'); return; }
     var btn = $(this).prop('disabled', true);
+    var refund = current.kind === 'refund';
+    // A payment is a Client Payment (1103); money paid back is a Client Refund,
+    // which the Finance Tree books against 1103 too.
     $.ajax({ url: '/api/finance/transactions', method: 'POST', contentType: 'application/json', data: JSON.stringify({
-      transaction_type: 'income', category_id: 1, amount: amount, payment_method_id: $('#ivPayMethod').val(),
+      transaction_type: refund ? 'expense' : 'income', category_id: refund ? REFUND_CATEGORY_ID : 1, amount: amount,
+      payment_method_id: $('#ivPayMethod').val(),
       sales_request_id: current.sales_request_id, client_id: current.client_id, transaction_date: $('#ivPayDate').val(),
-      reference_number: 'Invoice ' + current.invoice_number,
-      description: 'Payment for invoice ' + current.invoice_number + ($('#ivPayNote').val() ? ' - ' + $('#ivPayNote').val() : '')
+      reference_number: current.label,
+      description: (refund ? 'Paid back on ' : 'Payment for ') + current.label + ($('#ivPayNote').val() ? ' - ' + $('#ivPayNote').val() : '')
     }) }).done(function (r) {
       if (!r.success) { btn.prop('disabled', false); Swal.fire('Not recorded', r.error || 'Try again', 'error'); return; }
       Swal.fire('Payment recorded', 'It is a Client Payment in Finance' + (r.auto_approved ? '.' : ', waiting for approval in Finance Approvals.'), 'success');

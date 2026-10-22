@@ -430,3 +430,10 @@ before tax, Cr 2103 VAT; a posted refund the reverse on 4102. Columns Debit /
 Credit / Balance (normal side); the tree opens collapsed to the six classes,
 with search opening the branches it matches, and expand / collapse all. Still
 outside the journal: supplier costs on SRs (no Finance approval step yet).
+
+**Posting is not payment (2026-10-22, Ahmed):** posting an invoice asks only its
+number and shows the entry it books (Dr 1103 + 1107 / Cr 4101 + 2103); no payment
+method. The client's money is collected later with Record payment received
+(Client Payment: Dr cash / Cr 1103); a posted refund is paid back with Pay back
+to client (Client Refund: Dr 1103 / Cr cash). The post API still books money if
+a payment method is sent.

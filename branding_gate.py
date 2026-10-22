@@ -25074,7 +25074,13 @@ def _invoice_header(data):
 @app.route('/invoices', methods=['GET'])
 @perm('invoice.view')
 def client_invoices_page():
-    return render_template('client_invoices.html')
+    conn, cur = connection()
+    try:
+        refund_category = _refund_category_id(cur)
+    finally:
+        cur.close()
+        conn.close()
+    return render_template('client_invoices.html', refund_category_id=refund_category)
 
 
 @app.route('/invoices/<int:invoice_id>/print', methods=['GET'])
@@ -25553,10 +25559,10 @@ def client_invoice_submit(invoice_id):
 @perm('invoice.post')
 def client_invoice_post(invoice_id):
     """
-    Finance posts it: numbered, locked, on the client's account. The money
-    that moves with it -- received for an invoice, paid back for a refund --
-    is booked in the payment method chosen, so it reaches Finance's balances
-    and reports. An amount of 0 posts it as owed, to be collected later.
+    Finance posts it: numbered, locked, on the client's account (the journal
+    books Dr 1103 / Cr 4101 + 2103, a refund the reverse). Money is not part of
+    posting: it is collected (or paid back) later with Record payment. A
+    payment_method_id and amount, when sent, still book money with it.
     """
     data = request.get_json(silent=True) or {}
     conn, cur = connection()
@@ -25577,10 +25583,11 @@ def client_invoice_post(invoice_id):
                     (kind, number, invoice_id))
         if cur.fetchone():
             return jsonify(success=False, error='%s number %d is already used' % (kind.title(), number)), 400
-        if not data.get('payment_method_id'):
-            return jsonify(success=False, error='Choose the payment method'), 400
         try:
-            amount = float(invoicing.money(data.get('amount') if data.get('amount') not in (None, '') else inv['total']))
+            if not data.get('payment_method_id'):
+                amount = 0.0
+            else:
+                amount = float(invoicing.money(data.get('amount') if data.get('amount') not in (None, '') else inv['total']))
         except (ValueError, ArithmeticError):
             return jsonify(success=False, error='The amount must be a number'), 400
         if amount < 0 or amount > float(inv['total']) + 0.004:

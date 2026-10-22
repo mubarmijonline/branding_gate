@@ -23,12 +23,10 @@ You are notified when an account manager sends one. Finance > Client Invoices,
 card **With Finance**, open the invoice:
 - check the lines, item codes, prices, dates and the 1% tick; you may correct
   them in the window;
-- **Post to client account**: confirm the number, choose the **payment method**
-  the money came into, and the **amount received now** (the full total by
-  default; 0 if the client has not paid yet), then **Post**. The invoice is
-  locked and on the client's account, and the money received is booked in that
-  payment method: it shows in the payment method's balance and in Finance's
-  reports, and as a collection on the statement;
+- **Post to client account**: confirm the number and **Post**. The window shows
+  the entry it books in the Finance Tree: debit 1103 العملاء the total and 1107
+  the 1% withheld, credit 4101 المبيعات (before tax) and 2103 VAT. The invoice
+  is locked and on the client's account. No money moves yet;
 - or **Return** with what needs fixing; it goes back to its author.
 Each line carries its SR item's id as its code, so nothing waits on the item list.
 
@@ -43,10 +41,11 @@ approved.
 items to refund; each ticked item is refunded in full (all of it not refunded
 already), add the reason, **Create refund draft**. It is calculated at the
 invoice's prices, VAT 14% and the 1% if the invoice had it. **Post refund**:
-choose the payment method and the amount paid back to the client (0 if
-nothing is paid back, e.g. the invoice was not paid). It is a credit on the
-statement (*Refund R-n*); money paid back is a debit (*Refund paid back*) and
-comes out of the payment method. Refunds have their own series (R-1, R-2 ...).
+confirm the number; it books the reverse on 4102 (debit 4102 and 2103, credit
+1103 and 1107) and is a credit on the statement (*Refund R-n*). If money goes
+back to the client, open the refund > **Pay back to client**: amount, the
+payment method it leaves, date; it is a debit on the statement (*Refund paid
+back*). Refunds have their own series (R-1, R-2 ...).
 
 **4. Print.** Open the invoice > **Print** (the layout of your sample sheet).
 
