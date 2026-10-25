@@ -350,6 +350,8 @@ def _manager_expense_approval(scope):
         'expense_tracking.view': scope,
         'expense_tracking.create': 'own',
         'expense_tracking.approve_manager': scope,
+        # Whoever may approve an expense may also turn it down (same people).
+        'expense_tracking.reject': scope,
     }
 
 

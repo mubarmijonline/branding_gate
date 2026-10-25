@@ -28754,7 +28754,12 @@ def get_expense_approvals():
                 WHERE uet.status = %s
                 ORDER BY uet.submitted_at DESC
             """, (status_filter,))
-        expenses = with_expense_attachments(cur, list(cur.fetchall()))
+        expenses = list(cur.fetchall())
+        # A manager sees their own people's expenses; Finance sees everyone's.
+        ids = visible_user_ids('expense_tracking.view')
+        if ids is not None:
+            expenses = [e for e in expenses if e['user_id'] in ids]
+        expenses = with_expense_attachments(cur, expenses)
         
         # Get count by status
         cur.execute("""
@@ -28793,6 +28798,8 @@ def approve_user_expense(expense_id):
         
         if not expense:
             return jsonify({'success': False, 'error': 'Expense not found or not pending approval'}), 404
+        if not _scope_covers('expense_tracking.approve_manager', expense['user_id']):
+            return jsonify({'success': False, 'error': 'This expense is not one of your team\'s'}), 403
         
         # Store requested amount and update with edited amount
         edited_amount = data.get('edited_amount')
@@ -28874,6 +28881,10 @@ def approve_expenses_bulk():
         for exp in expenses:
             exp_id = exp.get('id')
             amount = exp.get('amount')
+            cur.execute("SELECT user_id FROM user_expense_tracking WHERE id = %s", (exp_id,))
+            owner = cur.fetchone()
+            if not owner or not _scope_covers('expense_tracking.approve_manager', owner['user_id']):
+                continue
             
             # Update amount and set to manager_approved
             cur.execute("""
@@ -29277,9 +29288,14 @@ def reject_expenses_bulk():
         
         rejected_count = 0
         rejector_id = session.get('user_id')
+        # Anyone who may reject does so within their people, until Finance has paid it.
+        stages = ('submitted', 'manager_approved')
         
         for exp_id in expense_ids:
-            # Can reject expenses with submitted OR manager_approved status
+            cur.execute("SELECT user_id, status FROM user_expense_tracking WHERE id = %s", (exp_id,))
+            row = cur.fetchone()
+            if not row or row['status'] not in stages or not _scope_covers('expense_tracking.reject', row['user_id']):
+                continue
             cur.execute("""
                 UPDATE user_expense_tracking 
                 SET status = 'rejected',
@@ -29315,11 +29331,15 @@ def reject_user_expense(expense_id):
             return jsonify({'success': False, 'error': 'Rejection reason is required'}), 400
         
         conn, cur = connection()
+        cur.execute("SELECT user_id FROM user_expense_tracking WHERE id = %s", (expense_id,))
+        owner = cur.fetchone()
+        if owner and not _scope_covers('expense_tracking.reject', owner['user_id']):
+            return jsonify({'success': False, 'error': 'This expense is not one of your team\'s'}), 403
         
         cur.execute("""
             UPDATE user_expense_tracking 
-            SET status = 'rejected', approved_by = %s, approved_at = NOW(), rejection_reason = %s
-            WHERE id = %s AND status = 'submitted'
+            SET status = 'rejected', rejected_by = %s, rejected_at = NOW(), rejection_reason = %s
+            WHERE id = %s AND status IN ('submitted', 'manager_approved')
         """, (session.get('user_id'), reason, expense_id))
         
         if cur.rowcount == 0:
@@ -30237,11 +30257,13 @@ def reject_expense_tracking(tracking_id):
         
         conn, cur = connection()
         
-        cur.execute("SELECT status FROM expense_tracking WHERE id = %s", (tracking_id,))
+        cur.execute("SELECT status, user_id FROM expense_tracking WHERE id = %s", (tracking_id,))
         tracking = cur.fetchone()
         
         if not tracking:
             return jsonify({'success': False, 'error': 'Tracking not found'}), 404
+        if not _scope_covers('expense_tracking.reject', tracking['user_id']):
+            return jsonify({'success': False, 'error': 'This expense is not one of your team\'s'}), 403
         
         if tracking['status'] in ['approved', 'rejected']:
             return jsonify({'success': False, 'error': f'Cannot reject: status is {tracking["status"]}'}), 400
