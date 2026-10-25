@@ -4676,15 +4676,16 @@ PARTY_FIELDS = {
                  'company_name', 'business_registration_number', 'address',
                  'contact_person_name', 'primary_phone', 'secondary_phone',
                  'email_address', 'whatsapp_number', 'preferred_contact_method',
-                 'website', 'job_title', 'additional_notes'),
+                 'website', 'job_title', 'additional_notes', 'status', 'date_added'),
 }
 PARTY_REQUIRED = {
     'client': ('client_name', 'mobile_number', 'email_address'),
     'company': ('company_name', 'industry_sector', 'address',
                 'phone_number', 'email_address', 'primary_contact_person'),
-    # A supplier is often reached on a phone number and nothing else, so the
-    # email is optional: requiring it only ever produced placeholder addresses.
-    'supplier': ('supplier_name',),
+    # The same as the head's own Add Supplier form (David, 2026-10-25). The
+    # email stays optional: a supplier is often reached on a phone and nothing else.
+    'supplier': ('supplier_name', 'supplier_type', 'status', 'date_added',
+                 'contact_person_name', 'primary_phone'),
 }
 PARTY_CREATE_PERMISSION = {
     'client': 'client_request.create',
@@ -5143,6 +5144,11 @@ def _create_party_record(cur, req, payload):
         # read it the same way now so approving one cannot fail on it.
         payload = dict(payload, preferred_contact_channel=contact_channel(
             payload.get('preferred_contact_channel')))
+    if kind == 'supplier':
+        # "Other" plus a typed word is that word, as on the Add form.
+        supplier_type, other_type = resolve_supplier_type(payload)
+        payload = dict(payload, supplier_type=supplier_type, other_supplier_type=other_type,
+                       status=payload.get('status') or 'Active')
     fields = [f for f in PARTY_FIELDS[kind] if payload.get(f) not in (None, '')]
     columns = fields + ['added_by']
     values = [payload[f] for f in fields] + [req['requester_name']]

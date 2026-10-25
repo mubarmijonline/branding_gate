@@ -125,17 +125,23 @@
       ['additional_notes', 'Notes', false]
     ],
     supplier: [
-      ['supplier_name', 'Supplier name', true],
-      ['email_address', 'Email', false],
-      ['company_name', 'Company', false],
-      ['supplier_type', 'Type', false],
-      ['contact_person_name', 'Contact person', false],
-      ['primary_phone', 'Phone', false],
-      ['whatsapp_number', 'WhatsApp', false],
+      ['supplier_name', 'Supplier Name', true],
+      ['supplier_type', 'Supplier Type', true],
+      ['other_supplier_type', 'Other supplier type', false],
+      ['company_name', 'Company Name', false],
+      ['business_registration_number', 'Business Registration Number', false],
+      ['status', 'Status', true],
+      ['date_added', 'Date Added', true],
       ['address', 'Address', false],
+      ['contact_person_name', 'Contact Person Name', true],
+      ['job_title', 'Job Title / Position', false],
+      ['primary_phone', 'Primary Phone Number', true],
+      ['secondary_phone', 'Secondary Phone Number', false],
+      ['email_address', 'Email Address', false],
+      ['whatsapp_number', 'WhatsApp Number', false],
+      ['preferred_contact_method', 'Preferred Contact Method', false],
       ['website', 'Website', false],
-      ['business_registration_number', 'Registration no.', false],
-      ['additional_notes', 'Notes', false]
+      ['additional_notes', 'Additional Notes', false]
     ]
   }[KIND];
 
@@ -301,9 +307,38 @@
     $('.party-view').filter(function () { return $(this).data('id') === id; }).first().trigger('click');
   });
 
+  // A supplier is asked for on the very form the head adds one with
+  // (supplier.html's Add Supplier form), copied, so the two cannot drift.
+  function supplierFormHtml() {
+    var form = $('#addSupplierForm').clone();
+    form.attr('id', 'partySupplierForm').find('[id]').each(function () { this.id = 'pr_' + this.id; });
+    form.find('label[for]').each(function () { $(this).attr('for', 'pr_' + $(this).attr('for')); });
+    form.find('[name]').addClass('party-field').each(function () {
+      var name = $(this).attr('name');
+      $(this).attr('data-field', name === 'notes' ? 'additional_notes' : name).removeAttr('required');
+    });
+    form.append('<div class="form-group"><label class="small font-weight-bold" for="partyNote">Why this one</label>' +
+      '<input type="text" class="form-control" id="partyNote" placeholder="What they are for, so whoever approves knows"></div>');
+    return form;
+  }
+
+  $(document).on('change', '#pr_supplierType', function () {
+    var other = $(this).val() === 'Other';
+    $('#pr_otherSupplierTypeRow').toggle(other);
+    if (!other) $('#pr_otherSupplierType').val('');
+  });
+
   $(document).on('click', '#partyRequestNew', function () {
     $('#partyRequestModalTitle').text('Request a new ' + KIND);
-    $('#partyRequestModalBody').html(formHtml());
+    if (KIND === 'supplier' && $('#addSupplierForm').length) {
+      $('#partyRequestModalBody').empty().append(supplierFormHtml());
+      $('#pr_supplierType').val('');
+      $('#pr_otherSupplierTypeRow').hide();
+      $('#pr_dateAdded').val(new Date().toISOString().split('T')[0]);
+      $('#partyRequestModal .modal-dialog').addClass('modal-lg');
+    } else {
+      $('#partyRequestModalBody').html(formHtml());
+    }
     $('#partyRequestModalFoot').html(
       '<button class="btn btn-secondary" data-dismiss="modal">Cancel</button>' +
       '<button class="btn btn-primary" id="partySubmit">Send for approval</button>');
@@ -312,7 +347,15 @@
 
   $(document).on('click', '#partySubmit', function () {
     var body = {kind: KIND, note: $('#partyNote').val()};
-    $('.party-field').each(function () { body[$(this).data('field')] = $(this).val(); });
+    $('#partyRequestModalBody .party-field').each(function () { body[$(this).attr('data-field')] = $(this).val(); });
+    if (KIND === 'supplier' && $('#partySupplierForm').length) {
+      // The same fields the Add form insists on, checked before it is sent.
+      var need = [['supplier_name', 'Supplier Name'], ['supplier_type', 'Supplier Type'], ['status', 'Status'],
+                  ['date_added', 'Date Added'], ['contact_person_name', 'Contact Person Name'], ['primary_phone', 'Primary Phone Number']];
+      if (body.supplier_type === 'Other') need.push(['other_supplier_type', 'the other supplier type']);
+      var missing = need.filter(function (f) { return !String(body[f[0]] || '').trim(); }).map(function (f) { return f[1]; });
+      if (missing.length) { Swal.fire('Missing: ' + missing.join(', '), 'Fill in the fields marked *.', 'warning'); return; }
+    }
     $.ajax({url: '/api/party-requests', method: 'POST', contentType: 'application/json',
             data: JSON.stringify(body)})
       .done(function (r) {

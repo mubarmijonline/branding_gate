@@ -77,10 +77,13 @@ class PartyRequestFlowTest(unittest.TestCase):
                                   "perms": perms, "role_code": role_code})
         return client
 
+    # What the Add Supplier form insists on; a request asks for the same.
+    SUPPLIER_FORM = {'kind': 'supplier', 'supplier_type': 'Materials', 'status': 'Active',
+                     'date_added': '2026-10-25', 'contact_person_name': 'Tester', 'primary_phone': '01000000000'}
+
     def _ask_supplier(self, actor, name='Test Supplier'):
-        return self._client_for(actor).post('/api/party-requests', json={
-            'kind': 'supplier', 'supplier_name': name,
-            'email_address': 'a@b.example', 'primary_phone': '01000000000'})
+        return self._client_for(actor).post('/api/party-requests', json=dict(
+            self.SUPPLIER_FORM, supplier_name=name, email_address='a@b.example'))
 
     def _latest(self):
         cur = self._cursor()
@@ -264,9 +267,9 @@ class PartyRequestFlowTest(unittest.TestCase):
         self.assertEqual(stranger['requests'], [])
 
     def test_the_payload_reaches_the_approver_in_full(self):
-        self._client_for(self.ops_member).post('/api/party-requests', json={
-            'kind': 'supplier', 'supplier_name': 'Full Detail', 'email_address': 'a@b.example',
-            'primary_phone': '01100000000', 'address': 'Somewhere', 'website': 'example.com'})
+        self._client_for(self.ops_member).post('/api/party-requests', json=dict(self.SUPPLIER_FORM, **{
+            'supplier_name': 'Full Detail', 'email_address': 'a@b.example',
+            'primary_phone': '01100000000', 'address': 'Somewhere', 'website': 'example.com'}))
         head = self._client_for(self.ops_head).get('/api/party-requests').get_json()
         payload = head['requests'][0]['payload']
         self.assertEqual(payload['supplier_name'], 'Full Detail')
@@ -391,11 +394,28 @@ class SupplierEmailOptionalTest(PartyRequestFlowTest):
     """
 
     def test_a_supplier_can_be_asked_for_without_an_email(self):
-        response = self._client_for(self.ops_member).post('/api/party-requests', json={
-            'kind': 'supplier', 'supplier_name': 'Phone Only Supplier',
-            'primary_phone': '01000000000'})
+        response = self._client_for(self.ops_member).post('/api/party-requests', json=dict(
+            self.SUPPLIER_FORM, supplier_name='Phone Only Supplier'))
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(self._latest()['status'], 'pending_head')
+
+    def test_a_request_needs_what_the_add_form_needs(self):
+        lacking = dict(self.SUPPLIER_FORM, supplier_name='No Contact')
+        del lacking['contact_person_name']
+        response = self._client_for(self.ops_member).post('/api/party-requests', json=lacking)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('contact person name', response.get_json()['error'])
+
+    def test_an_other_type_request_is_added_with_the_typed_word(self):
+        self._client_for(self.ops_member).post('/api/party-requests', json=dict(
+            self.SUPPLIER_FORM, supplier_name='Typed Other Request', primary_phone='01000000777',
+            supplier_type='Other', other_supplier_type='Fabrication'))
+        request_id = self._latest()['id']
+        self.assertEqual(self._client_for(self.ops_head).post(
+            '/api/party-requests/%d/head-approve' % request_id, json={}).status_code, 200)
+        cur = self._cursor()
+        cur.execute("SELECT supplier_type, status, contact_person_name FROM supplier WHERE supplier_name = 'Typed Other Request'")
+        self.assertEqual(cur.fetchone(), {'supplier_type': 'Fabrication', 'status': 'Active', 'contact_person_name': 'Tester'})
 
     def test_the_name_is_still_required(self):
         response = self._client_for(self.ops_member).post('/api/party-requests', json={
