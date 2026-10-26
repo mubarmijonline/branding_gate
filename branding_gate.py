@@ -1559,7 +1559,7 @@ def notify_user(user_id, title, content, link=None):
     return notify_users([user_id], title, content, link=link)
 
 
-def notify_username(username, title, content):
+def notify_username(username, title, content, link=None):
     """
     Tell one person named by their username.
 
@@ -1571,12 +1571,13 @@ def notify_username(username, title, content):
     if not username:
         return 0
     conn, cur = connection()
-    cur.execute("SELECT id FROM user WHERE username = %s OR name = %s LIMIT 1",
-                (username, username))
+    # The session's username is the mobile number for most people.
+    cur.execute("SELECT id FROM user WHERE username = %s OR name = %s OR mobile = %s LIMIT 1",
+                (username, username, username))
     row = cur.fetchone()
     cur.close()
     conn.close()
-    return notify_user(row['id'], title, content) if row else 0
+    return notify_user(row['id'], title, content, link=link) if row else 0
 
 
 def send_notification_to_role(role_name, title, content, link=None):
@@ -12645,6 +12646,18 @@ def get_pending_approvals():
             'error': str(e)
         }), 500
 
+def notify_new_request_to_operations(request_id, title, by):
+    """Tell Operations a request is waiting for costing (one wording, wherever it was created)."""
+    try:
+        return send_notification_to_role(
+            'operation', f"New Sales Request #{request_id:06d}",
+            f'"{title}" was created by {by}. Please review and add costing.',
+            link=f'/operation_request?request={request_id}')
+    except Exception as e:
+        print(f"Error notifying operations: {e}")
+        return 0
+
+
 @app.route('/api/approvals/<int:approval_id>/approve', methods=['POST'])
 @perm('sales_request.approve')
 def approve_request(approval_id):
@@ -12762,14 +12775,19 @@ def approve_request(approval_id):
         )
         
         # Send notification to original requester
+        approver = session.get('name') or session.get('username')
         try:
             notify_username(
                 approval['requested_by'],
                 'Request Approved',
-                f'Your sales request "{request_data.get("title")}" has been approved by {session["username"]}'
+                f'Your sales request "{request_data.get("title")}" has been approved by {approver}',
+                link=f'/sales_request?request={sales_request_id}'
             )
-        except:
-            pass
+        except Exception as e:
+            print(f"Error notifying the requester: {e}")
+        # The request now exists: Operations is told exactly as for any new
+        # request, or it sits in costing with nobody aware of it.
+        notify_new_request_to_operations(sales_request_id, request_data.get('title'), approver)
         
         cur.close()
         conn.close()
