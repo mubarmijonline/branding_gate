@@ -2460,7 +2460,7 @@ $(document).ready(function() {
                         }
                         
                         // Calculate current cost if exists
-                        var effectiveDays = (isSell || !includeDaysInCalc) ? 1 : rentalDays;
+                        var effectiveDays = !includeDaysInCalc ? 1 : rentalDays;
                         var effectiveQty = includeQtyInCalc ? item.total_quantity : 1;
                         var currentTotalCost = item.unit_cost ? formatNum(item.unit_cost * effectiveQty * effectiveDays * dimensionMultiplier) : '';
                         
@@ -2599,7 +2599,7 @@ $(document).ready(function() {
                                                 <span>Costing Formula</span>
                                             </div>
                                             <div class="enhanced-formula-display">
-                                                Total = Unit Cost${includeQtyInCalc ? ' × Quantity' : ''}${!isSell && includeDaysInCalc ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dimensions' : ''}
+                                                Total = Unit Cost${includeQtyInCalc ? ' × Quantity' : ''}${includeDaysInCalc ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dimensions' : ''}
                                             </div>
                                             <div class="enhanced-formula-values">
                                                 <div class="enhanced-formula-value-box">
@@ -2612,7 +2612,7 @@ $(document).ready(function() {
                                                     <div class="value-number">${item.total_quantity}</div>
                                                 </div>
                                                 ` : ''}
-                                                ${!isSell && includeDaysInCalc ? `
+                                                ${includeDaysInCalc ? `
                                                 <div class="enhanced-formula-value-box">
                                                     <div class="value-label">Days</div>
                                                     <div class="value-number">${rentalDays}</div>
@@ -2626,7 +2626,7 @@ $(document).ready(function() {
                                                 ` : ''}
                                             </div>
                                             <div class="enhanced-formula-result" id="formulaDetail_${item.id}">
-                                                ${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) + (includeQtyInCalc ? ' × ' + item.total_quantity.toLocaleString() : '') + ((!isSell && includeDaysInCalc) ? ' × ' + rentalDays : '') + (dimensionMultiplier > 1 ? ' × ' + formatNum(dimensionMultiplier) : '') + ' = EGP ' + currentTotalCost : 'Enter unit cost to calculate total'}
+                                                ${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) + (includeQtyInCalc ? ' × ' + item.total_quantity.toLocaleString() : '') + ((includeDaysInCalc) ? ' × ' + rentalDays : '') + (dimensionMultiplier > 1 ? ' × ' + formatNum(dimensionMultiplier) : '') + ' = EGP ' + currentTotalCost : 'Enter unit cost to calculate total'}
                                             </div>
                                         </div>
 
@@ -2698,7 +2698,7 @@ $(document).ready(function() {
         var itemId = $(this).data('item-id');
         
         // For Sell items or if days excluded, don't multiply by days (days = 1)
-        var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+        var effectiveDays = !includeDays ? 1 : rentalDays;
         var effectiveQty = includeQty ? quantity : 1;
         
         // Calculate total: Unit Cost × Quantity (if included) × Days (if rent AND include_days) × Dimension Multiplier
@@ -2720,7 +2720,7 @@ $(document).ready(function() {
             if (includeQty) {
                 formulaText += ' × ' + quantity.toLocaleString();
             }
-            if (!isSell && includeDays) {
+            if (includeDays) {
                 formulaText += ' × ' + rentalDays;
             }
             if (dimensionMultiplier > 1) {
@@ -2758,7 +2758,7 @@ $(document).ready(function() {
             var includeQty = $(this).data('include-qty') === 'true' || $(this).data('include-qty') === true;
             
             // For Sell items or if days excluded, don't multiply by days
-            var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+            var effectiveDays = !includeDays ? 1 : rentalDays;
             var effectiveQty = includeQty ? quantity : 1;
             
             if (costPerUnit > 0) {
@@ -2808,7 +2808,7 @@ $(document).ready(function() {
             var includeQty = $(this).data('include-qty') === 'true' || $(this).data('include-qty') === true;
             
             // For Sell items or if days excluded, don't multiply by days
-            var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+            var effectiveDays = !includeDays ? 1 : rentalDays;
             var effectiveQty = includeQty ? quantity : 1;
             
             // Calculate total using formula: Unit Cost × Qty (if included) × Days × Dimension Multiplier

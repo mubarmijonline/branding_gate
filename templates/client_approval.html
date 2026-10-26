@@ -1120,7 +1120,7 @@ $(document).ready(function() {
         const dimensionCalc = $(this).data('dimension-calc') || '';
         
         // Calculate effective values
-        const effectiveDays = (sellType === 'rent' && includeDays) ? rentalDays : 1;
+        const effectiveDays = includeDays ? rentalDays : 1;
         const effectiveQty = includeQty ? quantity : 1;
         
         // Build formula display

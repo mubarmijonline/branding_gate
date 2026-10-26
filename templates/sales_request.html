@@ -5026,7 +5026,8 @@ window.chartPieDemo = function() {
                        '  <div class="dropdown-menu dropdown-menu-right action-dropdown-menu" role="menu">' +
                        '    <a class="dropdown-item generate-proposal-btn" href="#" data-id="' + row.request_id + '" data-costed="' + row.costed_items_count + '" data-total="' + row.items_count + '"><i class="fas fa-file-pdf text-secondary mr-2"></i>Generate Proposal</a>' +
                        '    <a class="dropdown-item log-btn" href="#" data-id="' + row.request_id + '"><i class="fas fa-history text-warning mr-2"></i>View Change Log</a>';
-                if (!pricingMode) {
+                // Deleting a request is the admin's alone (sales_request.delete).
+                if (!pricingMode && (window.USER_PERMS || {})['sales_request.delete']) {
                     html += '    <div class="dropdown-divider"></div>' +
                             '    <a class="dropdown-item text-danger delete-btn" href="#" data-id="' + row.request_id + '"><i class="fas fa-trash mr-2"></i>Delete Request</a>';
                 }
@@ -9330,7 +9331,7 @@ window.chartPieDemo = function() {
                                             <div class="input-group-prepend">
                                                 <span class="input-group-text">W</span>
                                             </div>
-                                            <input type="number" step="0.01" class="form-control item-width" 
+                                            <input type="number" step="0.1" class="form-control item-width" 
                                                    name="items[${itemCounter}][width]" placeholder="Width">
                                             <div class="input-group-append">
                                                 <span class="input-group-text">cm</span>
@@ -9342,7 +9343,7 @@ window.chartPieDemo = function() {
                                             <div class="input-group-prepend">
                                                 <span class="input-group-text">H</span>
                                             </div>
-                                            <input type="number" step="0.01" class="form-control item-height" 
+                                            <input type="number" step="0.1" class="form-control item-height" 
                                                    name="items[${itemCounter}][height]" placeholder="Height">
                                             <div class="input-group-append">
                                                 <span class="input-group-text">cm</span>
@@ -9354,7 +9355,7 @@ window.chartPieDemo = function() {
                                             <div class="input-group-prepend">
                                                 <span class="input-group-text">D</span>
                                             </div>
-                                            <input type="number" step="0.01" class="form-control item-depth" 
+                                            <input type="number" step="0.1" class="form-control item-depth" 
                                                    name="items[${itemCounter}][depth]" placeholder="Depth">
                                             <div class="input-group-append">
                                                 <span class="input-group-text">cm</span>
@@ -9633,19 +9634,19 @@ window.chartPieDemo = function() {
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Width (m)</label>
-                                <input type="number" step="0.01" class="form-control item-width" placeholder="0">
+                                <input type="number" step="0.1" class="form-control item-width" placeholder="0">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Height (m)</label>
-                                <input type="number" step="0.01" class="form-control item-height" placeholder="0">
+                                <input type="number" step="0.1" class="form-control item-height" placeholder="0">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Depth (m)</label>
-                                <input type="number" step="0.01" class="form-control item-depth" placeholder="0">
+                                <input type="number" step="0.1" class="form-control item-depth" placeholder="0">
                             </div>
                         </div>
                     </div>
@@ -11968,21 +11969,21 @@ window.chartPieDemo = function() {
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
                                                                         <label>Width (m)</label>
-                                                                        <input type="number" step="0.01" class="form-control item-width" 
+                                                                        <input type="number" step="0.1" class="form-control item-width" 
                                                                                placeholder="0" value="${itemWidth}">
                                                                     </div>
                                                                 </div>
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
                                                                         <label>Height (m)</label>
-                                                                        <input type="number" step="0.01" class="form-control item-height" 
+                                                                        <input type="number" step="0.1" class="form-control item-height" 
                                                                                placeholder="0" value="${itemHeight}">
                                                                     </div>
                                                                 </div>
                                                                 <div class="col-md-4">
                                                                     <div class="form-group">
                                                                         <label>Depth (m)</label>
-                                                                        <input type="number" step="0.01" class="form-control item-depth" 
+                                                                        <input type="number" step="0.1" class="form-control item-depth" 
                                                                                placeholder="0" value="${itemDepth}">
                                                                     </div>
                                                                 </div>
@@ -12501,7 +12502,7 @@ window.chartPieDemo = function() {
                 var isSell = item.sell_type === 'sell';
                 var includeDays = item.include_days_in_calc !== false;
                 var includeQty = item.include_qty_in_calc !== false;
-                var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+                var effectiveDays = !includeDays ? 1 : rentalDays;
                 var effectiveQty = includeQty ? quantity : 1;
                 var totalSell = sellPerItem * effectiveQty * effectiveDays * dimensionMultiplier;
                 
@@ -12816,8 +12817,8 @@ window.chartPieDemo = function() {
                                     <!-- Compact Inline Formula -->
                                     <div style="background: #f0fdf4; padding: 7px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0;">
                                         <span style="font-size: 0.7rem; font-weight: 600; color: #065f46; white-space: nowrap;"><i class="fas fa-calculator mr-1"></i>Formula:</span>
-                                        <span style="font-size: 0.75rem; color: #374151;">Unit${includeQty ? ' × Qty' : ''}${!isSell && includeDays ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dim' : ''}</span>
-                                        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 600; color: #059669;" id="formulaDetailSell_${item.id}">${sellPerItem > 0 ? fmtNum(sellPerItem) + (includeQty ? ' × ' + quantity.toLocaleString() : '') + (!isSell && includeDays ? ' × ' + rentalDays.toLocaleString() : '') + (dimensionMultiplier > 1 ? ' × ' + fmtNum(dimensionMultiplier) : '') + ' = EGP ' + fmtNum(totalSell) : 'Enter price to calculate'}</span>
+                                        <span style="font-size: 0.75rem; color: #374151;">Unit${includeQty ? ' × Qty' : ''}${includeDays ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dim' : ''}</span>
+                                        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 600; color: #059669;" id="formulaDetailSell_${item.id}">${sellPerItem > 0 ? fmtNum(sellPerItem) + (includeQty ? ' × ' + quantity.toLocaleString() : '') + (includeDays ? ' × ' + rentalDays.toLocaleString() : '') + (dimensionMultiplier > 1 ? ' × ' + fmtNum(dimensionMultiplier) : '') + ' = EGP ' + fmtNum(totalSell) : 'Enter price to calculate'}</span>
                                     </div>
                                     <!-- Price Input Row -->
                                     <div style="background: #f8fafc; padding: 10px 14px;">
@@ -13015,8 +13016,8 @@ window.chartPieDemo = function() {
         var costPerItem = parseFloat($(this).data('cost-per-item')) || 0;
         var totalCost = parseFloat($(this).data('total-cost')) || 0;
         
-        // Calculate effective days (only for rent items with include_days enabled)
-        var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+        // Days count whenever their Calc box is ticked, Sell or Rent
+        var effectiveDays = !includeDays ? 1 : rentalDays;
         
         // Calculate effective quantity (only if include_qty enabled)
         var effectiveQty = includeQty ? quantity : 1;
@@ -13038,7 +13039,7 @@ window.chartPieDemo = function() {
             if (includeQty) {
                 formulaText += ' × ' + quantity.toLocaleString();
             }
-            if (!isSell && includeDays) {
+            if (includeDays) {
                 formulaText += ' × ' + rentalDays.toLocaleString();
             }
             if (dimensionMultiplier > 1) {
@@ -13137,8 +13138,8 @@ window.chartPieDemo = function() {
             var includeDays = sellInput.data('include-days') === 'true' || sellInput.data('include-days') === true;
             var includeQty = sellInput.data('include-qty') === 'true' || sellInput.data('include-qty') === true;
             
-            // Calculate effective days (only for rent items with include_days enabled)
-            var effectiveDays = (isSell || !includeDays) ? 1 : rentalDays;
+            // Days count whenever their Calc box is ticked, Sell or Rent
+            var effectiveDays = !includeDays ? 1 : rentalDays;
             
             // Calculate effective quantity
             var effectiveQty = includeQty ? quantity : 1;

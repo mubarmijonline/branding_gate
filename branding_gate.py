@@ -7456,8 +7456,10 @@ def item_total_cost(item_data, cost_per_item):
     quantity = float(item_data.get('qty') or 1)
     effective_qty = quantity if item_data.get('include_qty_in_calc', 1) else 1
 
+    # Days count whenever their Calc box is ticked, Sell or Rent: a screen sold
+    # for a 4-day event is priced per day too (Ahmed, 2026-10-26).
     effective_days = 1
-    if (item_data.get('sell_type') or 'rent') == 'rent' and item_data.get('include_days_in_calc', 1):
+    if item_data.get('include_days_in_calc', 1):
         effective_days = int(item_data.get('rental_days') or 1)
 
     multiplier = 1.0
@@ -12981,9 +12983,9 @@ def set_item_prices(request_id):
                     include_qty_in_calc = bool(item_data.get('include_qty_in_calc', 1))
                     dimension_calc = item_data.get('dimension_calc', '')
                     
-                    # Calculate effective days (only for rent items with include_days enabled)
+                    # Days count whenever their Calc box is ticked, Sell or Rent
                     effective_days = 1
-                    if sell_type == 'rent' and include_days_in_calc:
+                    if include_days_in_calc:
                         effective_days = rental_days
                     
                     # Calculate effective quantity (only if include_qty_in_calc is enabled)
