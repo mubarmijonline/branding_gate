@@ -4679,7 +4679,8 @@ PARTY_FIELDS = {
                  'website', 'job_title', 'additional_notes', 'status', 'date_added'),
 }
 PARTY_REQUIRED = {
-    'client': ('client_name', 'mobile_number', 'email_address'),
+    # As the Add Client form: a client always belongs to a parent company.
+    'client': ('parent_company_id', 'client_name', 'mobile_number', 'email_address'),
     'company': ('company_name', 'industry_sector', 'address',
                 'phone_number', 'email_address', 'primary_contact_person'),
     # The same as the head's own Add Supplier form (David, 2026-10-25). The
@@ -5034,6 +5035,12 @@ def create_party_request():
 
         me = session.get('user_id')
         conn, cur = connection()
+        if kind == 'client':
+            cur.execute("SELECT id FROM company WHERE id = %s", (payload.get('parent_company_id'),))
+            if not cur.fetchone():
+                cur.close()
+                conn.close()
+                return jsonify(success=False, error='Choose the parent company from the list'), 400
         code = _party_request_code(cur, kind)
         cur.execute("""
             INSERT INTO party_request (request_code, kind, payload, status, requested_by, note)
@@ -5108,10 +5115,16 @@ def list_party_requests():
         sql += (" ORDER BY FIELD(p.status,'pending_admin','pending_head','approved',"
                 "'rejected','cancelled'), p.id DESC")
         cur.execute(sql, params)
+        found = cur.fetchall()
+        cur.execute("SELECT id, company_name FROM company")
+        company_names = {r['id']: r['company_name'] for r in cur.fetchall()}
 
         rows = []
-        for row in cur.fetchall():
+        for row in found:
             row['payload'] = _party_payload(row)
+            if isinstance(row['payload'], dict) and row['payload'].get('parent_company_id'):
+                row['payload']['parent_company_name'] = company_names.get(
+                    int(row['payload']['parent_company_id']) if str(row['payload']['parent_company_id']).isdigit() else None)
             row['requested_at'] = (row['requested_at'].strftime('%Y-%m-%d %H:%M')
                                    if row['requested_at'] else None)
             for field in ('head_approved_at', 'admin_approved_at', 'rejected_at'):

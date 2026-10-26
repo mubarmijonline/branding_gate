@@ -104,6 +104,7 @@
   // enforces, so the form cannot ask for something that will be thrown away.
   var FIELDS = {
     client: [
+      ['parent_company_id', 'Parent company', true],
       ['client_name', 'Client name', true],
       ['mobile_number', 'Mobile', true],
       ['email_address', 'Email', true],
@@ -247,8 +248,10 @@
   function detailHtml(q) {
     var fields = FIELDS.filter(function (f) { return q.payload[f[0]]; }).map(function (f) {
       var wide = f[0] === 'additional_notes' || f[0] === 'address';
+      var value = f[0] === 'parent_company_id' ? (q.payload.parent_company_name || COMPANY_NAMES[q.payload[f[0]]] || '#' + q.payload[f[0]])
+                                               : q.payload[f[0]];
       return '<div' + (wide ? ' class="full"' : '') + '><span>' + f[1] + '</span><b data-no-i18n>' +
-             esc(q.payload[f[0]]) + '</b></div>';
+             esc(value) + '</b></div>';
     }).join('');
     var badge = STATUS[q.status] || ['secondary', q.status];
     var html = '<div class="pr-summary"><div><div class="who"><i class="fas fa-user mr-1"></i>' +
@@ -307,11 +310,23 @@
     $('.party-view').filter(function () { return $(this).data('id') === id; }).first().trigger('click');
   });
 
-  // A supplier is asked for on the very form the head adds one with
-  // (supplier.html's Add Supplier form), copied, so the two cannot drift.
-  function supplierFormHtml() {
-    var form = $('#addSupplierForm').clone();
-    form.attr('id', 'partySupplierForm').find('[id]').each(function () { this.id = 'pr_' + this.id; });
+  // A supplier or client is asked for on the very form it is added with
+  // (the page's Add form), copied, so the two cannot drift.
+  var ADD_FORM = {supplier: '#addSupplierForm', client: '#addClientForm'}[KIND];
+  // What that Add form insists on, checked before the request is sent.
+  var ADD_REQUIRED = {
+    supplier: [['supplier_name', 'Supplier Name'], ['supplier_type', 'Supplier Type'], ['status', 'Status'],
+               ['date_added', 'Date Added'], ['contact_person_name', 'Contact Person Name'], ['primary_phone', 'Primary Phone Number']],
+    client: [['parent_company_id', 'Parent Company'], ['client_name', 'Client Name'], ['mobile_number', 'Mobile Number'],
+             ['email_address', 'Email Address']]
+  }[KIND];
+
+  function addFormHtml() {
+    var form = $(ADD_FORM).clone();
+    form.find('.select2-container').remove();
+    form.find('select').removeClass('select2-hidden-accessible').removeAttr('data-select2-id aria-hidden tabindex')
+        .find('option').removeAttr('data-select2-id');
+    form.attr('id', 'partyAddForm').find('[id]').each(function () { this.id = 'pr_' + this.id; });
     form.find('label[for]').each(function () { $(this).attr('for', 'pr_' + $(this).attr('for')); });
     form.find('[name]').addClass('party-field').each(function () {
       var name = $(this).attr('name');
@@ -322,6 +337,22 @@
     return form;
   }
 
+  // The parent company list, searchable, filled here: the page only fills its
+  // own copy for people who may edit clients.
+  var COMPANY_NAMES = {};
+  function fillCompanies($select) {
+    return $.getJSON('/api/companies').done(function (r) {
+      $select.empty().append(new Option('Select Parent Company...', ''));
+      (r.companies || []).forEach(function (c) {
+        COMPANY_NAMES[c.id] = c.company_name;
+        $select.append(new Option(c.company_name, c.id));
+      });
+      if ($.fn.select2) {
+        $select.select2({ placeholder: 'Search for a company...', width: '100%', dropdownParent: $('#partyRequestModal') });
+      }
+    });
+  }
+
   $(document).on('change', '#pr_supplierType', function () {
     var other = $(this).val() === 'Other';
     $('#pr_otherSupplierTypeRow').toggle(other);
@@ -330,12 +361,16 @@
 
   $(document).on('click', '#partyRequestNew', function () {
     $('#partyRequestModalTitle').text('Request a new ' + KIND);
-    if (KIND === 'supplier' && $('#addSupplierForm').length) {
-      $('#partyRequestModalBody').empty().append(supplierFormHtml());
-      $('#pr_supplierType').val('');
-      $('#pr_otherSupplierTypeRow').hide();
-      $('#pr_dateAdded').val(new Date().toISOString().split('T')[0]);
+    if (ADD_FORM && $(ADD_FORM).length) {
+      $('#partyRequestModalBody').empty().append(addFormHtml());
       $('#partyRequestModal .modal-dialog').addClass('modal-lg');
+      if (KIND === 'supplier') {
+        $('#pr_supplierType').val('');
+        $('#pr_otherSupplierTypeRow').hide();
+        $('#pr_dateAdded').val(new Date().toISOString().split('T')[0]);
+      } else if (KIND === 'client') {
+        fillCompanies($('#pr_parentCompany'));
+      }
     } else {
       $('#partyRequestModalBody').html(formHtml());
     }
@@ -348,10 +383,8 @@
   $(document).on('click', '#partySubmit', function () {
     var body = {kind: KIND, note: $('#partyNote').val()};
     $('#partyRequestModalBody .party-field').each(function () { body[$(this).attr('data-field')] = $(this).val(); });
-    if (KIND === 'supplier' && $('#partySupplierForm').length) {
-      // The same fields the Add form insists on, checked before it is sent.
-      var need = [['supplier_name', 'Supplier Name'], ['supplier_type', 'Supplier Type'], ['status', 'Status'],
-                  ['date_added', 'Date Added'], ['contact_person_name', 'Contact Person Name'], ['primary_phone', 'Primary Phone Number']];
+    if ($('#partyAddForm').length && ADD_REQUIRED) {
+      var need = ADD_REQUIRED.slice();
       if (body.supplier_type === 'Other') need.push(['other_supplier_type', 'the other supplier type']);
       var missing = need.filter(function (f) { return !String(body[f[0]] || '').trim(); }).map(function (f) { return f[1]; });
       if (missing.length) { Swal.fire('Missing: ' + missing.join(', '), 'Fill in the fields marked *.', 'warning'); return; }

@@ -161,8 +161,12 @@ class ClientRequestApprovalTest(_Harness):
         self.assertEqual(row['preferred_contact_channel'], 'Phone')
 
     def test_a_new_request_is_stored_with_a_channel_the_column_takes(self):
+        cur = self._cursor()
+        cur.execute("SELECT id FROM company ORDER BY id LIMIT 1")
+        company = cur.fetchone()['id']
+        cur.close()
         response = self._client_for(self.leader).post('/api/party-requests', json={
-            'kind': 'client', 'client_name': 'Channel Probe Two',
+            'kind': 'client', 'parent_company_id': company, 'client_name': 'Channel Probe Two',
             'mobile_number': '01225900002', 'email_address': 'channel.two@example.com',
             'preferred_contact_channel': 'In Person'})
         self.assertEqual(response.status_code, 200, response.data[:300])

@@ -115,8 +115,12 @@ class PartyRequestFlowTest(unittest.TestCase):
         self.assertIn('supplier name', response.get_json()['error'])
 
     def test_client_request_phone_fields_are_normalized_before_saving(self):
+        cur = self._cursor()
+        cur.execute("SELECT id FROM company ORDER BY id LIMIT 1")
+        company = cur.fetchone()['id']
+        cur.close()
         response = self._client_for(self.sales_member).post('/api/party-requests', json={
-            'kind': 'client',
+            'kind': 'client', 'parent_company_id': company,
             'client_name': 'Spaced Phone',
             'mobile_number': '0 1226401477',
             'secondary_mobile_number': ' 0 100 200 3000 ',
@@ -151,6 +155,15 @@ class PartyRequestFlowTest(unittest.TestCase):
         cur.close()
         self.assertEqual(row['phone_number'], '01005557777')
         self.assertEqual(row['email_address'], 'requestedcompany@example.com')
+
+    def test_a_client_request_needs_a_real_parent_company(self):
+        base = {'kind': 'client', 'client_name': 'No Company', 'mobile_number': '01225900003',
+                'email_address': 'nocompany@example.com'}
+        missing = self._client_for(self.sales_member).post('/api/party-requests', json=base)
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn('parent company', missing.get_json()['error'])
+        unknown = self._client_for(self.sales_member).post('/api/party-requests', json=dict(base, parent_company_id=987654321))
+        self.assertEqual(unknown.status_code, 400)
 
     def test_party_request_rejects_invalid_contact_fields_as_bad_input(self):
         response = self._client_for(self.sales_member).post('/api/party-requests', json={

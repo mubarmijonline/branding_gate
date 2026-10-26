@@ -569,6 +569,7 @@ window.BG_AR = {
 "Choose the Sales Request: its client, company and approved items fill the invoice.": "اختر طلب المبيعات: يملأ العميل والشركة والبنود المعتمدة الفاتورة.",
 "Choose the account": "اختر الحساب",
 "Choose the item code": "اختر كود الصنف",
+"Choose the parent company from the list": "اختر الشركة الأم من القائمة",
 "Choose the payment method": "اختر طريقة الدفع",
 "Choose the payment method the money leaves": "اختر وسيلة الدفع التي سيُخصم منها المبلغ",
 "Choose two different payment methods": "اختر وسيلتي دفع مختلفتين",
