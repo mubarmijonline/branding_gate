@@ -1,0 +1,218 @@
+/*
+ * Phones only. Loaded on every page after branding-gate-system.css and before
+ * the Arabic overrides, so RTL still wins. Desktop (>= 768px) is untouched.
+ *
+ * What it does:
+ *   - app shell: top bar trimmed, bottom tab bar, "More" sheet, FAB lifted
+ *   - every table becomes one card per row (bg-mobile.js labels the cells)
+ *   - forms, modals, toolbars and stat grids stack to one column
+ *   - tap targets at least 44px
+ *
+ * Directions use logical properties (inline-start/end) so the same rules hold
+ * in Arabic.
+ */
+
+@media (max-width: 767.98px) {
+
+  /* ---------- shell ---------- */
+  :root { --bgm-tabbar: 64px; --bgm-topbar: 56px; }
+
+  html, body { overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+  body.bg-shell { padding-bottom: calc(var(--bgm-tabbar) + env(safe-area-inset-bottom, 0px)); }
+
+  /* Top bar: logo, balance, bell, user only. The menus live in the tab bar
+     and the More sheet, so the hamburger goes. */
+  #main_nav_bar { padding: 0 .6rem; min-height: var(--bgm-topbar); }
+  #main_nav_bar .navbar-toggler,
+  #main_nav_bar #navbarSupportedContent > ul.navbar-nav.mr-auto { display: none !important; }
+  #main_nav_bar > .container-fluid { flex-wrap: nowrap; padding: 0; }
+  #main_nav_bar #navbarSupportedContent { display: flex !important; flex-basis: auto; flex-grow: 1; justify-content: flex-end; min-width: 0; }
+  #main_nav_bar .navbar-brand { margin-inline-end: 4px; padding: 6px 0; }
+  #main_nav_bar .navbar-nav.my-2 { flex-direction: row; align-items: center; margin: 0 !important; }
+  #main_nav_bar .navbar-nav.my-2 > li, #main_nav_bar .navbar-nav.my-2 > ul > li { list-style: none; }
+  #main_nav_bar .navbar-nav.my-2 .nav-link { padding: .5rem .45rem; color: #fff; }
+  #main_nav_bar .bg-lang-toggle span { display: none; }
+  #main_nav_bar #navbarDropdown > span { display: none; }
+  #main_nav_bar .navbar-brand img { height: 30px; }
+  #main_nav_bar .brand-separator, #main_nav_bar .brand-text small { display: none; }
+  #main_nav_bar .brand-text span { font-size: .95rem; }
+  #main_nav_bar .dropdown-menu { position: fixed !important; top: var(--bgm-topbar) !important; inset-inline: 8px !important;
+    width: auto !important; min-width: 0 !important; max-height: 70vh; overflow-y: auto; transform: none !important; }
+
+  /* Bottom tab bar */
+  .bgm-tabbar { position: fixed; bottom: 0; inset-inline: 0; height: calc(var(--bgm-tabbar) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px); background: #fff; border-top: 1px solid #e2e8f0;
+    display: flex; z-index: 1045; box-shadow: 0 -4px 16px rgba(15,23,42,.06); }
+  .bgm-tab { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    color: #64748b; text-decoration: none; font-size: 11px; font-weight: 600; position: relative; border: 0; background: none;
+    padding: 6px 2px 4px; min-width: 0; }
+  .bgm-tab i { font-size: 20px; line-height: 1; }
+  .bgm-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bgm-tab.active { color: #4f46e5; }
+  .bgm-tab.active::before { content: ''; position: absolute; top: 0; inset-inline: 22%; height: 3px; border-radius: 0 0 3px 3px; background: #4f46e5; }
+  .bgm-tab .bgm-badge { position: absolute; top: 2px; inset-inline-start: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 5px;
+    border-radius: 999px; background: #dc2626; color: #fff; font-size: 10px; font-weight: 800; line-height: 17px; text-align: center; }
+  .bgm-tab:hover, .bgm-tab:focus { color: #4f46e5; text-decoration: none; outline: none; }
+
+  /* "More" sheet: every menu and its items, from the navbar's own markup */
+  .bgm-sheet-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 1050; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .bgm-sheet-overlay.open { opacity: 1; pointer-events: auto; }
+  .bgm-sheet { position: fixed; inset-inline: 0; bottom: 0; max-height: 86vh; background: #fff; border-radius: 18px 18px 0 0; z-index: 1051;
+    transform: translateY(105%); transition: transform .25s ease; display: flex; flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -8px 30px rgba(15,23,42,.18); }
+  .bgm-sheet.open { transform: translateY(0); }
+  .bgm-sheet-handle { width: 42px; height: 4px; border-radius: 2px; background: #cbd5e1; margin: 10px auto 4px; flex: none; }
+  .bgm-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 10px; flex: none; }
+  .bgm-sheet-head b { font-size: 16px; color: #0f172a; }
+  .bgm-sheet-close { border: 0; background: #f1f5f9; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; color: #475569; }
+  .bgm-sheet-body { overflow-y: auto; padding: 0 12px 12px; -webkit-overflow-scrolling: touch; }
+  .bgm-group { margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
+  .bgm-group-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-weight: 800; color: #0f172a; background: #f8fafc;
+    cursor: pointer; user-select: none; }
+  .bgm-group-head i:first-child { width: 22px; text-align: center; color: #4f46e5; }
+  .bgm-group-head .bgm-chev { margin-inline-start: auto; color: #94a3b8; transition: transform .2s; }
+  .bgm-group.open .bgm-chev { transform: rotate(180deg); }
+  .bgm-group-items { display: none; }
+  .bgm-group.open .bgm-group-items { display: block; }
+  .bgm-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 20px; color: #334155; text-decoration: none; font-size: 14px;
+    border-top: 1px solid #f1f5f9; min-height: 46px; }
+  .bgm-item i { width: 20px; text-align: center; color: #64748b; }
+  .bgm-item:hover, .bgm-item:active { background: #eef2ff; color: #4f46e5; text-decoration: none; }
+  .bgm-item .badge { margin-inline-start: auto; }
+  .bgm-sheet-header-item { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; padding: 10px 14px 4px 20px; }
+  .bgm-divider { height: 1px; background: #e2e8f0; margin: 4px 14px; }
+
+  /* FAB above the tab bar; inline-end so it flips in Arabic */
+  .quick-add-fab { bottom: calc(var(--bgm-tabbar) + 14px + env(safe-area-inset-bottom, 0px)) !important; right: auto !important; inset-inline-end: 16px !important; }
+  .fab-menu { inset-inline-end: 0; }
+
+  /* Drawers (notifications, chat) full width, from the inline-end edge */
+  #notifDrawer, #chatDrawer { width: 100vw !important; max-width: 100vw; }
+  .fin-nav { flex-wrap: nowrap; overflow-x: auto; }
+
+  /* The old demo footer */
+  footer.page-footer { display: none; }
+
+  /* ---------- content ---------- */
+  .container-fluid, .container { padding-inline: 12px !important; }
+  h1, .h1 { font-size: 1.35rem; }
+  h2, .h2 { font-size: 1.2rem; }
+  h3, .h3 { font-size: 1.05rem; }
+  .btn, .form-control, .custom-select, select, input[type="text"], input[type="number"], input[type="date"], input[type="search"] { min-height: 44px; font-size: 16px; }
+  .btn-sm { min-height: 40px; font-size: 14px; }
+  .btn-pill, .ea-btn, .ca-btn, .sp-btn, .tree-act { min-height: 40px; }
+  textarea.form-control { font-size: 16px; }
+  .dropdown-item { padding: 10px 16px; min-height: 44px; }
+  .swal2-popup { width: calc(100vw - 24px) !important; padding: 1.2rem 1rem; }
+  .swal2-actions { flex-wrap: wrap; gap: 8px; }
+  .swal2-actions .swal2-confirm, .swal2-actions .swal2-cancel, .swal2-actions .swal2-deny { flex: 1 1 45%; min-height: 44px; }
+
+  /* Headers that hold controls: title on top, controls fill the row */
+  .card-header.d-flex, .page-header.d-flex, .finance-header.d-flex, .bg-page-header { flex-wrap: wrap; gap: 8px; }
+  .card-header.d-flex > .d-flex, .card-header.d-flex > .btn-group, .card-header.d-flex > form { flex: 1 1 100%; flex-wrap: wrap; gap: 8px; }
+  .card-header.d-flex > .d-flex > .form-control, .card-header.d-flex > .d-flex > select { flex: 1 1 140px; margin: 0 !important; }
+  .card-header.d-flex > .d-flex > .btn { flex: 0 0 auto; }
+  .card-header h2, .card-header h3, .card-header h4, .card-header h5, .card-header h6 { font-size: 1.05rem; }
+  /* Inline px widths on controls do not survive a phone */
+  input[style*="width"], select[style*="width"], .form-control[style*="width"] { width: 100% !important; min-width: 0 !important; }
+  /* Bootstrap 4 stat cards (.card.border-left-* h-100 py-2): compact, no stretch */
+  .row > [class*="col-"] > .card.h-100 { height: auto !important; }
+  .card.border-left-primary, .card.border-left-success, .card.border-left-warning, .card.border-left-danger, .card.border-left-info, .card.border-left-dark,
+  .stat-filter-card { padding: 0 !important; }
+  .card.border-left-primary .card-body, .card.border-left-success .card-body, .card.border-left-warning .card-body, .card.border-left-danger .card-body,
+  .card.border-left-info .card-body, .card.border-left-dark .card-body, .stat-filter-card .card-body { padding: 10px 14px !important; }
+  .row.mb-4 > .col-xl-3.mb-4, .row.mb-4 > .col-md-6.mb-4 { margin-bottom: 8px !important; flex: 0 0 50% !important; max-width: 50% !important; }
+  .card .card-body .fa-2x { font-size: 1.3em; }
+  /* Tiles with an icon beside the label: drop the icon so the label gets the width */
+  .ea-stat > i, .sp-figure > i, .ca-figure > i { display: none; }
+  .ea-stat span, .ea-stat b { word-break: normal; }
+  /* The collapsed-navbar gradient block is a seam now that the bar is inline */
+  #main_nav_bar .navbar-collapse { background: transparent !important; margin: 0 !important; padding: 0 !important; border-radius: 0 !important; max-height: none; overflow: visible; }
+  /* First row sits straight under the bar */
+  body.bg-shell > .container-fluid:first-of-type, .container-fluid > .row:first-child { margin-top: 0; }
+
+  /* The balance pill collapses to a stub beside the brand: icon only, like the rest */
+  #main_nav_bar #balanceDropdown > span.d-none { display: none !important; }
+  #main_nav_bar #balanceDropdown > span.d-md-none { display: inline !important; }
+  #main_nav_bar .navbar-nav.my-2 > li.mr-2 { margin: 0 !important; }
+  #main_nav_bar #balanceDropdown > span.d-md-none { color: #fff !important; }
+  #main_nav_bar .navbar-brand { max-width: 50%; overflow: hidden; }
+  /* Rows of chips/tabs leave room for the FAB on their end */
+  .ea-chips, .ca-tabs, .finance-tabs { padding-inline-end: 72px; }
+
+  /* Stat / figure grids: two per row, short */
+  .stat-card, .kpi-card, .summary-card, .stats-card, .status-card, .dashboard-card { min-height: 0 !important; padding: 12px 14px !important; }
+  .stat-card .stat-icon, .kpi-card .kpi-icon { display: none; }
+  .stat-card h2, .stat-card .stat-number, .kpi-card .kpi-value { font-size: 22px; }
+  .ea-stats, .sp-figures, .ca-figures, .chart-summary, .stats-grid, .summary-cards, .iv-stages, .kpi-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .row > [class*="col-xl-"], .row > [class*="col-lg-"], .row > [class*="col-md-"] { flex: 0 0 100%; max-width: 100%; }
+
+  /* Toolbars: stack and stretch */
+  .finance-toolbar, .finance-toolbar .filters, .finance-toolbar .actions, .ea-toolbar, .ca-tools, .sp-tools, .iv-head { flex-direction: column; align-items: stretch !important; }
+  .finance-toolbar .filters > *, .ea-toolbar > *, .ca-tools > *, .sp-tools > * { width: 100%; }
+  .finance-toolbar .filters .select2-container { width: 100% !important; }
+  .chart-search-wrap, .ea-search { max-width: none; }
+  .finance-tabs, .nav-tabs, .nav-pills, .ca-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .finance-tabs::-webkit-scrollbar, .nav-tabs::-webkit-scrollbar, .nav-pills::-webkit-scrollbar { display: none; }
+  .finance-tab, .nav-tabs .nav-link, .nav-pills .nav-link { white-space: nowrap; }
+
+  /* Modals full screen with a sticky footer */
+  .modal-dialog, .modal-dialog.modal-lg, .modal-dialog.modal-xl { margin: 0 !important; width: 100vw !important; max-width: 100vw !important; min-height: 100vh; }
+  .modal-content { min-height: 100vh; border-radius: 0 !important; border: 0; }
+  .modal-header { position: sticky; top: 0; z-index: 2; background: inherit; }
+  .modal-footer { position: sticky; bottom: 0; background: #fff; z-index: 2; flex-wrap: wrap; gap: 8px; }
+  .modal-footer > .btn, .modal-footer > button { flex: 1 1 45%; margin: 0; }
+  .modal-footer > .btn-secondary, .modal-footer > .btn-light { flex-basis: 100%; order: 9; }
+  .form-row > .col, .form-row > [class*="col-"] { flex: 0 0 100%; max-width: 100%; }
+
+  /* ---------- tables -> cards ---------- */
+  /* bg-mobile.js puts data-label on every cell and marks the table .bgm-cards.
+     Each row becomes a card; each cell a label/value line; the actions cell
+     a row of buttons. Tables that opt out keep sideways scrolling. */
+  .table-responsive, .dataTables_wrapper { overflow: visible !important; max-height: none !important; }
+  table.bgm-cards, .table-responsive > table.bgm-cards, table.bgm-cards.dataTable,
+  #requests-table.bgm-cards { display: block; width: 100% !important; min-width: 0 !important; border: 0; background: transparent; }
+  .table-responsive:has(> table.bgm-cards) { min-width: 0 !important; }
+  table.bgm-cards thead { display: none; }
+  table.bgm-cards tbody { display: block; }
+  table.bgm-cards tbody tr { display: block; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; margin: 0 0 10px; padding: 6px 12px;
+    box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+  table.bgm-cards tbody tr.bgm-empty { padding: 20px; text-align: center; color: #64748b; }
+  table.bgm-cards tbody td { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 7px 0 !important;
+    border: 0 !important; border-bottom: 1px dashed #f1f5f9 !important; font-size: 14px; text-align: start !important; white-space: normal !important;
+    max-width: none !important; overflow: visible !important; }
+  table.bgm-cards tbody td:last-child { border-bottom: 0 !important; }
+  table.bgm-cards tbody td::before { content: attr(data-label); flex: 0 0 38%; max-width: 38%; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: #64748b; padding-top: 2px; }
+  table.bgm-cards tbody td > * { max-width: 100%; }
+  table.bgm-cards tbody td.bgm-title { display: block; padding-bottom: 8px !important; border-bottom: 1px solid #e2e8f0 !important; font-weight: 800; font-size: 15px; color: #0f172a; }
+  table.bgm-cards tbody td.bgm-title::before { display: none; }
+  table.bgm-cards tbody td.bgm-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; padding-top: 10px !important; }
+  table.bgm-cards tbody td.bgm-actions::before { display: none; }
+  table.bgm-cards tbody td.bgm-actions .btn, table.bgm-cards tbody td.bgm-actions button, table.bgm-cards tbody td.bgm-actions a.btn-pill,
+  table.bgm-cards tbody td.bgm-actions .btn-pill { flex: 1 1 calc(50% - 6px); margin: 0 !important; justify-content: center; min-height: 40px; display: inline-flex; align-items: center; }
+  table.bgm-cards tbody td.bgm-actions > div, table.bgm-cards tbody td.bgm-actions .btn-group,
+  table.bgm-cards tbody td.bgm-actions .d-flex, table.bgm-cards tbody td.bgm-actions .action-buttons { display: contents; }
+  table.bgm-cards tbody td.bgm-actions .btn-sm { font-size: 13px; padding: 6px 8px; }
+  table.bgm-cards tbody td:empty, table.bgm-cards tbody td.bgm-blank { display: none; }
+  table.bgm-cards tbody td .input-group, table.bgm-cards tbody td input.form-control { width: 100%; }
+  table.bgm-cards tbody td input[type="checkbox"] { width: 22px; height: 22px; }
+  /* DataTables chrome under cards */
+  .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_paginate { float: none; text-align: start; width: 100%; margin: 6px 0; }
+  .dataTables_wrapper .dataTables_filter input { width: 100%; margin: 0; }
+  .dataTables_wrapper .dataTables_paginate .paginate_button { padding: 8px 12px; min-width: 40px; }
+  .dataTables_wrapper .dataTables_length { display: none; }
+  .dataTables_wrapper .dataTables_info { font-size: 12px; color: #64748b; }
+  .dataTables_wrapper .row > div { flex: 0 0 100%; max-width: 100%; }
+
+  /* The finance chart of accounts: hide the counts, let the name wrap */
+  .chart-meta { display: none; }
+  .chart-row { flex-wrap: wrap; row-gap: 4px; }
+  .chart-row .chart-name { flex-basis: calc(100% - 100px); }
+}
+
+/* Pointer-independent: finer touch rules */
+@media (hover: none) and (pointer: coarse) {
+  .table-hover tbody tr:hover { background: inherit; }
+  a, button { -webkit-tap-highlight-color: rgba(79,70,229,.12); }
+}

@@ -731,6 +731,13 @@ firebase_admin.initialize_app(cred)
 # deadline, and a failure returns a fallback instead of an exception. An empty
 # notification tray is a much smaller problem than an ERP that does not answer.
 # ---------------------------------------------------------------------------
+import mimetypes
+# The install manifest must be served as its own type or phones will not offer "Add to Home Screen".
+mimetypes.add_type('application/manifest+json', '.webmanifest')
+
+# Web push: the Firebase project's VAPID public key (console > Cloud Messaging >
+# Web Push certificates). Empty = phones get the bell only, no push.
+FCM_VAPID_KEY = os.environ.get('BG_FCM_VAPID_KEY', '')
 MONGO_URI = os.environ.get('BG_MONGO_URI', 'mongodb://127.0.0.1:27017/')
 MONGO_DB_NAME = os.environ.get('BG_MONGO_DB', 'branding_gate')
 
@@ -828,12 +835,9 @@ def before_request():
 
 
 def initialize_firebase():
-    """Initialize Firebase Admin SDK."""
-    service_account_file = './eltime-6571b-firebase-adminsdk-71oq0-1b7a4414ce.json'
-    if not firebase_admin._apps:  # Prevent reinitialization
-        cred = credentials.Certificate(service_account_file)
-        firebase_admin.initialize_app(cred)
-        print("Firebase initialized successfully.")
+    """Firebase Admin is initialised at import for brandinggate-7c1f6; nothing to do."""
+    return None
+
 
 def get_user_roles(user_id):
     """
@@ -1229,6 +1233,7 @@ def inject_nav_sections():
     current = rbac.sections(session.get('perms'))
     return {
         'nav_sections': current,
+        'fcm_vapid_key': FCM_VAPID_KEY,
         # Everyone but the owner holds one of these, so they are a link each.
         # Four of them side by side pushed the navbar onto a second line, so
         # more than one collapses into a single menu.
@@ -1546,11 +1551,49 @@ def notify_users(user_ids, title, content, link=None):
             'triggered': False,
             'read': False,
         } for user_id in recipients]
-        return mongo_safe(
+        written = mongo_safe(
             lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
             fallback=0, label='notify users')
+        push_to_users(recipients, title, content, link)
+        return written
     except Exception as e:
         print(f"Error sending notifications: {e}")
+        return 0
+
+
+def push_to_users(user_ids, title, content, link=None):
+    """
+    The same notification on the recipients' phones, through Firebase Cloud
+    Messaging, to every device registered for them (fcm_tokens, by user id).
+    Best effort: a dead token is dropped, any other failure is logged and the
+    bell notification stands.
+    """
+    if not FCM_VAPID_KEY or not user_ids:
+        return 0
+    try:
+        rows = mongo_safe(lambda: list(mongo().fcm_tokens.find({'uid': {'$in': list(user_ids)}})),
+                          fallback=[], label='device tokens')
+        sent = 0
+        for row in rows:
+            token = row.get('fcm_token')
+            if not token:
+                continue
+            try:
+                messaging.send(messaging.Message(
+                    notification=messaging.Notification(title=title, body=content),
+                    data={'link': link or '/notifications'},
+                    webpush=messaging.WebpushConfig(
+                        notification=messaging.WebpushNotification(title=title, body=content, icon='/static/img/icons/icon-192.png'),
+                        fcm_options=messaging.WebpushFCMOptions(link=link or '/notifications')),
+                    token=token))
+                sent += 1
+            except messaging.UnregisteredError:
+                mongo_safe(lambda: mongo().fcm_tokens.delete_one({'_id': row['_id']}), fallback=None, label='drop token')
+            except Exception as e:
+                print(f"Push failed for uid {row.get('uid')}: {e}")
+        return sent
+    except Exception as e:
+        print(f"Push error: {e}")
         return 0
 
 
@@ -2004,6 +2047,29 @@ def login():
 
 
 
+@app.route('/api/push/register', methods=['POST'])
+def register_push_token():
+    """The browser's FCM token for this person, one row per device."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    token = ((request.get_json(silent=True) or {}).get('token') or '').strip()
+    if len(token) < 20:
+        return jsonify(success=False, error='No token'), 400
+    doc = {'uid': int(session['user_id']), 'phone_number': session.get('mobile'), 'email': session.get('email'),
+           'fcm_token': token, 'updated_at': datetime.now(), 'agent': (request.user_agent.string or '')[:200]}
+    mongo_safe(lambda: mongo().fcm_tokens.update_one({'fcm_token': token}, {'$set': doc}, upsert=True),
+               fallback=None, label='register push')
+    return jsonify(success=True)
+
+
+@app.route('/api/push/unregister', methods=['POST'])
+def unregister_push_token():
+    token = ((request.get_json(silent=True) or {}).get('token') or '').strip()
+    if token:
+        mongo_safe(lambda: mongo().fcm_tokens.delete_one({'fcm_token': token}), fallback=None, label='unregister push')
+    return jsonify(success=True)
+
+
 @app.route('/firebase-messaging-sw.js')
 def firebase_messaging_sw():
     return send_from_directory('static', 'firebase-messaging-sw.js', mimetype='application/javascript')
@@ -2265,114 +2331,14 @@ def send_test_notification(reg_token: str, title: str, body: str) -> str:
 
     
 ### AL MAL3AAAB ###
-def get_access_token():
-    """Generate access token using the Service Account JSON."""
-    service_account_file = './eltime-6571b-firebase-adminsdk-71oq0-1b7a4414ce.json'
-    
-    # Load the service account credentials using google.auth
-    creds, project = google.auth.load_credentials_from_file(service_account_file)
-    
-    # Define the required scope for FCM
-    scopes = ['https://www.googleapis.com/auth/firebase.messaging']
-
-    # If the credentials do not have the necessary scope, add it
-    creds = creds.with_scopes(scopes)
-    
-    # Refresh the credentials to get the access token
-    creds.refresh(Request())
-
-    # Return the access token
-    return creds.token
-def push_send_notification(mobile,title,content):
-                try:
-                    initialize_firebase()
-                    phone_numbers = []
-                    
-                    phone_numbers.append(f"0{str(mobile)}")  # Add more numbers as needed
-            
-                    # Get FCM tokens for users with the given phone numbers
-                    
-                    user_details = get_users_with_phone_numbers(phone_numbers)
-                    print(user_details)
-                    for phone_number in user_details.keys():
-                        tokens = user_details[phone_number]['token']  # Access using key
-                        uid = user_details[phone_number]['uid']      # Access using key
-                        email = user_details[phone_number]['email']  # Access using key
-                        
-
-                        #insert_notification(uid, email, student_id, title, content)
-                        if tokens:
-                            for token in tokens:
-                                        send_notification(token,title,content)
-                        else:
-                                print("No tokens found for the specified phone numbers.")
-                    
-                except Exception as e:
-                        print(f"Unexpected error: {e}")
-
-def get_users_with_phone_numbers(phone_numbers):
-    """
-    Device tokens for push, by phone number, from Mongo.
-
-    These used to be a `user` collection with an `fcm_tokens` subcollection in
-    Firestore, written by the mobile client. One flat `fcm_tokens` collection
-    replaces both: {phone_number, fcm_token, uid, email}. Anything that
-    registers a device has to write here now -- until it does, push finds no
-    tokens and simply sends nothing, which is what it was already doing with
-    the Firestore quota exhausted.
-    """
-    if not phone_numbers:
-        return {}
-
-    rows = mongo_safe(
-        lambda: list(mongo().fcm_tokens.find(
-            {'phone_number': {'$in': list(phone_numbers)}})),
-        fallback=[], label='device tokens')
-
-    user_all_info_dict = {}
-    for row in rows:
-        phone = row.get('phone_number')
-        entry = user_all_info_dict.setdefault(
-            phone, {"uid": row.get('uid'), "email": row.get('email'), "token": []})
-        if row.get('fcm_token'):
-            entry['token'].append(row['fcm_token'])
-
-    return user_all_info_dict
-def send_notification(device_token,msg_title,msg_body):
-    """Send a notification to the specified FCM device token."""
+def send_notification(device_token, msg_title, msg_body):
+    """One push to one device, through the app's own Firebase project."""
     try:
-        fcm_url = "https://fcm.googleapis.com/v1/projects/eltime-6571b/messages:send"
-
-        # Get the access token using Service Account JSON file
-        server_key = get_access_token()  # Get the access token from the service account
-
-        if not server_key:
-            print("Error: Server key is missing. Please set a valid Firebase server key.")
-            return
-
-        message = {
-            "message": {
-                "token": device_token,
-                "notification": {
-                    "title": f"{msg_title}",
-                    "body": f"{msg_body}",
-                }
-            }
-        }
-
-        headers = {
-            'Authorization': f'Bearer {server_key}',
-            'Content-Type': 'application/json; UTF-8',
-        }
-
-        response = requests.post(fcm_url, headers=headers, data=json.dumps(message))
-
-        if response.status_code == 200:
-            print(f"Notification sent successfully to token: {device_token}")
-        else:
-            print(f"Error sending notification to {device_token}: {response.status_code} - {response.text}")
+        return messaging.send(messaging.Message(
+            notification=messaging.Notification(title=msg_title, body=msg_body), token=device_token))
     except Exception as e:
         print(f"Error sending notification: {e}")
+        return None
 
 @app.route('/users', methods=['GET'])
 @perm('user.view')
@@ -3574,6 +3540,8 @@ PUBLIC_ENDPOINTS = {
     'subscribe', 'firebase_messaging_sw', 'refresh_user_roles',
     'get_notifications', 'mark_notifications_read', 'all_notifications',
     'add_notification',
+    # This person's own phone, for push: any signed-in user, no permission.
+    'register_push_token', 'unregister_push_token',
     'sales_requests_lookup',
     'set_ui_language',
 }

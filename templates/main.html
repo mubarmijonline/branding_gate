@@ -5,8 +5,15 @@
 
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Branding Gate - Enterprise Solutions">
+  <meta name="theme-color" content="#224abe">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Branding Gate">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}?v=20261026">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icons/icon-192.png') }}">
   <meta name="author" content="">
 
   <title>Branding Gate</title>
@@ -32,7 +39,6 @@
 
   <script src="{{ url_for('static', filename='js/main_user_profile.js') }}"></script>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
   <style>
     /* Base Mobile-Friendly Styles */
@@ -680,6 +686,7 @@
   {% block head %}{% endblock %}
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260910-responsive-tables">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-mobile.css') }}?v=20261026">
 
   {% include '_i18n_head.html' %}
 </head>
@@ -1695,6 +1702,13 @@
   <script src="{{ url_for('static', filename='js/bg-numbers.js') }}?v=20260906"></script>
   <script src="{{ url_for('static', filename='js/bg-expense-files.js') }}?v=20261018"></script>
   <script src="{{ url_for('static', filename='js/bg-invoice-view.js') }}?v=20261022"></script>
+  <script src="{{ url_for('static', filename='js/bg-mobile.js') }}?v=20261026"></script>
+  {% if fcm_vapid_key and session.get('user_id') %}
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script>window.BG_PUSH = { vapidKey: {{ fcm_vapid_key|tojson }} };</script>
+  <script src="{{ url_for('static', filename='js/bg-push.js') }}?v=20261026"></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='js/bg-item-twin.js') }}?v=20261018"></script>
   <script>
     // Fallback to CDN if local jQuery failed to load - use proper async loading

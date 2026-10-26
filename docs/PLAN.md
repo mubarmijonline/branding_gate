@@ -444,3 +444,19 @@ Daily Journal (دفتر اليومية): approved transactions plus posted invoi
 refunds (shown "On account", amount muted, opening the invoice). Any row of the
 Finance Tree opens its ledger (`/api/finance/tree/ledger`: every journal line
 under that code or payment method, running balance, Excel).
+
+# Mobile shell, 2026-10-26
+
+**Ask (the client):** the system is very poor on phones. Decided with Ahmed:
+an app shell (bottom tab bar + a More sheet holding every menu), every table
+as one card per row through one shared mechanism, installable PWA with phone
+push, everything in one release.
+
+**Done:** see docs/milestones/07-mobile-shell.md. One phone-only stylesheet
+(`bg-mobile.css`) and one script (`bg-mobile.js`) on every page; desktop
+untouched. Tabs and the More sheet come from the navbar's own gated markup
+(keyed on menu ids, so Arabic keeps them). Cards: cells labelled from headers,
+title and actions columns picked by heuristic, overridable per table. Push:
+`bg-push.js` + `/api/push/register` + `push_to_users` on every bell
+notification through the app's Firebase project; `BG_FCM_VAPID_KEY` in `.env`
+(read by the systemd unit) turns it on.

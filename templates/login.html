@@ -197,22 +197,7 @@
     });
   </script>
 
-  <script>
-// Initialize Firebase (SDK config)
-firebase.initializeApp({ /* your config */ });
-const messaging = firebase.messaging();
 
-// Ask permission & get token
-Notification.requestPermission()
-  .then(perm => {
-    if (perm !== 'granted') throw 'Denied';
-    return messaging.getToken({ vapidKey: 'YOUR_VAPID_KEY' });
-  })
-  .then(token => {
-    document.getElementById('fcm_token').value = token;
-  })
-  .catch(console.warn);
-</script>
 
 </body>
 {% endblock %}

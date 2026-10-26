@@ -105,3 +105,4 @@ nginx_*.log*
 .claude/
 private_uploads/
 private_backups/
+.env
