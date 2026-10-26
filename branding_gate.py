@@ -1484,10 +1484,13 @@ def get_users_by_role(role_name):
         return []
     conn, cur = connection()
     placeholders = ",".join(["%s"] * len(role_codes))
-    # The CEO is out of every fan-out, for the reason in users_holding().
+    # The CEO is out of every fan-out, for the reason in users_holding() --
+    # except when the audience is the admins: the CEO is one, and what is sent
+    # to admins (an urgent request to approve) is theirs to act on.
     cur.execute(
         "SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
-        "WHERE r.code IN (%s) AND u.manager_id IS NOT NULL AND u.is_active = 1" % placeholders,
+        "WHERE r.code IN (%s) AND u.is_active = 1" % placeholders
+        + ("" if role_name == 'admin' else " AND u.manager_id IS NOT NULL"),
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
@@ -10591,7 +10594,8 @@ def add_sales_request():
                 send_notification_to_role(
                     'admin',
                     'Approval Needed',
-                    f'New sales request "{title}" needs approval ({approval_reason})'
+                    f'New sales request "{title}" needs approval ({approval_reason})',
+                    link='/approvals'
                 )
             except Exception as notif_error:
                 print(f"DEBUG: Failed to send notification: {notif_error}")
