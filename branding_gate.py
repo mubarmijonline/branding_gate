@@ -1069,10 +1069,16 @@ def load_permissions(user_id):
     and is therefore denied everything.
     """
     conn, cur = connection()
-    cur.execute("SELECT id, is_pricing, rbac_role_id, department_id, manager_id FROM user WHERE id = %s",
+    cur.execute("SELECT id, is_pricing, is_active, rbac_role_id, department_id, manager_id FROM user WHERE id = %s",
                 (user_id,))
     account = cur.fetchone()
     is_pricing = bool(account and account['is_pricing'])
+    # Switched off (left the company): nothing, even on a session that is
+    # still open -- sessions reload this every minute.
+    if account and not account['is_active']:
+        cur.close()
+        conn.close()
+        return {}, None
 
     cur.execute("""
         SELECT r.code AS role_code, rp.permission_code, rp.scope
@@ -2867,6 +2873,7 @@ def get_users():
         cur.execute("""
             SELECT u.id, u.mobile, u.email, u.date, u.name, u.modified_date, u.added_by, u.username, u.title,
                    u.department_id, u.rbac_role_id, u.manager_id, u.is_pricing, u.is_active,
+                   u.reports_to_vacancy_id,
                    d.name AS rbac_department_name, d.code AS rbac_department_code,
                    r.code AS role_code, r.name AS role_name, r.level AS role_level,
                    m.name AS manager_name
@@ -2901,7 +2908,8 @@ def get_users():
                 'manager_id': user['manager_id'],
                 'manager_name': user['manager_name'],
                 'is_pricing': bool(user['is_pricing']),
-                'is_active': bool(user['is_active'])
+                'is_active': bool(user['is_active']),
+                'reports_to_vacancy_id': user['reports_to_vacancy_id'],
             })
         cur.close()
         conn.close()
@@ -3469,6 +3477,159 @@ def remove_permission_grant(grant_id):
         conn.close()
 
 
+# ---- vacant positions -------------------------------------------------------
+# A box on the org chart that nobody holds yet. People can sit under one
+# (user.reports_to_vacancy_id); their manager_id stays the nearest real person
+# above it, because approval chains and scopes need a person.
+
+def vacancy_manager(cur, vacancy_id):
+    """The nearest real person above this vacant position, or None."""
+    seen = set()
+    while vacancy_id and vacancy_id not in seen:
+        seen.add(vacancy_id)
+        cur.execute("SELECT parent_user_id, parent_vacancy_id FROM org_vacancy WHERE id = %s", (vacancy_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        if row['parent_user_id']:
+            return row['parent_user_id']
+        vacancy_id = row['parent_vacancy_id']
+    return None
+
+
+def _vacancies(cur):
+    cur.execute("""SELECT v.id, v.title, v.rbac_role_id, v.department_id, v.parent_user_id, v.parent_vacancy_id,
+                          r.name AS role_name, r.level AS role_level, d.name AS department_name
+                   FROM org_vacancy v JOIN rbac_role r ON r.id = v.rbac_role_id
+                   LEFT JOIN department d ON d.id = v.department_id
+                   ORDER BY r.level, v.title""")
+    return list(cur.fetchall())
+
+
+@app.route('/api/org/vacancies', methods=['GET'])
+@perm('user.view')
+def list_vacancies():
+    conn, cur = connection()
+    try:
+        return jsonify(success=True, vacancies=_vacancies(cur))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/org/vacancies', methods=['POST'])
+@perm('user.create')
+def add_vacancy():
+    """A position nobody holds yet: role, department, and who or what it sits under."""
+    data = request.get_json(silent=True) or {}
+    try:
+        role_id = int(data.get('rbac_role_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick the role of the position'), 400
+    department_id = data.get('department_id') or None
+    reports_to = str(data.get('reports_to') or '')
+    parent_user_id = parent_vacancy_id = None
+    if reports_to.startswith('v:'):
+        parent_vacancy_id = int(reports_to[2:])
+    elif reports_to:
+        parent_user_id = int(reports_to)
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT name, level, department_id FROM rbac_role WHERE id = %s", (role_id,))
+        role = cur.fetchone()
+        if not role:
+            return jsonify(success=False, error='Unknown role'), 400
+        parent_level = None
+        if parent_vacancy_id:
+            cur.execute("""SELECT r.level FROM org_vacancy v JOIN rbac_role r ON r.id = v.rbac_role_id
+                           WHERE v.id = %s""", (parent_vacancy_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error='Unknown vacant position'), 400
+            parent_level = row['level']
+        elif parent_user_id:
+            cur.execute("""SELECT r.level FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
+                           WHERE u.id = %s""", (parent_user_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error='Unknown manager'), 400
+            parent_level = row['level']
+        if parent_level is not None and parent_level >= role['level']:
+            return jsonify(success=False, error='It must sit under someone more senior'), 400
+        title = (data.get('title') or '').strip() or role['name']
+        cur.execute("""INSERT INTO org_vacancy (rbac_role_id, department_id, title, parent_user_id,
+                                                parent_vacancy_id, created_by)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (role_id, department_id or role['department_id'], title[:120], parent_user_id,
+                     parent_vacancy_id, session.get('user_id')))
+        conn.commit()
+        return jsonify(success=True, id=cur.lastrowid)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/org/vacancies/<int:vacancy_id>', methods=['DELETE'])
+@perm('user.edit')
+def remove_vacancy(vacancy_id):
+    """Take a position off the chart; whatever sat under it moves up a level."""
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM org_vacancy WHERE id = %s", (vacancy_id,))
+        seat = cur.fetchone()
+        if not seat:
+            return jsonify(success=False, error='Not found'), 404
+        cur.execute("UPDATE user SET reports_to_vacancy_id = %s WHERE reports_to_vacancy_id = %s",
+                    (seat['parent_vacancy_id'], vacancy_id))
+        cur.execute("""UPDATE org_vacancy SET parent_vacancy_id = %s, parent_user_id = %s
+                       WHERE parent_vacancy_id = %s""",
+                    (seat['parent_vacancy_id'], seat['parent_user_id'], vacancy_id))
+        cur.execute("DELETE FROM org_vacancy WHERE id = %s", (vacancy_id,))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/org/vacancies/<int:vacancy_id>/fill', methods=['POST'])
+@perm('user.edit')
+def fill_vacancy(vacancy_id):
+    """
+    Put a person in the seat: they take its role, department and place, and
+    the people and empty seats under it now sit under them.
+    """
+    try:
+        user_id = int((request.get_json(silent=True) or {}).get('user_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick the person'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM org_vacancy WHERE id = %s", (vacancy_id,))
+        seat = cur.fetchone()
+        if not seat:
+            return jsonify(success=False, error='Not found'), 404
+        cur.execute("SELECT id, is_active FROM user WHERE id = %s", (user_id,))
+        person = cur.fetchone()
+        if not person or not person['is_active']:
+            return jsonify(success=False, error='Pick an active person'), 400
+        cur.execute("""UPDATE user SET rbac_role_id = %s, department_id = COALESCE(%s, department_id),
+                                       manager_id = %s, reports_to_vacancy_id = %s, modified_date = NOW()
+                       WHERE id = %s""",
+                    (seat['rbac_role_id'], seat['department_id'], vacancy_manager(cur, vacancy_id),
+                     seat['parent_vacancy_id'], user_id))
+        cur.execute("""UPDATE user SET manager_id = %s, reports_to_vacancy_id = NULL
+                       WHERE reports_to_vacancy_id = %s AND id <> %s""", (user_id, vacancy_id, user_id))
+        cur.execute("""UPDATE org_vacancy SET parent_user_id = %s, parent_vacancy_id = NULL
+                       WHERE parent_vacancy_id = %s""", (user_id, vacancy_id))
+        cur.execute("DELETE FROM org_vacancy WHERE id = %s", (vacancy_id,))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/api/org-chart/pdf', methods=['GET'])
 @perm('user.view')
 def export_org_chart_pdf():
@@ -3482,22 +3643,33 @@ def export_org_chart_pdf():
     try:
         conn, cur = connection()
         cur.execute("""
-            SELECT u.id, u.name, u.manager_id, u.is_pricing,
+            SELECT u.id, u.name, u.manager_id, u.is_pricing, u.reports_to_vacancy_id,
                    r.name AS role_name, r.level AS role_level,
                    d.name AS rbac_department_name
             FROM user u
             LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
             LEFT JOIN department d ON d.id = u.department_id
+            WHERE u.is_active = 1
             ORDER BY r.level, u.name
         """)
-        people = cur.fetchall()
+        people = list(cur.fetchall())
+        # Empty seats are boxes too; whoever sits under one hangs from it.
+        for person in people:
+            if person['reports_to_vacancy_id']:
+                person['manager_id'] = 'v%d' % person['reports_to_vacancy_id']
+        for seat in _vacancies(cur):
+            people.append({'id': 'v%d' % seat['id'], 'name': 'Vacant', 'vacant': True,
+                           'manager_id': ('v%d' % seat['parent_vacancy_id']) if seat['parent_vacancy_id']
+                                         else seat['parent_user_id'],
+                           'role_name': seat['title'], 'role_level': seat['role_level'],
+                           'rbac_department_name': seat['department_name']})
         cur.execute("SELECT COUNT(*) AS n FROM department")
         departments = cur.fetchone()['n']
         cur.close()
         conn.close()
 
         subtitle = '%d people  ·  %d departments  ·  %s' % (
-            len(people), departments, datetime.now().strftime('%d %B %Y'))
+            sum(1 for p in people if not p.get('vacant')), departments, datetime.now().strftime('%d %B %Y'))
         pdf = org_chart_pdf.build(people, subtitle=subtitle)
 
         response = make_response(pdf)
@@ -4054,19 +4226,31 @@ def get_manager_candidates():
             WHERE 1=1
         """
         params = []
+        own_level = 99
         if role_id:
             cur.execute("SELECT level FROM rbac_role WHERE id = %s", (role_id,))
             row = cur.fetchone()
             if row:
                 sql += " AND r.level < %s"
                 params.append(row['level'])
+                own_level = row['level']
         if exclude_user_id:
             sql += " AND u.id != %s"
             params.append(exclude_user_id)
-        sql += " ORDER BY r.level, u.name"
+        sql += " AND u.is_active = 1 ORDER BY r.level, u.name"
 
         cur.execute(sql, params)
-        managers = cur.fetchall()
+        managers = list(cur.fetchall())
+        # Vacant positions senior enough, so a new person can sit under an
+        # empty seat; the value "v:<id>" is resolved when saved.
+        cur.execute("""SELECT v.id, v.title, r.name AS role_name, r.level, d.name AS department_name
+                       FROM org_vacancy v JOIN rbac_role r ON r.id = v.rbac_role_id
+                       LEFT JOIN department d ON d.id = v.department_id
+                       WHERE r.level < %s ORDER BY r.level, v.title""",
+                    (own_level,))
+        managers += [{'id': 'v:%d' % v['id'], 'name': 'Vacant seat', 'role_name': v['title'],
+                      'level': v['level'], 'department_name': v['department_name'], 'vacant': True}
+                     for v in cur.fetchall()]
         cur.close()
         conn.close()
         return jsonify(success=True, managers=managers)
@@ -4085,10 +4269,24 @@ def _hierarchy_fields(data):
     # position fields and follows the same only-if-sent rule.
     if 'is_pricing' in data:
         fields['is_pricing'] = 1 if data.get('is_pricing') in (True, 1, '1', 'true', 'on') else 0
+    # Someone who leaves is switched off, not deleted: their history stays.
+    if 'is_active' in data:
+        fields['is_active'] = 1 if data.get('is_active') in (True, 1, '1', 'true', 'on') else 0
     for key in ('department_id', 'rbac_role_id', 'manager_id'):
         if key not in data:
             continue
         value = data.get(key)
+        if key == 'manager_id':
+            # "v:12" is a vacant position; _validate_hierarchy turns it into the
+            # nearest real person above that position.
+            fields['reports_to_vacancy_id'] = None
+            if isinstance(value, str) and value.startswith('v:'):
+                try:
+                    fields['reports_to_vacancy_id'] = int(value[2:])
+                except ValueError:
+                    return None, 'Invalid manager_id'
+                fields['manager_id'] = None
+                continue
         if value in (None, '', 'undefined', 'null'):
             fields[key] = None
             continue
@@ -4102,7 +4300,23 @@ def _hierarchy_fields(data):
 def _validate_hierarchy(cur, fields, user_id=None):
     """Reject a role/department mismatch, a missing manager, or a reporting cycle."""
     role_id = fields.get('rbac_role_id')
+    vacancy_id = fields.get('reports_to_vacancy_id')
+    if vacancy_id:
+        cur.execute("""SELECT r.level FROM org_vacancy v JOIN rbac_role r ON r.id = v.rbac_role_id
+                       WHERE v.id = %s""", (vacancy_id,))
+        seat = cur.fetchone()
+        if not seat:
+            return 'Unknown vacant position'
+        if role_id:
+            cur.execute("SELECT level FROM rbac_role WHERE id = %s", (role_id,))
+            own = cur.fetchone()
+            if own and seat['level'] >= own['level']:
+                return 'A position must be more senior than the people under it'
+        # Under an empty seat, the person reports to whoever is above the seat.
+        fields['manager_id'] = vacancy_manager(cur, vacancy_id)
     manager_id = fields.get('manager_id')
+    if fields.get('is_active') == 0 and user_id in (1, session.get('user_id')):
+        return 'This account cannot be switched off'
 
     if role_id:
         cur.execute("SELECT id, level, department_id FROM rbac_role WHERE id = %s", (role_id,))

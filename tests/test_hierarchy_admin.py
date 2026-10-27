@@ -36,14 +36,21 @@ class HierarchyFieldsTest(unittest.TestCase):
             {'department_id': '3', 'rbac_role_id': 7, 'manager_id': '1'}
         )
         self.assertIsNone(error)
-        self.assertEqual(fields, {'department_id': 3, 'rbac_role_id': 7, 'manager_id': 1})
+        # Naming a real manager also takes the person out from under any vacancy.
+        self.assertEqual(fields, {'department_id': 3, 'rbac_role_id': 7, 'manager_id': 1,
+                                  'reports_to_vacancy_id': None})
 
     def test_blank_values_clear_the_field(self):
         for blank in ('', None, 'undefined', 'null'):
             with self.subTest(blank=blank):
                 fields, error = branding_gate._hierarchy_fields({'manager_id': blank})
                 self.assertIsNone(error)
-                self.assertEqual(fields, {'manager_id': None})
+                self.assertEqual(fields, {'manager_id': None, 'reports_to_vacancy_id': None})
+
+    def test_a_vacancy_is_named_by_its_id(self):
+        fields, error = branding_gate._hierarchy_fields({'manager_id': 'v:12'})
+        self.assertIsNone(error)
+        self.assertEqual(fields, {'manager_id': None, 'reports_to_vacancy_id': 12})
 
     def test_a_non_numeric_value_is_rejected(self):
         fields, error = branding_gate._hierarchy_fields({'rbac_role_id': 'sales_head'})

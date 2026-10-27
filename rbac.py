@@ -250,6 +250,7 @@ ROLES = {
     'sales_member':           ('Sales Member',           'sales',      LEVEL_MEMBER),
 
     'marketing_manager':      ('Marketing Manager',      'marketing',  LEVEL_HEAD),
+    'digital_marketing_team_leader': ('Digital Marketing Team Leader', 'marketing', LEVEL_TEAM_LEADER),
     'marketing_member':       ('Marketing Member',       'marketing',  LEVEL_MEMBER),
 
     'finance_manager':        ('Finance Manager',        'finance',    LEVEL_HEAD),
@@ -644,6 +645,15 @@ SEED_MATRIX = {
             'company.view': 'all',
             'catalog.view': 'all',
             'dashboard.sales': 'all',
+        },
+    ),
+    # Leads the Digital Marketing team under the Marketing Manager (2026-10-27).
+    'digital_marketing_team_leader': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('team'),
+        {
+            'client.view': 'all',
+            'catalog.view': 'all',
         },
     ),
     'marketing_member': _merge(

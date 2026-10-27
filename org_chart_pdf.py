@@ -129,7 +129,10 @@ def _draw_box(c, node, scale):
     c.setStrokeColor(BORDER)
     c.setLineWidth(0.7)
     c.setFillColor(white)
+    if person.get('vacant'):
+        c.setDash(3, 2)    # a seat nobody holds yet
     c.roundRect(x, y, w, h, 4, stroke=1, fill=1)
+    c.setDash()
 
     # A tinted strip carries the level, so rank is visible without reading.
     strip = 4.0

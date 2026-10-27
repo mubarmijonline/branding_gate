@@ -145,6 +145,13 @@
   .scope { font-size:.7rem; font-weight:600; padding:.12rem .45rem; border-radius:3px;
             background:#eef1fa; color:#2a3a86; white-space:nowrap; }
   .empty { text-align:center; color:var(--muted); padding:2rem 1rem; }
+  /* A seat nobody holds yet. */
+  .node.vacant { border-style:dashed; border-color:#b7bfcc; background:#fafbfd; }
+  .node.vacant .avatar { background:#eef0f4; color:#8a94a6; }
+  .node.vacant .nm { color:#6c757d; font-style:italic; }
+  .vac-act { border:0; background:none; color:var(--accent, #224abe); font-size:.75rem; padding:0 .25rem; cursor:pointer; }
+  .vac-act.danger { color:#b42318; }
+  .pill-left { background:#eef0f4; color:#5a5c69; }
   /* Extra permissions, given from this screen on top of a role. */
   .grant-editor { margin-top:1rem; border:1px solid var(--hair); border-radius:6px; padding:.75rem; background:#fff; }
   .grant-editor h6 { font-weight:700; margin:0 0 .25rem; }
@@ -221,6 +228,11 @@
         <button type="button" data-view="topdown">Top-down</button>
       </span>
       <span class="pan-hint" id="panHint">Drag to pan</span>
+      {% if can_edit_people %}
+      <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddVacancy">
+        <i class="fas fa-user-plus mr-1"></i> Add vacant position
+      </button>
+      {% endif %}
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPrintChart">
         <i class="fas fa-file-pdf mr-1"></i> Export PDF
       </button>
@@ -348,6 +360,11 @@
                 <select class="form-control" id="p_manager_id"></select>
               </div>
             </div>
+            <div class="custom-control custom-switch mt-1 mb-2">
+              <input type="checkbox" class="custom-control-input" id="p_is_active" checked>
+              <label class="custom-control-label" for="p_is_active"><strong>Active</strong>
+                <small class="text-muted ml-1">Off when someone leaves: they cannot sign in and leave the org chart; their history stays.</small></label>
+            </div>
             <div class="custom-control custom-switch mt-1">
               <input type="checkbox" class="custom-control-input" id="p_is_pricing">
               <label class="custom-control-label" for="p_is_pricing">
@@ -375,7 +392,7 @@
 (function () {
   'use strict';
 
-  var PEOPLE = [], DEPARTMENTS = [], ROLES = [];
+  var PEOPLE = [], DEPARTMENTS = [], ROLES = [], VACANCIES = [];
   var LEVEL = { 0: 'Executive', 1: 'Head / Manager', 2: 'Team Leader', 3: 'Member' };
   var CAN_EDIT = {{ 'true' if can_edit_people else 'false' }};
   var CAN_GRANT = {{ ('role.grant' in _p) | tojson }};
@@ -405,7 +422,8 @@
     return $.when(
       fetchInto('/api/users', function (r) { PEOPLE = r.users; }),
       fetchInto('/api/departments', function (r) { DEPARTMENTS = r.departments; }),
-      fetchInto('/api/rbac/roles', function (r) { ROLES = r.roles; })
+      fetchInto('/api/rbac/roles', function (r) { ROLES = r.roles; }),
+      fetchInto('/api/org/vacancies', function (r) { VACANCIES = r.vacancies; })
     ).always(function () {
       renderStats(); renderFilters(); renderPeople(); renderTree();
       renderDepartments(); renderRoles();
@@ -456,7 +474,8 @@
       $b.append(
         '<tr>' +
         '<td><div class="who"><div class="avatar">' + esc(initials(p.name)) + '</div>' +
-          '<div><div class="nm">' + esc(p.name) + '</div>' +
+          '<div><div class="nm">' + esc(p.name) +
+            (p.is_active ? '' : ' <span class="pill pill-left">Inactive</span>') + '</div>' +
           '<div class="un">@' + esc(p.username) + '</div></div></div></td>' +
         '<td>' + (p.rbac_department_name
             ? '<span class="pill pill-dept">' + esc(p.rbac_department_name) + '</span>'
@@ -481,12 +500,30 @@
 
   // ---- org chart ----------------------------------------------------------
   function renderTree() {
+    // Who hangs from whom: people from their manager, or from the empty seat
+    // they sit under; empty seats from a person or from another seat.
     var byManager = {};
-    PEOPLE.forEach(function (p) {
-      var key = p.manager_id === null || p.manager_id === undefined ? 'root' : p.manager_id;
-      (byManager[key] = byManager[key] || []).push(p);
+    function hang(key, entry) { (byManager[key] = byManager[key] || []).push(entry); }
+    PEOPLE.filter(function (p) { return p.is_active; }).forEach(function (p) {
+      hang(p.reports_to_vacancy_id ? 'v' + p.reports_to_vacancy_id
+           : (p.manager_id === null || p.manager_id === undefined ? 'root' : p.manager_id), p);
     });
+    VACANCIES.forEach(function (v) {
+      hang(v.parent_vacancy_id ? 'v' + v.parent_vacancy_id : (v.parent_user_id || 'root'),
+           $.extend({ vacant: true }, v));
+    });
+    function seat(v) {
+      var kids = byManager['v' + v.id] || [];
+      return '<li><span class="node vacant"><span class="avatar"><i class="fas fa-user"></i></span>' +
+        '<span><span class="nm">Vacant</span> <span class="pill pill-l' + v.role_level + '">' + esc(v.title) + '</span>' +
+        '<br><small>' + esc(v.department_name || 'No department') + '</small>' +
+        (CAN_EDIT ? '<br><button type="button" class="vac-act vac-fill" data-id="' + v.id + '">Fill</button>' +
+                    '<button type="button" class="vac-act danger vac-remove" data-id="' + v.id + '">Remove</button>' : '') +
+        '</span></span>' +
+        (kids.length ? '<ul>' + kids.map(node).join('') + '</ul>' : '') + '</li>';
+    }
     function node(p) {
+      if (p.vacant) { return seat(p); }
       var lvl = p.role_level === null || p.role_level === undefined ? 3 : p.role_level;
       var kids = byManager[p.id] || [];
       return '<li><span class="node"><span class="avatar">' + esc(initials(p.name)) + '</span>' +
@@ -500,6 +537,71 @@
     $('#orgTree').html(roots.length ? roots.map(node).join('')
       : '<p class="empty">Nobody has been placed yet.</p>');
   }
+
+  // ---- vacant positions ---------------------------------------------------
+  function seatOptions(excludeId) {
+    var html = '<option value="">- Top of the chart -</option>';
+    PEOPLE.filter(function (p) { return p.is_active && p.role_name; }).forEach(function (p) {
+      html += '<option value="' + p.id + '">' + esc(p.name + '  -  ' + p.role_name) + '</option>';
+    });
+    VACANCIES.filter(function (v) { return v.id !== excludeId; }).forEach(function (v) {
+      html += '<option value="v:' + v.id + '">' + esc('Vacant: ' + v.title) + '</option>';
+    });
+    return html;
+  }
+
+  $(document).on('click', '#btnAddVacancy', function () {
+    var roles = ROLES.map(function (r) {
+      return '<option value="' + r.id + '">' + esc(r.name + ' (' + (r.department_name || 'Company-wide') + ')') + '</option>';
+    }).join('');
+    Swal.fire({
+      title: 'Add vacant position',
+      html: '<div class="text-left">' +
+        '<label class="small font-weight-bold mb-1">Role</label><select id="vacRole" class="form-control mb-2">' + roles + '</select>' +
+        '<label class="small font-weight-bold mb-1">Title on the chart</label>' +
+        '<input id="vacTitle" class="form-control mb-2" placeholder="Defaults to the role name">' +
+        '<label class="small font-weight-bold mb-1">Reports to</label><select id="vacParent" class="form-control">' +
+        seatOptions(null) + '</select></div>',
+      showCancelButton: true, confirmButtonText: 'Add', focusConfirm: false,
+      preConfirm: function () {
+        return $.ajax({ url: '/api/org/vacancies', method: 'POST', contentType: 'application/json',
+                        data: JSON.stringify({ rbac_role_id: $('#vacRole').val(), title: $('#vacTitle').val(),
+                                               reports_to: $('#vacParent').val() }) })
+          .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Could not add it'); });
+      }
+    }).then(function (r) { if (r.isConfirmed) { loadAll(); } });
+  });
+
+  $(document).on('click', '.vac-fill', function () {
+    var id = $(this).data('id');
+    var v = VACANCIES.filter(function (x) { return x.id === id; })[0] || {};
+    var people = PEOPLE.filter(function (p) { return p.is_active; }).map(function (p) {
+      return '<option value="' + p.id + '">' + esc(p.name + (p.role_name ? '  -  ' + p.role_name : '')) + '</option>';
+    }).join('');
+    Swal.fire({
+      title: 'Fill: ' + esc(v.title || ''),
+      html: '<p class="small text-muted">They take this role and place; whoever sits under the position moves under them.</p>' +
+        '<select id="vacPerson" class="form-control"><option value="">- Pick the person -</option>' + people + '</select>',
+      showCancelButton: true, confirmButtonText: 'Fill', focusConfirm: false,
+      preConfirm: function () {
+        if (!$('#vacPerson').val()) { Swal.showValidationMessage('Pick the person'); return false; }
+        return $.ajax({ url: '/api/org/vacancies/' + id + '/fill', method: 'POST', contentType: 'application/json',
+                        data: JSON.stringify({ user_id: $('#vacPerson').val() }) })
+          .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Could not fill it'); });
+      }
+    }).then(function (r) { if (r.isConfirmed) { loadAll(); } });
+  });
+
+  $(document).on('click', '.vac-remove', function () {
+    var id = $(this).data('id');
+    Swal.fire({ title: 'Remove this position?', text: 'Whoever sits under it moves up a level.',
+                icon: 'warning', showCancelButton: true, confirmButtonText: 'Remove', confirmButtonColor: '#e74a3b' })
+      .then(function (r) {
+        if (!r.isConfirmed) { return; }
+        $.ajax({ url: '/api/org/vacancies/' + id, method: 'DELETE' }).done(loadAll)
+          .fail(function (xhr) { Swal.fire('Could not remove it', (xhr.responseJSON || {}).error || '', 'error'); });
+      });
+  });
 
   // ---- departments --------------------------------------------------------
   function renderDepartments() {
@@ -791,10 +893,11 @@
     $('#passwordHint').text(editing ? 'Leave blank to keep the current password.'
                                     : 'Required. They sign in with their mobile number.');
     $('#p_is_pricing').prop('checked', editing ? !!person.is_pricing : false);
+    $('#p_is_active').prop('checked', editing ? !!person.is_active : true);
     fillDepartments(editing ? person.department_id : null);
     fillRoles(editing ? person.department_id : null, editing ? person.rbac_role_id : null);
     fillManagers(editing ? person.rbac_role_id : null,
-                 editing ? person.manager_id : null,
+                 editing ? (person.reports_to_vacancy_id ? 'v:' + person.reports_to_vacancy_id : person.manager_id) : null,
                  editing ? person.id : null);
     showRolePermissions(editing ? person.rbac_role_id : null, '#rolePreview');
     grantEditor('#personGrants', 'user', editing ? person.id : null);
@@ -829,7 +932,8 @@
       department_id: $('#p_department_id').val() || null,
       rbac_role_id: $('#p_rbac_role_id').val() || null,
       manager_id: $('#p_manager_id').val() || null,
-      is_pricing: $('#p_is_pricing').is(':checked')
+      is_pricing: $('#p_is_pricing').is(':checked'),
+      is_active: $('#p_is_active').is(':checked')
     };
     var password = $('#p_password').val();
     if (password) { payload.password = password; }

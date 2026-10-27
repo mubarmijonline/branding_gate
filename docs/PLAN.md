@@ -556,3 +556,27 @@ must say which page it is on.
   (expenses, client, company, supplier, sales head, account head, urgent),
   each following its page's rule; the menu badge is their total. Urgent Sales
   Requests (/approvals) added to the menu for its approvers.
+
+## Vacant positions on the org chart, 2026-10-27
+
+Beshoy (voice notes): Kerolos, the Marketing Manager, is leaving, so that box
+will be empty; under it a Digital Marketing box, with two members today
+(Mariam Wessam and Sara); nobody under them yet but maybe later. Should the
+chart carry boxes for positions nobody holds? Ahmed: yes, vacant boxes (not
+dummy accounts); deactivate Kerolos now; Digital Marketing is a vacant team
+leader.
+
+- `org_vacancy` (role, department, title, reports to a person or another
+  vacancy). `user.reports_to_vacancy_id` puts a person under a vacancy on the
+  chart; their `manager_id` stays the nearest real person above it, so
+  approval chains and scopes keep working while the seat is empty.
+- Org chart and PDF: vacancies drawn as dashed "Vacant" boxes; inactive
+  people left off. Add / remove a vacancy, and "Fill" one with a person
+  (they take its role, department and place; its reports and sub-vacancies
+  move under them).
+- Person modal: "Reports to" lists vacancies too; an Active switch, so
+  someone who leaves is switched off rather than deleted.
+- New role `digital_marketing_team_leader` (Marketing, team leader).
+- Data (done 2026-10-27): Kerolos inactive (backup in private_backups/kerolos_before_deactivation_20261027.json); vacancies Marketing Manager (under Beshoy) and
+  Digital Marketing Team Leader (under it). Mariam Wessam and Sara are added
+  under it once their mobile numbers and emails are known.

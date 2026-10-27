@@ -32,6 +32,7 @@ EXPECTED = {
     'sales_member':           ['sales'],
     'marketing_manager':      ['marketing'],
     'marketing_member':       ['marketing'],
+    'digital_marketing_team_leader': ['marketing'],
     'finance_manager':        ['finance'],
     'finance_member':         ['finance'],
     'account_director':       ['sales', 'account'],

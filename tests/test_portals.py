@@ -33,7 +33,7 @@ def _a_user_holding(role_code):
     cur.execute("""
         SELECT u.id FROM user u
         JOIN rbac_role r ON r.id = u.rbac_role_id
-        WHERE r.code = %s ORDER BY u.id LIMIT 1
+        WHERE r.code = %s AND u.is_active = 1 ORDER BY u.id LIMIT 1
     """, (role_code,))
     row = cur.fetchone()
     cur.close()
