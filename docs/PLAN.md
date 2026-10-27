@@ -529,3 +529,30 @@ Gamal: re-pricing arrows moved a price by 0.01 (1500 -> 1500.01). 73 number
 inputs carry `step="0.01"`. One script in main.html switches them, and any
 drawn later, to `step="any"`: any amount is accepted and the arrows move by
 whole pounds.
+
+## Quick approval from a notification, and counts per Approvals item, 2026-10-27
+
+Ahmed: an approval that waits on a head or admin should be decidable from its
+notification, through the same flow as its approval page; once handled the
+notification says Approved / Declined. And the number on the Approvals menu
+must say which page it is on.
+
+- Approval notifications carry `action` {kind, id, stage} (only for the
+  people the work waits on): urgent sales request (`sales_request_approval`),
+  client / company / supplier request (`party_request`), عهدة (`custody`,
+  manager or finance stage), expenses (`expense`, manager or finance stage),
+  negotiation to review (`negotiation`). 72 stored ones back-filled by code.
+- `/get_notifications` adds each action's live `state` (pending, approved,
+  declined, cancelled, gone), seen from its stage.
+- `GET /api/quick-approvals/<kind>/<id>?stage=` returns the record, and the
+  approve / decline URLs, which are the approval pages' own endpoints, so who
+  may sign, scopes, required reasons and who is told next are unchanged.
+  Finance's stages need a payment method or expense categories: the modal
+  shows the record and links to the page instead.
+- Tray and /notifications: "Show details" while pending; Approved / Declined
+  badge once decided. Modal: details, optional notes (and the amount for a
+  manager passing on an عهدة), Approve, Decline with a required reason.
+- `GET /api/approvals/waiting-counts`: a count per Approvals menu item
+  (expenses, client, company, supplier, sales head, account head, urgent),
+  each following its page's rule; the menu badge is their total. Urgent Sales
+  Requests (/approvals) added to the menu for its approvers.

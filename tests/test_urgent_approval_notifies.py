@@ -30,7 +30,7 @@ class UrgentApprovalNotifiesTest(unittest.TestCase):
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self.raw.cursor(MySQLdb.cursors.DictCursor))
         self.sent = []
         branding_gate.send_notification_to_role = lambda role, title, content, link=None: self.sent.append((role, title, link)) or 1
-        branding_gate.notify_user = lambda uid, title, content, link=None: self.sent.append((uid, title, link)) or 1
+        branding_gate.notify_user = lambda uid, title, content, link=None, **_: self.sent.append((uid, title, link)) or 1
         branding_gate.app.config['TESTING'] = True
         cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
         cur.execute("SELECT id, mobile FROM user WHERE id = 107397")

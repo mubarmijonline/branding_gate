@@ -71,7 +71,7 @@ class RequestChatTest(unittest.TestCase):
         self.sent = []
         self._real_notify = branding_gate.notify_users
 
-        def capture(user_ids, title, content, link=None):
+        def capture(user_ids, title, content, link=None, **_):
             self.sent.append({'to': sorted(int(u) for u in (user_ids or []) if u),
                               'title': title, 'content': content, 'link': link})
             return len(user_ids or [])

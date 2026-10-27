@@ -316,6 +316,26 @@
       flex: 0 0 auto;
     }
     .notif-drawer-body { flex: 1 1 auto; overflow-y: auto; }
+    #approvalsDropdown + .dropdown-menu .dropdown-item { display: flex; align-items: center; }
+    #approvalsDropdown + .dropdown-menu .nav-wait { margin-inline-start: auto; }
+    /* Deciding an approval from its notification. */
+    .notif-actions { display: block; margin-top: .4rem; }
+    .notif-quick { font-size: .75rem; padding: .15rem .55rem; }
+    .notif-done { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem; font-weight: 700;
+                  padding: .12rem .5rem; border-radius: 10px; }
+    .notif-done.is-approved { background: #e6f6ee; color: #13795b; }
+    .notif-done.is-declined { background: #fdecea; color: #b42318; }
+    .notif-done.is-cancelled, .notif-done.is-gone { background: #eef0f4; color: #5a5c69; }
+    .qa-fields { width: 100%; font-size: .85rem; text-align: start; border-collapse: collapse; }
+    .qa-fields th { color: #6c757d; font-weight: 600; width: 38%; padding: .3rem .4rem; vertical-align: top; }
+    .qa-fields td { padding: .3rem .4rem; word-break: break-word; }
+    .qa-fields tr + tr th, .qa-fields tr + tr td { border-top: 1px solid #eceef3; }
+    .qa-lines { margin: .6rem 0 0; padding: 0; list-style: none; text-align: start; font-size: .83rem; }
+    .qa-lines li { border: 1px solid #eceef3; border-radius: 6px; padding: .4rem .6rem; margin-bottom: .35rem; }
+    .qa-lines .qa-amt { float: inline-end; font-weight: 700; }
+    .qa-lines small { display: block; color: #6c757d; }
+    .qa-form { text-align: start; margin-top: .6rem; }
+    .qa-form label { font-size: .8rem; font-weight: 600; margin-bottom: .2rem; }
     /* Important (waits on you) and Announcements (for your information). */
     .notif-tabs { display: flex; border-bottom: 1px solid #eceef3; background: #fff; flex: 0 0 auto; }
     .notif-tabs button {
@@ -876,12 +896,12 @@
               {% endif %}
               {% if can_decide_negotiation %}
               <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
-                <i class="fas fa-user-check"></i> Sales Head Approval
+                <i class="fas fa-user-check"></i> Sales Head Approval<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="sales_head"></span>
               </a>
               {% endif %}
               {% if can_decide_account_negotiation %}
               <a class="dropdown-item" href="{{ url_for('account_head_approval_page') }}">
-                <i class="fas fa-user-tie"></i> Account Head Approval
+                <i class="fas fa-user-tie"></i> Account Head Approval<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="account_head"></span>
               </a>
               {% endif %}
             </div>
@@ -947,34 +967,42 @@
              they hang here too: approving is what the person opening this menu
              came to do. #}
           {% set can_approve_expenses = can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
+          {% set can_approve_urgent = 'sales_request.approve' in _p %}
           {% if can_approve_expenses or can_open_clients or can_open_companies
-                or can_open_suppliers or can_decide_negotiation or can_decide_account_negotiation %}
+                or can_open_suppliers or can_decide_negotiation or can_decide_account_negotiation
+                or can_approve_urgent %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="approvalsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-clipboard-check mr-1"></i> Approvals
               <span class="badge badge-danger ml-1 d-none" id="navApprovalsBadge"></span>
             </a>
             <div class="dropdown-menu" aria-labelledby="approvalsDropdown">
+              {% if can_approve_urgent %}
+              <a class="dropdown-item" href="{{ url_for('approvals_page') }}">
+                <i class="fas fa-bolt"></i> Urgent Sales Requests<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="urgent"></span>
+              </a>
+              {% if can_approve_expenses %}<div class="dropdown-divider"></div>{% endif %}
+              {% endif %}
               {% if can_approve_expenses %}
               <a class="dropdown-item" href="{{ url_for('expense_tracking_approval_page') }}">
-                <i class="fas fa-receipt"></i> Expense Approvals
+                <i class="fas fa-receipt"></i> Expense Approvals<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="expenses"></span>
               </a>
               {% endif %}
               {% if can_open_clients or can_open_companies or can_open_suppliers %}
               {% if can_approve_expenses %}<div class="dropdown-divider"></div>{% endif %}
               {% if can_open_clients %}
               <a class="dropdown-item" href="{{ url_for('client') }}#partyRequestCard">
-                <i class="fas fa-handshake"></i> Client Requests
+                <i class="fas fa-handshake"></i> Client Requests<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="client"></span>
               </a>
               {% endif %}
               {% if can_open_companies %}
               <a class="dropdown-item" href="{{ url_for('company') }}#partyRequestCard">
-                <i class="fas fa-building"></i> Company Requests
+                <i class="fas fa-building"></i> Company Requests<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="company"></span>
               </a>
               {% endif %}
               {% if can_open_suppliers %}
               <a class="dropdown-item" href="{{ url_for('supplier') }}#partyRequestCard">
-                <i class="fas fa-truck"></i> Supplier Requests
+                <i class="fas fa-truck"></i> Supplier Requests<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="supplier"></span>
               </a>
               {% endif %}
               {% endif %}
@@ -982,12 +1010,12 @@
               {% if can_approve_expenses or can_open_clients or can_open_companies or can_open_suppliers %}<div class="dropdown-divider"></div>{% endif %}
               {% if can_decide_negotiation %}
               <a class="dropdown-item" href="{{ url_for('sales_head_approval_page') }}">
-                <i class="fas fa-user-check"></i> Sales Head Approval
+                <i class="fas fa-user-check"></i> Sales Head Approval<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="sales_head"></span>
               </a>
               {% endif %}
               {% if can_decide_account_negotiation %}
               <a class="dropdown-item" href="{{ url_for('account_head_approval_page') }}">
-                <i class="fas fa-user-tie"></i> Account Head Approval
+                <i class="fas fa-user-tie"></i> Account Head Approval<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="account_head"></span>
               </a>
               {% endif %}
               {% endif %}
@@ -2585,20 +2613,22 @@ function showToast(title, body) {
   </script>
   {% endif %}
 
-  {% if 'user_balance.approve_manager' in _p %}
+  {% if can_approve_expenses or can_open_clients or can_open_companies or can_open_suppliers
+        or can_decide_negotiation or can_decide_account_negotiation or 'sales_request.approve' in _p %}
   <script>
-  // عهدة waiting on this person, on the menu that opens the queue.
+  // What waits on this person, a number on each Approvals item so the one on
+  // the menu says which page it is on, and their sum on the menu itself.
   (function () {
     function paint() {
-      $.getJSON('/api/finance/balance-requests/waiting-on-me').done(function (r) {
+      $.getJSON('/api/approvals/waiting-counts').done(function (r) {
         if (!r || !r.success) { return; }
-        var $b = $('#navApprovalsBadge');
-        if (r.count > 0) {
-          $b.text(r.count).attr('title', r.count + ' عهدة request(s) waiting on you')
-            .removeClass('d-none');
-        } else {
-          $b.addClass('d-none');
-        }
+        var shown = r.counts.total || 0;
+        $('.nav-wait[data-wait]').each(function () {
+          var n = r.counts[$(this).data('wait')] || 0;
+          $(this).text(n).toggleClass('d-none', n === 0);
+        });
+        $('#navApprovalsBadge').text(shown).attr('title', shown + ' waiting on you')
+          .toggleClass('d-none', shown === 0);
       });
     }
     $(paint);
@@ -2856,6 +2886,106 @@ window.notifLink = function (notification) {
   return null;      // nothing sensible to open: the row just marks itself read
 };
 
+// ---- deciding an approval from its notification ---------------------------
+// An approval notification carries `action` {kind, id, stage, state}. While it
+// waits, the row offers "Show details"; once decided -- here, on its page, or
+// by somebody else -- the row says Approved / Declined instead. The modal
+// decides through the same endpoints the approval pages use.
+window.notifActionHtml = function (n) {
+  var a = n && n.action;
+  if (!a || !a.kind) { return ''; }
+  if (a.state === 'pending') {
+    return '<span class="notif-actions"><button type="button" class="btn btn-primary notif-quick" ' +
+      'data-nid="' + n.id + '" data-kind="' + a.kind + '" data-id="' + a.id + '" data-stage="' + (a.stage || '') + '" ' +
+      'onclick="return bgQuickOpen(event, this)"><i class="fas fa-search mr-1"></i>Show details</button></span>';
+  }
+  var done = { approved: ['fa-check-circle', 'Approved'], declined: ['fa-times-circle', 'Declined'],
+               cancelled: ['fa-ban', 'Withdrawn'], gone: ['fa-ban', 'Removed'] }[a.state] || ['fa-check', 'Handled'];
+  return '<span class="notif-actions"><span class="notif-done is-' + a.state + '"><i class="fas ' + done[0] + '"></i>' +
+    done[1] + '</span></span>';
+};
+
+window.bgQuickOpen = function (event, el) {
+  event.preventDefault();
+  event.stopPropagation();
+  var $el = $(el);
+  window.bgQuickApproval({ nid: $el.data('nid'), kind: $el.data('kind'), id: $el.data('id'), stage: $el.data('stage') });
+  return false;
+};
+
+window.bgQuickApproval = function (o) {
+  var esc = window.notifEscape;
+  function post(url, body) {
+    return $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body) })
+      .then(function (r) {
+        if (r && (r.success === false || (r.error && r.success !== true))) { return $.Deferred().reject({ responseJSON: r }); }
+        return r;
+      });
+  }
+  function failText(xhr) { var j = (xhr && xhr.responseJSON) || {}; return j.error || j.message || 'Request failed'; }
+  function decided(outcome) {
+    if (o.nid) {
+      fetch('/mark_notifications_read', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ notification_ids: [o.nid] }) });
+    }
+    if (typeof refreshNotifications === 'function') { refreshNotifications(); }
+    if (typeof refreshNotificationsPage === 'function') { refreshNotificationsPage(); }
+    Swal.fire({ toast: true, position: 'top', timer: 2500, showConfirmButton: false,
+                icon: outcome === 'approved' ? 'success' : 'info', title: outcome === 'approved' ? 'Approved' : 'Declined' });
+  }
+
+  $.getJSON('/api/quick-approvals/' + o.kind + '/' + o.id, { stage: o.stage || '' }).done(function (d) {
+    var html = '<table class="qa-fields"><tbody>' + d.fields.map(function (f) {
+      return '<tr><th>' + esc(f[0]) + '</th><td>' + esc(f[1]) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+    if (d.lines && d.lines.length) {
+      html += '<ul class="qa-lines">' + d.lines.map(function (l) {
+        return '<li>' + (l.amount ? '<span class="qa-amt">' + esc(l.amount) + '</span>' : '') +
+          '<strong>' + esc(l.label) + '</strong>' + (l.detail ? '<small>' + esc(l.detail) + '</small>' : '') + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (d.quick) {
+      html += '<div class="qa-form">' +
+        (d.amount !== null && d.amount !== undefined
+          ? '<label for="qaAmount">Amount to approve (EGP)</label>' +
+            '<input type="number" step="any" min="0" class="form-control form-control-sm mb-2" id="qaAmount" value="' + d.amount + '">'
+          : '') +
+        '<label for="qaNotes">Notes (optional)</label>' +
+        '<textarea class="form-control form-control-sm" id="qaNotes" rows="2"></textarea></div>';
+    } else if (d.state === 'pending') {
+      html += '<p class="small text-muted mt-2 mb-0">This step needs the full approval page.</p>';
+    }
+    var stateBadge = d.state === 'pending' ? '' : ' ' + window.notifActionHtml({ action: { kind: o.kind, state: d.state } });
+    Swal.fire({
+      title: esc(d.title), html: (stateBadge ? '<div class="mb-2">' + stateBadge + '</div>' : '') + html,
+      width: 640,
+      showConfirmButton: d.quick, confirmButtonText: '<i class="fas fa-check mr-1"></i>Approve', confirmButtonColor: '#1cc88a',
+      showDenyButton: d.quick, denyButtonText: '<i class="fas fa-times mr-1"></i>Decline',
+      showCancelButton: true, cancelButtonText: 'Close',
+      footer: d.page ? '<a href="' + d.page + '">Open the approval page</a>' : '',
+      showLoaderOnConfirm: true,
+      preConfirm: function () {
+        var body = { notes: $('#qaNotes').val() || '' };
+        if ($('#qaAmount').length) { body.amount = $('#qaAmount').val(); }
+        return post(d.approve_url, body).catch(function (xhr) { Swal.showValidationMessage(failText(xhr)); });
+      },
+      allowOutsideClick: function () { return !Swal.isLoading(); }
+    }).then(function (result) {
+      if (result.isConfirmed) { decided('approved'); return; }
+      if (!result.isDenied) { return; }
+      Swal.fire({
+        title: 'Decline: ' + esc(d.title), input: 'textarea', inputLabel: 'Reason (the requester reads this)',
+        inputValidator: function (v) { return v && v.trim() ? undefined : 'A reason is required'; },
+        showCancelButton: true, confirmButtonText: 'Decline', confirmButtonColor: '#e74a3b',
+        showLoaderOnConfirm: true,
+        preConfirm: function (reason) {
+          return post(d.reject_url, { reason: reason.trim() }).catch(function (xhr) { Swal.showValidationMessage(failText(xhr)); });
+        }
+      }).then(function (r2) { if (r2.isConfirmed) { decided('declined'); } });
+    });
+  }).fail(function (xhr) { Swal.fire('Could not open it', failText(xhr), 'error'); });
+};
+
 // Function to display notifications in dropdown
 function displayNotifications(notifications) {
   const container = document.getElementById('notificationList');
@@ -2913,6 +3043,7 @@ function displayNotifications(notifications) {
             '<span class="notif-when">' + window.notifRelativeTime(notif.timeadded_datestamp) + '</span>' +
           '</span>' +
           '<span class="notif-text">' + window.notifEscape(notif.content || notif.body || '') + '</span>' +
+          window.notifActionHtml(notif) +
         '</span>' +
       '</a>';
   }).join('');

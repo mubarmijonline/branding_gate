@@ -35,7 +35,7 @@ class InventoryItemPageTest(unittest.TestCase):
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
         branding_gate.app.config['TESTING'] = True
         self._real_notify = branding_gate.notify_users
-        branding_gate.notify_users = lambda ids, title, body, link=None: len(ids)
+        branding_gate.notify_users = lambda ids, title, body, link=None, **_: len(ids)
 
         cur = self._cursor()
         cur.execute("""INSERT INTO entities (entity_name, entity_code, status, created_by)

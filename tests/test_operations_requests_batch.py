@@ -49,7 +49,7 @@ class _Harness(unittest.TestCase):
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
         branding_gate.app.config['TESTING'] = True
         self.sent = []
-        branding_gate.notify_users = lambda ids, title, body, link=None: (
+        branding_gate.notify_users = lambda ids, title, body, link=None, **_: (
             self.sent.append({'to': sorted(int(i) for i in (ids or [])), 'title': title,
                               'body': body, 'link': link}) or len(ids or []))
 

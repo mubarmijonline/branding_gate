@@ -85,7 +85,7 @@ class ItemHistoryTest(unittest.TestCase):
 
         self.sent = []
         self._real_notify = branding_gate.notify_users
-        branding_gate.notify_users = lambda ids, title, body, link=None: (
+        branding_gate.notify_users = lambda ids, title, body, link=None, **_: (
             self.sent.append({'to': sorted(ids), 'title': title,
                               'body': body, 'link': link}) or len(ids))
 

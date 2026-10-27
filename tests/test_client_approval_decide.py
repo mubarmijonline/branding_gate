@@ -52,7 +52,7 @@ class DecideRoutesTest(unittest.TestCase):
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self._cursor())
         branding_gate.app.config['TESTING'] = True
         self._real_notify = branding_gate.notify_users
-        branding_gate.notify_users = lambda ids, title, body, link=None: len(ids or [])
+        branding_gate.notify_users = lambda ids, title, body, link=None, **_: len(ids or [])
 
         cur = self._cursor()
         cur.execute("SELECT id FROM department ORDER BY id LIMIT 1")

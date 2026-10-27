@@ -1625,7 +1625,7 @@ def notification_category(title):
     return 'important' if IMPORTANT_TITLES.match((title or '').strip()) else 'announcement'
 
 
-def notify_users(user_ids, title, content, link=None, category=None):
+def notify_users(user_ids, title, content, link=None, category=None, action=None):
     """
     Send one notification to each of these people.
 
@@ -1662,6 +1662,8 @@ def notify_users(user_ids, title, content, link=None, category=None):
             'content': content,
             'link': link or None,
             'category': category_for(user_id),
+            # An approval this person can decide from the tray: {kind, id, stage}.
+            'action': action if category_for(user_id) == 'important' else None,
             'added_by': added_by,
             'added_uid': int(added_uid),
             'added_date': now,
@@ -1717,9 +1719,9 @@ def push_to_users(user_ids, title, content, link=None):
         return 0
 
 
-def notify_user(user_id, title, content, link=None):
+def notify_user(user_id, title, content, link=None, action=None):
     """Tell one person. Named so a caller cannot mistake it for a role."""
-    return notify_users([user_id], title, content, link=link)
+    return notify_users([user_id], title, content, link=link, action=action)
 
 
 def notify_username(username, title, content, link=None):
@@ -1743,12 +1745,12 @@ def notify_username(username, title, content, link=None):
     return notify_user(row['id'], title, content, link=link) if row else 0
 
 
-def send_notification_to_role(role_name, title, content, link=None):
+def send_notification_to_role(role_name, title, content, link=None, action=None):
     """
     Send notification to all users with the specified role.
     """
     try:
-        return notify_users(get_users_by_role(role_name), title, content, link=link)
+        return notify_users(get_users_by_role(role_name), title, content, link=link, action=action)
     except Exception as e:
         print(f"Error sending notifications to role {role_name}: {e}")
         return 0
@@ -2273,6 +2275,9 @@ def get_notifications():
         # Old rows hold the date as text in the same order-preserving format.
         docs.sort(key=lambda d: str(d.get('added_date') or ''), reverse=True)
 
+        # Where each approval stands now, so the tray offers it only while it waits.
+        statuses = quick_statuses([d['action'] for d in docs if d.get('action')])
+
         # Convert to list of dictionaries
         notifications = []
         for doc in docs:
@@ -2293,6 +2298,9 @@ def get_notifications():
 
             if data.get('category') not in NOTIFICATION_CATEGORIES:
                 data['category'] = notification_category(data.get('title'))
+            if data.get('action'):
+                data['action'] = dict(data['action'], state=quick_state(
+                    data['action'], statuses.get((data['action'].get('kind'), data['action'].get('id')))))
             notifications.append({
                 'id': str(doc['_id']),
                 **data
@@ -2349,6 +2357,350 @@ def mark_notifications_read():
             'success': False,
             'error': str(e)
         }), 500
+
+# ---- quick approvals from a notification ----------------------------------
+# An approval notification carries `action` = {kind, id, stage}. The tray asks
+# where each record stands, and the details modal decides through the very
+# endpoints the approval pages use, so the rules (who may sign, scopes, what a
+# decline needs, who is told next) are the same whichever way it is done.
+# Finance's stages need a payment method or expense categories, so for those
+# the modal shows the record and opens the page.
+
+QUICK_ACTION_PERMS = {
+    'sales_request_approval': ('sales_request.approve',),
+    'party_request': ('party_request.approve_head', 'party_request.approve_admin'),
+    'custody': ('user_balance.approve_manager', 'user_balance.approve'),
+    'expense': ('expense_tracking.approve_manager', 'expense_tracking.approve_finance'),
+    'negotiation': ('negotiation.decide_sales_head', 'negotiation.decide_account_head'),
+}
+_QUICK_TABLE = {
+    'sales_request_approval': 'sales_request_approvals', 'party_request': 'party_request',
+    'custody': 'user_balance_transfers', 'expense': 'expense_tracking',
+    'negotiation': 'negotiation_requests',
+}
+# Record statuses that mean "still waiting at this stage".
+_QUICK_WAITING = {
+    ('sales_request_approval', None): ('pending',),
+    ('party_request', None): ('pending_head', 'pending_admin'),
+    ('custody', 'manager'): ('pending_manager',),
+    ('custody', 'finance'): ('pending_finance',),
+    ('expense', 'manager'): ('pending',),
+    ('expense', 'finance'): ('manager_approved', 'finance_pending'),
+    ('negotiation', None): ('pending_sales_head',),
+}
+
+
+def approval_action(kind, record_id, stage=None):
+    return {'kind': kind, 'id': int(record_id), 'stage': stage}
+
+
+def quick_state(action, status):
+    """pending / approved / declined / cancelled / gone, seen from the action's stage."""
+    if status is None:
+        return 'gone'
+    if status in ('rejected', 'sales_head_declined'):
+        return 'declined'
+    if status == 'cancelled':
+        return 'cancelled'
+    waiting = _QUICK_WAITING.get((action.get('kind'), action.get('stage')), ())
+    return 'pending' if status in waiting else 'approved'
+
+
+def quick_statuses(actions):
+    """{(kind, id): status} for these actions, a query per kind."""
+    by_kind = {}
+    for action in actions:
+        if action.get('kind') in _QUICK_TABLE and action.get('id'):
+            by_kind.setdefault(action['kind'], set()).add(int(action['id']))
+    if not by_kind:
+        return {}
+    found = {}
+    conn, cur = connection()
+    try:
+        for kind, ids in by_kind.items():
+            cur.execute("SELECT id, status FROM " + _QUICK_TABLE[kind] + " WHERE id IN (%s)"
+                        % ",".join(["%s"] * len(ids)), list(ids))
+            for row in cur.fetchall():
+                found[(kind, row['id'])] = row['status']
+    finally:
+        cur.close()
+        conn.close()
+    return found
+
+
+def _person_name(cur, user_id=None, login=None):
+    if user_id:
+        cur.execute("SELECT name FROM user WHERE id = %s", (user_id,))
+    elif login:
+        cur.execute("SELECT name FROM user WHERE username = %s OR mobile = %s LIMIT 1", (login, login))
+    else:
+        return None
+    row = cur.fetchone()
+    return row['name'] if row else (login or None)
+
+
+def _when(value):
+    return value.strftime('%Y-%m-%d %H:%M') if hasattr(value, 'strftime') else value
+
+
+def _egp(value):
+    return 'EGP {:,.2f}'.format(float(value or 0))
+
+
+def _quick_details(cur, kind, record_id, stage):
+    """The record as the approval page shows it, plus how it is decided."""
+    if kind == 'sales_request_approval':
+        cur.execute("SELECT * FROM sales_request_approvals WHERE id = %s", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        data = row['request_data']
+        data = json.loads(data) if isinstance(data, str) else (data or {})
+        cur.execute("SELECT client_name FROM client WHERE id = %s", (data.get('client_id') or 0,))
+        client = cur.fetchone()
+        cur.execute("SELECT company_name FROM company WHERE id = %s", (data.get('company_id') or 0,))
+        company = cur.fetchone()
+        lines = []
+        for instance in (data.get('template_fields') or {}).get('instances') or []:
+            for item in instance.get('items') or []:
+                size = ' x '.join(str(item[k]) for k in ('width', 'height', 'depth') if item.get(k))
+                lines.append({'label': item.get('name') or 'Item',
+                              'detail': ' · '.join(x for x in (
+                                  '%s %s' % (item.get('quantity') or 1, item.get('unit') or ''),
+                                  size and size + ' m', item.get('sell_type'),
+                                  item.get('rental_days') and '%s day(s)' % item.get('rental_days'),
+                                  item.get('comment')) if x),
+                              'amount': None})
+        return {
+            'title': 'Sales request: %s' % (data.get('title') or ''),
+            'status': row['status'],
+            'fields': [
+                ['Why it needs approval', row['approval_reason']],
+                ['Client', client and client['client_name']],
+                ['Company', company and company['company_name']],
+                ['Type', ', '.join(data.get('request_types') or []) or data.get('request_type')],
+                ['Priority', data.get('priority')],
+                ['Starts', data.get('start_date')], ['Ends', data.get('end_date')],
+                ['Description', data.get('description')],
+                ['Requested by', _person_name(cur, login=row['requested_by'])],
+                ['Requested at', _when(row['requested_at'])],
+                ['Reviewed by', row['reviewed_by'] and _person_name(cur, login=row['reviewed_by'])],
+                ['Reason given', row['rejection_reason']],
+            ],
+            'lines': lines,
+            'approve_url': '/api/approvals/%d/approve' % record_id,
+            'reject_url': '/api/approvals/%d/reject' % record_id,
+            'page': '/approvals',
+        }
+
+    if kind == 'party_request':
+        cur.execute("SELECT * FROM party_request WHERE id = %s", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        payload = row['payload']
+        payload = json.loads(payload) if isinstance(payload, str) else (payload or {})
+        fields = [['Code', row['request_code']],
+                  ['Requested by', _person_name(cur, user_id=row['requested_by'])],
+                  ['Requested at', _when(row['requested_at'])], ['Note', row['note']]]
+        if payload.get('parent_company_id'):
+            cur.execute("SELECT company_name FROM company WHERE id = %s", (payload['parent_company_id'],))
+            parent = cur.fetchone()
+            fields.append(['Parent company', parent and parent['company_name']])
+        fields += [[key.replace('_', ' ').capitalize(), value] for key, value in payload.items()
+                   if value not in (None, '') and not key.endswith('_id')]
+        fields.append(['Reason given', row['rejection_reason']])
+        name = (payload.get('client_name') or payload.get('company_name') or payload.get('supplier_name'))
+        return {
+            'title': 'New %s: %s' % (row['kind'], name or ''),
+            'status': row['status'],
+            'fields': fields, 'lines': [],
+            'approve_url': '/api/party-requests/%d/%s' % (
+                record_id, 'head-approve' if row['status'] == 'pending_head' else 'approve'),
+            'reject_url': '/api/party-requests/%d/reject' % record_id,
+            'page': _party_page(row['kind']),
+        }
+
+    if kind == 'custody':
+        cur.execute("SELECT * FROM user_balance_transfers WHERE id = %s", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        manager_stage = stage == 'manager'
+        return {
+            'title': 'عهدة request %s' % row['transfer_code'],
+            'status': row['status'],
+            'fields': [
+                ['For', _person_name(cur, user_id=row['to_user_id'])],
+                ['Amount', _egp(row['amount'])],
+                ['First asked for', _egp(row['original_amount']) if row['original_amount'] else None],
+                ['Reason', row['description']], ['Notes', row['notes']],
+                ['Requested at', _when(row['created_at'])],
+                ['Approved by the manager', row['manager_approved_by'] and
+                 _person_name(cur, user_id=row['manager_approved_by'])],
+                ['Manager notes', row['manager_notes']],
+                ['Reason given', row['rejection_reason']],
+            ],
+            'lines': [],
+            # The manager may lower or raise the amount as they pass it on.
+            'amount': float(row['amount'] or 0) if manager_stage else None,
+            'approve_url': ('/api/finance/balance-requests/%d/manager-approve' % record_id) if manager_stage else None,
+            'reject_url': ('/api/finance/balance-requests/%d/manager-reject' % record_id) if manager_stage else None,
+            'page': '/expense-tracking-approval' if manager_stage else '/finance/approvals',
+        }
+
+    if kind == 'expense':
+        cur.execute("SELECT * FROM expense_tracking WHERE id = %s", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cur.execute("""SELECT i.item_description, i.amount, i.notes, sr.title
+                       FROM expense_tracking_items i LEFT JOIN sales_request sr ON sr.id = i.sales_request_id
+                       WHERE i.tracking_id = %s ORDER BY i.id""", (record_id,))
+        lines = [{'label': i['item_description'] or 'Expense',
+                  'detail': ' · '.join(x for x in (i['title'] and 'For: ' + i['title'], i['notes']) if x),
+                  'amount': _egp(i['amount'])} for i in cur.fetchall()]
+        manager_stage = stage == 'manager'
+        return {
+            'title': 'Expenses %s' % row['tracking_code'],
+            'status': row['status'],
+            'fields': [
+                ['By', row['user_name']], ['Total', _egp(row['total_amount'])],
+                ['Date', _when(row['tracking_date'])], ['Description', row['description']],
+                ['Notes', row['notes']],
+                ['Approved by the manager', row['manager_approved_by']],
+                ['Reason given', row['rejection_reason']],
+            ],
+            'lines': lines,
+            'approve_url': ('/api/expense-tracking/%d/manager-approve' % record_id) if manager_stage else None,
+            'reject_url': ('/api/expense-tracking/%d/reject' % record_id) if manager_stage else None,
+            'page': '/expense-tracking-approval' if manager_stage else '/finance-expense-approval',
+        }
+    if kind == 'negotiation':
+        cur.execute("""
+            SELECT nr.*, i.name AS item_name, i.qty, i.cost_per_item, i.sell_per_item,
+                   sr.title AS request_title, c.client_name, u.department_id, d.code AS department_code
+            FROM negotiation_requests nr
+            JOIN sales_request_items i ON i.id = nr.item_id
+            JOIN sales_request sr ON sr.id = nr.request_id
+            LEFT JOIN client c ON c.id = sr.client_id
+            LEFT JOIN user u ON u.id = sr.owner_user_id
+            LEFT JOIN department d ON d.id = u.department_id
+            WHERE nr.id = %s""", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        page = NEGOTIATION_LINES[negotiation_line_for(row['department_code'])][2]
+        return {
+            'title': 'Negotiation: %s' % (row['item_name'] or ''),
+            'status': row['status'],
+            'fields': [
+                ['Request', '#%s %s' % (row['request_id'], row['request_title'] or '')],
+                ['Client', row['client_name']], ['Quantity', row['qty']],
+                ['Cost / item', _egp(row['cost_per_item']) if row['cost_per_item'] is not None else None],
+                ['Our price / item', _egp(row['sell_per_item']) if row['sell_per_item'] is not None else None],
+                ['Client expects / item', _egp(row['client_expected_price'])],
+                ['Client reason', row['client_reason']],
+                ['Asked at', _when(row['created_at'])],
+                ['Head notes', row['sales_head_notes']],
+            ],
+            'lines': [],
+            # Approving sends it to Pricing for a new price, as on the head's page.
+            'approve_url': '/api/sales-head/negotiations/%d/approve' % record_id,
+            'reject_url': '/api/sales-head/negotiations/%d/decline' % record_id,
+            'page': page,
+        }
+    return None
+
+
+@app.route('/api/quick-approvals/<kind>/<int:record_id>', methods=['GET'])
+@perm(*sorted({code for codes in QUICK_ACTION_PERMS.values() for code in codes}))
+def quick_approval_details(kind, record_id):
+    """One approval, for the details modal opened from a notification."""
+    if kind not in QUICK_ACTION_PERMS:
+        return jsonify(success=False, error='Unknown approval'), 404
+    if not any(has(code) for code in QUICK_ACTION_PERMS[kind]):
+        return jsonify(success=False, error='Not yours to decide'), 403
+    stage = request.args.get('stage') or None
+    conn, cur = connection()
+    try:
+        details = _quick_details(cur, kind, record_id, stage)
+    finally:
+        cur.close()
+        conn.close()
+    if not details:
+        return jsonify(success=False, error='This request no longer exists'), 404
+    details['state'] = quick_state({'kind': kind, 'stage': stage}, details['status'])
+    details['fields'] = [f for f in details['fields'] if f[1] not in (None, '')]
+    # Decidable here only while it waits at this stage and needs nothing but a yes or no.
+    details['quick'] = details['state'] == 'pending' and bool(details.get('approve_url'))
+    return jsonify(success=True, **details)
+
+
+@app.route('/api/approvals/waiting-counts', methods=['GET'])
+@perm('expense_tracking.approve_manager', 'user_balance.approve_manager',
+      'party_request.approve_head', 'party_request.approve_admin',
+      'negotiation.decide_sales_head', 'negotiation.decide_account_head', 'sales_request.approve')
+def approvals_waiting_counts():
+    """
+    What waits on me, per item of the Approvals menu, so the number on the
+    menu says which page it is on. Each count follows the rule of the page it
+    points at.
+    """
+    me = session.get('user_id')
+    counts = {}
+    conn, cur = connection()
+    try:
+        waiting = 0
+        if has('user_balance.approve_manager'):
+            cur.execute("SELECT to_user_id FROM user_balance_transfers "
+                        "WHERE status = 'pending_manager' AND transfer_type = 'user_request'")
+            waiting += sum(1 for row in cur.fetchall() if _may_approve_for(
+                cur, me, row['to_user_id'], 'user_balance.approve_manager'))
+        if has('expense_tracking.approve_manager'):
+            cur.execute("SELECT user_id FROM expense_tracking WHERE status = 'pending'")
+            waiting += sum(1 for row in cur.fetchall() if _may_approve_for(
+                cur, me, row['user_id'], 'expense_tracking.approve_manager'))
+        counts['expenses'] = waiting
+
+        is_admin = has('party_request.approve_admin')
+        is_head = has('party_request.approve_head')
+        for kind in ('client', 'company', 'supplier'):
+            if is_admin:
+                cur.execute("SELECT COUNT(*) AS n FROM party_request WHERE kind = %s "
+                            "AND status IN ('pending_head', 'pending_admin')", (kind,))
+            elif is_head:
+                cur.execute("""SELECT COUNT(*) AS n FROM party_request p JOIN user u ON u.id = p.requested_by
+                               WHERE p.kind = %s AND p.status = 'pending_head'
+                                 AND u.department_id = (SELECT department_id FROM user WHERE id = %s)""",
+                            (kind, me))
+            else:
+                counts[kind] = 0
+                continue
+            counts[kind] = cur.fetchone()['n']
+
+        for line in ('sales', 'account'):
+            code = NEGOTIATION_LINES[line][0]
+            if not has(code):
+                counts[line + '_head'] = 0
+                continue
+            scope_sql, scope_params = scope_clause(code, 'sr.owner_user_id')
+            cur.execute("SELECT COUNT(*) AS n FROM negotiation_requests WHERE status = 'pending_sales_head' "
+                        "AND request_id IN (SELECT sr.id FROM sales_request sr WHERE 1=1" + scope_sql
+                        + negotiation_line_clause(line) + ")", scope_params)
+            counts[line + '_head'] = cur.fetchone()['n']
+
+        if has('sales_request.approve'):
+            cur.execute("SELECT COUNT(*) AS n FROM sales_request_approvals WHERE status = 'pending'")
+            counts['urgent'] = cur.fetchone()['n']
+        else:
+            counts['urgent'] = 0
+    finally:
+        cur.close()
+        conn.close()
+    counts['total'] = sum(counts.values())
+    return jsonify(success=True, counts=counts)
+
 
 @app.route('/notifications')
 def all_notifications():
@@ -5279,6 +5631,7 @@ def create_party_request():
             VALUES (%s, %s, %s, 'pending_head', %s, %s)
         """, (code, kind, json.dumps(payload), me,
               (data.get('note') or '').strip()[:500] or None))
+        party_request_id = cur.lastrowid
         heads = _party_heads(cur, me)
         conn.commit()
         cur.close()
@@ -5290,7 +5643,8 @@ def create_party_request():
                      'New %s request: %s' % (kind, name),
                      '%s asks to add the %s "%s" (%s). It needs your approval.'
                      % (session.get('name') or 'A colleague', kind, name, code),
-                     link=_party_page(kind))
+                     link=_party_page(kind),
+                     action=approval_action('party_request', party_request_id))
         return jsonify(success=True, request_code=code,
                        message='Sent to your department head for approval')
     except HTTPException:
@@ -10829,7 +11183,8 @@ def add_sales_request():
                     'admin',
                     'Approval Needed',
                     f'New sales request "{title}" needs approval ({approval_reason})',
-                    link='/approvals'
+                    link='/approvals',
+                    action=approval_action('sales_request_approval', approval_id)
                 )
             except Exception as notif_error:
                 print(f"DEBUG: Failed to send notification: {notif_error}")
@@ -17675,7 +18030,8 @@ def negotiate_item_price(item_id):
                          '%s asks for EGP %s on "%s" (request #%s). Reason: %s'
                          % (user_name, '{:,.2f}'.format(float(expected_price)), item['name'],
                             item['request_id'], negotiation_reason),
-                         link=head_page)
+                         link=head_page,
+                         action=approval_action('negotiation', negotiation_id))
         except Exception as notify_error:
             print(f"Negotiation notification failed: {notify_error}")
 
@@ -27552,6 +27908,7 @@ def request_balance():
             (transfer_code, from_user_id, to_user_id, amount, transfer_type, status, description, requested_by)
             VALUES (%s, NULL, %s, %s, 'user_request', %s, %s, %s)
         """, (transfer_code, me, amount, status, description, me))
+        transfer_id = cur.lastrowid
 
         conn.commit()
         cur.close()
@@ -27568,6 +27925,7 @@ def request_balance():
                 'before Finance sees it.'
                 % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
                 link='/expense-tracking-approval',
+                action=approval_action('custody', transfer_id, 'manager'),
             )
         else:
             notify_users(
@@ -27576,6 +27934,7 @@ def request_balance():
                 '%s asked for EGP %s. Reason: %s (%s)'
                 % (asker, f'{amount:,.2f}', description.strip(), transfer_code),
                 link='/finance/approvals',
+                action=approval_action('custody', transfer_id, 'finance'),
             )
 
         return jsonify({'success': True, 'transfer_code': transfer_code,
@@ -28212,6 +28571,7 @@ def manager_approve_balance_request(request_id):
             '%s approved EGP %s for %s (%s). It is waiting for Finance.'
             % (manager_name, f'{amount:,.2f}', req['requester_name'], req['transfer_code']),
             link='/finance/approvals',
+            action=approval_action('custody', request_id, 'finance'),
         )
         notify_user(
             req['to_user_id'],
@@ -30215,6 +30575,7 @@ def create_expense_tracking():
             '%s submitted EGP %s of expenses (%s) for your approval.'
             % (user_name, f'{total_amount:,.2f}', tracking_code),
             link=('/expense-tracking-approval' if chain else '/finance-expense-approval'),
+            action=approval_action('expense', tracking_id, 'manager' if chain else 'finance'),
         )
 
         return jsonify({

@@ -475,6 +475,7 @@ function createNotificationElement(notification) {
                 </span>
             </div>
             <div class="notif-card-text">${esc(notification.content || notification.body || '')}</div>
+            ${window.notifActionHtml(notification)}
             ${notification.added_by ? `<div class="notif-card-by">from ${esc(notification.added_by)}</div>` : ''}
         </div>
         <div class="notif-card-action">

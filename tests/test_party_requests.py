@@ -305,20 +305,20 @@ class PartyRequestNotificationTest(PartyRequestFlowTest):
         self.sent = []
         self._real_notify = branding_gate.notify_users
 
-        def capture(user_ids, title, content, link=None):
+        def capture(user_ids, title, content, link=None, **_):
             self.sent.append({'to': sorted(int(u) for u in (user_ids or []) if u),
                               'title': title, 'content': content, 'link': link})
             return len(user_ids or [])
 
         branding_gate.notify_users = capture
         branding_gate.notify_user = (
-            lambda user_id, title, content, link=None:
+            lambda user_id, title, content, link=None, **_:
             capture([user_id], title, content, link=link))
 
     def tearDown(self):
         branding_gate.notify_users = self._real_notify
         branding_gate.notify_user = (
-            lambda user_id, title, content, link=None:
+            lambda user_id, title, content, link=None, **_:
             self._real_notify([user_id], title, content, link=link))
         super().tearDown()
 
