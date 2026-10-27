@@ -714,9 +714,12 @@ class WholeRequestAssignmentTest(_CostingHarness):
 
 class OperationsListScopeTest(_CostingHarness):
     """
-    Everyone sees their own work on /operation_request, and nobody else's.
+    Everyone sees their own work on /operation_request, plus whatever is on
+    nobody's desk yet; what somebody else is costing is not theirs to see.
 
-    Before this the list was every request in the company, for everybody.
+    Before this the list was every request in the company, for everybody;
+    then it was assignments only, and a new request told to the department by
+    notification showed up for nobody but the Head.
     """
 
     def setUp(self):
@@ -731,6 +734,10 @@ class OperationsListScopeTest(_CostingHarness):
                     (self.request_id,))
         cur.close()
 
+    def _assign_other(self, actor, assignees):
+        return self._client_for(actor).post('/api/costing/assign', json={
+            'item_id': self.other_item, 'assignee_ids': assignees, 'note': ''})
+
     def _rows(self, actor):
         response = self._client_for(actor).get('/api/operations/requests')
         self.assertEqual(response.status_code, 200)
@@ -741,12 +748,21 @@ class OperationsListScopeTest(_CostingHarness):
         self.assertIn(self.request_id, rows)
         self.assertFalse(rows[self.request_id]['scoped_to_me'])
 
-    def test_a_member_sees_nothing_until_something_is_assigned(self):
+    def test_a_fresh_request_is_everybody_s_until_it_is_handed_out(self):
+        rows = self._rows(self.member)
+        self.assertIn(self.request_id, rows)
+        self.assertEqual(rows[self.request_id]['items_count'], 2)
+
+    def test_a_member_does_not_see_items_on_somebody_else_s_desk(self):
+        self._assign(self.head, [self.leader])
+        self._assign(self.leader, [self.member_b])
+        self._assign_other(self.head, [self.leader_b])
         self.assertNotIn(self.request_id, self._rows(self.member))
 
     def test_a_member_sees_the_request_holding_their_item(self):
         self._assign(self.head, [self.leader])
         self._assign(self.leader, [self.member])
+        self._assign_other(self.head, [self.leader_b])
         rows = self._rows(self.member)
         self.assertIn(self.request_id, rows)
         # One of the two items is theirs, and that is what the row counts.
@@ -762,15 +778,29 @@ class OperationsListScopeTest(_CostingHarness):
     def test_another_team_sees_none_of_it(self):
         self._assign(self.head, [self.leader])
         self._assign(self.leader, [self.member])
+        self._assign_other(self.head, [self.leader])
         self.assertNotIn(self.request_id, self._rows(self.outsider))
 
     def test_withdrawing_takes_it_off_their_page(self):
         self._assign(self.head, [self.leader])
         self._assign(self.leader, [self.member])
+        self._assign_other(self.head, [self.leader])
         assignment_id = self._assignment_id(self.member)
         self._client_for(self.leader).post(
             '/api/costing/assignments/%d/withdraw' % assignment_id)
+        # The item is still on the leader's desk, so it is nobody else's.
         self.assertNotIn(self.request_id, self._rows(self.member))
+        self.assertNotIn(self.request_id, self._rows(self.outsider))
+
+    def test_withdrawing_the_last_hand_puts_it_back_in_the_pool(self):
+        self._assign(self.head, [self.member])
+        self._assign_other(self.head, [self.leader])
+        self.assertNotIn(self.request_id, self._rows(self.outsider))
+        self._client_for(self.head).post(
+            '/api/costing/assignments/%d/withdraw' % self._assignment_id(self.member))
+        # Back on nobody's desk: open work for the whole department again.
+        self.assertIn(self.request_id, self._rows(self.member))
+        self.assertIn(self.request_id, self._rows(self.outsider))
 
 
 class EmptyRequestTest(_CostingHarness):

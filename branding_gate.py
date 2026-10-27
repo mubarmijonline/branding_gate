@@ -9529,10 +9529,12 @@ def get_operations_requests():
         # The Operations Head sees the whole board; so does anybody outside the
         # costing ladder, whose reason for opening this page was never an
         # assignment in the first place. Everyone inside it -- a team leader
-        # with `costing.view: team`, a member with `own` -- sees only what has
-        # been put on their desk, or what they put on somebody else's.
-        # Withdrawn assignments do not count: taking an item back should remove
-        # it from view rather than leave a ghost.
+        # with `costing.view: team`, a member with `own` -- sees what is on
+        # nobody's desk yet (a fresh request, or an item handed back), what has
+        # been put on their own desk, and what they put on somebody else's.
+        # An item on somebody else's desk is hidden: once taken it is theirs.
+        # Without the first part a new request told to the whole department by
+        # notification was invisible to everyone but the Head (#18921).
         #
         # The counts and the total then cover those items alone, so a member
         # costing one item of nine does not read "9 items, 2 costed" and have
@@ -9543,10 +9545,13 @@ def get_operations_requests():
         mine_only = ""
         item_params = []
         if restricted:
-            mine_only = """ AND EXISTS (SELECT 1 FROM costing_assignment ca
-                                        WHERE ca.item_id = i.id
-                                          AND ca.status <> 'withdrawn'
-                                          AND (ca.assignee_id = %s OR ca.assigned_by = %s))"""
+            mine_only = """ AND (NOT EXISTS (SELECT 1 FROM costing_assignment ca
+                                             WHERE ca.item_id = i.id
+                                               AND ca.status <> 'withdrawn')
+                                 OR EXISTS (SELECT 1 FROM costing_assignment ca
+                                            WHERE ca.item_id = i.id
+                                              AND ca.status <> 'withdrawn'
+                                              AND (ca.assignee_id = %s OR ca.assigned_by = %s)))"""
             item_params = [me, me]
         # A request nothing of mine hangs off is not a request I am part of.
         having = " HAVING COUNT(i.id) > 0" if restricted else ""

@@ -460,3 +460,15 @@ title and actions columns picked by heuristic, overridable per table. Push:
 `bg-push.js` + `/api/push/register` + `push_to_users` on every bell
 notification through the app's Firebase project; `BG_FCM_VAPID_KEY` in `.env`
 (read by the systemd unit) turns it on.
+
+## Operations board: unassigned pool, 2026-10-27
+
+David (Operations Manager): his leader and members tapped the "New Sales
+Request #18921" notification and saw nothing pending. The board hid every item
+not assigned to the viewer, and a fresh request has no assignments yet, so only
+the Head could see what the whole department had just been told about.
+
+Rule now (`get_operations_requests`): a restricted viewer (team / own) sees an
+item while it is on nobody's desk, on their own desk, or handed out by them;
+an item on somebody else's desk stays hidden. Withdrawing the last assignment
+puts the item back in the pool. Tests: `OperationsListScopeTest`.
