@@ -510,3 +510,11 @@ Two requests from Ahmed.
    - Drawer and /notifications page get Important / Announcements tabs, each
      with its unread count; the bell badge counts unread Important only; phone
      push goes out for Important only.
+   - Refined same day: Important is decided per recipient. Admins hold every
+     permission, so each desk fan-out (عهدة approved -> Finance, invoice to
+     post, costing completed -> pricing...) also reached them and read as
+     theirs. `users_holding` / `get_users_by_role` now return an `Audience`
+     whose `fyi` marks admins present only for that reason; for them it is an
+     Announcement. Admin-only work (urgent approval, party requests to sign,
+     their own approval chain, anything assigned to them) stays Important.
+     Stored admin notifications re-classified the same way.

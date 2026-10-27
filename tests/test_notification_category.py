@@ -51,3 +51,28 @@ class NotificationCategoryTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BystanderTest(unittest.TestCase):
+    """An admin on a desk's fan-out is told, but it is not waiting on them."""
+
+    def test_admins_are_fyi_where_another_desk_holds_the_work(self):
+        audience = branding_gate.users_holding('user_balance.approve')
+        conn, cur = branding_gate.connection()
+        try:
+            admins = branding_gate._admin_ids(cur, list(audience))
+        finally:
+            cur.close()
+            conn.close()
+        self.assertEqual(set(audience.fyi), admins)
+
+    def test_admin_only_work_stays_theirs(self):
+        audience = branding_gate.users_holding('party_request.approve_admin', include_root=True)
+        self.assertEqual(audience.fyi, frozenset())
+        self.assertEqual(branding_gate.get_users_by_role('admin').fyi, frozenset())
+
+    def test_the_marks_survive_being_added_to(self):
+        audience = branding_gate.Audience.of([1, 2], {2})
+        self.assertEqual(([9] + audience).fyi, frozenset({2}))
+        self.assertEqual((audience + [9]).fyi, frozenset({2}))
+        self.assertEqual(sorted([9] + audience), [1, 2, 9])

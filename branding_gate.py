@@ -1510,6 +1510,37 @@ NOTIFICATION_AUDIENCE = {
 }
 
 
+class Audience(list):
+    """
+    Recipient ids, plus `fyi`: the ones on the list only because the admin role
+    holds every permission while the work belongs to another desk. They are
+    told, but for them it is an announcement, not something waiting on them.
+    """
+    fyi = frozenset()
+
+    @classmethod
+    def of(cls, ids, fyi=()):
+        audience = cls(ids)
+        audience.fyi = frozenset(fyi)
+        return audience
+
+    def __add__(self, other):
+        return Audience.of(list(self) + list(other), self.fyi | getattr(other, 'fyi', frozenset()))
+
+    # [owner] + users_holding(...) keeps the marks too.
+    def __radd__(self, other):
+        return Audience.of(list(other) + list(self), self.fyi)
+
+
+def _admin_ids(cur, user_ids):
+    if not user_ids:
+        return set()
+    cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                "WHERE r.code = 'admin' AND u.id IN (%s)" % ",".join(["%s"] * len(user_ids)),
+                list(user_ids))
+    return {row['id'] for row in cur.fetchall()}
+
+
 def get_users_by_role(role_name):
     """
     Return user ids to notify for a workflow role.
@@ -1536,9 +1567,11 @@ def get_users_by_role(role_name):
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
+    # Sent to 'operation' or 'finance', an admin is there by holding everything.
+    fyi = _admin_ids(cur, user_ids) if role_name != 'admin' else set()
     cur.close()
     conn.close()
-    return user_ids
+    return Audience.of(user_ids, fyi)
 
 
 def notifications_disabled():
@@ -1609,11 +1642,16 @@ def notify_users(user_ids, title, content, link=None, category=None):
     if notifications_disabled():
         return 0
     try:
+        fyi = getattr(user_ids, 'fyi', frozenset())
         recipients = sorted({int(user_id) for user_id in (user_ids or []) if user_id})
         if not recipients:
             return 0
         if category not in NOTIFICATION_CATEGORIES:
             category = notification_category(title)
+
+        def category_for(user_id):
+            # Important means waiting on *this* reader.
+            return 'announcement' if user_id in fyi else category
 
         added_by = session.get('name', 'System')
         added_uid = session.get('user_id', 0)
@@ -1623,7 +1661,7 @@ def notify_users(user_ids, title, content, link=None, category=None):
             'title': title,
             'content': content,
             'link': link or None,
-            'category': category,
+            'category': category_for(user_id),
             'added_by': added_by,
             'added_uid': int(added_uid),
             'added_date': now,
@@ -1634,8 +1672,9 @@ def notify_users(user_ids, title, content, link=None, category=None):
             lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
             fallback=0, label='notify users')
         # Phones buzz for work, not for news.
-        if category == 'important':
-            push_to_users(recipients, title, content, link)
+        movers = [user_id for user_id in recipients if category_for(user_id) == 'important']
+        if movers:
+            push_to_users(movers, title, content, link)
         return written
     except Exception as e:
         print(f"Error sending notifications: {e}")
@@ -1744,6 +1783,9 @@ def users_holding(permission, include_root=False):
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
+    # When another role holds this too, the desk is theirs: admins are on the
+    # list only because the admin role holds everything.
+    fyi = _admin_ids(cur, user_ids) if set(role_codes) - {'admin'} else set()
 
     # Extras given from People & Access: a person handed an approval should
     # also hear that something is waiting for it.
@@ -1751,7 +1793,9 @@ def users_holding(permission, include_root=False):
         "SELECT DISTINCT u.id FROM user u JOIN permission_grant g ON g.permission_code = %s AND "
         + _GRANT_MATCH + " WHERE u.is_active = 1"
         + ("" if include_root else " AND u.manager_id IS NOT NULL"), (permission,))
-    user_ids = sorted({row['id'] for row in cur.fetchall()} | set(user_ids))
+    granted = {row['id'] for row in cur.fetchall()}
+    fyi -= granted
+    user_ids = sorted(granted | set(user_ids))
 
     # Pricing is held two ways. Beside the Pricing roles there is a per-account
     # flag, and load_permissions() grants the same set to anyone carrying it --
@@ -1762,11 +1806,13 @@ def users_holding(permission, include_root=False):
         cur.execute(
             "SELECT id FROM user WHERE is_pricing = 1 AND is_active = 1%s"
             % ("" if include_root else " AND manager_id IS NOT NULL"))
-        user_ids = sorted({row['id'] for row in cur.fetchall()} | set(user_ids))
+        flagged = {row['id'] for row in cur.fetchall()}
+        fyi -= flagged
+        user_ids = sorted(flagged | set(user_ids))
 
     cur.close()
     conn.close()
-    return user_ids
+    return Audience.of(user_ids, fyi)
 def calculate_duration_days(start_date, end_date):
     """Calculate duration in days between two dates (inclusive)"""
     if not start_date:
