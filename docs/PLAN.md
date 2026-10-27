@@ -783,3 +783,21 @@ said OK and nothing was added.
   the bell only). The recipient sees who sent it. `POST
   /api/notifications/send`, active people only, at most 300 at a time.
 - Notifications panel widened from 460px to 640px (phones stay full width).
+
+## Operations hear everything; app icon badge, 2026-10-29
+
+David asked that Operations get a phone push for every notification, not only
+Important ones, and for an unread badge on the Home Screen icon.
+
+- `push_everything_ids(user_ids, link)`: the Operations department (by
+  `department.code`), minus anyone who muted the chat the link opens.
+  `notify_users` and `/add_notification` push to Important recipients plus
+  these. Everyone else is unchanged (Important only).
+- `push_to_users` adds `badge` (unread Important count, the bell's number) to
+  the data payload; `firebase-messaging-sw.js` calls `setAppBadge` with it;
+  `updateNotificationBadge` in `main.html` keeps the icon equal to the bell
+  while the app is open, and clears it when nothing is waiting.
+- Group chat messages without a mention never were notifications, so they do
+  not push; tagged messages and request chats do.
+- Tests: `tests/test_push_payload.py` (badge in payload, Operations-only,
+  muted chat left out).

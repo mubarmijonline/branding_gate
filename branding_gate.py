@@ -1698,14 +1698,50 @@ def notify_users(user_ids, title, content, link=None, category=None, action=None
         written = mongo_safe(
             lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
             fallback=0, label='notify users')
-        # Phones buzz for work, not for news.
-        movers = [user_id for user_id in recipients if category_for(user_id) == 'important']
+        # Phones buzz for work, not for news -- except Operations, who asked
+        # to hear everything (a chat they muted stays quiet).
+        everything = push_everything_ids(recipients, link)
+        movers = [user_id for user_id in recipients
+                  if category_for(user_id) == 'important' or user_id in everything]
         if movers:
             push_to_users(movers, title, content, link)
         return written
     except Exception as e:
         print(f"Error sending notifications: {e}")
         return 0
+
+
+CHAT_LINK = re.compile(r'^/home\?chat=(sr:\d+|g:[\w-]+)$')
+
+
+def push_everything_ids(user_ids, link=None):
+    """
+    Of these people, the ones whose phones get every notification, not only
+    the Important ones: the Operations department. Someone who muted the chat
+    a notification links to is left out for that one.
+    """
+    # ponytail: department rule; a per-person setting if other teams ask too.
+    if not user_ids:
+        return set()
+    try:
+        conn, cur = connection()
+        try:
+            marks = ','.join(['%s'] * len(user_ids))
+            cur.execute("SELECT u.id FROM user u JOIN department d ON d.id = u.department_id "
+                        "WHERE d.code = 'operations' AND u.id IN (%s)" % marks, list(user_ids))
+            people = {r['id'] for r in cur.fetchall()}
+            thread = CHAT_LINK.match(link or '')
+            if people and thread:
+                cur.execute("SELECT user_id FROM chat_mute WHERE thread = %s "
+                            "AND (muted_until IS NULL OR muted_until > NOW())", (thread.group(1),))
+                people -= {r['user_id'] for r in cur.fetchall()}
+            return people
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"Push-everything lookup failed: {e}")
+        return set()
 
 
 def push_to_users(user_ids, title, content, link=None):
@@ -1720,11 +1756,17 @@ def push_to_users(user_ids, title, content, link=None):
     try:
         rows = mongo_safe(lambda: list(mongo().fcm_tokens.find({'uid': {'$in': list(user_ids)}})),
                           fallback=[], label='device tokens')
+        # The home-screen icon's badge: what the bell would show (unread Important).
+        badges = {}
         sent = 0
         for row in rows:
             token = row.get('fcm_token')
             if not token:
                 continue
+            uid = row.get('uid')
+            if uid not in badges:
+                badges[uid] = mongo_safe(lambda: mongo().notifications.count_documents(
+                    {'uid': uid, 'read': False, 'category': 'important'}), fallback=0, label='badge')
             try:
                 # Data only: the service worker (firebase-messaging-sw.js) shows it
                 # and opens `link` on a tap. With a `notification` block as well,
@@ -1733,7 +1775,7 @@ def push_to_users(user_ids, title, content, link=None):
                 # -- each send raised and only the log knew.
                 messaging.send(messaging.Message(
                     data={'title': str(title or 'Branding Gate')[:200], 'body': str(content or '')[:500],
-                          'link': link or '/notifications'},
+                          'link': link or '/notifications', 'badge': str(badges[uid] or 0)},
                     webpush=messaging.WebpushConfig(headers={'Urgency': 'high', 'TTL': '86400'}),
                     token=token))
                 sent += 1
@@ -2281,7 +2323,7 @@ def add_notification():
                        error='Notifications are unavailable right now.'), 503
     # Pages that write here (rather than through notify_users) were the one
     # path whose Important notifications never reached a phone.
-    if notification_category(title) == 'important':
+    if notification_category(title) == 'important' or push_everything_ids([uid], data.get('link')):
         push_to_users([uid], title, content, data.get('link'))
 
     return jsonify(success=True, message_id=str(inserted))

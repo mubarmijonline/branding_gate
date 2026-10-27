@@ -32,6 +32,13 @@ to the home screen, with notifications arriving as phone push.
   Needs `BG_FCM_VAPID_KEY` in `/development/projects/branding_gate/.env`
   (Firebase console > Cloud Messaging > Web Push certificates); without it,
   phones get the bell only.
+- Who gets a push: everyone for Important notifications; the Operations
+  department for every notification (announcements and chat too), except a
+  chat they muted (`push_everything_ids`).
+- Home-screen badge: each push carries the unread Important count and the
+  service worker sets it on the app icon (`setAppBadge`); the page keeps it
+  equal to the bell. iPhone needs iOS 16.4+, the app added to the Home Screen
+  and notifications allowed.
 
 **Acceptance:**
 - `tests/`: the suite (route coverage counts the two push routes as login-only;
@@ -44,4 +51,4 @@ to the home screen, with notifications arriving as phone push.
 - Phone: "Add to Home Screen" offered; after allowing notifications a bell
   notification also arrives as a push and opens its page.
 
-**Status:** live 2026-10-26. Push live 2026-10-28 (key set, verified end to end).
+**Status:** live 2026-10-26. Push live 2026-10-28 (key set, verified end to end). Operations push-all and icon badge 2026-10-29.

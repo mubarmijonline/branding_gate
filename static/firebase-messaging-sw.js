@@ -23,6 +23,11 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(payload => {
   const d = payload.data || {}, n = payload.notification || {};
   const link = d.link || '/notifications';
+  // The home-screen icon's badge: the unread Important count the server sent.
+  if (d.badge !== undefined && self.navigator.setAppBadge) {
+    const n = parseInt(d.badge, 10) || 0;
+    (n ? self.navigator.setAppBadge(n) : self.navigator.clearAppBadge()).catch(() => {});
+  }
   return self.registration.showNotification(d.title || n.title || 'Branding Gate', {
     body: d.body || n.body || '', icon: '/static/img/icons/icon-192.png', badge: '/static/img/icons/icon-192.png',
     data: { link: link }, tag: link, renotify: true

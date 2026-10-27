@@ -2068,6 +2068,10 @@ function updateNotificationBadge(count) {
   } else {
     badge.style.display = 'none';
   }
+  // The same number on the home-screen icon (installed app; iPhone 16.4+).
+  try {
+    if (navigator.setAppBadge) { (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(function () {}); }
+  } catch (e) {}
 }
 
 // Function to format date
