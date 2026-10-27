@@ -726,3 +726,22 @@ said OK and nothing was added.
   kind `sticker` pointing at the same file. Stickers and messages of only 1-3
   emoji show big with no bubble, as on WhatsApp. Lists show "Sticker".
   `chat_sticker_migration.sql`.
+
+## Sounds and muting chats, 2026-10-28
+
+- Sounds made in the browser (Web Audio, no files), switched on at the first
+  tap or key press as browsers require: a two-note chime when a new
+  notification reaches the bell (the first load of a page is silent), a short
+  pop for a new chat message (softer when that chat is open; nothing for my
+  own). At most one sound per 1.5 s.
+- On/off per device (kept in the browser): the speaker button in the Chats
+  top bar (Message sounds, Notification sounds) and the speaker in the
+  Notifications panel header.
+- Mute a chat (bell button in the chat header): 8 hours, 1 week or Always;
+  Unmute from the same button. Per person, on the server (`chat_mute`,
+  `/api/chat/mutes`, `/api/chat/thread/<t>/mute`, `chat_mute_migration.sql`),
+  so it follows them across devices. A muted chat: no sound, no pop-up, a
+  bell-slash in the list, a grey unread count kept out of the chat badge. An
+  @mention (including @all) still notifies, as on WhatsApp.
+- Fix found while testing: the first message into an empty chat was treated
+  as the chat's first load, so it neither sounded nor scrolled.

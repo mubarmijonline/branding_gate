@@ -443,3 +443,20 @@ body.bgc-lock { overflow: hidden; }
 .bgc-msg.jumbo-2 .bgc-text { font-size: 2.2rem; }
 .bgc-msg.jumbo-3 .bgc-text { font-size: 1.9rem; }
 @media (max-width: 767.98px) { .bgc-emoji-panel { height: 42vh; } .bgc-sticker { width: 130px; height: 130px; } }
+
+/* ---- mute + sounds ---- */
+.bgc-muted-ico { color: #8696a0; font-size: .7rem; }
+.bgc-count.muted { background: #c4ccd1; }
+.bgc-mute-btn.is-muted { color: #e74a3b !important; }
+.bgc-menu-note { padding: 6px 16px 4px; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--bgc-muted); }
+.bgc-switch {
+  margin-inline-start: auto; width: 34px; height: 18px; border-radius: 9px; background: #c4ccd1; position: relative; flex: 0 0 34px;
+  transition: background .15s;
+}
+.bgc-switch::after {
+  content: ''; position: absolute; top: 2px; inset-inline-start: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: inset-inline-start .15s;
+}
+.bgc-switch.on { background: #00a884; }
+.bgc-switch.on::after { inset-inline-start: 18px; }
+@media (max-width: 767.98px) { .bgc-thead .bgc-members-btn { display: none; } }

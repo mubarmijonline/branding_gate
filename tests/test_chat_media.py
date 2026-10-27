@@ -309,6 +309,31 @@ class StickerTest(_ChatHarness):
         self.assertEqual(r.status_code, 400)
 
 
+class MuteTest(_ChatHarness):
+
+    def _mute(self, user, thread, body):
+        return self._client_for(user).post('/api/chat/thread/%s/mute' % thread, json=body)
+
+    def test_mute_for_a_while_always_and_unmute(self):
+        r = self._mute(self.seller, self.thread, {'hours': 8})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertIsNotNone(r.get_json()['mutes'][self.thread])
+        r = self._mute(self.seller, self.thread, {'always': True})
+        self.assertIsNone(r.get_json()['mutes'][self.thread])
+        mutes = self._client_for(self.seller).get('/api/chat/mutes').get_json()['mutes']
+        self.assertIn(self.thread, mutes)
+        # Mine only: somebody else's list is untouched.
+        self.assertNotIn(self.thread, self._client_for(self.head).get('/api/chat/mutes').get_json()['mutes'])
+        r = self._mute(self.seller, self.thread, {'off': True})
+        self.assertNotIn(self.thread, r.get_json()['mutes'])
+
+    def test_group_mute_and_refusals(self):
+        self.assertEqual(self._mute(self.member, 'g:operations', {'hours': 168}).status_code, 200)
+        self.assertEqual(self._mute(self.member, 'g:operations', {'hours': 5}).status_code, 400)
+        self.assertEqual(self._mute(self.member, 'g:managers', {'always': True}).status_code, 403)
+        self.assertEqual(self._mute(self.stranger, self.thread, {'always': True}).status_code, 403)
+
+
 class ItemFilesSurviveEditTest(_CostingHarness):
 
     def test_files_follow_the_reinserted_item(self):

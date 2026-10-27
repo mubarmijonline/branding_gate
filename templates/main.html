@@ -306,6 +306,12 @@
       background: rgba(255,255,255,.22); border-radius: 20px;
       padding: .05rem .5rem; font-size: .72rem; font-weight: 700;
     }
+    .notif-drawer-sound {
+      background: transparent; border: 0; color: #fff; margin-inline-start: auto;
+      width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: .95rem;
+    }
+    .notif-drawer-sound:hover { background: rgba(255,255,255,.15); }
+    .notif-drawer-sound.is-off { opacity: .65; }
     .notif-drawer-close {
       background: transparent; border: 0; color: #fff;
       font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 6px;
@@ -509,7 +515,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260910-responsive-tables">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-mobile.css') }}?v=20261026">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-chat.css') }}?v=20261028c">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-chat.css') }}?v=20261028d">
 
   {% include '_i18n_head.html' %}
 </head>
@@ -1764,6 +1770,7 @@ function showToast(title, body) {
       <h5><i class="fas fa-bell mr-2"></i>Notifications
         <span class="notif-drawer-count d-none" id="notifDrawerCount">0</span>
       </h5>
+      <button type="button" class="notif-drawer-sound" id="notifSoundBtn" title="Notification sounds"><i class="fas fa-volume-up"></i></button>
       <button type="button" class="notif-drawer-close" id="notifDrawerCloseBtn" title="Close">&times;</button>
     </div>
     <div class="notif-tabs" role="tablist">
@@ -1796,6 +1803,7 @@ function showToast(title, body) {
   <aside id="chatDrawer" aria-hidden="true" aria-label="Chats">
     <div class="bgc-top">
       <h5><i class="fas fa-comments mr-2"></i>Chats</h5>
+      <button type="button" class="bgc-icon-btn" id="chatSoundBtn" title="Sounds"><i class="fas fa-volume-up"></i></button>
       <button type="button" class="bgc-icon-btn" id="chatDrawerCloseBtn" title="Close"><i class="fas fa-times"></i></button>
     </div>
     <div class="bgc-body">
@@ -1824,7 +1832,7 @@ function showToast(title, body) {
     </div>
   </aside>
   <script>window.BG_CHAT = { meId: {{ (session.get('user_id') or 0) | tojson }}, meName: {{ (session.get('name') or '') | tojson }} };</script>
-  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261028c"></script>
+  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261028e"></script>
 
   {% if can_view_costing %}
   <script>
@@ -2305,8 +2313,27 @@ function displayNotifications(notifications) {
 }
 
 // Function to refresh notifications
+// A new notification plays a chime (bg-chat.js makes the sound). The first
+// load only learns what is already there, so opening a page is silent. A
+// chat notification for a chat on screen, or a muted chat's non-mention
+// message, makes no sound.
+window.NOTIF_SEEN = null;
+function chimeForNew(notifications) {
+  const fresh = (notifications || []).filter(function (n) { return !n.read && window.NOTIF_SEEN && !window.NOTIF_SEEN.has(n.id); });
+  window.NOTIF_SEEN = new Set((notifications || []).map(function (n) { return n.id; }));
+  if (!fresh.length || !window.bgSound) { return; }
+  const loud = fresh.some(function (n) {
+    const m = /[?&]chat=((?:g:[a-z_]+)|(?:sr:\d+))/.exec(window.notifLink(n) || '');
+    if (!m) { return true; }
+    const mention = /mentioned you/i.test(n.title || '');
+    return mention || !(window.bgChatMuted && window.bgChatMuted(m[1]));
+  });
+  if (loud) { window.bgSound.play('notification'); }
+}
+
 async function refreshNotifications() {
   const notifications = await fetchNotifications();
+  chimeForNew(notifications);
   displayNotifications(notifications);
 }
 
@@ -2320,6 +2347,20 @@ function openNotifDrawer() {
   $('body').css('overflow', 'hidden');
   refreshNotifications();
 }
+
+function paintNotifSound() {
+  const on = !window.bgSound || window.bgSound.enabled('notification');
+  $('#notifSoundBtn').attr('title', on ? 'Notification sounds: on' : 'Notification sounds: off')
+    .toggleClass('is-off', !on).find('i').attr('class', 'fas fa-' + (on ? 'volume-up' : 'volume-mute'));
+}
+$(document).on('click', '#notifSoundBtn', function () {
+  if (!window.bgSound) { return; }
+  const on = !window.bgSound.enabled('notification');
+  window.bgSound.set('notification', on);
+  paintNotifSound();
+  if (on) { window.bgSound.play('notification'); }
+});
+$(paintNotifSound);
 
 function closeNotifDrawer() {
   $('#notifDrawer').removeClass('open').attr('aria-hidden', 'true');

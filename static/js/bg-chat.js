@@ -122,6 +122,63 @@
         return out;
     }
 
+    // ---------------------------------------------------------------- sounds
+    // Made in the browser (Web Audio), so there is no file to load. Browsers
+    // allow sound only after the person has touched the page, so the audio is
+    // switched on at the first tap or key press. Each kind can be turned off;
+    // the choice is kept on this device, as on WhatsApp.
+    var sound = (function () {
+        var ctx = null, last = 0;
+        function unlock() {
+            try {
+                ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+                if (ctx.state === 'suspended') { ctx.resume(); }
+            } catch (e) { ctx = null; }
+        }
+        ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) { document.addEventListener(ev, unlock, { capture: true, passive: true }); });
+        function enabled(kind) { try { return localStorage.getItem('bg.sound.' + kind) !== 'off'; } catch (e) { return true; } }
+        function set(kind, on) { try { localStorage.setItem('bg.sound.' + kind, on ? 'on' : 'off'); } catch (e) { /* ignore */ } }
+        function tone(freq, start, dur, vol) {
+            var o = ctx.createOscillator(), g = ctx.createGain();
+            o.type = 'sine'; o.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+            g.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.02);
+        }
+        function play(kind, quiet) {
+            if (!enabled(kind === 'notification' ? 'notification' : 'message') || !ctx || ctx.state !== 'running') { return; }
+            var now = Date.now();
+            if (now - last < 1500) { return; }      // one sound for a burst, not five
+            last = now;
+            var v = quiet ? 0.08 : 0.18;
+            if (kind === 'notification') { tone(880, 0, 0.18, v); tone(1318.5, 0.14, 0.32, v); }
+            else { tone(740, 0, 0.09, v); tone(988, 0.07, 0.14, v); }
+        }
+        return { play: play, enabled: enabled, set: set };
+    })();
+    window.bgSound = sound;
+
+    var mutes = {};    // thread -> until text, or null for always
+    function isMuted(t) {
+        if (!mutes.hasOwnProperty(t)) { return false; }
+        var until = mutes[t];
+        return until === null || parseTime(until) > new Date();
+    }
+    window.bgChatMuted = isMuted;
+    function loadMutes() {
+        return $.ajax({ url: '/api/chat/mutes', cache: false, silent: true }).done(function (r) {
+            if (r && r.success) { mutes = r.mutes || {}; setBadge(); if ($drawer.hasClass('open')) { renderList(); } }
+        });
+    }
+    function mutedLabel(t) {
+        var until = mutes[t];
+        if (until === null) { return T('Muted'); }
+        var d = parseTime(until);
+        return T('Muted until') + ' ' + (dayKey(d) === dayKey(new Date()) ? hhmm(until) : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + hhmm(until));
+    }
+
     // ---------------------------------------------------------------- media
     // Shared by the request page's own comment views.
     function mediaHtml(atts, progress) {
@@ -203,20 +260,28 @@
 
     // ---------------------------------------------------------------- badge + list
     function setBadge() {
-        var n = srUnread + groupUnread;
+        // A muted group's messages stay out of the badge; mentions (srUnread) always count.
+        var n = srUnread + groups.reduce(function (sum, g) { return sum + (isMuted('g:' + g.room) ? 0 : (g.unread || 0)); }, 0);
         if (n > 0) { $badge.text(n > 99 ? '99+' : n).show(); } else { $badge.hide(); }
     }
 
     function fetchGroups() {
         return $.ajax({ url: '/api/chat/groups', cache: false, silent: true }).done(function (r) {
             if (!r || !r.success) { return; }
+            var before = lastGroupUnread || {};
             groups = r.groups || [];
             groupUnread = r.total_unread || 0;
-            if (lastGroupUnread !== null && groupUnread > lastGroupUnread && !$drawer.hasClass('open')) {
-                var g = groups.filter(function (x) { return x.unread; })[0];
-                if (g) { toast('info', g.title + ': ' + (g.last_message_user || '') + ' ' + (g.last_message_text || '').slice(0, 60)); }
+            if (lastGroupUnread !== null) {
+                groups.forEach(function (g) {
+                    var t = 'g:' + g.room;
+                    if (!(g.unread > (before[g.room] || 0)) || isMuted(t)) { return; }
+                    if (cur && cur.thread === t && visible()) { return; }     // on screen already
+                    sound.play('message');
+                    if (!$drawer.hasClass('open')) { toast('info', T(g.title) + ': ' + (g.last_message_user || '') + ' ' + (g.last_message_text || '').slice(0, 60)); }
+                });
             }
-            lastGroupUnread = groupUnread;
+            lastGroupUnread = {};
+            groups.forEach(function (g) { lastGroupUnread[g.room] = g.unread || 0; });
             setBadge();
             if ($drawer.hasClass('open')) { renderList(); }
         });
@@ -233,7 +298,9 @@
             var top = chats[0];
             if (top && top.last_message_at) {
                 if (lastToastAt && top.last_message_at > lastToastAt && top.last_message_user !== ME_NAME
-                    && !(cur && cur.thread === 'sr:' + top.request_id && visible())) {
+                    && !(cur && cur.thread === 'sr:' + top.request_id && visible())
+                    && !isMuted('sr:' + top.request_id)) {
+                    sound.play('message');
                     toast('info', 'SR-' + top.request_id + ' · ' + (top.last_message_user || '') + ': ' + (top.last_message_text || '').slice(0, 60));
                 }
                 lastToastAt = top.last_message_at;
@@ -280,11 +347,12 @@
                     '" data-thread="' + t + '" role="button" tabindex="0">' +
                     '<div class="bgc-avatar group"><i class="fas ' + esc(g.icon || 'fa-users') + '"></i></div>' +
                     '<div class="bgc-item-body"><div class="bgc-row"><span class="bgc-name">' + esc(T(g.title)) + '</span>' +
-                    '<span class="bgc-time">' + listTime(g.last_message_at) + '</span></div>' +
+                    '<span class="bgc-time">' + (isMuted(t) ? '<i class="fas fa-bell-slash bgc-muted-ico" title="' + esc(mutedLabel(t)) + '"></i> ' : '') +
+                    listTime(g.last_message_at) + '</span></div>' +
                     '<div class="bgc-row"><span class="bgc-preview" data-no-i18n>' +
                     (g.last_message_at ? esc((g.last_message_user || '').split(' ')[0]) + ': ' + esc(g.last_message_text || '')
                                        : '<i>' + esc(T('No messages yet')) + '</i>') + '</span>' +
-                    (g.unread ? '<span class="bgc-count">' + g.unread + '</span>' : '') + '</div></div></div>';
+                    (g.unread ? '<span class="bgc-count' + (isMuted(t) ? ' muted' : '') + '">' + g.unread + '</span>' : '') + '</div></div></div>';
             }).join('');
         }
         if (!srDenied && filter !== 'groups') {
@@ -296,7 +364,8 @@
                     '<div class="bgc-avatar">' + esc(initials(c.client_name || c.title)) + '</div>' +
                     '<div class="bgc-item-body"><div class="bgc-row"><span class="bgc-name"><span class="rid">SR-' + c.request_id +
                     '</span> · ' + esc(c.title || '') + '</span>' +
-                    '<span class="bgc-time">' + (c.last_message_at ? listTime(c.last_message_at) : '') + '</span></div>' +
+                    '<span class="bgc-time">' + (isMuted(t) ? '<i class="fas fa-bell-slash bgc-muted-ico" title="' + esc(mutedLabel(t)) + '"></i> ' : '') +
+                    (c.last_message_at ? listTime(c.last_message_at) : '') + '</span></div>' +
                     '<div class="bgc-sub">' + esc(c.client_name || '-') + (c.company_name ? ' · ' + esc(c.company_name) : '') + '</div>' +
                     '<div class="bgc-row"><span class="bgc-preview" data-no-i18n>' +
                     (c.last_message_at ? esc((c.last_message_user || '').split(' ')[0]) + ': ' + esc(c.last_message_text || '')
@@ -415,6 +484,7 @@
                 '<div class="bgc-thead-title" data-no-i18n>' + esc(h.title) + '</div>' +
                 '<div class="bgc-thead-sub" id="chatThreadMeta">' + esc(h.sub) + '</div></div>' +
               (h.group ? '' : '<button type="button" class="bgc-open-btn" id="chatDetailsBtn"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open')) + '</button>') +
+              '<button type="button" class="bgc-icon-btn bgc-mute-btn" title="' + esc(T('Mute notifications')) + '"><i class="fas fa-bell"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-members-btn" title="' + esc(T('Members')) + '"><i class="fas fa-users"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-thread-close" title="' + esc(T('Close')) + '"><i class="fas fa-times"></i></button>' +
             '</div>' +
@@ -441,6 +511,71 @@
             '<input type="file" id="chatCameraInput" accept="image/*" capture="environment" hidden>' +
             '<input type="file" id="chatStickerInput" accept="image/png,image/webp,image/gif,image/jpeg" hidden>');
         updateSendButton();
+        paintMute();
+    }
+
+    function paintMute() {
+        if (!cur) { return; }
+        var m = isMuted(cur.thread);
+        $('.bgc-mute-btn').toggleClass('is-muted', m).attr('title', m ? mutedLabel(cur.thread) : T('Mute notifications'))
+            .find('i').attr('class', 'fas ' + (m ? 'fa-bell-slash' : 'fa-bell'));
+    }
+    function setMute(body) {
+        var t = cur && cur.thread; if (!t) { return; }
+        $.ajax({ url: '/api/chat/thread/' + encodeURIComponent(t) + '/mute', type: 'POST', contentType: 'application/json',
+                 data: JSON.stringify(body), silent: true })
+            .done(function (r) {
+                if (!r || !r.success) { return; }
+                mutes = r.mutes || {}; paintMute(); setBadge(); renderList();
+                toast('success', body.off ? T('Notifications on for this chat') : mutedLabel(t));
+            })
+            .fail(function (x) { toast('error', (x.responseJSON && x.responseJSON.error) || T('Could not change it')); });
+    }
+    $(document).on('click', '.bgc-mute-btn', function (e) {
+        e.stopPropagation();
+        var r = this.getBoundingClientRect(), m = cur && isMuted(cur.thread);
+        closeMenu();
+        var $menu = $('<div class="bgc-menu" role="menu">' + (m
+            ? '<div class="bgc-menu-note">' + esc(mutedLabel(cur.thread)) + '</div><button type="button" data-mute="off"><i class="fas fa-bell"></i> ' + esc(T('Unmute')) + '</button>'
+            : '<div class="bgc-menu-note">' + esc(T('Mute this chat for')) + '</div>' +
+              '<button type="button" data-mute="8"><i class="far fa-clock"></i> ' + esc(T('8 hours')) + '</button>' +
+              '<button type="button" data-mute="168"><i class="far fa-calendar"></i> ' + esc(T('1 week')) + '</button>' +
+              '<button type="button" data-mute="always"><i class="fas fa-bell-slash"></i> ' + esc(T('Always')) + '</button>') + '</div>');
+        $('body').append($menu);
+        $menu.css({ left: Math.max(8, Math.min(r.right - $menu.outerWidth(), window.innerWidth - $menu.outerWidth() - 8)), top: r.bottom + 4 });
+        $menu.on('click', 'button', function () {
+            var v = String($(this).data('mute')); closeMenu();
+            setMute(v === 'off' ? { off: true } : v === 'always' ? { always: true } : { hours: Number(v) });
+        });
+    });
+
+    // Sound settings for this device, from the top bar.
+    $(document).on('click', '#chatSoundBtn', function (e) {
+        e.stopPropagation();
+        var r = this.getBoundingClientRect();
+        closeMenu();
+        function row(kind, label) {
+            var on = sound.enabled(kind);
+            return '<button type="button" data-sound="' + kind + '"><i class="fas fa-' + (on ? 'volume-up' : 'volume-mute') + '"></i> ' +
+                esc(T(label)) + '<span class="bgc-switch' + (on ? ' on' : '') + '"></span></button>';
+        }
+        var $menu = $('<div class="bgc-menu" role="menu"><div class="bgc-menu-note">' + esc(T('Sounds on this device')) + '</div>' +
+            row('message', 'Message sounds') + row('notification', 'Notification sounds') + '</div>');
+        $('body').append($menu);
+        $menu.css({ left: Math.max(8, Math.min(r.right - $menu.outerWidth(), window.innerWidth - $menu.outerWidth() - 8)), top: r.bottom + 4 });
+        $menu.on('click', 'button', function (ev) {
+            ev.stopPropagation();
+            var kind = $(this).data('sound'), on = !sound.enabled(kind);
+            sound.set(kind, on);
+            $(this).find('.bgc-switch').toggleClass('on', on);
+            $(this).find('i').attr('class', 'fas fa-' + (on ? 'volume-up' : 'volume-mute'));
+            paintSoundBtn();
+            if (on) { sound.play(kind); }
+        });
+    });
+    function paintSoundBtn() {
+        var off = !sound.enabled('message') && !sound.enabled('notification');
+        $('#chatSoundBtn i').attr('class', 'fas fa-' + (off ? 'volume-mute' : 'volume-up'));
     }
 
     function fetchSrMeta(id) {
@@ -552,14 +687,18 @@
     function renderMessages(list) {
         var $box = $('#chatThreadMessages');
         if (!$box.length) { return; }
-        var first = $.isEmptyObject(rendered) && !$box.find('.bgc-msg').length;
+        // First render of this chat (not "no messages yet": the first message
+        // into an empty chat is news, and plays a sound).
+        var first = !cur.loaded;
+        cur.loaded = true;
         var ids = {};
         list.forEach(function (m) { ids[m.id] = 1; });
         // A message gone (deleted): start again rather than patch around it.
         var gone = Object.keys(rendered).some(function (id) { return !ids[id]; });
-        if (gone && !(audio && !audio.paused)) { rendered = {}; lastDay = null; lastAuthor = null; $box.empty(); first = true; }
+        var rebuilt = false;
+        if (gone && !(audio && !audio.paused)) { rendered = {}; lastDay = null; lastAuthor = null; $box.empty(); rebuilt = true; }
         if (first) { $box.empty(); }
-        var stick = first || nearBottom($box), added = 0, mine = false;
+        var stick = first || rebuilt || nearBottom($box), added = 0, mine = false, addedIds = {};
         list.forEach(function (m) {
             cache[m.id] = m;
             if (rendered.hasOwnProperty(m.id)) {
@@ -577,11 +716,15 @@
             var $pend = $box.find('.bgc-msg.pending').first();
             if ($pend.length) { $pend.before(html); } else { $box.append(html); }
             rendered[m.id] = m.receipt;
+            addedIds[m.id] = 1;
             added++;
             if (m.user_id === ME) { mine = true; }
         });
         if (!list.length && first) { $box.html('<div class="bgc-empty">' + esc(T('No messages yet. Say hello')) + '</div>'); }
         if (list.length) { $box.children('.bgc-empty').remove(); }
+        if (!first && cur && !isMuted(cur.thread) && list.some(function (m) { return addedIds[m.id] && m.user_id !== ME; })) {
+            sound.play('message', true);     // softer: the chat is already open
+        }
         if (stick || mine) { toBottom(); }
         else if (added) {
             var $j = $('.bgc-jump').addClass('show'), $n = $j.find('.bgc-count');
@@ -1161,6 +1304,8 @@
     // Background badge while the drawer is shut.
     function pollBadge() { if (!$drawer.hasClass('open') && document.visibilityState !== 'hidden') { fetchChats(); } }
     $(function () {
+        paintSoundBtn();
+        loadMutes();
         fetchChats();
         badgeTimer = setInterval(pollBadge, 15000);
         // Deep links: a mention notification opens ?chat=g:<room> or ?chat=sr:<id>.

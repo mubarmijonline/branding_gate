@@ -4388,6 +4388,8 @@ PUBLIC_ENDPOINTS = {
     'chat_groups', 'chat_group_messages', 'chat_group_post', 'chat_group_read',
     # Any chat's members, message info and media: access is checked inside.
     'chat_thread_members', 'chat_message_info', 'chat_media',
+    # My own muted chats (access to the chat checked inside).
+    'chat_mutes', 'chat_mute',
     # The company sticker pack: any signed-in user; removal checked inside.
     'chat_stickers', 'chat_sticker_add', 'chat_sticker_remove', 'chat_sticker_image',
     # Names / roles for @mentions (group rooms are open to people with no
@@ -20476,6 +20478,65 @@ def chat_media(attachment_id):
     response = send_file(path, mimetype=row['mime'], conditional=True)
     response.headers['Cache-Control'] = 'private, max-age=86400'
     return response
+
+
+# ---- muting a chat ---------------------------------------------------------------
+# Per person and per chat, like WhatsApp: 8 hours, a week, or until unmuted.
+# Muting silences the chat's message sound and pop-up and keeps a muted
+# group's unread count out of the badge; an @mention still notifies.
+CHAT_MUTE_HOURS = (8, 168)
+
+
+def chat_mutes_for(cur, user_id):
+    """{thread: 'until' text, or None for always} -- live mutes only."""
+    cur.execute("SELECT thread, muted_until FROM chat_mute WHERE user_id = %s "
+                "AND (muted_until IS NULL OR muted_until > NOW())", (user_id,))
+    return {r['thread']: (r['muted_until'].strftime('%Y-%m-%d %H:%M:%S') if r['muted_until'] else None)
+            for r in cur.fetchall()}
+
+
+@app.route('/api/chat/mutes', methods=['GET'])
+def chat_mutes():
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    conn, cur = connection()
+    try:
+        return jsonify(success=True, mutes=chat_mutes_for(cur, session['user_id']))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/thread/<thread>/mute', methods=['POST'])
+def chat_mute(thread):
+    """{"hours": 8 | 168} mutes for that long, {"always": true} until unmuted, {"off": true} unmutes."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    data = request.get_json(silent=True) or {}
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        chat_thread_or_403(cur, thread)
+        if data.get('off'):
+            cur.execute("DELETE FROM chat_mute WHERE user_id = %s AND thread = %s", (me, thread))
+        elif data.get('always'):
+            cur.execute("""INSERT INTO chat_mute (user_id, thread, muted_until) VALUES (%s, %s, NULL)
+                           ON DUPLICATE KEY UPDATE muted_until = NULL""", (me, thread))
+        else:
+            try:
+                hours = int(data.get('hours'))
+            except (TypeError, ValueError):
+                hours = 0
+            if hours not in CHAT_MUTE_HOURS:
+                return jsonify(success=False, error='Mute for 8 hours, a week, or always'), 400
+            cur.execute("""INSERT INTO chat_mute (user_id, thread, muted_until)
+                           VALUES (%s, %s, NOW() + INTERVAL %s HOUR)
+                           ON DUPLICATE KEY UPDATE muted_until = VALUES(muted_until)""", (me, thread, hours))
+        conn.commit()
+        return jsonify(success=True, mutes=chat_mutes_for(cur, me))
+    finally:
+        cur.close()
+        conn.close()
 
 
 # ---- stickers -----------------------------------------------------------------
