@@ -559,10 +559,12 @@ must say which page it is on.
 
 ## Vacant positions on the org chart, 2026-10-27
 
-Beshoy (voice notes): Kerolos, the Marketing Manager, is leaving, so that box
-will be empty; under it a Digital Marketing box, with two members today
-(Mariam Wessam and Sara); nobody under them yet but maybe later. Should the
-chart carry boxes for positions nobody holds? Ahmed: yes, vacant boxes (not
+Beshoy (voice note): Kerolos, the Marketing Manager, is leaving, so that box
+will be empty; under it a Digital Marketing box with two team members today
+(not named). Gamal (second voice note, first misread as Beshoy's): Mariam
+Magdy and Sarah Gaber, his Account Team Leaders, have nobody under them yet
+but may later; should boxes go under them now? Should the chart carry boxes
+for positions nobody holds? Ahmed: yes, vacant boxes (not
 dummy accounts); deactivate Kerolos now; Digital Marketing is a vacant team
 leader.
 
@@ -578,5 +580,6 @@ leader.
   someone who leaves is switched off rather than deleted.
 - New role `digital_marketing_team_leader` (Marketing, team leader).
 - Data (done 2026-10-27): Kerolos inactive (backup in private_backups/kerolos_before_deactivation_20261027.json); vacancies Marketing Manager (under Beshoy) and
-  Digital Marketing Team Leader (under it). Mariam Wessam and Sara are added
-  under it once their mobile numbers and emails are known.
+  Digital Marketing Team Leader (under it). The two Digital Marketing members
+  are added under it once Beshoy names them; seats under Mariam Magdy and
+  Sarah Gaber wait on Gamal saying how many.
