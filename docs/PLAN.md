@@ -745,3 +745,19 @@ said OK and nothing was added.
   @mention (including @all) still notifies, as on WhatsApp.
 - Fix found while testing: the first message into an empty chat was treated
   as the chat's first load, so it neither sounded nor scrolled.
+
+## Phone push switched on, 2026-10-28
+
+- `BG_FCM_VAPID_KEY` set in `.env` (Firebase project brandinggate-7c1f6,
+  Web Push certificate). Verified end to end with real Firebase: a browser
+  gets a device token on its first visit and registers it; a push arrives as
+  an in-page pop-up while the site is open and as a system notification when
+  it is closed, and the tap opens its link (chats open the chat).
+- Fixes found while switching it on: (1) push is now data-only; the old
+  payload's `fcm_options.link` rejected our relative links, so every send
+  failed, and its notification block would have shown a second copy;
+  (2) the first visit waited forever for a token because the service worker
+  was still installing; the page now waits for it to be active.
+- What reaches a phone: Important notifications only (approvals, costing and
+  pricing steps, mentions and @all). iPhone needs iOS 16.4+ with the site
+  added to the Home Screen and opened from there once to allow notifications.

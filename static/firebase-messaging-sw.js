@@ -17,12 +17,15 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 // Background: show it with the app icon; a tap opens the page the
 // notification is about (data.link), focusing the app if it is already open.
+// The server sends data only (title, body, link), so this is the one place a
+// push becomes a notification: never two copies. Same link, same tag, so a
+// busy chat replaces its notification instead of stacking them.
 messaging.onBackgroundMessage(payload => {
-  const n = payload.notification || {};
-  const link = (payload.data && payload.data.link) || (payload.fcmOptions && payload.fcmOptions.link) || '/notifications';
-  self.registration.showNotification(n.title || 'Branding Gate', {
-    body: n.body || '', icon: '/static/img/icons/icon-192.png', badge: '/static/img/icons/icon-192.png',
-    data: { link: link }, tag: link
+  const d = payload.data || {}, n = payload.notification || {};
+  const link = d.link || '/notifications';
+  return self.registration.showNotification(d.title || n.title || 'Branding Gate', {
+    body: d.body || n.body || '', icon: '/static/img/icons/icon-192.png', badge: '/static/img/icons/icon-192.png',
+    data: { link: link }, tag: link, renotify: true
   });
 });
 self.addEventListener('notificationclick', event => {

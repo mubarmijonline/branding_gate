@@ -36,8 +36,19 @@
             .then(function (r) { if (r.ok) try { localStorage.setItem(KEY, token); } catch (e) {} });
     }
 
+    // Firebase's getToken waits forever on a worker that is still installing
+    // (the very first visit), with no error -- so wait for it to be active.
+    function activated(reg) {
+        if (reg.active) return Promise.resolve(reg);
+        var sw = reg.installing || reg.waiting;
+        if (!sw) return navigator.serviceWorker.ready;
+        return new Promise(function (resolve) {
+            sw.addEventListener('statechange', function () { if (sw.state === 'activated') resolve(reg); });
+        });
+    }
+
     function enable() {
-        return navigator.serviceWorker.register('/firebase-messaging-sw.js').then(function (reg) {
+        return navigator.serviceWorker.register('/firebase-messaging-sw.js').then(activated).then(function (reg) {
             return app().getToken({ vapidKey: cfg.vapidKey, serviceWorkerRegistration: reg });
         }).then(save).catch(function (e) { console.warn('push:', e && e.message ? e.message : e); });
     }
@@ -50,7 +61,8 @@
             var n = payload.notification || payload.data || {};
             if (window.Swal) Swal.fire({ toast: true, position: 'top', timer: 4000, showConfirmButton: false, icon: 'info',
                 title: n.title || 'Notification', text: n.body || '' });
-            if (typeof fetchNotifications === 'function') fetchNotifications();
+            // Repaint the bell (and its chime) now rather than at the next poll.
+            if (typeof refreshNotifications === 'function') refreshNotifications();
         });
         return;
     }

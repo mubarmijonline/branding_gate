@@ -44,4 +44,4 @@ to the home screen, with notifications arriving as phone push.
 - Phone: "Add to Home Screen" offered; after allowing notifications a bell
   notification also arrives as a push and opens its page.
 
-**Status:** live 2026-10-26. Push waits on the VAPID key.
+**Status:** live 2026-10-26. Push live 2026-10-28 (key set, verified end to end).

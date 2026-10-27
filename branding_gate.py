@@ -1726,12 +1726,15 @@ def push_to_users(user_ids, title, content, link=None):
             if not token:
                 continue
             try:
+                # Data only: the service worker (firebase-messaging-sw.js) shows it
+                # and opens `link` on a tap. With a `notification` block as well,
+                # Firebase also showed its own copy (two on the phone), and its
+                # fcm_options.link refuses the relative links every caller passes
+                # -- each send raised and only the log knew.
                 messaging.send(messaging.Message(
-                    notification=messaging.Notification(title=title, body=content),
-                    data={'link': link or '/notifications'},
-                    webpush=messaging.WebpushConfig(
-                        notification=messaging.WebpushNotification(title=title, body=content, icon='/static/img/icons/icon-192.png'),
-                        fcm_options=messaging.WebpushFCMOptions(link=link or '/notifications')),
+                    data={'title': str(title or 'Branding Gate')[:200], 'body': str(content or '')[:500],
+                          'link': link or '/notifications'},
+                    webpush=messaging.WebpushConfig(headers={'Urgency': 'high', 'TTL': '86400'}),
                     token=token))
                 sent += 1
             except messaging.UnregisteredError:
