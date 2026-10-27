@@ -653,3 +653,21 @@ not change.
   the item's id, and saving deletes and re-inserts the items, cascading the
   photo away. Both edit routes now carry item files to the re-inserted item
   (same name and type). Sarah's five photos on request 23645 restored.
+
+## Reply to a message; chat button on the operations list, 2026-10-28
+
+- Reply like WhatsApp: swipe a bubble sideways on a phone, the reply arrow on
+  hover on a computer, or Reply in the message menu (long press / right
+  click; the menu also has Copy and, on my own messages, Message info). The
+  quoted message sits above the composer until sent or cancelled (x or Esc);
+  the sent bubble carries the quote, and tapping it scrolls to the original.
+  Works with text, photos and voice notes.
+- Stored as `sales_request_comments.parent_comment_id` (request chats, column
+  already there) and `group_chat_message.reply_to_id`
+  (`chat_reply_migration.sql`). The server keeps a reply only when the quoted
+  message is live in the same chat, and sends a short preview with each
+  message (`reply`).
+- Operations list: a purple chat button on every request, as on Sales
+  Request, with its message count and a red dot for unread mentions of me;
+  it opens that request's chat in the drawer. Shown to whoever may write in
+  request chats.

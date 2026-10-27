@@ -872,6 +872,11 @@
         font-size: 0.8rem;
     }
 .op-assign-sum { margin-top:.35rem; font-size:.75rem; line-height:1.25; }
+.op-chat-btn { position:relative; background:#6f42c1; color:#fff; border-color:#6f42c1; }
+.op-chat-btn:hover { background:#5a32a3; color:#fff; }
+.op-chat-count { margin-inline-start:4px; font-weight:700; font-size:.72rem; }
+.op-chat-dot { position:absolute; top:-7px; inset-inline-end:-7px; min-width:18px; height:18px; padding:0 4px; border-radius:9px;
+               background:#e74a3b; color:#fff; font-size:.65rem; font-weight:800; line-height:18px; text-align:center; }
 .op-assign-line { padding:.2rem .4rem; border-left:3px solid #4e73df; background:#f3f6fd; border-radius:3px; margin-bottom:.2rem; }
 .op-assign-line.free { border-left-color:#f6c23e; background:#fff9e6; color:#7a5d00; }
 .op-assign-by { color:#6c757d; font-size:.7rem; }
@@ -1209,6 +1214,11 @@ function formatNum(n) {
 // the team leaders only; everyone else gets there by proposal.
 var CAN_COST_DIRECT   = {{ 'true' if 'sales_item.cost_direct' in _p else 'false' }};
 var CAN_ASSIGN_COSTING = {{ 'true' if 'costing.assign' in _p else 'false' }};
+var CAN_CHAT = {{ 'true' if 'sales_request.comment' in _p else 'false' }};
+$(document).on('click', '.op-chat-btn', function (e) {
+    e.preventDefault();
+    if (window.openChatDrawerForRequest) { window.openChatDrawerForRequest($(this).data('id')); }
+});
 var CAN_VIEW_COSTING  = {{ 'true' if 'costing.view' in _p else 'false' }};
 var CAN_PROPOSE_COSTING = {{ 'true' if 'costing.propose' in _p else 'false' }};
 var COSTING_STATE = {};      // item_id -> {assignments, proposals}
@@ -2140,6 +2150,16 @@ $(document).ready(function() {
                                    'data-title="' + costEsc(row.title || '') + '" ' +
                                    'title="Assign this whole request for costing">' +
                                    '<i class="fas fa-user-plus"></i> Assign</button> ';
+                    }
+                    // The request's chat, as on Sales Request: count of messages,
+                    // red dot for mentions of me not yet read.
+                    if (CAN_CHAT) {
+                        var n = row.comment_count || 0, at = row.unread_mentions || 0;
+                        actions += '<button type="button" class="btn btn-sm op-chat-btn" data-id="' + row.request_id + '" ' +
+                                   'title="Chat' + (at ? ' (' + at + ' mention' + (at > 1 ? 's' : '') + ')' : '') + '">' +
+                                   '<i class="fas fa-comments"></i>' +
+                                   (n ? '<span class="op-chat-count">' + n + '</span>' : '') +
+                                   (at ? '<span class="op-chat-dot">' + at + '</span>' : '') + '</button> ';
                     }
                     actions += '<button class="btn btn-sm btn-info view-btn" data-id="' + row.request_id + '">View Details</button> ';
                     actions += '<button class="btn btn-sm btn-secondary log-btn" data-id="' + row.request_id + '"><i class="fas fa-history"></i> Log</button>';

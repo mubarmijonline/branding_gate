@@ -173,6 +173,57 @@ class ChatMediaTest(_ChatHarness):
         self.assertIn(mine['receipt'], ('seen_some', 'seen_all'))
 
 
+class ReplyTest(_ChatHarness):
+
+    def test_a_reply_quotes_its_message(self):
+        self._post(self.seller, 'Which colour?')
+        first = self._messages(self.seller)[0]
+        r = self._client_for(self.head).post('/api/sales/requests/%d/comments' % self.request_id,
+                                             json={'comment_text': 'Navy', 'reply_to': first['id']})
+        self.assertEqual(r.status_code, 200)
+        reply = self._messages(self.seller)[0]
+        self.assertEqual(reply['reply']['id'], first['id'])
+        self.assertEqual(reply['reply']['text'], 'Which colour?')
+        self.assertEqual(reply['reply']['user_id'], self.seller)
+
+    def test_a_message_of_another_chat_cannot_be_quoted(self):
+        cur = self._cursor()
+        cur.execute("INSERT INTO sales_request (client_id, title, start_date, created_by, owner_user_id) "
+                    "SELECT client_id, 'other', CURDATE(), 'x', owner_user_id FROM sales_request WHERE id = %s",
+                    (self.request_id,))
+        other = cur.lastrowid
+        cur.execute("INSERT INTO sales_request_comments (request_id, user_id, comment_text, source) "
+                    "VALUES (%s, %s, 'secret', 'general')", (other, self.head))
+        foreign = cur.lastrowid
+        cur.close()
+        self._client_for(self.head).post('/api/sales/requests/%d/comments' % self.request_id,
+                                         json={'comment_text': 'x', 'reply_to': foreign})
+        self.assertIsNone(self._messages(self.head)[0]['reply'])
+
+    def test_group_reply_with_a_photo(self):
+        c = self._client_for(self.member)
+        c.post('/api/chat/groups/operations/messages', json={'comment_text': 'Is the truck ready?'})
+        first = c.get('/api/chat/groups/operations/messages').get_json()['comments'][0]
+        r = self._client_for(self.leader).post(
+            '/api/chat/groups/operations/messages',
+            data={'kind': 'image', 'reply_to': str(first['id']), 'file': (_png(), 'p.png', 'image/png')},
+            content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        latest = c.get('/api/chat/groups/operations/messages').get_json()['comments'][0]
+        self.assertEqual(latest['reply']['id'], first['id'])
+        self.assertEqual(latest['attachments'][0]['kind'], 'image')
+        # Quoting the photo says what it was.
+        c.post('/api/chat/groups/operations/messages', json={'comment_text': 'ok', 'reply_to': latest['id']})
+        quote = c.get('/api/chat/groups/operations/messages').get_json()['comments'][0]['reply']
+        self.assertEqual((quote['kind'], quote['text']), ('image', ''))
+
+    def test_the_operations_board_counts_chat_messages(self):
+        self._post(self.seller, 'hello')
+        rows = self._client_for(self.head).get('/api/operations/requests').get_json()['requests']
+        row = [r for r in rows if r['request_id'] == self.request_id][0]
+        self.assertEqual(row['comment_count'], 1)
+
+
 class ItemFilesSurviveEditTest(_CostingHarness):
 
     def test_files_follow_the_reinserted_item(self):

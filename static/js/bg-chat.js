@@ -33,8 +33,10 @@
     var filter = 'all';
     var cur = null;              // {thread, kind, key, members:[], meta}
     var rendered = {};           // message id -> receipt, for the open thread
+    var cache = {};              // message id -> message, for quoting
     var lastDay = null, lastAuthor = null;
     var pending = [];            // my messages on their way up
+    var replyTo = null;          // {id, user_id, user_name, text, kind} being answered
     var tempSeq = 0;
     var listTimer = null, threadTimer = null, badgeTimer = null;
     var lastToastAt = null, lastGroupUnread = null;
@@ -349,7 +351,7 @@
         stopRecording(true);
         var wasOpen = $drawer.hasClass('thread-open');
         cur = { thread: thread, kind: isGroup(thread) ? 'g' : 'sr', key: thread.split(':')[1], members: [] };
-        rendered = {}; lastDay = null; lastAuthor = null; pending = [];
+        rendered = {}; cache = {}; lastDay = null; lastAuthor = null; pending = []; replyTo = null;
         $drawer.addClass('thread-open');
         if (PHONE.matches && !wasOpen) { pushState('thread'); }
         renderShell();
@@ -398,6 +400,7 @@
             '<button type="button" class="bgc-jump" title="' + esc(T('Latest')) + '"><i class="fas fa-chevron-down"></i></button>' +
             '<div class="bgc-composer" id="chatComposerBar">' +
               '<div class="bgc-suggest" id="chatMentionSuggest"></div>' +
+              '<div class="bgc-replybar" id="chatReplyBar"></div>' +
               '<div class="bgc-crow">' +
                 '<button type="button" class="bgc-icon-btn bgc-attach" title="' + esc(T('Photo')) + '"><i class="fas fa-paperclip"></i></button>' +
                 (COARSE.matches ? '<button type="button" class="bgc-icon-btn bgc-camera" title="' + esc(T('Camera')) + '"><i class="fas fa-camera"></i></button>' : '') +
@@ -465,11 +468,53 @@
         return '<div class="bgc-msg' + (own ? ' own' : '') + (first ? ' first' : '') + (m.temp ? ' pending' : '') +
             '" data-id="' + esc(m.id) + '">' +
             '<div class="bgc-bubble">' +
+              (m.temp ? '' : '<button type="button" class="bgc-reply-btn" title="' + esc(T('Reply')) + '"><i class="fas fa-reply"></i></button>') +
               (!own && first ? '<div class="bgc-author" style="color:' + colourFor(m.user_id) + '" data-no-i18n>' + esc(m.user_name || '') + '</div>' : '') +
+              quoteHtml(m.reply, true) +
               mediaHtml(m.attachments, m.progress) +
               (text ? '<span class="bgc-text" data-no-i18n>' + highlight(text, names) + '</span>' : '') +
               '<span class="bgc-meta">' + hhmm(m.created_at) + ticksHtml(m) + '</span>' +
             '</div></div>';
+    }
+
+    // ---------------------------------------------------------------- replies
+    function quoteText(q) {
+        if (!q) { return ''; }
+        if (q.deleted) { return '<i>' + esc(T('This message was deleted')) + '</i>'; }
+        var icon = q.kind === 'image' ? '<i class="fas fa-camera"></i> ' : q.kind === 'voice' ? '<i class="fas fa-microphone"></i> ' : '';
+        var t = q.text || (q.kind === 'image' ? T('Photo') : q.kind === 'voice' ? T('Voice note') : '');
+        return icon + '<span data-no-i18n>' + esc(t) + '</span>';
+    }
+    function quoteHtml(q, inBubble) {
+        if (!q) { return ''; }
+        var who = q.user_id === ME ? T('You') : (q.user_name || '');
+        return '<div class="bgc-quote"' + (inBubble ? ' data-jump="' + esc(q.id) + '"' : '') +
+            ' style="border-inline-start-color:' + colourFor(q.user_id) + '">' +
+            '<div class="who" style="color:' + colourFor(q.user_id) + '" data-no-i18n>' + esc(who) + '</div>' +
+            '<div class="q">' + quoteText(q) + '</div></div>';
+    }
+    function messageById(id) {
+        var $m = $('#chatThreadMessages .bgc-msg[data-id="' + id + '"]');
+        if (!$m.length) { return null; }
+        var src = cache[id];
+        return src ? { id: src.id, user_id: src.user_id, user_name: src.user_name,
+                       text: (src.attachments && src.attachments.length) ? (src.caption || '') : (src.comment_text || ''),
+                       kind: src.attachments && src.attachments.length ? src.attachments[0].kind : null } : null;
+    }
+    function startReply(id) {
+        var q = messageById(id);
+        if (!q || !cur) { return; }
+        replyTo = q;
+        $('#chatReplyBar').html(quoteHtml(q, false) +
+            '<button type="button" class="bgc-icon-btn bgc-reply-cancel" title="' + esc(T('Cancel')) + '"><i class="fas fa-times"></i></button>').show();
+        if (!$('#chatComposerBar').hasClass('recording')) { $('#chatComposer').trigger('focus'); }
+    }
+    function clearReply() { replyTo = null; $('#chatReplyBar').hide().empty(); }
+    function jumpTo(id) {
+        var $m = $('#chatThreadMessages .bgc-msg[data-id="' + id + '"]');
+        if (!$m.length) { toast('info', T('That message is too far back to show here')); return; }
+        $m[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        $m.removeClass('flash'); void $m[0].offsetWidth; $m.addClass('flash');
     }
 
     function nearBottom($box) { var el = $box[0]; return el.scrollHeight - el.scrollTop - el.clientHeight < 120; }
@@ -487,6 +532,7 @@
         if (first) { $box.empty(); }
         var stick = first || nearBottom($box), added = 0, mine = false;
         list.forEach(function (m) {
+            cache[m.id] = m;
             if (rendered.hasOwnProperty(m.id)) {
                 if (m.user_id === ME && rendered[m.id] !== m.receipt) {
                     $box.find('.bgc-msg[data-id="' + m.id + '"] .bgc-ticks').replaceWith(ticksHtml(m));
@@ -561,9 +607,11 @@
             fd.append('comment_text', msg.comment_text || '');
             fd.append('mentioned_users', JSON.stringify(msg.mentions || []));
             fd.append('source', 'general');
+            if (msg.reply) { fd.append('reply_to', String(msg.reply.id)); }
             if (msg.duration_ms) { fd.append('duration_ms', String(msg.duration_ms)); }
         } else {
-            data = JSON.stringify({ comment_text: msg.comment_text, source: 'general', is_note: false, mentioned_users: msg.mentions || [] });
+            data = JSON.stringify({ comment_text: msg.comment_text, source: 'general', is_note: false,
+                                    mentioned_users: msg.mentions || [], reply_to: msg.reply ? msg.reply.id : null });
         }
         msg.receipt = 'sending'; msg.progress = msg.blob ? 0 : null; redrawPending(msg);
         $.ajax({
@@ -603,7 +651,8 @@
         if (!text || !cur) { return; }
         $ta.val('').trigger('input');
         hideSuggest();
-        post(addPending({ comment_text: text, mentions: mentionIds(text), attachments: [] }));
+        var reply = replyTo; clearReply();
+        post(addPending({ comment_text: text, mentions: mentionIds(text), attachments: [], reply: reply }));
     }
 
     function updateSendButton() {
@@ -661,11 +710,12 @@
         $s.on('keydown', '.bgc-caption', function (e) { if (e.key === 'Enter' && !e.shiftKey && !COARSE.matches) { e.preventDefault(); $s.find('.bgc-photo-send').click(); } });
         $s.on('click', '.bgc-photo-send', function () {
             var caption = ($s.find('.bgc-caption').val() || '').trim();
+            var reply = replyTo; clearReply();
             close();
             files.forEach(function (f, i) {
                 var local = URL.createObjectURL(f);
                 var msg = addPending({ kind: 'image', comment_text: i === 0 ? caption : '', caption: i === 0 ? caption : '',
-                                       mentions: i === 0 ? mentionIds(caption) : [], objectUrl: local,
+                                       mentions: i === 0 ? mentionIds(caption) : [], objectUrl: local, reply: i === 0 ? reply : null,
                                        attachments: [{ kind: 'image', url: local }] });
                 shrink(f).then(function (r) {
                     msg.blob = r.blob; msg.filename = (f.name || 'photo').replace(/\.\w+$/, '') + (r.blob.type === 'image/jpeg' ? '.jpg' : '');
@@ -704,7 +754,8 @@
                 if (ms < 800) { toast('info', T('Hold on a little longer to record')); return; }
                 var type = (recorder.mimeType || mime || 'audio/webm').split(';')[0];
                 var blob = new Blob(r.chunks, { type: type });
-                var msg = addPending({ kind: 'voice', comment_text: '', duration_ms: ms, mentions: [],
+                var reply = replyTo; clearReply();
+                var msg = addPending({ kind: 'voice', comment_text: '', duration_ms: ms, mentions: [], reply: reply,
                                        attachments: [{ kind: 'voice', url: '', duration_ms: ms }] });
                 msg.blob = blob;
                 msg.filename = 'voice.' + ({ 'audio/mp4': 'm4a', 'audio/ogg': 'ogg' }[type] || 'webm');
@@ -794,22 +845,72 @@
         openSheet(T('Members') + ' (' + list.length + ')', list.length ? list.map(function (p) { return personRow(p); }).join('') : '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>');
     }
 
-    // Long press (phones) or right click / the ticks (desktop) on my own message.
+    // A message's menu: long press on a phone, right click on a computer.
+    function openMenu(id, x, y) {
+        closeMenu();
+        if (!cur || String(id).indexOf('tmp') === 0) { return; }
+        var m = cache[id] || {}, own = m.user_id === ME;
+        var text = (m.attachments && m.attachments.length) ? (m.caption || '') : (m.comment_text || '');
+        var $menu = $('<div class="bgc-menu" role="menu">' +
+            '<button type="button" data-act="reply"><i class="fas fa-reply"></i> ' + esc(T('Reply')) + '</button>' +
+            (text ? '<button type="button" data-act="copy"><i class="far fa-copy"></i> ' + esc(T('Copy')) + '</button>' : '') +
+            (own ? '<button type="button" data-act="info"><i class="fas fa-info-circle"></i> ' + esc(T('Message info')) + '</button>' : '') +
+            '</div>');
+        $('body').append($menu);
+        var w = $menu.outerWidth(), h = $menu.outerHeight();
+        $menu.css({ left: Math.max(8, Math.min(x, window.innerWidth - w - 8)), top: Math.max(8, Math.min(y, window.innerHeight - h - 8)) });
+        $menu.on('click', 'button', function () {
+            var act = $(this).data('act');
+            closeMenu();
+            if (act === 'reply') { startReply(id); }
+            if (act === 'info') { showInfo(id); }
+            if (act === 'copy' && navigator.clipboard) { navigator.clipboard.writeText(text).then(function () { toast('success', T('Copied')); }); }
+        });
+    }
+    function closeMenu() { $('.bgc-menu').remove(); }
+    $(document).on('mousedown touchstart', function (e) { if (!$(e.target).closest('.bgc-menu').length) { closeMenu(); } });
+    $(document).on('scroll', '#chatThreadMessages', closeMenu);
+
+    // Touch: hold for the menu, or swipe the bubble sideways to reply.
     var press = null;
-    $(document).on('touchstart', '#chatThreadMessages .bgc-msg.own .bgc-bubble', function (e) {
-        var id = $(this).closest('.bgc-msg').data('id'), x = e.originalEvent.touches[0];
-        press = { id: id, x: x.clientX, y: x.clientY, t: setTimeout(function () { press = null; if (navigator.vibrate) { navigator.vibrate(15); } showInfo(id); }, 500) };
+    var rtl = document.documentElement.getAttribute('dir') === 'rtl';
+    $(document).on('touchstart', '#chatThreadMessages .bgc-msg:not(.pending) .bgc-bubble', function (e) {
+        var $b = $(this), id = $b.closest('.bgc-msg').data('id'), t = e.originalEvent.touches[0];
+        press = { id: id, $b: $b, x: t.clientX, y: t.clientY, dx: 0, swiping: false,
+                  timer: setTimeout(function () {
+                      if (!press || press.swiping) { return; }
+                      if (navigator.vibrate) { navigator.vibrate(15); }
+                      openMenu(id, press.x, press.y); press = null;
+                  }, 500) };
     });
     $(document).on('touchmove', function (e) {
         if (!press) { return; }
-        var x = e.originalEvent.touches[0];
-        if (Math.abs(x.clientX - press.x) > 10 || Math.abs(x.clientY - press.y) > 10) { clearTimeout(press.t); press = null; }
+        var t = e.originalEvent.touches[0], dx = t.clientX - press.x, dy = t.clientY - press.y;
+        if (!press.swiping && Math.abs(dy) > 12) { clearTimeout(press.timer); press = null; return; }
+        if (Math.abs(dx) > 10) { clearTimeout(press.timer); press.swiping = true; }
+        if (press.swiping) {
+            var pull = rtl ? Math.min(0, Math.max(-80, dx)) : Math.max(0, Math.min(80, dx));
+            press.dx = pull;
+            press.$b.css('transform', 'translateX(' + pull + 'px)');
+        }
     });
-    $(document).on('touchend touchcancel', function () { if (press) { clearTimeout(press.t); press = null; } });
-    $(document).on('contextmenu', '#chatThreadMessages .bgc-msg.own .bgc-bubble', function (e) {
-        if (window.getSelection && String(window.getSelection())) { return; }
-        e.preventDefault(); showInfo($(this).closest('.bgc-msg').data('id'));
+    $(document).on('touchend touchcancel', function () {
+        if (!press) { return; }
+        clearTimeout(press.timer);
+        var p = press; press = null;
+        if (p.swiping) {
+            p.$b.css({ transition: 'transform .15s', transform: '' });
+            setTimeout(function () { p.$b.css('transition', ''); }, 160);
+            if (Math.abs(p.dx) >= 55) { if (navigator.vibrate) { navigator.vibrate(10); } startReply(p.id); }
+        }
     });
+    $(document).on('contextmenu', '#chatThreadMessages .bgc-msg:not(.pending) .bgc-bubble', function (e) {
+        if (COARSE.matches || (window.getSelection && String(window.getSelection()))) { return; }
+        e.preventDefault(); openMenu($(this).closest('.bgc-msg').data('id'), e.clientX, e.clientY);
+    });
+    $(document).on('click', '.bgc-reply-btn', function (e) { e.stopPropagation(); startReply($(this).closest('.bgc-msg').data('id')); });
+    $(document).on('click', '.bgc-reply-cancel', clearReply);
+    $(document).on('click', '#chatThreadMessages .bgc-quote[data-jump]', function (e) { e.stopPropagation(); jumpTo($(this).data('jump')); });
     $(document).on('click', '#chatThreadMessages .bgc-msg.own:not(.pending) .bgc-ticks', function (e) {
         e.stopPropagation(); showInfo($(this).closest('.bgc-msg').data('id'));
     });
@@ -825,8 +926,10 @@
         if (e.key !== 'Escape' || !$drawer.hasClass('open')) { return; }
         if ($('.bgc-lightbox').length) { $('.bgc-lightbox').remove(); return; }
         if ($('#chatThreadPane .bgc-sheet').length) { closeSheet($('#chatThreadPane .bgc-sheet')); return; }
+        if ($('.bgc-menu').length) { closeMenu(); return; }
         if (rec) { stopRecording(true); return; }
         if (sug.on) { hideSuggest(); return; }
+        if (replyTo) { clearReply(); return; }
         closeDrawer();
     });
     $(document).on('click keydown', '#chatListItems .bgc-item', function (e) {

@@ -16,7 +16,7 @@ browsers: one pane at a time on a phone, photos and voice notes, ticks and
   another member, ticks turn to seen after they open it, Message info,
   phone back button closes sheet -> chat -> drawer.
 
-**Status:** live 2026-10-27.
+**Status:** live 2026-10-27. Replies (swipe, hover arrow, message menu) live 2026-10-28.
 
 Shipped alongside: storage page (`/admin/storage`), who-assigned-whom on the
 operations board, Client Approval without cost for Account Management and

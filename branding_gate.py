@@ -10430,6 +10430,23 @@ def get_sales_requests():
             'error': str(e)
         }), 500
 
+def request_chat_counts(cur, request_ids, me):
+    """{request_id: {'messages': n, 'mentions': unread mentions of me}} for a list's chat buttons."""
+    if not request_ids:
+        return {}
+    marks = ",".join(["%s"] * len(request_ids))
+    cur.execute("SELECT request_id, COUNT(*) AS n FROM sales_request_comments WHERE is_deleted = 0 "
+                "AND request_id IN (" + marks + ") GROUP BY request_id", list(request_ids))
+    out = {r['request_id']: {'messages': r['n'], 'mentions': 0} for r in cur.fetchall()}
+    cur.execute("SELECT c.request_id, COUNT(*) AS n FROM sales_request_comment_mentions m "
+                "JOIN sales_request_comments c ON c.id = m.comment_id WHERE m.mentioned_user_id = %s "
+                "AND m.is_read = 0 AND c.is_deleted = 0 AND c.request_id IN (" + marks + ") GROUP BY c.request_id",
+                [me] + list(request_ids))
+    for r in cur.fetchall():
+        out.setdefault(r['request_id'], {'messages': 0, 'mentions': 0})['mentions'] = r['n']
+    return out
+
+
 def operations_assignments(cur, request_ids, only_for=None):
     """
     Who handed which items to whom, per request: the live costing assignments
@@ -10614,6 +10631,7 @@ def get_operations_requests():
         people = people_index(cur)
         assignments = operations_assignments(cur, [r['request_id'] for r in requests_data],
                                              me if restricted else None)
+        chat_counts = request_chat_counts(cur, [r['request_id'] for r in requests_data], me)
         requests_list = []
         for req in requests_data:
             # Determine status based on cost completion.
@@ -10674,6 +10692,8 @@ def get_operations_requests():
                 'sales_added_by_mobile': person_of(people, req.get('sales_added_by'))['mobile'],
                 'assigned_items_count': assignments.get(req['request_id'], {}).get('assigned_items', 0),
                 'assignments': assignments.get(req['request_id'], {}).get('people', []),
+                'comment_count': chat_counts.get(req['request_id'], {}).get('messages', 0),
+                'unread_mentions': chat_counts.get(req['request_id'], {}).get('mentions', 0),
             })
         
         cur.close()
@@ -19471,7 +19491,7 @@ def add_sales_request_comment(request_id):
             comment_text = CHAT_PLACEHOLDER.get(data.get('kind'), '')
         source = data.get('source', 'general')
         is_note = data.get('is_note', False)
-        parent_comment_id = data.get('parent_comment_id')
+        parent_comment_id = data.get('parent_comment_id') or data.get('reply_to')
         mentioned_user_ids = data.get('mentioned_users', [])  # List of user IDs
         
         if not comment_text:
@@ -19500,6 +19520,9 @@ def add_sales_request_comment(request_id):
             conn.close()
             return jsonify({'success': False, 'error': 'This chat is not yours to write in'}), 403
         
+        # A reply quotes a message of this same chat, or nothing.
+        parent_comment_id = chat_reply_target(cur, 'sr', request_id, parent_comment_id)
+
         # Insert comment
         cur.execute("""
             INSERT INTO sales_request_comments 
@@ -19961,7 +19984,8 @@ def chat_group_messages(room):
     conn, cur = connection()
     try:
         _room_or_403(cur, room)
-        cur.execute("""SELECT m.id, m.body AS comment_text, m.created_at, m.user_id, u.name AS user_name
+        cur.execute("""SELECT m.id, m.body AS comment_text, m.created_at, m.user_id, u.name AS user_name,
+                              m.reply_to_id
                        FROM group_chat_message m JOIN user u ON u.id = m.user_id
                        WHERE m.room = %s AND m.is_deleted = 0 ORDER BY m.id DESC LIMIT 200""", (room,))
         rows = list(cur.fetchall())
@@ -19994,8 +20018,9 @@ def chat_group_post(room):
     conn, cur = connection()
     try:
         _room_or_403(cur, room)
-        cur.execute("INSERT INTO group_chat_message (room, user_id, body) VALUES (%s, %s, %s)",
-                    (room, me, text[:4000]))
+        reply_to = chat_reply_target(cur, 'g', room, data.get('reply_to'))
+        cur.execute("INSERT INTO group_chat_message (room, user_id, body, reply_to_id) VALUES (%s, %s, %s, %s)",
+                    (room, me, text[:4000], reply_to))
         message_id = cur.lastrowid
         if upload:
             error = chat_save_attachment(cur, 'g:' + room, message_id, upload, data.get('kind'),
@@ -20137,6 +20162,47 @@ def chat_seen_upto(cur, thread):
     return {row['user_id']: row['upto'] for row in cur.fetchall()}
 
 
+def chat_reply_target(cur, kind, key, message_id):
+    """The id being replied to when it is a live message of this chat; None otherwise."""
+    try:
+        message_id = int(message_id)
+    except (TypeError, ValueError):
+        return None
+    if kind == 'sr':
+        cur.execute("SELECT id FROM sales_request_comments WHERE id = %s AND request_id = %s AND is_deleted = 0",
+                    (message_id, key))
+    else:
+        cur.execute("SELECT id FROM group_chat_message WHERE id = %s AND room = %s AND is_deleted = 0",
+                    (message_id, key))
+    return message_id if cur.fetchone() else None
+
+
+def chat_reply_previews(cur, thread, ids):
+    """{id: {id, user_id, user_name, text, kind}} for the messages being quoted."""
+    ids = sorted({i for i in ids if i})
+    if not ids:
+        return {}
+    marks = ",".join(["%s"] * len(ids))
+    if thread.startswith('sr:'):
+        cur.execute("SELECT c.id, c.user_id, u.name, c.comment_text AS body, c.is_deleted FROM sales_request_comments c "
+                    "JOIN user u ON u.id = c.user_id WHERE c.id IN (" + marks + ")", ids)
+    else:
+        cur.execute("SELECT m.id, m.user_id, u.name, m.body, m.is_deleted FROM group_chat_message m "
+                    "JOIN user u ON u.id = m.user_id WHERE m.id IN (" + marks + ")", ids)
+    rows = {r['id']: r for r in cur.fetchall()}
+    cur.execute("SELECT message_id, MIN(kind) AS kind FROM chat_attachment WHERE thread = %s AND message_id IN ("
+                + marks + ") GROUP BY message_id", [thread] + ids)
+    kinds = {r['message_id']: r['kind'] for r in cur.fetchall()}
+    out = {}
+    for i, r in rows.items():
+        text = '' if r['is_deleted'] else (r['body'] or '')
+        if kinds.get(i) and text in CHAT_PLACEHOLDER.values():
+            text = ''
+        out[i] = {'id': i, 'user_id': r['user_id'], 'user_name': r['name'], 'text': text[:200],
+                  'kind': kinds.get(i), 'deleted': bool(r['is_deleted'])}
+    return out
+
+
 def chat_decorate(cur, thread, messages, members=None):
     """
     Add each message's photos / voice notes and, on my own messages, the ticks:
@@ -20155,7 +20221,10 @@ def chat_decorate(cur, thread, messages, members=None):
                 'width': row['width'], 'height': row['height']})
     me = session.get('user_id')
     upto = chat_seen_upto(cur, thread) if members is not None else {}
+    reply_key = 'parent_comment_id' if thread.startswith('sr:') else 'reply_to_id'
+    quoted = chat_reply_previews(cur, thread, [m.get(reply_key) for m in messages])
     for m in messages:
+        m['reply'] = quoted.get(m.get(reply_key))
         m['attachments'] = by_message.get(m['id'], [])
         # The text under a photo; '' when the stored text is only the
         # "Photo" / "Voice note" stand-in that lists and older screens show.
@@ -20241,7 +20310,8 @@ def chat_request_payload():
             mentioned = []
         return {'comment_text': form.get('comment_text') or '', 'source': form.get('source') or 'general',
                 'is_note': form.get('is_note') in ('1', 'true'), 'mentioned_users': mentioned,
-                'kind': form.get('kind'), 'duration_ms': form.get('duration_ms')}, request.files.get('file')
+                'kind': form.get('kind'), 'duration_ms': form.get('duration_ms'),
+                'reply_to': form.get('reply_to')}, request.files.get('file')
     return (request.get_json(silent=True) or {}), None
 
 
