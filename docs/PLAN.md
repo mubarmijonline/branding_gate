@@ -583,3 +583,24 @@ leader.
   Digital Marketing Team Leader (under it). The two Digital Marketing members
   are added under it once Beshoy names them; seats under Mariam Magdy and
   Sarah Gaber wait on Gamal saying how many.
+
+## Group chats, 2026-10-27
+
+Ahmed: three group chats beside the per-request ("code") chats, shown as
+headings in the chat drawer: Managers (managers only), Operations (the
+operations team only), Sales (sales only).
+
+- Rooms decided on the server, from the person's current place: Managers =
+  active people at Executive or Head/Manager level; Operations = the
+  Operations department; Sales = the Sales and Account Management
+  departments (nobody active sits in Sales itself; Account Management is who
+  sells). A person sees and can post only in their rooms; membership follows
+  role and department changes with no list to keep.
+- `group_chat_message` (room, user, text, time) and `group_chat_read`
+  (room, user, last message read) for unread counts.
+- `/api/chat/groups` (my rooms, last message, unread), `.../<room>/messages`
+  GET / POST (with @mentions, which notify like request mentions),
+  `.../<room>/read`.
+- Drawer: a "Groups" heading with the rooms on top, "Requests" below; the same
+  thread view and composer. The chat badge counts unread group messages too,
+  and keeps working for people with no access to request chats.

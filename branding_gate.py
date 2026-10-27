@@ -2644,9 +2644,6 @@ def quick_approval_details(kind, record_id):
 
 
 @app.route('/api/approvals/waiting-counts', methods=['GET'])
-@perm('expense_tracking.approve_manager', 'user_balance.approve_manager',
-      'party_request.approve_head', 'party_request.approve_admin',
-      'negotiation.decide_sales_head', 'negotiation.decide_account_head', 'sales_request.approve')
 def approvals_waiting_counts():
     """
     What waits on me, per item of the Approvals menu, so the number on the
@@ -4368,6 +4365,12 @@ PUBLIC_ENDPOINTS = {
     'add_notification',
     # This person's own phone, for push: any signed-in user, no permission.
     'register_push_token', 'unregister_push_token',
+    # Group chats: login only; membership of each room is checked inside.
+    'chat_groups', 'chat_group_messages', 'chat_group_post', 'chat_group_read',
+    # Names / roles for @mentions (group rooms are open to people with no
+    # request-chat permission), and per-item approval counts that check each
+    # permission themselves and are zero for everyone else.
+    'mention_users', 'approvals_waiting_counts',
     'sales_requests_lookup',
     'set_ui_language',
 }
@@ -19089,7 +19092,6 @@ def update_request_approval_stage(request_id, conn=None, cur=None):
 # ============================================================================
 
 @app.route('/api/mention-users', methods=['GET'])
-@perm('sales_request.comment')
 def mention_users():
     """
     Who can be tagged in a comment.
@@ -19594,6 +19596,166 @@ def get_chat_sr_list():
     except Exception as e:
         print(f"Error fetching chat SR list: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---- group chats --------------------------------------------------------------
+# Three rooms beside the per-request chats. Who is in a room follows the
+# person's current role level and department, so there is no member list to
+# keep: someone who moves to Operations is in the Operations room the next
+# time the drawer polls.
+CHAT_ROOMS = {
+    'managers':   {'title': 'Managers',   'icon': 'fa-user-tie'},
+    'operations': {'title': 'Operations', 'icon': 'fa-cogs'},
+    'sales':      {'title': 'Sales',      'icon': 'fa-chart-line'},
+}
+_ROOM_MEMBERS_SQL = {
+    # Executive and Head / Manager level.
+    'managers': "r.level <= 1",
+    'operations': "d.code = 'operations'",
+    # Nobody active sits in Sales itself; Account Management is who sells.
+    'sales': "d.code IN ('sales', 'account')",
+}
+
+
+def chat_room_members(cur, room):
+    cur.execute("""SELECT u.id FROM user u LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+                   LEFT JOIN department d ON d.id = u.department_id
+                   WHERE u.is_active = 1 AND """ + _ROOM_MEMBERS_SQL[room])
+    return [row['id'] for row in cur.fetchall()]
+
+
+def chat_rooms_for(cur, user_id):
+    """The rooms this person belongs to, in CHAT_ROOMS order."""
+    cur.execute("""SELECT r.level, d.code FROM user u LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+                   LEFT JOIN department d ON d.id = u.department_id
+                   WHERE u.id = %s AND u.is_active = 1""", (user_id,))
+    me = cur.fetchone()
+    if not me:
+        return []
+    rooms = []
+    if me['level'] is not None and me['level'] <= 1:
+        rooms.append('managers')
+    if me['code'] == 'operations':
+        rooms.append('operations')
+    if me['code'] in ('sales', 'account'):
+        rooms.append('sales')
+    return rooms
+
+
+def _room_or_403(cur, room):
+    if room not in CHAT_ROOMS:
+        abort(404)
+    if room not in chat_rooms_for(cur, session.get('user_id')):
+        abort(403)
+
+
+@app.route('/api/chat/groups', methods=['GET'])
+def chat_groups():
+    """My rooms, each with its last message and how many I have not read."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        groups = []
+        for room in chat_rooms_for(cur, me):
+            cur.execute("""SELECT m.id, m.body, m.created_at, u.name FROM group_chat_message m
+                           JOIN user u ON u.id = m.user_id
+                           WHERE m.room = %s AND m.is_deleted = 0 ORDER BY m.id DESC LIMIT 1""", (room,))
+            last = cur.fetchone()
+            cur.execute("""SELECT COUNT(*) AS n FROM group_chat_message m
+                           WHERE m.room = %s AND m.is_deleted = 0 AND m.user_id <> %s
+                             AND m.id > COALESCE((SELECT last_read_id FROM group_chat_read
+                                                  WHERE room = %s AND user_id = %s), 0)""",
+                        (room, me, room, me))
+            unread = cur.fetchone()['n']
+            groups.append({
+                'room': room, 'title': CHAT_ROOMS[room]['title'], 'icon': CHAT_ROOMS[room]['icon'],
+                'members': len(chat_room_members(cur, room)),
+                'last_message_text': (last['body'][:117] + '...') if last and len(last['body']) > 120 else (last['body'] if last else ''),
+                'last_message_user': last['name'] if last else '',
+                'last_message_at': last['created_at'].strftime('%Y-%m-%d %H:%M:%S') if last else None,
+                'unread': unread,
+            })
+        return jsonify(success=True, groups=groups, total_unread=sum(g['unread'] for g in groups))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/groups/<room>/messages', methods=['GET'])
+def chat_group_messages(room):
+    """The latest 200 messages, newest first (the drawer reverses them)."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    conn, cur = connection()
+    try:
+        _room_or_403(cur, room)
+        cur.execute("""SELECT m.id, m.body AS comment_text, m.created_at, m.user_id, u.name AS user_name
+                       FROM group_chat_message m JOIN user u ON u.id = m.user_id
+                       WHERE m.room = %s AND m.is_deleted = 0 ORDER BY m.id DESC LIMIT 200""", (room,))
+        rows = cur.fetchall()
+        for row in rows:
+            row['created_at'] = row['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        return jsonify(success=True, comments=rows, room=room, title=CHAT_ROOMS[room]['title'],
+                       members=len(chat_room_members(cur, room)))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/groups/<room>/messages', methods=['POST'])
+def chat_group_post(room):
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    data = request.get_json(silent=True) or {}
+    text = (data.get('comment_text') or data.get('text') or '').strip()
+    if not text:
+        return jsonify(success=False, error='Write something first'), 400
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        _room_or_403(cur, room)
+        cur.execute("INSERT INTO group_chat_message (room, user_id, body) VALUES (%s, %s, %s)",
+                    (room, me, text[:4000]))
+        message_id = cur.lastrowid
+        # Their own message is read by definition.
+        cur.execute("""INSERT INTO group_chat_read (room, user_id, last_read_id) VALUES (%s, %s, %s)
+                       ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))""",
+                    (room, me, message_id))
+        members = set(chat_room_members(cur, room))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    # A mention is a notification, as in a request chat; only room members.
+    mentioned = [int(u) for u in (data.get('mentioned_users') or []) if str(u).isdigit()
+                 and int(u) in members and int(u) != me]
+    if mentioned:
+        name = session.get('name') or 'Someone'
+        notify_users(mentioned, '%s mentioned you: %s group' % (name, CHAT_ROOMS[room]['title']),
+                     '%s: "%s"' % (name, text[:140]), link='/home?chat=g:%s' % room)
+    return jsonify(success=True, id=message_id)
+
+
+@app.route('/api/chat/groups/<room>/read', methods=['POST'])
+def chat_group_read(room):
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        _room_or_403(cur, room)
+        cur.execute("SELECT COALESCE(MAX(id), 0) AS n FROM group_chat_message WHERE room = %s", (room,))
+        latest = cur.fetchone()['n']
+        cur.execute("""INSERT INTO group_chat_read (room, user_id, last_read_id) VALUES (%s, %s, %s)
+                       ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))""",
+                    (room, me, latest))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route('/api/chat/sr/<int:request_id>/mark-read', methods=['POST'])

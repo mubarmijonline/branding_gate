@@ -587,6 +587,12 @@
       background:#fff; color:#1ea854;
     }
     .chat-list-items { flex: 1 1 auto; overflow-y: auto; }
+    /* Group rooms on top, request chats below, each under its heading. */
+    .chat-list-heading {
+      padding: .45rem .9rem; font-size: .7rem; font-weight: 800; letter-spacing: .04em;
+      text-transform: uppercase; color: #667781; background: #f0f2f5; border-bottom: 1px solid #e9edef;
+    }
+    .chat-group-item .chat-list-avatar { background: #075e54; color: #fff; }
     .chat-list-empty {
       padding: 30px 16px; text-align: center; color: #888; font-size: 0.85rem;
     }
@@ -1203,7 +1209,7 @@
 
           <!-- Chat Drawer Trigger -->
           <li class="nav-item">
-            <a class="nav-link position-relative" href="#" id="chatDrawerToggle" title="Sales Request Chats">
+            <a class="nav-link position-relative" href="#" id="chatDrawerToggle" title="Chats">
               <i class="fas fa-comments fa-fw"></i>
               <span class="badge badge-danger chat-unread-badge" id="chatUnreadBadge" style="display:none;">0</span>
             </a>
@@ -2002,7 +2008,7 @@ function showToast(title, body) {
   <div id="chatDrawerOverlay"></div>
   <aside id="chatDrawer" aria-hidden="true">
     <div class="chat-drawer-header">
-      <h5><i class="fas fa-comments mr-2"></i>Sales Request Chats</h5>
+      <h5><i class="fas fa-comments mr-2"></i>Chats</h5>
       <button type="button" class="chat-drawer-close" id="chatDrawerCloseBtn" title="Close">&times;</button>
     </div>
     <div class="chat-drawer-body">
@@ -2051,6 +2057,8 @@ function showToast(title, body) {
     var $overlay = $('#chatDrawerOverlay');
     var $badge = $('#chatUnreadBadge');
     var chats = [];
+    var groups = [];           // group rooms this person belongs to
+    var srUnread = 0, groupUnread = 0;
     var mentionUsers = [];
     var currentRequestId = null;
     var currentRequestMeta = null;
@@ -2123,6 +2131,20 @@ function showToast(title, body) {
       return (name||'?').split(/\s+/).map(function(p){return p.charAt(0);}).slice(0,2).join('').toUpperCase();
     }
 
+    function isGroup(id) { return typeof id === 'string' && id.indexOf('g:') === 0; }
+    function roomOf(id) { return id.slice(2); }
+    function setBadge() { updateBadge(srUnread + groupUnread); }
+
+    function fetchGroups() {
+      $.ajax({ url: '/api/chat/groups', type: 'GET', cache: false, silent: true }).done(function (r) {
+        if (!r || !r.success) { return; }
+        groups = r.groups || [];
+        groupUnread = r.total_unread || 0;
+        setBadge();
+        if ($drawer.hasClass('open')) { renderChatList($('#chatListSearch').val() || ''); }
+      });
+    }
+
     function updateBadge(total) {
       if (total && total > 0) {
         $badge.text(total > 99 ? '99+' : total).show();
@@ -2167,7 +2189,8 @@ function showToast(title, body) {
           if (!resp || !resp.success) return;
           var prevTop = chats.length ? chats[0] : null;
           chats = resp.chats || [];
-          updateBadge(resp.total_unread || 0);
+          srUnread = resp.total_unread || 0;
+          setBadge();
           renderChatList($('#chatListSearch').val() || '');
 
           // Notify when a NEW message arrives (only after first fetch)
@@ -2182,11 +2205,10 @@ function showToast(title, body) {
           firstListFetch = false;
         })
         .fail(function(xhr) {
-          if (xhr && (xhr.status === 401 || xhr.status === 403)) {
-            chatAccessDenied = true;
-            if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
-          }
+          // No request chats for this person; their group rooms still work.
+          if (xhr && (xhr.status === 401 || xhr.status === 403)) { chatAccessDenied = true; }
         });
+      fetchGroups();
     }
 
     function notifyNewMessage(chat) {
@@ -2235,8 +2257,31 @@ function showToast(title, body) {
         return (b.last_message_at||'').localeCompare(a.last_message_at||'');
       });
 
+      var shownGroups = groups.filter(function (g) {
+        if (unreadOnly && !(g.unread > 0)) return false;
+        return !q || (g.title || '').toLowerCase().includes(q);
+      });
+      var groupsHtml = shownGroups.length ? '<div class="chat-list-heading">Groups</div>' + shownGroups.map(function (g) {
+        var isUnread = g.unread > 0;
+        var active = (currentRequestId === 'g:' + g.room) ? ' active' : '';
+        var preview = g.last_message_at
+          ? '<span><b>' + escapeHtml(g.last_message_user || '') + ':</b> ' + escapeHtml((g.last_message_text || '').substring(0, 40)) + '</span>'
+          : '<span class="text-muted font-italic">No messages yet, say hello</span>';
+        return '<div class="chat-list-item chat-group-item' + active + (isUnread ? ' unread' : '') + '" data-room="' + g.room + '">' +
+          '<div class="chat-list-avatar"><i class="fas ' + g.icon + '"></i></div>' +
+          '<div class="chat-list-body">' +
+            '<div class="chat-list-title"><span>' + escapeHtml(g.title) + '</span>' +
+              '<span class="time">' + (g.last_message_at ? timeAgo(g.last_message_at) : '') + '</span></div>' +
+            '<div class="chat-list-sub">' + g.members + ' members</div>' +
+            '<div class="chat-list-preview">' + preview +
+              (isUnread ? '<span class="unread">' + g.unread + '</span>' : '') + '</div>' +
+          '</div></div>';
+      }).join('') : '';
+
       if (!rows.length) {
-        $list.html('<div class="chat-list-empty">' + (unreadOnly ? 'No unread chats.' : 'No chats found.') + '</div>');
+        $list.html(groupsHtml + (chatAccessDenied ? '' :
+          (groupsHtml ? '<div class="chat-list-heading">Requests</div>' : '') +
+          '<div class="chat-list-empty">' + (unreadOnly ? 'No unread chats.' : 'No chats found.') + '</div>'));
         return;
       }
       var html = rows.map(function(c){
@@ -2270,7 +2315,7 @@ function showToast(title, body) {
           '</div>' +
         '</div>';
       }).join('');
-      $list.html(html);
+      $list.html(groupsHtml + (groupsHtml ? '<div class="chat-list-heading">Requests</div>' : '') + html);
     }
 
     // Toolbar handlers: re-render on sort change or unread toggle click
@@ -2289,7 +2334,22 @@ function showToast(title, body) {
       });
     }
 
+    function openGroup(room) {
+      currentRequestId = 'g:' + room;
+      currentRequestMeta = null;
+      lastThreadMsgIds = new Set();
+      var g = groups.find(function (x) { return x.room === room; });
+      if (g && g.unread) { groupUnread = Math.max(0, groupUnread - g.unread); g.unread = 0; setBadge(); }
+      renderChatList($('#chatListSearch').val() || '');
+      renderThreadShell();
+      fetchThread(currentRequestId, false);
+      startThreadPolling();
+      $.ajax({ url: '/api/chat/groups/' + room + '/read', type: 'POST', cache: false })
+        .always(function () { setTimeout(fetchGroups, 250); });
+    }
+
     function openChat(requestId) {
+      if (isGroup(requestId)) { return openGroup(roomOf(requestId)); }
       currentRequestId = requestId;
       currentRequestMeta = chats.find(function(c){ return c.request_id === requestId; }) || null;
       lastThreadMsgIds = new Set();
@@ -2314,8 +2374,14 @@ function showToast(title, body) {
 
     function renderThreadShell() {
       var c = currentRequestMeta || {};
-      var html = '' +
-        '<div class="chat-thread-header">' +
+      var g = isGroup(currentRequestId) ? (groups.find(function (x) { return 'g:' + x.room === currentRequestId; }) || {}) : null;
+      var header = g
+        ? '<div class="chat-thread-header">' +
+            '<div class="title"><i class="fas ' + (g.icon || 'fa-users') + ' text-success mr-1"></i>' +
+              escapeHtml(g.title || '') + ' group</div>' +
+            '<div class="meta" id="chatThreadMeta">' + (g.members || 0) + ' members</div>' +
+          '</div>'
+        : '<div class="chat-thread-header">' +
           '<button class="btn btn-sm btn-outline-secondary details-btn" id="chatDetailsBtn" title="Open full request">' +
             '<i class="fas fa-external-link-alt"></i> Open</button>' +
           '<div class="title"><i class="fas fa-hashtag text-success"></i>' +
@@ -2324,7 +2390,8 @@ function showToast(title, body) {
             escapeHtml(c.client_name||'') +
             (c.company_name ? ' · ' + escapeHtml(c.company_name) : '') +
           '</div>' +
-        '</div>' +
+        '</div>';
+      var html = header +
         '<div class="chat-thread-messages" id="chatThreadMessages">' +
           '<div class="text-center text-muted p-3"><i class="fas fa-spinner fa-spin"></i> Loading...</div>' +
         '</div>' +
@@ -2358,7 +2425,9 @@ function showToast(title, body) {
     }
 
     function fetchThread(requestId, silent) {
-      $.ajax({ url: '/api/sales/requests/' + requestId + '/comments', type: 'GET', cache: false })
+      var url = isGroup(requestId) ? '/api/chat/groups/' + roomOf(requestId) + '/messages'
+                                   : '/api/sales/requests/' + requestId + '/comments';
+      $.ajax({ url: url, type: 'GET', cache: false, silent: !!silent })
         .done(function(r){
           if (!r || !r.success) return;
           if (requestId !== currentRequestId) return; // user switched chat
@@ -2459,7 +2528,8 @@ function showToast(title, body) {
       });
       var $btn = $('#chatSendBtn').prop('disabled', true);
       $.ajax({
-        url: '/api/sales/requests/' + currentRequestId + '/comments',
+        url: isGroup(currentRequestId) ? '/api/chat/groups/' + roomOf(currentRequestId) + '/messages'
+                                       : '/api/sales/requests/' + currentRequestId + '/comments',
         type: 'POST', contentType: 'application/json',
         data: JSON.stringify({
           comment_text: text, source: 'general', is_note: false,
@@ -2491,6 +2561,7 @@ function showToast(title, body) {
     });
 
     $(document).on('click', '#chatListItems .chat-list-item', function(){
+      if ($(this).data('room')) { openGroup($(this).data('room')); return; }
       var id = parseInt($(this).data('id'), 10);
       if (id) openChat(id);
     });
@@ -2535,13 +2606,15 @@ function showToast(title, body) {
     var chatAccessDenied = false;
     var chatPollInterval = null;
     function pollBadge() {
+      fetchGroups();
       if (chatAccessDenied) return;
       $.ajax({ url: '/api/chat/sr-list', type: 'GET', cache: false, silent: true })
         .done(function(r){
           if (r && r.success) {
             chats = r.chats || [];
             var prevSeen = lastSeenLastMsgIso;
-            updateBadge(r.total_unread || 0);
+            srUnread = r.total_unread || 0;
+            setBadge();
             var top = chats[0];
             if (top && top.last_message_at) {
               if (prevSeen && top.last_message_at > prevSeen &&
@@ -2554,14 +2627,17 @@ function showToast(title, body) {
           }
         })
         .fail(function(xhr){
-          if (xhr && (xhr.status === 401 || xhr.status === 403)) {
-            chatAccessDenied = true;
-            if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
-          }
+          if (xhr && (xhr.status === 401 || xhr.status === 403)) { chatAccessDenied = true; }
         });
     }
     $(document).ready(function(){
       pollBadge();
+      // A group mention links here as ?chat=g:<room>.
+      var wanted = new URLSearchParams(window.location.search).get('chat');
+      if (wanted && isGroup(wanted)) {
+        openDrawer();
+        setTimeout(function () { openGroup(roomOf(wanted)); }, 600);
+      }
       chatPollInterval = setInterval(function(){ if (!$drawer.hasClass('open')) pollBadge(); }, 15000);
     });
 
