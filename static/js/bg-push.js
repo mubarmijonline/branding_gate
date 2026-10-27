@@ -13,6 +13,21 @@
 (function () {
     'use strict';
     var cfg = window.BG_PUSH || {};
+    var T = function (x) { return window.bgT ? window.bgT(x) : x; };
+    var IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var STANDALONE = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    // An iPhone in a Safari tab has no web push at all: only the Home Screen
+    // app does. Say so once after signing in, instead of asking for nothing.
+    if (cfg.vapidKey && IOS && !STANDALONE && !('Notification' in window)) {
+        if (cfg.afterLogin && window.Swal) {
+            setTimeout(function () {
+                Swal.fire({ icon: 'info', title: T('Get notifications on your iPhone'),
+                    html: T('Tap the Share button, then "Add to Home Screen". Open Branding Gate from that icon and allow notifications.'),
+                    confirmButtonText: T('OK') });
+            }, 1200);
+        }
+        return;
+    }
     if (!cfg.vapidKey || !('serviceWorker' in navigator) || !('Notification' in window)) return;
     if (!window.firebase || !firebase.messaging) return;
 
@@ -53,9 +68,7 @@
         }).then(save).catch(function (e) { console.warn('push:', e && e.message ? e.message : e); });
     }
 
-    // Already allowed: refresh the token quietly on each visit (they rotate).
-    if (Notification.permission === 'granted') {
-        enable();
+    function foreground() {
         app().onMessage(function (payload) {
             // In the foreground the bell updates itself; a toast is enough.
             var n = payload.notification || payload.data || {};
@@ -64,6 +77,12 @@
             // Repaint the bell (and its chime) now rather than at the next poll.
             if (typeof refreshNotifications === 'function') refreshNotifications();
         });
+    }
+
+    // Already allowed: refresh the token quietly on each visit (they rotate).
+    if (Notification.permission === 'granted') {
+        enable();
+        foreground();
         return;
     }
     if (Notification.permission === 'denied') return;
@@ -72,11 +91,39 @@
     // never on page load.
     function askOnce() {
         document.removeEventListener('click', onTap, true);
-        Notification.requestPermission().then(function (p) { if (p === 'granted') enable(); });
+        Notification.requestPermission().then(function (p) {
+            if (p === 'granted') {
+                enable(); foreground();
+                if (window.Swal) Swal.fire({ toast: true, position: 'top', timer: 3000, showConfirmButton: false, icon: 'success',
+                                             title: T('Notifications are on for this device') });
+            }
+        });
     }
     function onTap(e) {
         if (e.target.closest('#notificationDropdown, [data-bgm-action="notifications"], #bgPushEnable')) askOnce();
     }
     document.addEventListener('click', onTap, true);
     window.bgEnablePush = askOnce;
+
+    // Asked straight after signing in, and again every 3 days after "Not now"
+    // until the person decides. A card, not the browser prompt itself:
+    // browsers (iPhones above all) only show that from a tap.
+    var SNOOZE = 'bg.push.snoozeUntil';
+    var snoozed = false;
+    try { snoozed = Number(localStorage.getItem(SNOOZE) || 0) > Date.now(); } catch (e) { /* ignore */ }
+    if ((cfg.afterLogin || !snoozed) && window.Swal) {
+        setTimeout(function () {
+            if (Notification.permission !== 'default' || (Swal.isVisible && Swal.isVisible())) return;
+            Swal.fire({
+                icon: 'question', iconHtml: '<i class="fas fa-bell"></i>',
+                title: T('Turn on notifications'),
+                html: T('Approvals, @mentions and important updates will reach this device, even when Branding Gate is closed.'),
+                showCancelButton: true, confirmButtonText: T('Allow'), cancelButtonText: T('Not now'),
+                confirmButtonColor: '#224abe', reverseButtons: true
+            }).then(function (r) {
+                if (r.isConfirmed) { askOnce(); return; }
+                try { localStorage.setItem(SNOOZE, String(Date.now() + 3 * 86400000)); } catch (e) { /* ignore */ }
+            });
+        }, 1500);
+    }
 })();

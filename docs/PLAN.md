@@ -761,3 +761,11 @@ said OK and nothing was added.
 - What reaches a phone: Important notifications only (approvals, costing and
   pricing steps, mentions and @all). iPhone needs iOS 16.4+ with the site
   added to the Home Screen and opened from there once to allow notifications.
+- Asking for permission (2026-10-28): the first page after signing in shows
+  a "Turn on notifications" card (Allow / Not now); Allow opens the browser's
+  own prompt from that tap, which iPhones require. "Not now" asks again after
+  3 days, and every new sign-in asks until the person decides. An iPhone in a
+  Safari tab (no web push there) is told to Add to Home Screen instead. The
+  bell still asks on first tap as before.
+- `/add_notification` (notifications written from a page) now pushes its
+  Important ones too; it was the one path that never reached a phone.

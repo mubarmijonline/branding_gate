@@ -2177,6 +2177,8 @@ def login():
         # RBAC: permission set and role code, refreshed by /api/refresh-roles.
         session['perms'], session['role_code'] = load_permissions(user['id'])
         session['perms_loaded_at'] = datetime.now().isoformat()
+        # The first page after signing in offers to turn on notifications.
+        session['ask_push'] = True
         # — 2) Ensure a Firebase Auth user exists for this phone number —
         fb_mobile = "+20" + user['mobile'].lstrip('0')  # Ensure all leading zeros are stripped
         # Validate Egyptian phone number (E.164: +20XXXXXXXXXX)
@@ -2277,6 +2279,10 @@ def add_notification():
     if inserted is None:
         return jsonify(success=False,
                        error='Notifications are unavailable right now.'), 503
+    # Pages that write here (rather than through notify_users) were the one
+    # path whose Important notifications never reached a phone.
+    if notification_category(title) == 'important':
+        push_to_users([uid], title, content, data.get('link'))
 
     return jsonify(success=True, message_id=str(inserted))
 @app.route('/get_notifications')
