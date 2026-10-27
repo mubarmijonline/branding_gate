@@ -13831,6 +13831,8 @@ window.chartPieDemo = function() {
         $.ajax({
             url: '/api/mention-users',
             type: 'GET',
+            // This request's chat members only, as in the chat drawer.
+            data: currentCommentsRequestId ? { thread: 'sr:' + currentCommentsRequestId } : {},
             success: function(response) {
                 console.log('Users loaded for modal:', response);
                 if (response.success && response.users && response.users.length > 0) {
@@ -14197,7 +14199,9 @@ window.chartPieDemo = function() {
         sortedComments.forEach(function(comment) {
             var isOwn = comment.user_name === currentUser;
             var timeAgo = formatTimeAgo(comment.created_at);
-            var commentText = formatCommentWithMentions(escapeHtml(comment.comment_text || ''));
+            var hasMedia = comment.attachments && comment.attachments.length;
+            var commentText = formatCommentWithMentions(escapeHtml((hasMedia ? comment.caption : comment.comment_text) || ''));
+            if (hasMedia && window.bgChatMediaHtml) { commentText = bgChatMediaHtml(comment.attachments) + commentText; }
             
             html += '<div class="comment-item' + (isOwn ? ' own-comment' : '') + '">';
             html += '  <div class="comment-header">';

@@ -871,6 +871,10 @@
     .no-image-placeholder span {
         font-size: 0.8rem;
     }
+.op-assign-sum { margin-top:.35rem; font-size:.75rem; line-height:1.25; }
+.op-assign-line { padding:.2rem .4rem; border-left:3px solid #4e73df; background:#f3f6fd; border-radius:3px; margin-bottom:.2rem; }
+.op-assign-line.free { border-left-color:#f6c23e; background:#fff9e6; color:#7a5d00; }
+.op-assign-by { color:#6c757d; font-size:.7rem; }
 </style>
 <script>
 // Override chart demo scripts to prevent errors
@@ -1380,6 +1384,29 @@ function costingRowBadges(requestId) {
     return out;
 }
 
+// Who handed which items to whom, on the board itself: the Head should not
+// have to open every request to see whether a leader has split it yet.
+function assignSummaryHtml(row) {
+    var people = row.assignments || [];
+    var total = row.items_count || 0;
+    var free = Math.max(0, total - (row.assigned_items_count || 0));
+    if (!people.length && !total) { return ''; }
+    var html = '<div class="op-assign-sum">';
+    people.forEach(function (p) {
+        html += '<div class="op-assign-line" title="' + costEsc(p.assigned_by_name) + ' assigned ' +
+                p.items + ' item(s) to ' + costEsc(p.assignee_name) + '">' +
+                '<i class="fas fa-user-tag"></i> <b>' + costEsc(p.assignee_name) + '</b> &middot; ' +
+                p.items + ' item' + (p.items === 1 ? '' : 's') +
+                (p.open ? '' : ' <span class="text-success">(done)</span>') +
+                '<div class="op-assign-by">by ' + costEsc(p.assigned_by_name) + '</div></div>';
+    });
+    if (free) {
+        html += '<div class="op-assign-line free"><i class="fas fa-inbox"></i> ' + free +
+                ' not assigned yet</div>';
+    }
+    return html + '</div>';
+}
+
 // ---- costing by assignment, inside the request drawer ----------------------
 function loadCostingState(requestId) {
     if (!CAN_VIEW_COSTING) { return $.Deferred().resolve().promise(); }
@@ -1449,7 +1476,9 @@ function renderCostingBlocks() {
         var chips = state.assignments.map(function (a) {
             return '<span class="badge badge-' +
                 (a.status === 'open' ? 'info' : 'secondary') + ' mr-1">' +
-                costEsc(a.assignee_name) + ' · ' + a.status + '</span>';
+                costEsc(a.assignee_name) + ' · ' + a.status + '</span>' +
+                '<small class="text-muted mr-2">by ' + costEsc(a.assigned_by_name || '') +
+                (a.assigned_on ? ', ' + costEsc(a.assigned_on) : '') + '</small>';
         }).join('');
         var buttons = '';
         if (CAN_ASSIGN_COSTING) {
@@ -2073,6 +2102,7 @@ $(document).ready(function() {
 
                     // Where the costing workflow has got to on this request.
                     html += costingRowBadges(row.request_id);
+                    html += assignSummaryHtml(row);
 
                     html += '</div>';
                     return html;
@@ -2997,6 +3027,12 @@ $(document).ready(function() {
                 if (it.approval_status === 'pending_negotiation' && it.negotiation_status === 'pending_negotiation') {
                     costStatus = '<span class="badge badge-danger">Re-cost</span>';
                 }
+                var assigned = (it.assignments || []).map(function (a) {
+                    return '<div><b>' + escHtml(a.assignee_name) + '</b> <span class="badge badge-' +
+                           (a.status === 'open' ? 'info' : 'secondary') + '">' + escHtml(a.status) + '</span>' +
+                           '<br><small class="text-muted">by ' + escHtml(a.assigned_by_name) +
+                           (a.assigned_on ? ', ' + escHtml(a.assigned_on) : '') + '</small></div>';
+                }).join('') || '<span class="text-muted">Not assigned</span>';
                 rows += '<tr>' +
                         '<td><strong>' + escHtml(it.item_name) + '</strong><br>' +
                           '<small class="text-muted">ID: ' + escHtml(it.id) + '</small></td>' +
@@ -3005,16 +3041,17 @@ $(document).ready(function() {
                         '<td>' + unitCost + '</td>' +
                         '<td>' + totalCost + '</td>' +
                         '<td>' + costStatus + '</td>' +
+                        '<td>' + assigned + '</td>' +
                         '<td>' + escHtml(it.item_comment || '') + '</td>' +
                         '</tr>';
             });
         } else {
-            rows = '<tr><td colspan="7" class="text-center text-muted py-3">No items.</td></tr>';
+            rows = '<tr><td colspan="8" class="text-center text-muted py-3">No items.</td></tr>';
         }
         var itemsBlock = '<div class="opd-section"><h6><i class="fas fa-boxes mr-1 text-primary"></i>Items (Cost View)</h6>' +
                         '<div class="table-responsive"><table class="opd-items-table">' +
                         '<thead><tr><th>Item</th><th>Qty</th><th>Dimensions</th>' +
-                        '<th>Unit Cost</th><th>Total Cost</th><th>Status</th><th>Comment</th></tr></thead>' +
+                        '<th>Unit Cost</th><th>Total Cost</th><th>Status</th><th>Assigned to</th><th>Comment</th></tr></thead>' +
                         '<tbody>' + rows + '</tbody></table></div></div>';
 
         // Activity log (costing-related only)

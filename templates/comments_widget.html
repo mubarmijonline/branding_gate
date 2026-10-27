@@ -590,7 +590,7 @@ function loadUsersPanel(callback) {
     $.ajax({
         url: '/api/users/search',
         type: 'GET',
-        data: { q: '' }, // Empty query to get all users
+        data: currentRequestId ? { q: '', request_id: currentRequestId } : { q: '' }, // this request's chat members
         success: function(response) {
             console.log('Users loaded:', response);
             if (response.success && response.users && response.users.length > 0) {
@@ -822,8 +822,10 @@ function renderComments(comments) {
         const commentClass = comment.is_note ? 'is-note' : '';
         
         // Highlight mentions in text - match only known usernames
-        let commentText = escapeHtml(comment.comment_text);
+        const hasMedia = comment.attachments && comment.attachments.length;
+        let commentText = escapeHtml((hasMedia ? comment.caption : comment.comment_text) || '');
         commentText = highlightMentions(commentText);
+        if (hasMedia && window.bgChatMediaHtml) { commentText = bgChatMediaHtml(comment.attachments) + commentText; }
         
         html += `
             <div class="comment-item ${commentClass}" data-comment-id="${comment.id}">
@@ -1069,7 +1071,7 @@ function searchUsersForMention(searchTerm) {
     // Show all users when just @ is typed (no search term yet)
     // searchTerm will be empty string "" when user types just @
     
-    $.get(`/api/users/search?q=${searchTerm}`, function(response) {
+    $.get('/api/users/search', currentRequestId ? { q: searchTerm, request_id: currentRequestId } : { q: searchTerm }, function(response) {
         if (response.success && response.users.length > 0) {
             renderMentionSuggestions(response.users);
         } else {

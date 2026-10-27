@@ -4367,6 +4367,8 @@ PUBLIC_ENDPOINTS = {
     'register_push_token', 'unregister_push_token',
     # Group chats: login only; membership of each room is checked inside.
     'chat_groups', 'chat_group_messages', 'chat_group_post', 'chat_group_read',
+    # Any chat's members, message info and media: access is checked inside.
+    'chat_thread_members', 'chat_message_info', 'chat_media',
     # Names / roles for @mentions (group rooms are open to people with no
     # request-chat permission), and per-item approval counts that check each
     # permission themselves and are zero for everyone else.
@@ -4471,6 +4473,99 @@ def management_admin():
         return redirect(url_for('login'))
     
     return render_template("admin_section.html")
+
+# ---- storage ------------------------------------------------------------------
+# What the system's own files take on disk, for the admin to watch as people
+# upload more (photos and voice notes in chat, item files, receipts).
+STORAGE_AREAS = (
+    ('uploads/items',          'Sales request item files'),
+    ('uploads/alternatives',   'Costing alternatives'),
+    ('uploads/costing',        'Costing proposal files'),
+    ('uploads/sales_requests', 'Sales request files'),
+    ('uploads/companies',      'Company documents'),
+    ('uploads/chat',           'Chat photos and voice notes'),
+    ('private_uploads/expenses', 'Expense receipts'),
+)
+
+
+def folder_usage(path):
+    """(bytes, files) under `path`, not following links; (0, 0) when absent."""
+    total = count = 0
+    stack = [path]
+    while stack:
+        try:
+            entries = list(os.scandir(stack.pop()))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(entry.path)
+                elif entry.is_file(follow_symlinks=False):
+                    total += entry.stat(follow_symlinks=False).st_size
+                    count += 1
+            except OSError:
+                continue
+    return total, count
+
+
+def storage_report():
+    base = os.path.dirname(os.path.abspath(__file__))
+    areas, known = [], set()
+    for rel, label in STORAGE_AREAS:
+        size, files = folder_usage(os.path.join(base, rel))
+        areas.append({'key': rel, 'label': label, 'bytes': size, 'files': files})
+        known.add(rel)
+    # Anything else people's uploads ended up in, so the total is the total.
+    for top in ('uploads', 'private_uploads'):
+        try:
+            names = sorted(e.name for e in os.scandir(os.path.join(base, top)) if e.is_dir())
+        except OSError:
+            names = []
+        for name in names:
+            rel = '%s/%s' % (top, name)
+            if rel not in known:
+                size, files = folder_usage(os.path.join(base, rel))
+                areas.append({'key': rel, 'label': name.replace('_', ' ').capitalize(),
+                              'bytes': size, 'files': files})
+    uploads_bytes = sum(a['bytes'] for a in areas)
+
+    conn, cur = connection()
+    try:
+        cur.execute("""SELECT COALESCE(SUM(data_length + index_length), 0) AS n
+                       FROM information_schema.tables WHERE table_schema = DATABASE()""")
+        sql_bytes = int(cur.fetchone()['n'])
+    finally:
+        cur.close()
+        conn.close()
+    mongo_bytes = mongo_safe(lambda: int(mongo().command('dbstats').get('storageSize', 0)),
+                             fallback=0, label='dbstats')
+    disk = shutil.disk_usage(base)
+    gb = lambda n: round(n / 1024.0 ** 3, 3)
+    for a in areas:
+        a['gb'] = gb(a['bytes'])
+        a['mb'] = round(a['bytes'] / 1024.0 ** 2, 1)
+    return {
+        'areas': sorted(areas, key=lambda a: -a['bytes']),
+        'uploads_gb': gb(uploads_bytes), 'uploads_files': sum(a['files'] for a in areas),
+        'database_gb': gb(sql_bytes), 'notifications_gb': gb(mongo_bytes),
+        'total_gb': gb(uploads_bytes + sql_bytes + mongo_bytes),
+        'disk_total_gb': gb(disk.total), 'disk_used_gb': gb(disk.used), 'disk_free_gb': gb(disk.free),
+        'disk_used_pct': round(100.0 * disk.used / disk.total, 1) if disk.total else 0,
+    }
+
+
+@app.route('/admin/storage', methods=['GET'])
+@perm('system.storage')
+def admin_storage():
+    return render_template('admin_storage.html', report=storage_report())
+
+
+@app.route('/api/admin/storage', methods=['GET'])
+@perm('system.storage')
+def admin_storage_api():
+    return jsonify(success=True, **storage_report())
+
 
 @app.route('/sales_mainpage', methods=['GET'])
 @perm('section.sales')
@@ -10335,6 +10430,49 @@ def get_sales_requests():
             'error': str(e)
         }), 500
 
+def operations_assignments(cur, request_ids, only_for=None):
+    """
+    Who handed which items to whom, per request: the live costing assignments
+    (withdrawn ones are history). `only_for` keeps a team leader or member to
+    the assignments they are part of, the same rule their list follows.
+
+    Returns {request_id: {'assigned_items': n, 'people': [...], 'by_item': {...}}}.
+    The Operations Head reads this off the board to see whether a leader has
+    split a request yet, and between whom (David, 2026-10-27).
+    """
+    if not request_ids:
+        return {}
+    sql = """SELECT a.request_id, a.item_id, a.status, a.added_date, a.assignee_id, a.assigned_by,
+                    u.name AS assignee_name, m.name AS assigned_by_name
+             FROM costing_assignment a
+             JOIN user u ON u.id = a.assignee_id
+             JOIN user m ON m.id = a.assigned_by
+             WHERE a.status <> 'withdrawn' AND a.request_id IN (%s)""" % ",".join(["%s"] * len(request_ids))
+    params = list(request_ids)
+    if only_for is not None:
+        sql += " AND (a.assignee_id = %s OR a.assigned_by = %s)"
+        params += [only_for, only_for]
+    cur.execute(sql + " ORDER BY a.added_date", params)
+    out = {}
+    for row in cur.fetchall():
+        entry = out.setdefault(row['request_id'], {'people': {}, 'by_item': {}, 'items': set()})
+        entry['items'].add(row['item_id'])
+        key = (row['assignee_id'], row['assigned_by'])
+        person = entry['people'].setdefault(key, {
+            'assignee_name': row['assignee_name'], 'assigned_by_name': row['assigned_by_name'],
+            'items': 0, 'open': 0, 'closed': 0})
+        person['items'] += 1
+        person['open' if row['status'] == 'open' else 'closed'] += 1
+        entry['by_item'].setdefault(row['item_id'], []).append({
+            'assignee_name': row['assignee_name'], 'assigned_by_name': row['assigned_by_name'],
+            'status': row['status'],
+            'assigned_on': row['added_date'].strftime('%d %b %Y %H:%M') if row['added_date'] else None})
+    for entry in out.values():
+        entry['assigned_items'] = len(entry.pop('items'))
+        entry['people'] = list(entry['people'].values())
+    return out
+
+
 @app.route('/api/operations/requests', methods=['GET'])
 @perm('sales_request.view')
 def get_operations_requests():
@@ -10474,6 +10612,8 @@ def get_operations_requests():
         
         # Convert to list of dictionaries for JSON response
         people = people_index(cur)
+        assignments = operations_assignments(cur, [r['request_id'] for r in requests_data],
+                                             me if restricted else None)
         requests_list = []
         for req in requests_data:
             # Determine status based on cost completion.
@@ -10531,7 +10671,9 @@ def get_operations_requests():
                 # The mobile that was being shown as a name.
                 'sales_added_by_name': person_of(people, req.get('sales_added_by'))['name'],
                 'sales_added_by_user_id': person_of(people, req.get('sales_added_by'))['user_id'],
-                'sales_added_by_mobile': person_of(people, req.get('sales_added_by'))['mobile']
+                'sales_added_by_mobile': person_of(people, req.get('sales_added_by'))['mobile'],
+                'assigned_items_count': assignments.get(req['request_id'], {}).get('assigned_items', 0),
+                'assignments': assignments.get(req['request_id'], {}).get('people', []),
             })
         
         cur.close()
@@ -11138,7 +11280,11 @@ def get_single_operations_request(request_id):
                 })
             
             request_info['items'].append(item_dict)
-        
+
+        by_item = operations_assignments(cur, [request_id]).get(request_id, {}).get('by_item', {})
+        for item_dict in request_info['items']:
+            item_dict['assignments'] = by_item.get(item_dict['id'], [])
+
         cur.close()
         conn.close()
         
@@ -12655,7 +12801,8 @@ def edit_sales_request(request_id):
         except Exception as inst_del_error:
             print(f"DEBUG EDIT: Could not delete template instances (table may not exist): {inst_del_error}")
         
-        # Delete existing items
+        # Delete existing items (their files are carried to the new rows below)
+        item_files = snapshot_item_files(cur, request_id)
         cur.execute("DELETE FROM sales_request_items WHERE request_id = %s", (request_id,))
         print(f"DEBUG EDIT: Deleted existing items for request {request_id}")
         
@@ -12822,6 +12969,7 @@ def edit_sales_request(request_id):
             print(f"DEBUG EDIT: Updated items_count to {items_count} for request {request_id}")
         else:
             print(f"DEBUG EDIT: No items to update (items_count = 0) for request {request_id}")
+        carry_item_files(cur, request_id, item_files)
         
         conn.commit()
         cur.close()
@@ -15823,6 +15971,66 @@ def create_request_with_template():
             'error': str(e)
         }), 500
 
+def snapshot_item_files(cur, request_id):
+    """
+    The files on a request's items, keyed to the item they hang off, taken
+    before an edit deletes and re-inserts the items.
+
+    item_images cascades on the item, and saving the edit modal deletes every
+    open item and inserts it again under a new id. A photo uploaded from that
+    modal -- it goes up the moment it is picked, against the item's current id
+    -- was therefore deleted by the very save that was meant to keep it, and
+    the modal still said "updated" (Sarah Gaber, request 23645, 2026-10-27).
+    """
+    cur.execute("""SELECT f.*, i.name AS item_name, i.request_type AS item_request_type
+                   FROM item_images f JOIN sales_request_items i ON i.id = f.item_id
+                   WHERE i.request_id = %s ORDER BY f.id""", (request_id,))
+    return list(cur.fetchall())
+
+
+def carry_item_files(cur, request_id, files):
+    """
+    Put snapshot files back on the re-inserted items, matched by name and
+    request type (then name alone). A file whose item is still there, or whose
+    item was really removed, is left alone. The file moves to its new item's
+    folder so the path keeps naming the item it belongs to.
+    """
+    if not files:
+        return 0
+    cur.execute("SELECT id, name, request_type FROM sales_request_items WHERE request_id = %s ORDER BY id",
+                (request_id,))
+    items = list(cur.fetchall())
+    alive = {row['id'] for row in items}
+    by_key, by_name = {}, {}
+    for row in items:
+        name = (row['name'] or '').strip().lower()
+        by_key.setdefault((name, row['request_type'] or ''), row['id'])
+        by_name.setdefault(name, row['id'])
+    base = os.path.dirname(os.path.abspath(__file__))
+    moved = 0
+    for f in files:
+        if f['item_id'] in alive:
+            continue
+        name = (f['item_name'] or '').strip().lower()
+        target = by_key.get((name, f['item_request_type'] or '')) or by_name.get(name)
+        if not target:
+            continue
+        path = f['image_path']
+        old_abs = os.path.join(base, path)
+        new_rel = 'uploads/items/%d/%s' % (target, os.path.basename(path))
+        if os.path.isfile(old_abs):
+            os.makedirs(os.path.join(base, 'uploads', 'items', str(target)), exist_ok=True)
+            os.replace(old_abs, os.path.join(base, new_rel))
+            path = new_rel
+        cur.execute("""INSERT INTO item_images (item_id, image_path, image_type, file_size, uploaded_by,
+                                                uploaded_at, is_alternative, alt_comment, alt_label)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (target, path, f['image_type'], f['file_size'], f['uploaded_by'], f['uploaded_at'],
+                     f['is_alternative'], f['alt_comment'], f['alt_label']))
+        moved += 1
+    return moved
+
+
 @app.route('/api/sales-requests/update-with-template/<int:request_id>', methods=['POST'])
 @perm('sales_request.edit')
 def update_request_with_template(request_id):
@@ -16083,6 +16291,9 @@ def update_request_with_template(request_id):
             except:
                 pass
         
+        # The items' files, before the items are deleted and re-inserted below.
+        item_files = snapshot_item_files(cur, request_id)
+
         # Now execute the update query
         cur.execute(update_query, update_values)
         
@@ -16198,6 +16409,7 @@ def update_request_with_template(request_id):
             items_count = len(locked_ids) + reinserted
             cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s",
                         (items_count, request_id))
+            carry_item_files(cur, request_id, item_files)
 
             conn.commit()
             cur.close()
@@ -16589,6 +16801,7 @@ def update_request_with_template(request_id):
             print(f"DEBUG UPDATE-TEMPLATE: Updated items_count to {items_count} for request {request_id}")
         else:
             print(f"DEBUG UPDATE-TEMPLATE: No items to update (items_count = 0) for request {request_id}")
+        carry_item_files(cur, request_id, item_files)
         
         conn.commit()
         cur.close()
@@ -17523,6 +17736,24 @@ def client_approval_page():
     """Render client approval management page"""
     return render_template('client_approval.html')
 
+def hide_item_cost(rows):
+    """
+    Take cost, and with it profit and margin, out of item rows for anyone who
+    does not hold `sales_item.cost`. Account Management works the client's
+    side and sees what the client is quoted, not what the job costs (Gamal,
+    2026-10-27). `has_cost` stays, so "no cost yet" can still be told apart.
+    """
+    rows = list(rows or [])
+    if has('sales_item.cost'):
+        return rows
+    for row in rows:
+        row['has_cost'] = bool(row.get('cost_per_item') and float(row['cost_per_item']) > 0)
+        for key in [k for k in row if 'cost' in k or 'profit' in k or 'margin' in k]:
+            if key != 'has_cost':
+                row.pop(key)
+    return rows
+
+
 @app.route('/api/client-approval/items', methods=['GET'])
 @perm('client_approval.view')
 def get_client_approval_items():
@@ -17578,7 +17809,7 @@ def get_client_approval_items():
                 i.client_feedback,
                 sr.client_id,
                 c.client_name,
-                sr.sales_added_date,
+                COALESCE(sr.sales_added_date, sr.created_at) AS sales_added_date,
                 u.name as submitted_by_name
             FROM sales_request_items i
             INNER JOIN sales_request sr ON i.request_id = sr.id
@@ -17620,14 +17851,15 @@ def get_client_approval_items():
         query += " ORDER BY i.id DESC"
         
         cur.execute(query, params)
-        items = cur.fetchall()
+        items = hide_item_cost(cur.fetchall())
         
         cur.close()
         conn.close()
         
         return jsonify({
             'success': True,
-            'items': items
+            'items': items,
+            'can_see_cost': has('sales_item.cost'),
         })
         
     except Exception as e:
@@ -17721,7 +17953,7 @@ def get_client_approval_item_details(item_id):
         
         return jsonify({
             'success': True,
-            'item': item
+            'item': hide_item_cost([item])[0]
         })
         
     except Exception as e:
@@ -19105,14 +19337,21 @@ def mention_users():
     """
     try:
         conn, cur = connection()
+        # Inside a chat, the people in that chat and nobody else: tagging
+        # someone who cannot read it tells them about a message they cannot open.
+        only = None
+        if request.args.get('thread'):
+            only = chat_members(cur, *chat_thread_or_403(cur, request.args['thread']))
+            if not only:
+                return jsonify(success=True, users=[])
         cur.execute("""
             SELECT u.id, u.name, r.name AS role_name, d.name AS department_name
             FROM user u
             LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
             LEFT JOIN department d ON d.id = u.department_id
-            WHERE u.is_active = 1
+            WHERE u.is_active = 1""" + (" AND u.id IN (" + ",".join(["%s"] * len(only)) + ")" if only else "") + """
             ORDER BY d.name, r.level, u.name
-        """)
+        """, only or ())
         people = [{'id': row['id'], 'name': row['name'],
                    'role_name': row['role_name'] or '',
                    'department_name': row['department_name'] or ''}
@@ -19174,10 +19413,22 @@ def get_sales_request_comments(request_id):
         if not show_notes:
             query += " AND c.is_note = FALSE"
         
-        query += " ORDER BY c.created_at DESC"
-        
+        query += " ORDER BY c.created_at DESC, c.id DESC"
+
+        if not chat_may_open(cur, 'sr', request_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'This chat is not yours to read'}), 403
+
         cur.execute(query, params)
-        comments = cur.fetchall()
+        comments = list(cur.fetchall())
+        thread = 'sr:%d' % request_id
+        # The chat drawer, while this chat is on screen: I have seen it.
+        if request.args.get('seen') == '1' and comments:
+            chat_mark_seen(cur, thread, session['user_id'], max(c['id'] for c in comments))
+            conn.commit()
+        members = chat_members(cur, 'sr', request_id) if request.args.get('receipts') == '1' else None
+        chat_decorate(cur, thread, comments, members)
         
         # Get my mentions count
         cur.execute("""
@@ -19214,8 +19465,10 @@ def add_sales_request_comment(request_id):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        data = request.get_json()
-        comment_text = data.get('comment_text', '').strip()
+        data, upload = chat_request_payload()
+        comment_text = (data.get('comment_text') or '').strip()
+        if upload and not comment_text:
+            comment_text = CHAT_PLACEHOLDER.get(data.get('kind'), '')
         source = data.get('source', 'general')
         is_note = data.get('is_note', False)
         parent_comment_id = data.get('parent_comment_id')
@@ -19242,6 +19495,10 @@ def add_sales_request_comment(request_id):
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'Request not found'}), 404
+        if not chat_may_open(cur, 'sr', request_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'This chat is not yours to write in'}), 403
         
         # Insert comment
         cur.execute("""
@@ -19251,6 +19508,15 @@ def add_sales_request_comment(request_id):
         """, (request_id, user_id, comment_text, source, is_note, parent_comment_id))
         
         comment_id = cur.lastrowid
+        if upload:
+            error = chat_save_attachment(cur, 'sr:%d' % request_id, comment_id, upload,
+                                         data.get('kind'), data.get('duration_ms'))
+            if error:
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': error}), 400
+        chat_mark_seen(cur, 'sr:%d' % request_id, user_id, comment_id)
         
         # Process mentions.
         #
@@ -19665,9 +19931,9 @@ def chat_groups():
             last = cur.fetchone()
             cur.execute("""SELECT COUNT(*) AS n FROM group_chat_message m
                            WHERE m.room = %s AND m.is_deleted = 0 AND m.user_id <> %s
-                             AND m.id > COALESCE((SELECT last_read_id FROM group_chat_read
-                                                  WHERE room = %s AND user_id = %s), 0)""",
-                        (room, me, room, me))
+                             AND m.id > COALESCE((SELECT MAX(upto_id) FROM chat_seen
+                                                  WHERE thread = %s AND user_id = %s), 0)""",
+                        (room, me, 'g:' + room, me))
             unread = cur.fetchone()['n']
             groups.append({
                 'room': room, 'title': CHAT_ROOMS[room]['title'], 'icon': CHAT_ROOMS[room]['icon'],
@@ -19685,7 +19951,11 @@ def chat_groups():
 
 @app.route('/api/chat/groups/<room>/messages', methods=['GET'])
 def chat_group_messages(room):
-    """The latest 200 messages, newest first (the drawer reverses them)."""
+    """
+    The latest 200 messages, newest first (the drawer reverses them), with
+    their photos / voice notes and my ticks. `?seen=1` (the drawer, while the
+    room is on screen) records that I have seen up to the newest.
+    """
     if 'user_id' not in session:
         return jsonify(success=False, error='Not authenticated'), 401
     conn, cur = connection()
@@ -19694,11 +19964,17 @@ def chat_group_messages(room):
         cur.execute("""SELECT m.id, m.body AS comment_text, m.created_at, m.user_id, u.name AS user_name
                        FROM group_chat_message m JOIN user u ON u.id = m.user_id
                        WHERE m.room = %s AND m.is_deleted = 0 ORDER BY m.id DESC LIMIT 200""", (room,))
-        rows = cur.fetchall()
+        rows = list(cur.fetchall())
+        thread = 'g:' + room
+        if request.args.get('seen') == '1' and rows:
+            chat_mark_seen(cur, thread, session['user_id'], rows[0]['id'])
+            conn.commit()
+        members = chat_room_members(cur, room)
+        chat_decorate(cur, thread, rows, members)
         for row in rows:
             row['created_at'] = row['created_at'].strftime('%Y-%m-%d %H:%M:%S')
         return jsonify(success=True, comments=rows, room=room, title=CHAT_ROOMS[room]['title'],
-                       members=len(chat_room_members(cur, room)))
+                       members=len(members))
     finally:
         cur.close()
         conn.close()
@@ -19708,8 +19984,10 @@ def chat_group_messages(room):
 def chat_group_post(room):
     if 'user_id' not in session:
         return jsonify(success=False, error='Not authenticated'), 401
-    data = request.get_json(silent=True) or {}
+    data, upload = chat_request_payload()
     text = (data.get('comment_text') or data.get('text') or '').strip()
+    if upload and not text:
+        text = CHAT_PLACEHOLDER.get(data.get('kind'), '')
     if not text:
         return jsonify(success=False, error='Write something first'), 400
     me = session['user_id']
@@ -19719,10 +19997,14 @@ def chat_group_post(room):
         cur.execute("INSERT INTO group_chat_message (room, user_id, body) VALUES (%s, %s, %s)",
                     (room, me, text[:4000]))
         message_id = cur.lastrowid
-        # Their own message is read by definition.
-        cur.execute("""INSERT INTO group_chat_read (room, user_id, last_read_id) VALUES (%s, %s, %s)
-                       ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))""",
-                    (room, me, message_id))
+        if upload:
+            error = chat_save_attachment(cur, 'g:' + room, message_id, upload, data.get('kind'),
+                                         data.get('duration_ms'))
+            if error:
+                conn.rollback()
+                return jsonify(success=False, error=error), 400
+        # Their own message is seen by definition.
+        chat_mark_seen(cur, 'g:' + room, me, message_id)
         members = set(chat_room_members(cur, room))
         conn.commit()
     finally:
@@ -19747,15 +20029,307 @@ def chat_group_read(room):
     try:
         _room_or_403(cur, room)
         cur.execute("SELECT COALESCE(MAX(id), 0) AS n FROM group_chat_message WHERE room = %s", (room,))
-        latest = cur.fetchone()['n']
-        cur.execute("""INSERT INTO group_chat_read (room, user_id, last_read_id) VALUES (%s, %s, %s)
-                       ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))""",
-                    (room, me, latest))
+        chat_mark_seen(cur, 'g:' + room, me, cur.fetchone()['n'])
         conn.commit()
         return jsonify(success=True)
     finally:
         cur.close()
         conn.close()
+
+
+# ---- chat: who is in a thread, photos, voice notes, seen ---------------------
+# A thread is 'sr:<request id>' (the request's chat) or 'g:<room>' (a group).
+#
+# Who is in a request's chat: everyone who may write in it -- holds the comment
+# permission and either sees requests of this owner or has a part in this one
+# (raised it, costs it, assigned it, already wrote in it). The @ list, the
+# "seen by" list and the ticks all read the same members, so the three agree.
+CHAT_MEDIA_MAX_BYTES = 16 * 1024 * 1024
+CHAT_IMAGE_TYPES = {'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif'}
+CHAT_VOICE_TYPES = {'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
+                    'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav'}
+CHAT_PLACEHOLDER = {'image': '\U0001F4F7 Photo', 'voice': '\U0001F3A4 Voice note'}
+
+
+def chat_thread(thread):
+    """('sr', request_id) or ('g', room) from 'sr:12' / 'g:sales'; 404 otherwise."""
+    kind, _, key = (thread or '').partition(':')
+    if kind == 'sr' and key.isdigit():
+        return 'sr', int(key)
+    if kind == 'g' and key in CHAT_ROOMS:
+        return 'g', key
+    abort(404)
+
+
+def _scope_reaches(scope, person, owner):
+    """Does `scope`, held by `person`, reach a request owned by `owner`? Rows have id, department_id, manager_id."""
+    if scope == 'all':
+        return True
+    if not owner or not scope:
+        return False
+    if owner['id'] == person['id']:
+        return True
+    if scope == 'team':
+        return owner['manager_id'] == person['id']
+    if scope == 'department':
+        return bool(person['department_id']) and owner['department_id'] == person['department_id']
+    return False
+
+
+def chat_members(cur, kind, key):
+    """Active user ids in this thread."""
+    if kind == 'g':
+        return chat_room_members(cur, key)
+    cur.execute("""SELECT u.id, u.department_id, u.manager_id FROM sales_request sr
+                   JOIN user u ON u.id = sr.owner_user_id WHERE sr.id = %s""", (key,))
+    owner = cur.fetchone()
+    involved = set(sales_request_audience(cur, key))
+    cur.execute("SELECT id, department_id, manager_id FROM user WHERE is_active = 1")
+    members = []
+    # ponytail: one load_permissions per active user (15 today); a role-level
+    # cache is the upgrade when the company grows past a few hundred.
+    for person in cur.fetchall():
+        perms = load_permissions(person['id'])[0]
+        if 'sales_request.comment' not in perms:
+            continue
+        if person['id'] in involved or _scope_reaches(perms.get('sales_request.view'), person, owner):
+            members.append(person['id'])
+    return members
+
+
+def chat_may_open(cur, kind, key):
+    """The signed-in person may read and write in this thread."""
+    me = session.get('user_id')
+    if kind == 'g':
+        return key in chat_rooms_for(cur, me)
+    if not has('sales_request.comment'):
+        return False
+    cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (key,))
+    row = cur.fetchone()
+    if not row:
+        return False
+    if has('sales_request.view') and _scope_covers('sales_request.view', row['owner_user_id']):
+        return True
+    return me in sales_request_audience(cur, key)
+
+
+def chat_thread_or_403(cur, thread):
+    kind, key = chat_thread(thread)
+    if not chat_may_open(cur, kind, key):
+        abort(403)
+    return kind, key
+
+
+def chat_mark_seen(cur, thread, user_id, upto_id):
+    """Move this person's "seen up to" forward; never back."""
+    if not upto_id:
+        return
+    cur.execute("SELECT COALESCE(MAX(upto_id), 0) AS n FROM chat_seen WHERE thread = %s AND user_id = %s",
+                (thread, user_id))
+    if upto_id > cur.fetchone()['n']:
+        cur.execute("INSERT IGNORE INTO chat_seen (thread, user_id, upto_id) VALUES (%s, %s, %s)",
+                    (thread, user_id, upto_id))
+
+
+def chat_seen_upto(cur, thread):
+    cur.execute("SELECT user_id, MAX(upto_id) AS upto FROM chat_seen WHERE thread = %s GROUP BY user_id",
+                (thread,))
+    return {row['user_id']: row['upto'] for row in cur.fetchall()}
+
+
+def chat_decorate(cur, thread, messages, members=None):
+    """
+    Add each message's photos / voice notes and, on my own messages, the ticks:
+    'sent' (nobody else has seen it), 'seen_some', 'seen_all'.
+    """
+    ids = [m['id'] for m in messages]
+    by_message = {}
+    if ids:
+        cur.execute("SELECT id, message_id, kind, mime, duration_ms, width, height FROM chat_attachment "
+                    "WHERE thread = %s AND message_id IN (" + ",".join(["%s"] * len(ids)) + ")",
+                    [thread] + ids)
+        for row in cur.fetchall():
+            by_message.setdefault(row['message_id'], []).append({
+                'id': row['id'], 'kind': row['kind'], 'mime': row['mime'],
+                'url': '/api/chat/media/%d' % row['id'], 'duration_ms': row['duration_ms'],
+                'width': row['width'], 'height': row['height']})
+    me = session.get('user_id')
+    upto = chat_seen_upto(cur, thread) if members is not None else {}
+    for m in messages:
+        m['attachments'] = by_message.get(m['id'], [])
+        # The text under a photo; '' when the stored text is only the
+        # "Photo" / "Voice note" stand-in that lists and older screens show.
+        text = m.get('comment_text') or ''
+        m['caption'] = '' if m['attachments'] and text in CHAT_PLACEHOLDER.values() else text
+        if members is not None and m.get('user_id') == me:
+            others = [u for u in members if u != me]
+            seen = sum(1 for u in others if upto.get(u, 0) >= m['id'])
+            m['receipt'] = 'seen_all' if others and seen == len(others) else ('seen_some' if seen else 'sent')
+            m['seen_count'], m['member_count'] = seen, len(others)
+    return messages
+
+
+def chat_save_attachment(cur, thread, message_id, upload, kind, duration_ms=None):
+    """
+    Store one photo or voice note for a message. Returns an error string, or None.
+
+    Photos are checked to be images (Pillow) and kept as sent -- the browser
+    already shrank them. Voice notes are turned into AAC (.m4a) when they are
+    not already, because Safari on an iPhone plays neither WebM nor Ogg.
+    """
+    import subprocess
+    import uuid
+    from PIL import Image
+    mime = (upload.mimetype or '').split(';')[0].strip().lower()
+    types = CHAT_IMAGE_TYPES if kind == 'image' else CHAT_VOICE_TYPES if kind == 'voice' else None
+    if not types or mime not in types:
+        return 'Only photos and voice notes can be sent here'
+    data = upload.read(CHAT_MEDIA_MAX_BYTES + 1)
+    if not data:
+        return 'The file is empty'
+    if len(data) > CHAT_MEDIA_MAX_BYTES:
+        return 'Files up to 16 MB'
+    slug = thread.replace(':', '-')
+    folder = os.path.join(UPLOADS_DIR, 'chat', slug)
+    os.makedirs(folder, exist_ok=True)
+    name = uuid.uuid4().hex
+    path = os.path.join(folder, '%s.%s' % (name, types[mime]))
+    with open(path, 'wb') as handle:
+        handle.write(data)
+    width = height = None
+    if kind == 'image':
+        try:
+            with Image.open(path) as img:
+                img.verify()
+            with Image.open(path) as img:
+                width, height = img.size
+        except Exception:
+            os.remove(path)
+            return 'That photo could not be read'
+    elif types[mime] != 'm4a':
+        out = os.path.join(folder, name + '.m4a')
+        try:
+            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-y', '-i', path, '-vn',
+                            '-c:a', 'aac', '-b:a', '64k', out], check=True, timeout=90)
+            os.remove(path)
+            path, mime = out, 'audio/mp4'
+        except Exception as e:
+            # Kept as recorded: every browser but Safari still plays it.
+            print("DEBUG: voice note transcode failed: %s" % e)
+            if os.path.exists(out):
+                os.remove(out)
+    try:
+        duration_ms = int(duration_ms) if duration_ms not in (None, '') else None
+    except (TypeError, ValueError):
+        duration_ms = None
+    cur.execute("""INSERT INTO chat_attachment (thread, message_id, user_id, kind, path, mime, bytes,
+                                                duration_ms, width, height)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (thread, message_id, session['user_id'], kind,
+                 os.path.relpath(path, UPLOADS_DIR), mime, os.path.getsize(path),
+                 duration_ms, width, height))
+    return None
+
+
+def chat_request_payload():
+    """The posted message, from JSON or from a multipart form carrying a file."""
+    if request.files:
+        form = request.form
+        try:
+            mentioned = json.loads(form.get('mentioned_users') or '[]')
+        except ValueError:
+            mentioned = []
+        return {'comment_text': form.get('comment_text') or '', 'source': form.get('source') or 'general',
+                'is_note': form.get('is_note') in ('1', 'true'), 'mentioned_users': mentioned,
+                'kind': form.get('kind'), 'duration_ms': form.get('duration_ms')}, request.files.get('file')
+    return (request.get_json(silent=True) or {}), None
+
+
+@app.route('/api/chat/thread/<thread>/members', methods=['GET'])
+def chat_thread_members(thread):
+    """Who is in this chat: the @ list and the member list in the header."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    conn, cur = connection()
+    try:
+        kind, key = chat_thread_or_403(cur, thread)
+        ids = chat_members(cur, kind, key)
+        people = []
+        if ids:
+            cur.execute("""SELECT u.id, u.name, r.name AS role_name, d.name AS department_name FROM user u
+                           LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+                           LEFT JOIN department d ON d.id = u.department_id
+                           WHERE u.id IN (""" + ",".join(["%s"] * len(ids)) + ") ORDER BY u.name", ids)
+            people = [{'id': p['id'], 'name': p['name'], 'role_name': p['role_name'] or '',
+                       'department_name': p['department_name'] or '',
+                       'is_me': p['id'] == session['user_id']} for p in cur.fetchall()]
+        return jsonify(success=True, members=people)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/thread/<thread>/messages/<int:message_id>/info', methods=['GET'])
+def chat_message_info(thread, message_id):
+    """Message info, as on WhatsApp: who has seen my message and when, and who not yet."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        kind, key = chat_thread_or_403(cur, thread)
+        if kind == 'sr':
+            cur.execute("SELECT user_id, created_at FROM sales_request_comments WHERE id = %s AND request_id = %s "
+                        "AND is_deleted = 0", (message_id, key))
+        else:
+            cur.execute("SELECT user_id, created_at FROM group_chat_message WHERE id = %s AND room = %s "
+                        "AND is_deleted = 0", (message_id, key))
+        msg = cur.fetchone()
+        if not msg:
+            abort(404)
+        if msg['user_id'] != me:
+            abort(403)
+        members = [u for u in chat_members(cur, kind, key) if u != me]
+        cur.execute("SELECT user_id, MIN(seen_at) AS at FROM chat_seen WHERE thread = %s AND upto_id >= %s "
+                    "GROUP BY user_id", (thread, message_id))
+        seen_at = {row['user_id']: row['at'] for row in cur.fetchall()}
+        names = {}
+        if members:
+            cur.execute("SELECT id, name FROM user WHERE id IN (" + ",".join(["%s"] * len(members)) + ")", members)
+            names = {row['id']: row['name'] for row in cur.fetchall()}
+        seen = sorted(({'id': u, 'name': names.get(u, ''), 'at': seen_at[u].strftime('%Y-%m-%d %H:%M:%S')}
+                       for u in members if u in seen_at), key=lambda x: x['at'])
+        not_seen = sorted(({'id': u, 'name': names.get(u, '')} for u in members if u not in seen_at),
+                          key=lambda x: x['name'])
+        return jsonify(success=True, seen=seen, not_seen=not_seen,
+                       sent_at=msg['created_at'].strftime('%Y-%m-%d %H:%M:%S'))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/media/<int:attachment_id>', methods=['GET'])
+def chat_media(attachment_id):
+    """A chat photo or voice note, to whoever may read that chat."""
+    if 'user_id' not in session:
+        abort(401)
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT thread, path, mime FROM chat_attachment WHERE id = %s", (attachment_id,))
+        row = cur.fetchone()
+        if not row:
+            abort(404)
+        chat_thread_or_403(cur, row['thread'])
+    finally:
+        cur.close()
+        conn.close()
+    root = os.path.realpath(UPLOADS_DIR)
+    path = os.path.realpath(os.path.join(root, row['path']))
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        abort(404)
+    response = send_file(path, mimetype=row['mime'], conditional=True)
+    response.headers['Cache-Control'] = 'private, max-age=86400'
+    return response
 
 
 @app.route('/api/chat/sr/<int:request_id>/mark-read', methods=['POST'])
@@ -19783,6 +20357,9 @@ def mark_chat_sr_read(request_id):
             (user_id, request_id)
         )
         affected = cur.rowcount
+        cur.execute("SELECT COALESCE(MAX(id), 0) AS n FROM sales_request_comments WHERE request_id = %s "
+                    "AND is_deleted = 0", (request_id,))
+        chat_mark_seen(cur, 'sr:%d' % request_id, user_id, cur.fetchone()['n'])
         conn.commit()
         cur.close()
         conn.close()
@@ -19860,6 +20437,16 @@ def search_users_for_mention():
         #     return jsonify({'success': True, 'users': []})
         
         conn, cur = connection()
+        if (request.args.get('request_id') or '').isdigit():
+            # The request's chat: its members only (the chat drawer's rule).
+            kind, key = chat_thread_or_403(cur, 'sr:' + request.args['request_id'])
+            members = [u for u in chat_members(cur, kind, key) if u != session['user_id']]
+            if not members:
+                return jsonify({'success': True, 'users': []})
+            like = '%' + search_term + '%'
+            cur.execute("SELECT id, name, mobile FROM user WHERE id IN (" + ",".join(["%s"] * len(members))
+                        + ") AND (name LIKE %s OR mobile LIKE %s) ORDER BY name", members + [like, like])
+            return jsonify({'success': True, 'users': list(cur.fetchall())})
         
         # If no search term, return all active users
         if not search_term:
@@ -19897,6 +20484,8 @@ def search_users_for_mention():
             'users': users
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error searching users: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500

@@ -137,6 +137,36 @@
     <div class="row mb-4">
 
         <!-- Pending Approvals -->
+        {% if 'system.storage' in _p %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card feature-card">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-hdd card-icon mr-3"></i>
+                        <div>
+                            <h5>Storage</h5>
+                            <small>Uploads and data, in GB</small>
+                        </div>
+                        <span class="approval-badge ml-auto" id="storageBadge">...</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>How much space photos, voice notes, item files and receipts take, and what is left on the server.</p>
+                    <div class="d-flex justify-content-center">
+                        <a href="/admin/storage" class="btn btn-info btn-lg"><i class="fas fa-hdd mr-1"></i>Open Storage</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        $(function () {
+            $.getJSON('/api/admin/storage').done(function (r) {
+                if (r && r.success) { $('#storageBadge').text(r.uploads_gb.toFixed(2) + ' GB'); }
+            });
+        });
+        </script>
+        {% endif %}
+
         {% if 'user.view' in _p %}
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card feature-card">

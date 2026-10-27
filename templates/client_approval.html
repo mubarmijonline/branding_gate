@@ -905,6 +905,10 @@
         </div>
     </div>
 
+    <div class="d-flex justify-content-end mb-2" style="gap:6px;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="caExpandAll"><i class="fas fa-expand-alt mr-1"></i>Expand all</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="caCollapseAll"><i class="fas fa-compress-alt mr-1"></i>Collapse all</button>
+    </div>
     <!-- Items Table View -->
     <div id="itemsContainer">
         <!-- Items will be loaded here dynamically as grouped tables -->
@@ -1016,6 +1020,10 @@
 // reject). Repeated from the server only to decide what to draw: the routes
 // check the permission and the request's owner for themselves.
 const CAN_DECIDE = {{ ('client_approval.decide' in _p)|tojson }};
+// Cost, profit and the money totals are Operations' and Pricing's; Account
+// Management sees what the client is quoted (the server leaves cost out too).
+const CAN_SEE_COST = {{ ('sales_item.cost' in _p)|tojson }};
+const OPEN_GROUPS = new Set();   // request ids expanded by hand, kept across reloads
 
 // What went wrong, in words. Every failure used to read "Failed to approve
 // item" -- including a 403, which is how five refusals looked like a bug.
@@ -1371,6 +1379,16 @@ $(document).ready(function() {
             const profitMargin = totalCost > 0 ? ((totalProfit / totalCost) * 100).toFixed(1) : 0;
             
             const tableId = `approvalTable_${group.request_id}`;
+            // Collapsed until asked for, so the page reads as a list of
+            // requests; one request on screen opens by itself.
+            const open = sortedGroups.length === 1 || OPEN_GROUPS.has(group.request_id);
+            const counts = { pending: 0, approved: 0, rejected: 0, negotiation: 0 };
+            group.items.forEach(item => {
+                if (item.approval_status === 'approved') counts.approved++;
+                else if (item.approval_status === 'rejected') counts.rejected++;
+                else if (item.approval_status === 'pending_negotiation' || item.negotiation_status === 'pending_negotiation') counts.negotiation++;
+                else counts.pending++;
+            });
             
             // Determine overall status for border color
             let overallStatus = 'pending';
@@ -1397,26 +1415,32 @@ $(document).ready(function() {
             const requestCard = `
                 <div class="request-group-card" style="background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 24px; overflow: hidden; border: 1px solid #e5e7eb;">
                     <!-- Request Header - Clean Design -->
-                    <div class="request-header" style="background: #fff !important; padding: 20px 24px !important; border-bottom: 1px solid #e5e7eb !important; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <div class="request-header ca-toggle" data-request="${group.request_id}" role="button" tabindex="0" aria-expanded="${open}" style="background: #fff !important; padding: 16px 20px !important; border-bottom: 1px solid #e5e7eb !important; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; cursor: pointer;">
                         <div style="display: flex; align-items: center; gap: 16px;">
                             <h5 style="color: #1f2937 !important; margin: 0 !important; font-weight: 700 !important; font-size: 1.15rem !important;">
-                                <i class="fas fa-file-alt" style="color: #3b82f6 !important; margin-right: 8px;"></i>Request #${group.request_id}
+                                <i class="fas fa-chevron-${open ? 'down' : 'right'} ca-chevron fa-flip-rtl" style="color: #6b7280 !important; margin-inline-end: 8px; width: 14px;"></i><i class="fas fa-file-alt" style="color: #3b82f6 !important; margin-right: 8px;"></i>Request #${group.request_id}
                             </h5>
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-building" style="margin-right: 6px;"></i>${group.client_name || 'N/A'}</span>
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-calendar" style="margin-right: 6px;"></i>${new Date(group.sales_added_date).toLocaleDateString()}</span>
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-cubes" style="margin-right: 6px;"></i>${totalItems} Item${totalItems > 1 ? 's' : ''}</span>
                         </div>
-                        <div>
+                        <div class="d-flex align-items-center flex-wrap" style="gap: 6px;">
+                            ${counts.pending ? `<span class="badge badge-light" title="Waiting for the client">${counts.pending} pending</span>` : ''}
+                            ${counts.approved ? `<span class="badge badge-success">${counts.approved} approved</span>` : ''}
+                            ${counts.negotiation ? `<span class="badge badge-warning">${counts.negotiation} negotiating</span>` : ''}
+                            ${counts.rejected ? `<span class="badge badge-danger">${counts.rejected} rejected</span>` : ''}
                             <span class="badge" style="background: ${overallStatus === 'approved' ? '#dcfce7' : overallStatus === 'rejected' ? '#fee2e2' : overallStatus === 'pending_negotiation' ? '#ffedd5' : '#f3f4f6'}; color: ${overallStatus === 'approved' ? '#166534' : overallStatus === 'rejected' ? '#991b1b' : overallStatus === 'pending_negotiation' ? '#9a3412' : '#374151'}; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 0.8rem;">${overallStatus.replace('_', ' ').toUpperCase()}</span>
                         </div>
                     </div>
                     
+                    <div class="ca-body" style="${open ? '' : 'display:none;'}">
                     <!-- Request Summary - ABOVE Table -->
                     <div class="request-metrics" style="background: #f8fafc; padding: 16px 24px; display: flex; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #e5e7eb;">
                         <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
                             <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Items</div>
                             <div style="font-size: 1.4rem; font-weight: 700; color: #3b82f6;">${totalItems}</div>
                         </div>
+                        ${CAN_SEE_COST ? `
                         <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
                             <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Cost</div>
                             <div style="font-size: 1.4rem; font-weight: 700; color: #ef4444;">EGP ${bgNumber(totalCost, 2)}</div>
@@ -1432,7 +1456,7 @@ $(document).ready(function() {
                         <div style="flex: 1; min-width: 140px; background: #fff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e5e7eb;">
                             <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Profit Margin</div>
                             <div style="font-size: 1.4rem; font-weight: 700; color: #f59e0b;">${profitMargin}%</div>
-                        </div>
+                        </div>` : ''}
                     </div>
                     
                     <!-- Items Table - Clean Design -->
@@ -1444,7 +1468,7 @@ $(document).ready(function() {
                                     <th style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Description</th>
                                     <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Dimensions</th>
                                     <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Qty</th>
-                                    <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Cost/Item</th>
+                                    ${CAN_SEE_COST ? `<th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Cost/Item</th>` : ''}
                                     <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Sell/Item</th>
                                     <th class="text-right" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb;">Total</th>
                                     <th class="text-center" style="font-weight: 600; color: #374151; padding: 14px 12px; border-bottom: 2px solid #e5e7eb; min-width: 100px;">Status</th>
@@ -1456,18 +1480,13 @@ $(document).ready(function() {
                             </tbody>
                         </table>
                     </div>
+                    </div>
                 </div>
             `;
             
             container.append(requestCard);
             
             // Debug logging for this request
-            console.log('%c✅ METRICS FOOTER LOADED for Request #' + group.request_id, 'background: #2ecc71; color: white; padding: 5px; font-weight: bold;');
-            console.log('Total Items:', totalItems);
-            console.log('Total Cost:', bgNumber(totalCost, 2));
-            console.log('Total Selling:', bgNumber(totalSell, 2));
-            console.log('Profit:', bgNumber(totalProfit, 2));
-            console.log('Margin:', profitMargin + '%');
             
             // Initialize DataTable for this request table
             setTimeout(() => {
@@ -1477,9 +1496,12 @@ $(document).ready(function() {
                     "ordering": false, // Disable ordering - use backend order (DESC by ID)
                     "info": true,
                     "pageLength": 10,
-                    "columnDefs": [
+                    "columnDefs": CAN_SEE_COST ? [
                         { "className": "text-center", "targets": [2, 3, 7, 8] },
                         { "className": "text-right", "targets": [4, 5, 6] }
+                    ] : [
+                        { "className": "text-center", "targets": [2, 3, 6, 7] },
+                        { "className": "text-right", "targets": [4, 5] }
                     ],
                     "language": {
                         "search": "Search items:",
@@ -1497,11 +1519,34 @@ $(document).ready(function() {
         });
     }
     
+    $(document).on('click', '#caExpandAll, #caCollapseAll', function () {
+        const opening = this.id === 'caExpandAll';
+        $('.ca-toggle').each(function () {
+            if ($(this).next('.ca-body').is(':visible') !== opening) $(this).trigger('click');
+        });
+    });
+        $(document).on('click keydown', '.ca-toggle', function (e) {
+        if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+        if ($(e.target).closest('button, a').length) return;
+        e.preventDefault();
+        const id = Number($(this).data('request'));
+        const $body = $(this).next('.ca-body');
+        const opening = !$body.is(':visible');
+        if (opening) OPEN_GROUPS.add(id); else OPEN_GROUPS.delete(id);
+        $(this).attr('aria-expanded', opening).find('.ca-chevron')
+            .toggleClass('fa-chevron-right', !opening).toggleClass('fa-chevron-down', opening);
+        $body.stop(true, true).slideToggle(160, function () {
+            const t = $body.find('table.dataTable');
+            if (opening && t.length) t.DataTable().columns.adjust();
+        });
+    });
+
     function renderTableRows(items) {
         return items.map(item => {
-            const hasCost = item.cost_per_item && parseFloat(item.cost_per_item) > 0;
+            const hasCost = CAN_SEE_COST ? (item.cost_per_item && parseFloat(item.cost_per_item) > 0) : !!item.has_cost;
             const hasSelling = item.sell_per_item && parseFloat(item.sell_per_item) > 0;
             const hasPricing = hasCost && hasSelling;
+            const showProfit = hasPricing && CAN_SEE_COST;
             
             // Use STORED total_sell from database (calculated with formula in backend)
             const itemTotal = item.total_sell ? parseFloat(item.total_sell) : 0;
@@ -1562,11 +1607,11 @@ $(document).ready(function() {
                     <td class="text-center">
                         <span class="badge badge-info">${item.qty || 0}</span>
                     </td>
-                    <td class="text-right">
+                    ${CAN_SEE_COST ? `<td class="text-right">
                         <span class="table-price cost">
                             ${hasCost ? 'EGP ' + bgNumber(item.cost_per_item, 2) : '-'}
                         </span>
-                    </td>
+                    </td>` : ''}
                     <td class="text-right">
                         <span class="table-price sell">
                             ${hasSelling ? 'EGP ' + bgNumber(item.sell_per_item, 2) : '-'}
@@ -1576,7 +1621,7 @@ $(document).ready(function() {
                         <div>
                             <span class="table-price sell">EGP ${bgNumber(itemTotal, 2)}</span>
                         </div>
-                        ${hasPricing ? `
+                        ${showProfit ? `
                             <div>
                                 <small class="table-price profit">
                                     <i class="fas fa-arrow-up"></i> ${itemProfit}
@@ -1664,9 +1709,9 @@ $(document).ready(function() {
                         <div class="col-md-6">
                             <h6 class="text-success"><i class="fas fa-dollar-sign"></i> Pricing Information</h6>
                             <table class="table table-sm">
-                                <tr><th>Cost per Item:</th><td class="text-danger">EGP ${item.cost_per_item || '0.00'}</td></tr>
+                                ${CAN_SEE_COST ? `<tr><th>Cost per Item:</th><td class="text-danger">EGP ${item.cost_per_item || '0.00'}</td></tr>` : ''}
                                 <tr><th>Sell per Item:</th><td class="text-success">EGP ${item.sell_per_item || '0.00'}</td></tr>
-                                <tr><th>Total Cost:</th><td class="text-danger">EGP ${item.total_cost ? bgNumber(item.total_cost, 2) : (item.cost_per_item * item.qty).toFixed(2)}</td></tr>
+                                ${CAN_SEE_COST ? `<tr><th>Total Cost:</th><td class="text-danger">EGP ${item.total_cost ? bgNumber(item.total_cost, 2) : (item.cost_per_item * item.qty).toFixed(2)}</td></tr>` : ''}
                                 <tr><th>Total Sell:</th><td class="text-success">EGP ${item.total_sell ? bgNumber(item.total_sell, 2) : (item.sell_per_item * item.qty).toFixed(2)}</td></tr>
                                 <tr><th>Status:</th><td><span class="badge status-${item.approval_status}">${(item.approval_status || 'pending').toUpperCase()}</span></td></tr>
                             </table>

@@ -1,0 +1,85 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+    .st-hero { background: linear-gradient(135deg, #4e73df 0%, #224abe 100%); color: #fff; border-radius: 15px; padding: 1.5rem 2rem; margin-bottom: 1.5rem; }
+    .st-hero h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 .25rem; }
+    .st-hero p { opacity: .9; margin: 0; }
+    .st-card { border: none; border-radius: 12px; box-shadow: 0 .15rem 1.75rem rgba(58,59,69,.1); height: 100%; }
+    .st-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #858796; }
+    .st-value { font-size: 1.6rem; font-weight: 800; color: #224abe; }
+    .st-value small { font-size: .9rem; font-weight: 600; color: #858796; }
+    .st-bar { height: 10px; border-radius: 6px; background: #eaecf4; overflow: hidden; }
+    .st-bar > span { display: block; height: 100%; background: #4e73df; }
+    .st-bar.warn > span { background: #f6c23e; }
+    .st-bar.danger > span { background: #e74a3b; }
+    .st-table td, .st-table th { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set r = report %}
+<div class="container-fluid py-3">
+    <div class="st-hero d-flex align-items-center flex-wrap" style="gap:1rem;">
+        <i class="fas fa-hdd fa-2x"></i>
+        <div class="flex-grow-1">
+            <h1>Storage</h1>
+            <p>Space used by uploaded files and the system's data.</p>
+        </div>
+        <a href="{{ url_for('admin_storage') }}" class="btn btn-light btn-sm"><i class="fas fa-sync-alt mr-1"></i>Refresh</a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-3 col-6 mb-3"><div class="card st-card"><div class="card-body">
+            <div class="st-label">Uploaded files</div>
+            <div class="st-value">{{ '%.2f' % r.uploads_gb }} <small>GB</small></div>
+            <div class="small text-muted">{{ r.uploads_files }} files</div>
+        </div></div></div>
+        <div class="col-lg-3 col-6 mb-3"><div class="card st-card"><div class="card-body">
+            <div class="st-label">Database</div>
+            <div class="st-value">{{ '%.2f' % r.database_gb }} <small>GB</small></div>
+            <div class="small text-muted">Requests, finance, chats</div>
+        </div></div></div>
+        <div class="col-lg-3 col-6 mb-3"><div class="card st-card"><div class="card-body">
+            <div class="st-label">Notifications</div>
+            <div class="st-value">{{ '%.2f' % r.notifications_gb }} <small>GB</small></div>
+            <div class="small text-muted">Bell history</div>
+        </div></div></div>
+        <div class="col-lg-3 col-6 mb-3"><div class="card st-card"><div class="card-body">
+            <div class="st-label">System total</div>
+            <div class="st-value">{{ '%.2f' % r.total_gb }} <small>GB</small></div>
+            <div class="small text-muted">Files + data</div>
+        </div></div></div>
+    </div>
+
+    <div class="card st-card mb-3"><div class="card-body">
+        <div class="d-flex justify-content-between flex-wrap mb-2">
+            <strong><i class="fas fa-server mr-1 text-primary"></i>Server disk</strong>
+            <span class="text-muted small">{{ '%.1f' % r.disk_used_gb }} GB used of {{ '%.1f' % r.disk_total_gb }} GB &middot; <b>{{ '%.1f' % r.disk_free_gb }} GB free</b></span>
+        </div>
+        <div class="st-bar {{ 'danger' if r.disk_used_pct >= 90 else ('warn' if r.disk_used_pct >= 75 else '') }}">
+            <span style="width: {{ r.disk_used_pct }}%"></span>
+        </div>
+        <div class="small text-muted mt-1">{{ r.disk_used_pct }}% full. The disk is shared with other sites on this server.</div>
+    </div></div>
+
+    <div class="card st-card"><div class="card-body">
+        <strong class="d-block mb-2"><i class="fas fa-folder-open mr-1 text-primary"></i>Uploads by area</strong>
+        <div class="table-responsive">
+            <table class="table table-sm st-table mb-0" data-mobile-title="Area">
+                <thead><tr><th>Area</th><th class="text-right">Files</th><th class="text-right">Size</th><th style="width:35%">Share</th></tr></thead>
+                <tbody>
+                {% for a in r.areas %}
+                    <tr>
+                        <td>{{ a.label }}</td>
+                        <td class="text-right">{{ a.files }}</td>
+                        <td class="text-right">{% if a.gb >= 1 %}{{ '%.2f' % a.gb }} GB{% else %}{{ a.mb }} MB{% endif %}</td>
+                        <td><div class="st-bar"><span style="width: {{ (100.0 * a.bytes / (r.uploads_gb * 1024 ** 3)) if r.uploads_gb else 0 }}%"></span></div></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div></div>
+</div>
+{% endblock %}

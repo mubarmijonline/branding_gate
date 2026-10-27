@@ -604,3 +604,52 @@ operations team only), Sales (sales only).
 - Drawer: a "Groups" heading with the rooms on top, "Requests" below; the same
   thread view and composer. The chat badge counts unread group messages too,
   and keeps working for people with no access to request chats.
+
+## Chat like WhatsApp, storage, assignment board, 2026-10-27
+
+Ahmed: chat must be very mobile friendly and work properly in browsers; the
+@ list shows only the people in that chat; photos and voice notes as on
+WhatsApp; seen / not seen with "who has seen it"; a storage page in GB for
+the admin; David wants to see who a leader assigned items to. Gamal (same
+day): no total cost / selling / profit for Account Management on Client
+Approval; Client Approval collapsible; Sarah's item photos "updated" but did
+not change.
+
+- Chat drawer rewritten into `static/js/bg-chat.js` + `static/css/bg-chat.css`
+  (was inline in main.html). Desktop: list beside chat. Phone: full screen,
+  one pane at a time, back arrow and the phone's back button, composer kept
+  above the keyboard (visual viewport), 16px inputs, safe areas. RTL by
+  logical properties.
+- Members of a chat: a group = its room; a request = everyone who may write
+  in it (holds `sales_request.comment`, and either their `sales_request.view`
+  scope reaches the owner or they have a part in the request). Same rule now
+  guards reading and writing request chats, which had no row check.
+  `/api/chat/thread/<t>/members`; `/api/mention-users?thread=` and
+  `/api/users/search?request_id=` give members only (drawer and the request
+  page's comment boxes).
+- Photos: shrunk in the browser (1600px JPEG), checked with Pillow, kept
+  under `uploads/chat/<thread>/`. Voice notes: MediaRecorder, tap to record,
+  cancel or send, 5 min cap; the server converts to AAC (.m4a) with ffmpeg so
+  iPhones play them. `chat_attachment`, served by `/api/chat/media/<id>` to
+  the chat's members only. Caption kept; lists show "Photo" / "Voice note".
+- Seen: `chat_seen` (thread, user, seen-up-to, when). The drawer marks seen
+  only while the chat is on screen (`?seen=1`). Ticks on my messages: one grey
+  sent, two grey seen by some, two blue seen by all members. Message info
+  (tap the ticks, long-press or right-click my message): seen by with time,
+  not seen yet. Group unread counts moved from group_chat_read to chat_seen
+  (rows carried over by `chat_media_migration.sql`).
+- Storage: `system.storage` (admin), `/admin/storage` and a card on Admin
+  Section: uploads by area in MB/GB, database and notifications size, server
+  disk used / free.
+- Operations board: each request shows who has its items, how many and who
+  assigned them, plus how many are not assigned yet; the details panel has an
+  "Assigned to" column (assignee, state, by whom, when).
+- Client Approval: cost, profit and the money totals hidden, and cost left out
+  of the data, for anyone without `sales_item.cost` (Account Management,
+  Gamal included). Request cards collapse; header shows pending / approved /
+  negotiating / rejected counts; Expand all / Collapse all. Dates fall back
+  to the request's creation date (was 1/1/1970).
+- Item photos lost on edit: the edit modal uploads a photo at once against
+  the item's id, and saving deletes and re-inserts the items, cascading the
+  photo away. Both edit routes now carry item files to the re-inserted item
+  (same name and type). Sarah's five photos on request 23645 restored.
