@@ -851,6 +851,8 @@ PRICING_FLAG_PERMISSIONS = {
     'sales_request.view': 'all',
     'client_approval.view': 'all',
     'catalog.view': 'all',
+    # Whoever prices a request may also remove one (Ahmed, 2026-10-27).
+    'sales_request.delete': 'all',
 }
 
 

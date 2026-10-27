@@ -271,8 +271,8 @@
           <div id="grantTargetEditor"></div>
           <div id="grantOverview" class="mt-2"></div>
         </div>
-        <div id="rolePerms" class="mt-3"><p class="empty">Select a role.</p></div>
         <div id="roleGrants"></div>
+        <div id="rolePerms" class="mt-3"><p class="empty">Select a role.</p></div>
       </div>
     </div>
   </section>
@@ -355,11 +355,11 @@
               </label>
             </div>
             <small class="form-text text-muted">
-              Lets this person set selling prices and decide re-pricing, whatever their role.
+              Lets this person set selling prices, decide re-pricing and delete sales requests, whatever their role.
               Everyone else never sees the pricing controls.
             </small>
-            <div id="rolePreview" class="mt-3"></div>
             <div id="personGrants"></div>
+            <div id="rolePreview" class="mt-3"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -665,14 +665,19 @@
     $.getJSON('/api/rbac/roles/' + roleId + '/permissions', function (r) {
       if (!r.success) { $out.html('<p class="empty">' + esc(r.error || 'Failed') + '</p>'); return; }
       if (!r.permissions.length) { $out.html('<p class="empty">This role holds no permissions.</p>'); return; }
-      var html = '<h5 class="mb-2">' + esc(r.role.name) + '</h5><table class="perms"><tbody>';
+      // Collapsed: the extras above are what gets changed here; the role's own
+      // list is long and only read now and then.
+      var html = '<button type="button" class="btn btn-sm btn-outline-secondary role-perms-toggle" ' +
+        'data-toggle="collapse" data-target="' + target + ' .role-perms-body">' +
+        '<i class="fas fa-chevron-down mr-1"></i>' + esc(r.role.name) + ': ' + r.permissions.length +
+        ' role permissions</button><div class="collapse role-perms-body mt-2"><table class="perms"><tbody>';
       r.permissions.forEach(function (p) {
         html += '<tr><td><code>' + esc(p.permission_code) + '</code><br>' +
           '<small class="muted">' + esc(p.description) + '</small></td>' +
           '<td class="text-right"><span class="scope">' + esc(p.scope) + '</span><br>' +
           '<small class="muted">' + esc(SCOPE_TEXT[p.scope] || '') + '</small></td></tr>';
       });
-      $out.html(html + '</tbody></table>');
+      $out.html(html + '</tbody></table></div>');
     });
   }
 

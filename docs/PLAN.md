@@ -518,3 +518,14 @@ Two requests from Ahmed.
      Announcement. Admin-only work (urgent approval, party requests to sign,
      their own approval chain, anything assigned to them) stays Important.
      Stored admin notifications re-classified the same way.
+   - Same day: the pricing flag now carries `sales_request.delete` (all);
+     Gamal's one-off person grant removed as redundant. In the person modal
+     and under a role the extras box comes first and the role's own list is
+     collapsed behind a toggle.
+
+## Money inputs step, 2026-10-27
+
+Gamal: re-pricing arrows moved a price by 0.01 (1500 -> 1500.01). 73 number
+inputs carry `step="0.01"`. One script in main.html switches them, and any
+drawn later, to `step="any"`: any amount is accepted and the arrows move by
+whole pounds.

@@ -96,3 +96,9 @@ class PermissionGrantTest(_CostingHarness):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PricingFlagDeleteTest(unittest.TestCase):
+    def test_whoever_prices_may_delete_a_request(self):
+        import rbac
+        self.assertEqual(rbac.apply_pricing_flag({})['sales_request.delete'], 'all')

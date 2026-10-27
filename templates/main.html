@@ -2726,6 +2726,22 @@ function showToast(title, body) {
 </footer>
 
 <script>
+// Money boxes were step="0.01": the arrows moved a price by one piastre
+// (1500 -> 1500.01) and a value off that grid was refused. step="any" takes
+// any amount typed and moves the arrows by a whole pound. One place, for
+// every page and for boxes drawn later (modals, SweetAlert).
+(function () {
+  function relax(root) {
+    $(root).find('input[type=number][step="0.01"]').addBack('input[type=number][step="0.01"]').attr('step', 'any');
+  }
+  $(function () {
+    relax(document.body);
+    new MutationObserver(function (changes) {
+      changes.forEach(function (c) { c.addedNodes.forEach(function (n) { if (n.nodeType === 1) { relax(n); } }); });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+})();
+
 // Function to fetch notifications
 async function fetchNotifications() {
   try {
