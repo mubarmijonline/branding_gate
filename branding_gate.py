@@ -19598,6 +19598,9 @@ def add_sales_request_comment(request_id):
         # nobody was ever told they had been mentioned.
         notification_sent_to = []
         mentioned = []
+        # @all tags everyone who is in this request's chat.
+        if chat_mentions_all(comment_text, mentioned_user_ids):
+            mentioned_user_ids = [u for u in chat_members(cur, 'sr', request_id) if u != user_id]
         for mentioned_user_id in (mentioned_user_ids or []):
             try:
                 mentioned_user_id = int(mentioned_user_id)
@@ -19624,7 +19627,8 @@ def add_sales_request_comment(request_id):
         # is a comment nobody reads.
         audience = sales_request_audience(cur, request_id, exclude=[user_id] + mentioned)
         excerpt = comment_text[:120] + ('...' if len(comment_text) > 120 else '')
-        deep_link = '/sales_request?request=%d' % request_id
+        # Opens the chat itself (in place when the app is already open).
+        deep_link = '/home?chat=sr:%d' % request_id
         if mentioned:
             notify_users(
                 mentioned,
@@ -20085,8 +20089,11 @@ def chat_group_post(room):
         cur.close()
         conn.close()
     # A mention is a notification, as in a request chat; only room members.
-    mentioned = [int(u) for u in (data.get('mentioned_users') or []) if str(u).isdigit()
-                 and int(u) in members and int(u) != me]
+    if chat_mentions_all(text, data.get('mentioned_users')):
+        mentioned = sorted(u for u in members if u != me)
+    else:
+        mentioned = [int(u) for u in (data.get('mentioned_users') or []) if str(u).isdigit()
+                     and int(u) in members and int(u) != me]
     if mentioned:
         name = session.get('name') or 'Someone'
         notify_users(mentioned, '%s mentioned you: %s group' % (name, CHAT_ROOMS[room]['title']),
@@ -20209,6 +20216,14 @@ def chat_seen_upto(cur, thread):
     cur.execute("SELECT user_id, MAX(upto_id) AS upto FROM chat_seen WHERE thread = %s GROUP BY user_id",
                 (thread,))
     return {row['user_id']: row['upto'] for row in cur.fetchall()}
+
+
+MENTION_ALL = re.compile(r'(^|\s)@(all|everyone)(?=$|[\s.,!?;:)\]}])', re.I)
+
+
+def chat_mentions_all(text, mentioned):
+    """True when the message tags everyone in the chat (@all, or the picker's 'all')."""
+    return 'all' in [str(u).lower() for u in (mentioned or [])] or bool(MENTION_ALL.search(text or ''))
 
 
 def chat_reply_target(cur, kind, key, message_id):

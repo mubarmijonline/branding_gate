@@ -26,6 +26,7 @@
     var CAN_RECORD = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia
                         && window.isSecureContext);
     var MAX_VOICE_MS = 5 * 60 * 1000;
+    var MENTION_ALL = /(^|\s)@(all|everyone)(?=$|[\s.,!?;:)\]}])/i;
     var AUTHOR_COLOURS = ['#e542a3', '#1f7aec', '#d3396d', '#00a884', '#a62c71', '#c75300', '#7f66ff', '#02a698'];
 
     var $drawer = $('#chatDrawer'), $overlay = $('#chatDrawerOverlay'), $badge = $('#chatUnreadBadge');
@@ -463,7 +464,7 @@
 
     function bubbleHtml(m, first) {
         var own = m.user_id === ME;
-        var names = cur.members.map(function (u) { return u.name; });
+        var names = cur.members.map(function (u) { return u.name; }).concat(['all', 'everyone']);
         var text = (m.attachments && m.attachments.length) ? (m.caption || '') : (m.comment_text || '');
         return '<div class="bgc-msg' + (own ? ' own' : '') + (first ? ' first' : '') + (m.temp ? ' pending' : '') +
             '" data-id="' + esc(m.id) + '">' +
@@ -569,7 +570,7 @@
 
     // ---------------------------------------------------------------- sending
     function mentionIds(text) {
-        var out = [];
+        var out = MENTION_ALL.test(text || '') ? ['all'] : [];
         cur.members.forEach(function (u) {
             if (u.is_me || !u.name) { return; }
             var re = new RegExp('@' + u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[\\s.,!?;:)\\]}])');
@@ -789,9 +790,19 @@
         if (/\n/.test(q) || q.length > 30) { return hideSuggest(); }
         q = q.toLowerCase();
         sug.list = cur.members.filter(function (u) { return !u.is_me && (u.name || '').toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+        // @all: everyone in this chat, at the top like WhatsApp's "everyone".
+        if (cur.members.length > 1 && ('all'.indexOf(q) === 0 || 'everyone'.indexOf(q) === 0)) {
+            sug.list.unshift({ id: 'all', name: 'all', everyone: true });
+        }
         if (!sug.list.length) { return hideSuggest(); }
         sug.on = true; sug.start = at; sug.idx = 0;
         $('#chatMentionSuggest').html('<div class="hint">' + esc(T('People in this chat')) + '</div>' + sug.list.map(function (u, i) {
+            if (u.everyone) {
+                var others = cur.members.filter(function (m) { return !m.is_me; }).length;
+                return '<div class="item' + (i ? '' : ' active') + '" data-i="' + i + '">' +
+                    '<div class="bgc-avatar sm group"><i class="fas fa-users"></i></div>' +
+                    '<div><div class="who">@all</div><small>' + esc(T('Everyone in this chat')) + ' (' + others + ')</small></div></div>';
+            }
             return '<div class="item' + (i ? '' : ' active') + '" data-i="' + i + '">' +
                 '<div class="bgc-avatar sm" style="background:' + colourFor(u.id) + '">' + esc(initials(u.name)) + '</div>' +
                 '<div><div class="who" data-no-i18n>' + esc(u.name) + '</div><small>' + esc([u.role_name, u.department_name].filter(Boolean).join(' · ')) + '</small></div></div>';
@@ -996,9 +1007,19 @@
         badgeTimer = setInterval(pollBadge, 15000);
         // Deep links: a mention notification opens ?chat=g:<room> or ?chat=sr:<id>.
         var wanted = new URLSearchParams(window.location.search).get('chat');
-        if (wanted && /^(g:[a-z_]+|sr:\d+)$/.test(wanted)) { setTimeout(function () { openThread(wanted); }, 400); }
+        if (wanted && /^(g:[a-z_]+|sr:\d+)$/.test(wanted)) {
+            // Out of the address bar, so a refresh does not reopen it.
+            try { var u = new URL(window.location.href); u.searchParams.delete('chat'); history.replaceState(history.state, '', u.toString()); } catch (e) { /* ignore */ }
+            setTimeout(function () { openThread(wanted); }, 400);
+        }
     });
 
     // Other pages open a request's chat directly.
     window.openChatDrawerForRequest = function (requestId) { openThread('sr:' + parseInt(requestId, 10)); };
+    // A notification about a chat opens that chat where you are ('sr:12' / 'g:sales').
+    window.bgOpenChat = function (thread) {
+        if (!/^(g:[a-z_]+|sr:\d+)$/.test(thread || '')) { return false; }
+        openThread(thread);
+        return true;
+    };
 })(window.jQuery);

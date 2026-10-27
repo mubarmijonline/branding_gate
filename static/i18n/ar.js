@@ -1178,6 +1178,7 @@ window.BG_AR = {
 "Every person has a department, a role, and someone they report to.": "لكل شخص قسم ودور ومسؤول مباشر يتبع له.",
 "Everyone else never sees the pricing controls.": "لا يرى أي شخص آخر أدوات التحكم في التسعير.",
 "Everyone has seen it": "شاهدها الجميع",
+"Everyone in this chat": "كل من في هذه المحادثة",
 "Everything approved has a supplier.": "كل البنود المعتمدة لها مورد.",
 "Everything else": "كل ما عدا ذلك",
 "Everything the client signed off.": "كل ما وافق عليه العميل.",

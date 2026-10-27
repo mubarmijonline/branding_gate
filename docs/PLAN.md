@@ -689,3 +689,19 @@ said OK and nothing was added.
   the operations page; the save message says how many went to costing.
 - Gamal's lost test item was not recreated: saving it again goes through the
   normal path (insert, notification, costing).
+
+## @all in chats; chat notifications open the chat, 2026-10-28
+
+- `@all` (or `@everyone`): first entry in the @ list of any request chat or
+  group ("Everyone in this chat (n)"). The server expands it to the chat's
+  members (the same member rule as the list) minus the sender: each gets the
+  usual "... mentioned you" notification (Important), and in request chats a
+  mention row, so their unread @ count shows it. Typed by hand it works too;
+  an address like x@all.com does not.
+- Chat notifications open the chat they came from. Request mentions and
+  "New comment on request #N" now link to `/home?chat=sr:<id>` (groups
+  already linked to `?chat=g:<room>`); older ones are mapped from the title.
+  Clicking one in the bell or on the Notifications page opens the chat panel
+  on the current page instead of reloading; a phone push goes to the link and
+  the chat opens there. The `chat=` parameter is removed from the address
+  once used.

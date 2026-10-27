@@ -224,6 +224,44 @@ class ReplyTest(_ChatHarness):
         self.assertEqual(row['comment_count'], 1)
 
 
+class MentionAllTest(_ChatHarness):
+
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        self.original_notify = branding_gate.notify_users
+        branding_gate.notify_users = lambda ids, title, *a, **k: self.sent.append((sorted(ids), title, k.get('link'))) or len(ids)
+
+    def tearDown(self):
+        branding_gate.notify_users = self.original_notify
+        super().tearDown()
+
+    def test_at_all_in_a_request_chat_tags_every_member(self):
+        r = self._client_for(self.seller).post('/api/sales/requests/%d/comments' % self.request_id,
+                                               json={'comment_text': '@all meeting at 3', 'mentioned_users': ['all']})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        members = set(branding_gate.chat_members(self._cursor(), 'sr', self.request_id)) - {self.seller}
+        mention = [x for x in self.sent if 'mentioned you' in x[1]][0]
+        self.assertEqual(set(mention[0]), members)
+        self.assertEqual(mention[2], '/home?chat=sr:%d' % self.request_id)
+        cur = self._cursor()
+        cur.execute("SELECT COUNT(*) AS n FROM sales_request_comment_mentions m JOIN sales_request_comments c "
+                    "ON c.id = m.comment_id WHERE c.request_id = %s", (self.request_id,))
+        self.assertEqual(cur.fetchone()['n'], len(members))
+        cur.close()
+
+    def test_at_all_typed_in_a_group(self):
+        self._client_for(self.member).post('/api/chat/groups/operations/messages', json={'comment_text': 'Truck here @all'})
+        mention = [x for x in self.sent if 'mentioned you' in x[1]][0]
+        room = set(branding_gate.chat_room_members(self._cursor(), 'operations')) - {self.member}
+        self.assertEqual(set(mention[0]), room)
+        self.assertEqual(mention[2], '/home?chat=g:operations')
+
+    def test_an_email_is_not_at_all(self):
+        self.assertFalse(branding_gate.chat_mentions_all('mail me at x@all.com', []))
+        self.assertTrue(branding_gate.chat_mentions_all('@Everyone, look', []))
+
+
 class ItemFilesSurviveEditTest(_CostingHarness):
 
     def test_files_follow_the_reinserted_item(self):

@@ -177,12 +177,12 @@ class RequestChatTest(unittest.TestCase):
         for note in general:
             self.assertNotIn(self.leader, note['to'])
 
-    def test_every_notification_opens_the_request(self):
+    def test_every_notification_opens_the_request_chat(self):
+        # The chat the message is in, opened over the current page.
         self._comment(self.head, mentions=[self.leader])
         self.assertTrue(self.sent)
         for note in self.sent:
-            self.assertEqual(note['link'],
-                             '/sales_request?request=%d' % self.request_id)
+            self.assertEqual(note['link'], '/home?chat=sr:%d' % self.request_id)
 
     def test_someone_who_replied_earlier_stays_in_the_thread(self):
         self._comment(self.leader)          # the leader speaks first

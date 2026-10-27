@@ -497,6 +497,7 @@ function createNotificationElement(notification) {
         div.querySelector('.notif-card-body').style.cursor = 'pointer';
         div.querySelector('.notif-card-body').addEventListener('click', function () {
             markAsRead(notification.id);
+            if (window.bgOpenChatFromLink && window.bgOpenChatFromLink(href)) { return; }
             window.location.href = href;
         });
     }

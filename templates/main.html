@@ -1824,7 +1824,7 @@ function showToast(title, body) {
     </div>
   </aside>
   <script>window.BG_CHAT = { meId: {{ (session.get('user_id') or 0) | tojson }}, meName: {{ (session.get('name') or '') | tojson }} };</script>
-  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261028"></script>
+  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261028b"></script>
 
   {% if can_view_costing %}
   <script>
@@ -2099,6 +2099,12 @@ window.notifKind = function (notification) {
 // the sender; everything already in the tray -- and any sender not yet passing
 // one -- is read the same way notifKind() reads it, from the words.
 window.notifLink = function (notification) {
+  // A chat notification opens the chat it came from: a group mention links
+  // there already; request mentions and "New comment on request #N" used to
+  // link to the Sales Request page, so older ones are read from the title.
+  var head = (notification && notification.title) || '';
+  var srChat = head.match(/mentioned you: request #0*(\d+)|^new (?:comment|note) on request #0*(\d+)/i);
+  if (srChat) { return '/home?chat=sr:' + (srChat[1] || srChat[2]); }
   if (notification && notification.link) { return notification.link; }
   var title = (notification.title || '') + ' ' + (notification.content || '');
   var text = title.toLowerCase();
@@ -2146,6 +2152,12 @@ window.notifActionHtml = function (n) {
                cancelled: ['fa-ban', 'Withdrawn'], gone: ['fa-ban', 'Removed'] }[a.state] || ['fa-check', 'Handled'];
   return '<span class="notif-actions"><span class="notif-done is-' + a.state + '"><i class="fas ' + done[0] + '"></i>' +
     done[1] + '</span></span>';
+};
+
+// '/home?chat=sr:12' -> open that chat here; false when the link is not a chat.
+window.bgOpenChatFromLink = function (href) {
+  var m = /[?&]chat=((?:g:[a-z_]+)|(?:sr:\d+))/.exec(href || '');
+  return !!(m && window.bgOpenChat && window.bgOpenChat(decodeURIComponent(m[1])));
 };
 
 window.bgQuickOpen = function (event, el) {
@@ -2367,6 +2379,12 @@ async function markNotificationAsRead(notificationId, event) {
     console.error('Error marking notification as read:', error);
   }
 
+  // A chat opens on this page, over whatever you were doing.
+  if (goes && window.bgOpenChatFromLink && window.bgOpenChatFromLink(goes)) {
+    closeNotifDrawer();
+    refreshNotifications();
+    return;
+  }
   // Marked first, then away -- so the badge is right when the next page loads.
   if (goes) { window.location.href = goes; }
 }
