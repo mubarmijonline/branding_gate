@@ -145,6 +145,16 @@
   .scope { font-size:.7rem; font-weight:600; padding:.12rem .45rem; border-radius:3px;
             background:#eef1fa; color:#2a3a86; white-space:nowrap; }
   .empty { text-align:center; color:var(--muted); padding:2rem 1rem; }
+  /* Extra permissions, given from this screen on top of a role. */
+  .grant-editor { margin-top:1rem; border:1px solid var(--hair); border-radius:6px; padding:.75rem; background:#fff; }
+  .grant-editor h6 { font-weight:700; margin:0 0 .25rem; }
+  .grant-editor .grant-add { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.6rem; align-items:center; }
+  .grant-editor .grant-add .g-perm { flex:1 1 260px; min-width:0; }
+  .grant-editor .grant-add .g-scope { flex:0 0 150px; }
+  .scope.extra { background:#fff4e5; color:#b26a00; }
+  .grant-targets { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0; }
+  .grant-targets select { flex:1 1 200px; min-width:0; }
+  table.perms td .gby { font-size:.72rem; }
 </style>
 
 <div class="container-fluid people-page">
@@ -237,12 +247,32 @@
   <section class="panel" id="panel-roles">
     <div class="row">
       <div class="col-md-4">
-        <p class="sub">Pick a role to see exactly what it allows. Defined in
-           <code>rbac.py</code>, so it is reviewed in code rather than edited here.</p>
+        <p class="sub">Pick a role to see exactly what it allows. A role's own
+           permissions are defined in code; anything extra is added below the list,
+           or in the box on the right for a department, a team or one person.</p>
         <div class="role-list" id="roleList"></div>
       </div>
       <div class="col-md-8">
-        <div id="rolePerms"><p class="empty">Select a role.</p></div>
+        <div class="grant-editor" id="grantPanel">
+          <h6><i class="fas fa-key text-warning mr-1"></i>Extra permissions</h6>
+          <p class="sub mb-0">Give one role, a department, a team (a leader and everyone
+             reporting to them) or one person a permission their role does not have.
+             It takes effect within a minute, and taking it away is one click.</p>
+          <div class="grant-targets">
+            <select class="form-control form-control-sm" id="grantTargetType">
+              <option value="">- Give to... -</option>
+              <option value="role">A role</option>
+              <option value="department">A department</option>
+              <option value="team">A team</option>
+              <option value="user">One person</option>
+            </select>
+            <select class="form-control form-control-sm" id="grantTargetId" disabled></select>
+          </div>
+          <div id="grantTargetEditor"></div>
+          <div id="grantOverview" class="mt-2"></div>
+        </div>
+        <div id="rolePerms" class="mt-3"><p class="empty">Select a role.</p></div>
+        <div id="roleGrants"></div>
       </div>
     </div>
   </section>
@@ -329,6 +359,7 @@
               Everyone else never sees the pricing controls.
             </small>
             <div id="rolePreview" class="mt-3"></div>
+            <div id="personGrants"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -347,6 +378,8 @@
   var PEOPLE = [], DEPARTMENTS = [], ROLES = [];
   var LEVEL = { 0: 'Executive', 1: 'Head / Manager', 2: 'Team Leader', 3: 'Member' };
   var CAN_EDIT = {{ 'true' if can_edit_people else 'false' }};
+  var CAN_GRANT = {{ ('role.grant' in _p) | tojson }};
+  var PERMS = [];
 
   function esc(v) {
     return String(v === null || v === undefined ? '' : v)
@@ -505,6 +538,125 @@
   $(document).on('click', '.role-item', function () {
     $('.role-item').removeClass('on'); $(this).addClass('on');
     showRolePermissions($(this).data('id'), '#rolePerms');
+    grantEditor('#roleGrants', 'role', $(this).data('id'));
+  });
+
+  // ---- extra permissions --------------------------------------------------
+  // A role's own grants come from rbac.py and are rebuilt by every seed, so
+  // extras live apart (permission_grant) and only ever add.
+  var TARGET_TEXT = { role: 'Role', department: 'Department', team: 'Team of', user: 'Person' };
+
+  function loadVocabulary() {
+    if (PERMS.length) { return $.Deferred().resolve().promise(); }
+    return $.getJSON('/api/rbac/permissions', function (r) { if (r.success) { PERMS = r.permissions; } });
+  }
+
+  function grantRows(grants, withTarget) {
+    if (!grants.length) { return '<p class="muted small mb-0">No extra permissions.</p>'; }
+    var html = '<table class="perms"><tbody>';
+    grants.forEach(function (g) {
+      html += '<tr><td>' +
+        (withTarget ? '<strong>' + esc(TARGET_TEXT[g.target_type]) + ' ' + esc(g.target_name || '#' + g.target_id) + '</strong><br>' : '') +
+        '<code>' + esc(g.permission_code) + '</code><br><small class="muted">' + esc(g.description) + '</small></td>' +
+        '<td class="text-right"><span class="scope extra">' + esc(g.scope) + '</span><br>' +
+        '<small class="muted gby">' + esc(g.granted_by_name || '') + (g.granted_at ? ' &middot; ' + esc(g.granted_at) : '') + '</small>' +
+        (CAN_GRANT ? '<br><button type="button" class="btn btn-link btn-sm text-danger p-0 grant-remove" data-id="' + g.id + '">Remove</button>' : '') +
+        '</td></tr>';
+    });
+    return html + '</tbody></table>';
+  }
+
+  // The list for one target, plus a row to add another.
+  function grantEditor(target, type, id) {
+    var $box = $(target);
+    if (!id) { $box.empty(); return; }
+    $box.html('<div class="grant-editor"><p class="muted small mb-0">Loading extra permissions...</p></div>');
+    loadVocabulary().then(function () {
+      return $.getJSON('/api/rbac/grants', { target_type: type, target_id: id });
+    }).done(function (r) {
+      if (!r || !r.success) { $box.empty(); return; }
+      var html = '<div class="grant-editor" data-type="' + type + '" data-id="' + id + '" data-target="' + target + '">' +
+        '<h6><i class="fas fa-plus-circle text-warning mr-1"></i>Extra permissions for this ' +
+        (type === 'user' ? 'person' : type) + '</h6>' + grantRows(r.grants, false);
+      if (CAN_GRANT) {
+        html += '<div class="grant-add"><select class="form-control form-control-sm g-perm"><option value="">- Permission -</option>';
+        PERMS.forEach(function (p) {
+          html += '<option value="' + esc(p.code) + '" data-scopeless="' + (p.scopeless ? 1 : 0) + '">' +
+            esc(p.code + ' - ' + p.description) + '</option>';
+        });
+        html += '</select><select class="form-control form-control-sm g-scope">' +
+          '<option value="all">all - everything</option><option value="department">department</option>' +
+          '<option value="team">team</option><option value="own">own records</option></select>' +
+          '<button type="button" class="btn btn-sm btn-warning g-add"><i class="fas fa-plus mr-1"></i>Give</button></div>';
+      }
+      $box.html(html + '</div>');
+      var $sel = $box.find('.g-perm');
+      if ($.fn.select2 && $sel.length) {
+        var $modal = $box.closest('.modal');
+        $sel.select2({ width: '100%', placeholder: '- Permission -',
+                       dropdownParent: $modal.length ? $modal : $(document.body) });
+      }
+    });
+  }
+
+  function loadGrantOverview() {
+    $.getJSON('/api/rbac/grants', function (r) {
+      if (!r.success) { return; }
+      $('#grantOverview').html(r.grants.length
+        ? '<div class="muted small font-weight-bold mb-1">All extras (' + r.grants.length + ')</div>' + grantRows(r.grants, true)
+        : '');
+    });
+  }
+
+  function refreshGrantViews() {
+    loadGrantOverview();
+    $('.grant-editor[data-target]').each(function () {
+      grantEditor($(this).data('target'), $(this).data('type'), $(this).data('id'));
+    });
+  }
+
+  $(document).on('change', '.grant-editor .g-perm', function () {
+    var scopeless = $(this).find(':selected').data('scopeless') === 1;
+    $(this).closest('.grant-add').find('.g-scope').val('all').prop('disabled', scopeless);
+  });
+
+  $(document).on('click', '.grant-editor .g-add', function () {
+    var $ed = $(this).closest('.grant-editor');
+    var code = $ed.find('.g-perm').val();
+    if (!code) { Swal.fire('Pick a permission', '', 'info'); return; }
+    $.ajax({ url: '/api/rbac/grants', method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ target_type: $ed.data('type'), target_id: $ed.data('id'),
+                                    permission_code: code, scope: $ed.find('.g-scope').val() }) })
+      .done(function (r) {
+        if (!r.success) { Swal.fire('Could not give it', r.error || '', 'error'); return; }
+        refreshGrantViews();
+      })
+      .fail(function (xhr) { Swal.fire('Could not give it', (xhr.responseJSON || {}).error || 'Request failed', 'error'); });
+  });
+
+  $(document).on('click', '.grant-remove', function () {
+    var id = $(this).data('id');
+    $.ajax({ url: '/api/rbac/grants/' + id, method: 'DELETE' })
+      .done(refreshGrantViews)
+      .fail(function (xhr) { Swal.fire('Could not remove it', (xhr.responseJSON || {}).error || 'Request failed', 'error'); });
+  });
+
+  $(document).on('change', '#grantTargetType', function () {
+    var type = $(this).val(), $t = $('#grantTargetId').empty();
+    $('#grantTargetEditor').empty();
+    if (!type) { $t.prop('disabled', true); return; }
+    var options = type === 'role' ? ROLES.map(function (r) { return [r.id, r.name]; })
+      : type === 'department' ? DEPARTMENTS.map(function (d) { return [d.id, d.name]; })
+      : type === 'team' ? PEOPLE.filter(function (p) {
+            return PEOPLE.some(function (q) { return q.manager_id === p.id; });
+          }).map(function (p) { return [p.id, 'Team of ' + p.name]; })
+      : PEOPLE.map(function (p) { return [p.id, p.name + (p.role_name ? '  -  ' + p.role_name : '')]; });
+    $t.append('<option value="">- Pick -</option>');
+    options.forEach(function (o) { $t.append($('<option>').val(o[0]).text(o[1])); });
+    $t.prop('disabled', false);
+  });
+  $(document).on('change', '#grantTargetId', function () {
+    grantEditor('#grantTargetEditor', $('#grantTargetType').val(), $(this).val());
   });
 
   function showRolePermissions(roleId, target) {
@@ -579,6 +731,7 @@
     $('.tabs button').removeClass('on'); $(this).addClass('on');
     $('.panel').removeClass('on');
     $('#panel-' + $(this).data('panel')).addClass('on');
+    if ($(this).data('panel') === 'roles') { loadGrantOverview(); }
   });
 
   // ---- the person modal ---------------------------------------------------
@@ -639,6 +792,7 @@
                  editing ? person.manager_id : null,
                  editing ? person.id : null);
     showRolePermissions(editing ? person.rbac_role_id : null, '#rolePreview');
+    grantEditor('#personGrants', 'user', editing ? person.id : null);
     $('#personModal').modal('show');
   }
 

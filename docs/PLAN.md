@@ -472,3 +472,41 @@ Rule now (`get_operations_requests`): a restricted viewer (team / own) sees an
 item while it is on nobody's desk, on their own desk, or handed out by them;
 an item on somebody else's desk stays hidden. Withdrawing the last assignment
 puts the item back in the pool. Tests: `OperationsListScopeTest`.
+
+## Extra permissions and notification classes, 2026-10-27
+
+Two requests from Ahmed.
+
+1. **Extra permissions without a code change.** Ahmed tried to give Gamal
+   `sales_request.delete` from the person modal and could not: role grants are
+   generated from `rbac.SEED_MATRIX` by `seed_rbac.py`, which rebuilds
+   `role_permission` on every run, so the screen was read-only on purpose.
+   Plan: a second, additive layer that seeding never touches.
+   - Table `permission_grant` (target_type role | department | team | user,
+     target_id, permission_code, scope, granted_by, granted_at), unique per
+     target and permission. A "team" is a leader and everyone reporting to
+     them (`user.manager_id`), the same tree the org chart draws.
+   - `load_permissions` merges the person's matching grants over the role's,
+     wider scope winning. `users_holding` counts them too, so a person given
+     an approval also hears about the work.
+   - New permission `role.grant` (admin only, via the generated admin row).
+   - API `/api/rbac/grants` (list, add/upsert, remove) and
+     `/api/rbac/permissions` (the vocabulary for the picker).
+   - UI: "Extra permissions" in the person modal (that person), under a
+     selected role (that role), and a panel on the Roles tab for any target,
+     department and team included, with the full list of extras.
+   - Extras only add. Taking a role's own grant away is still a code change.
+
+2. **Important vs Announcements.** Beshoy's tray mixes "needs you" with
+   "for your information". Every notification gets `category`:
+   `important` when the title asks the reader to act (approval needed,
+   costing assigned / to decide, re-costing / re-pricing needed, negotiation
+   to review, client approved -> source it, invoice to post / returned,
+   expenses to approve, عهدة requests and hand-backs, new client / company /
+   supplier requests, mentions, stock alerts, costing completed -> price it),
+   `announcement` otherwise. Decided in one place (`notification_category`)
+   from the title so all 48 senders are covered; a sender can override.
+   - Existing documents classified once (seed), reads classify any stragglers.
+   - Drawer and /notifications page get Important / Announcements tabs, each
+     with its unread count; the bell badge counts unread Important only; phone
+     push goes out for Important only.

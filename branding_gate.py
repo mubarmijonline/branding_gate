@@ -779,6 +779,7 @@ def ensure_mongo_indexes():
     def build():
         mongo().notifications.create_index([('uid', 1), ('added_date', -1)])
         mongo().notifications.create_index([('uid', 1), ('read', 1)])
+        mongo().notifications.create_index([('uid', 1), ('category', 1), ('added_date', -1)])
         mongo().comments.create_index([('request_id', 1), ('created_at', -1)])
         mongo().fcm_tokens.create_index([('phone_number', 1)])
         return True
@@ -1068,7 +1069,8 @@ def load_permissions(user_id):
     and is therefore denied everything.
     """
     conn, cur = connection()
-    cur.execute("SELECT is_pricing FROM user WHERE id = %s", (user_id,))
+    cur.execute("SELECT id, is_pricing, rbac_role_id, department_id, manager_id FROM user WHERE id = %s",
+                (user_id,))
     account = cur.fetchone()
     is_pricing = bool(account and account['is_pricing'])
 
@@ -1080,11 +1082,15 @@ def load_permissions(user_id):
         WHERE u.id = %s
     """, (user_id,))
     rows = cur.fetchall()
+    extra = granted_permissions(cur, account) if account else {}
     cur.close()
     conn.close()
 
     role_code = rows[0]['role_code'] if rows else None
     perms = {row['permission_code']: row['scope'] for row in rows if row['permission_code']}
+    # Extras given from People & Access add to the role; the wider scope wins.
+    if extra:
+        perms = rbac._merge(perms, extra)
 
     # The pricing flag grants pricing on top of the role, so an account with no
     # role at all still gets pricing if it is flagged.
@@ -1092,6 +1098,37 @@ def load_permissions(user_id):
         perms = rbac.apply_pricing_flag(perms)
 
     return perms, role_code
+
+
+GRANT_TARGETS = ('role', 'department', 'team', 'user')
+
+# Which permission_grant rows reach a person: their own, their role's, their
+# department's, and the team they lead or sit in (a team is a leader and their
+# direct reports). Written once so load_permissions and users_holding agree.
+_GRANT_MATCH = """((g.target_type = 'user' AND g.target_id = u.id)
+                 OR (g.target_type = 'role' AND g.target_id = u.rbac_role_id)
+                 OR (g.target_type = 'department' AND g.target_id = u.department_id)
+                 OR (g.target_type = 'team' AND g.target_id IN (u.id, u.manager_id)))"""
+
+
+def granted_permissions(cur, account):
+    """
+    The extra permissions an admin has given this person, on top of their role.
+
+    role_permission is rebuilt from rbac.py on every seed, so anything granted
+    from the screen lives in permission_grant instead, which seeding never
+    touches.
+    """
+    try:
+        cur.execute("SELECT g.permission_code, g.scope FROM permission_grant g "
+                    "JOIN user u ON u.id = %s WHERE " + _GRANT_MATCH, (account['id'],))
+        extra = {}
+        for row in cur.fetchall():
+            extra = rbac._merge(extra, {row['permission_code']: row['scope']})
+        return extra
+    except Exception as e:
+        print(f"Error reading permission grants: {e}")
+        return {}
 
 
 def refresh_session_permissions(user_id=None):
@@ -1516,7 +1553,46 @@ def notifications_disabled():
     return bool(os.environ.get('BG_NO_NOTIFICATIONS')) or 'unittest' in sys.modules
 
 
-def notify_users(user_ids, title, content, link=None):
+# A notification is Important when the reader is being asked to do something:
+# approve, cost, price, review, post, source, confirm. Everything else -- an
+# outcome, a status change, "X was added" -- is an Announcement. Decided from
+# the title because it is the one thing every sender writes, and the same
+# rule classifies the notifications already stored. Matched at the start of
+# the title, case-insensitively.
+IMPORTANT_TITLES = re.compile(r"""^(
+      approval\ needed
+    | new\ sales\ request\ \#                 # operations: add costing
+    | request\ \#\d+\ (re-)?costing\ completed  # pricing: set the price
+    | re-costing\ done                         # pricing: re-price
+    | costing\ assigned
+    | new\ costing\ to\ decide
+    | costing\ re-submitted
+    | re-costing\ needed
+    | re-pricing\ needed
+    | negotiation\ to\ review
+    | client\ approved:                        # operations: source and deliver
+    | invoice\ to\ post
+    | invoice\ returned
+    | expenses\ to\ approve
+    | عهدة\ request\ from
+    | عهدة\ request:
+    | عهدة\ request\ approved\ by               # finance decides next
+    | تسوية\ عهدة\ from                        # confirm the cash
+    | new\ (client|company|supplier)\ request
+    | out\ of\ stock
+    | below\ minimum
+    | .*\ mentioned\ you
+)""", re.IGNORECASE | re.VERBOSE)
+
+NOTIFICATION_CATEGORIES = ('important', 'announcement')
+
+
+def notification_category(title):
+    """'important' when the title asks the reader to act, else 'announcement'."""
+    return 'important' if IMPORTANT_TITLES.match((title or '').strip()) else 'announcement'
+
+
+def notify_users(user_ids, title, content, link=None, category=None):
     """
     Send one notification to each of these people.
 
@@ -1536,6 +1612,8 @@ def notify_users(user_ids, title, content, link=None):
         recipients = sorted({int(user_id) for user_id in (user_ids or []) if user_id})
         if not recipients:
             return 0
+        if category not in NOTIFICATION_CATEGORIES:
+            category = notification_category(title)
 
         added_by = session.get('name', 'System')
         added_uid = session.get('user_id', 0)
@@ -1545,6 +1623,7 @@ def notify_users(user_ids, title, content, link=None):
             'title': title,
             'content': content,
             'link': link or None,
+            'category': category,
             'added_by': added_by,
             'added_uid': int(added_uid),
             'added_date': now,
@@ -1554,7 +1633,9 @@ def notify_users(user_ids, title, content, link=None):
         written = mongo_safe(
             lambda: len(mongo().notifications.insert_many(documents).inserted_ids),
             fallback=0, label='notify users')
-        push_to_users(recipients, title, content, link)
+        # Phones buzz for work, not for news.
+        if category == 'important':
+            push_to_users(recipients, title, content, link)
         return written
     except Exception as e:
         print(f"Error sending notifications: {e}")
@@ -1663,6 +1744,14 @@ def users_holding(permission, include_root=False):
         role_codes,
     )
     user_ids = [row['id'] for row in cur.fetchall()]
+
+    # Extras given from People & Access: a person handed an approval should
+    # also hear that something is waiting for it.
+    cur.execute(
+        "SELECT DISTINCT u.id FROM user u JOIN permission_grant g ON g.permission_code = %s AND "
+        + _GRANT_MATCH + " WHERE u.is_active = 1"
+        + ("" if include_root else " AND u.manager_id IS NOT NULL"), (permission,))
+    user_ids = sorted({row['id'] for row in cur.fetchall()} | set(user_ids))
 
     # Pricing is held two ways. Beside the Pricing roles there is a per-account
     # flag, and load_permissions() grants the same set to anyone carrying it --
@@ -2104,6 +2193,7 @@ def add_notification():
             'added_by':   added_by,
             'added_uid':  int(added_uid),
             'added_date': datetime.now(),
+            'category':   notification_category(title),
             'triggered':  False,
             'read':       False,
         }).inserted_id,
@@ -2119,14 +2209,23 @@ def get_notifications():
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
 
-        # The newest fifty for this person. An empty tray if Mongo is unwell:
-        # the notification bell must never be what takes a page down.
-        docs = mongo_safe(
-            lambda: list(mongo().notifications
-                         .find({'uid': session['user_id']})
-                         .sort('added_date', DESCENDING)
-                         .limit(50)),
-            fallback=[], label='notifications')
+        # The newest fifty of each class for this person, so a run of
+        # announcements cannot push the work off the list. An empty tray if
+        # Mongo is unwell: the bell must never be what takes a page down.
+        uid = session['user_id']
+
+        def newest(category):
+            match = {'uid': uid, 'category': category}
+            if category == 'announcement':
+                # Anything not yet classified counts here until it is.
+                match = {'uid': uid, 'category': {'$ne': 'important'}}
+            return list(mongo().notifications.find(match)
+                        .sort('added_date', DESCENDING).limit(50))
+
+        docs = mongo_safe(lambda: newest('important') + newest('announcement'),
+                          fallback=[], label='notifications')
+        # Old rows hold the date as text in the same order-preserving format.
+        docs.sort(key=lambda d: str(d.get('added_date') or ''), reverse=True)
 
         # Convert to list of dictionaries
         notifications = []
@@ -2146,6 +2245,8 @@ def get_notifications():
                 data['timeadded_datestamp'] = added.isoformat()
                 data['added_date'] = added.isoformat()
 
+            if data.get('category') not in NOTIFICATION_CATEGORIES:
+                data['category'] = notification_category(data.get('title'))
             notifications.append({
                 'id': str(doc['_id']),
                 **data
@@ -2169,15 +2270,20 @@ def mark_notifications_read():
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
 
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         notification_ids = data.get('notification_ids', [])
         
         if not notification_ids:
-            # Mark all of this person's unread notifications, in one write.
+            # Mark all of this person's unread notifications, in one write,
+            # or all of one tab's when the tray says which.
+            match = {'uid': session['user_id'], 'read': False}
+            category = data.get('category')
+            if category == 'important':
+                match['category'] = 'important'
+            elif category == 'announcement':
+                match['category'] = {'$ne': 'important'}
             mongo_safe(
-                lambda: mongo().notifications.update_many(
-                    {'uid': session['user_id'], 'read': False},
-                    {'$set': {'read': True}}),
+                lambda: mongo().notifications.update_many(match, {'$set': {'read': True}}),
                 label='mark all read')
         else:
             # Only their own: an id from the wire is not a licence to touch
@@ -2830,8 +2936,9 @@ def get_rbac_roles():
 @perm('role.view')
 def get_rbac_role_permissions(role_id):
     """
-    Show what a role can do. Read-only: the grant matrix lives in rbac.py and
-    is applied by seed_rbac.py, so it is reviewed in code rather than edited here.
+    Show what a role can do. The role's own grants live in rbac.py and are
+    applied by seed_rbac.py; extras given from the screen are in
+    permission_grant (/api/rbac/grants) and are listed beside these.
     """
     try:
         conn, cur = connection()
@@ -2855,6 +2962,113 @@ def get_rbac_role_permissions(role_id):
         return jsonify(success=True, role=role, permissions=permissions)
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/rbac/permissions', methods=['GET'])
+@perm('role.view')
+def list_rbac_permissions():
+    """The permission vocabulary, for the extra-permission picker."""
+    return jsonify(success=True, permissions=[
+        {'code': code, 'description': text, 'scopeless': code in rbac.SCOPELESS_PERMISSIONS}
+        for code, text in sorted(rbac.PERMISSIONS.items())])
+
+
+def _permission_grants(cur, target_type=None, target_id=None):
+    where, params = '', ()
+    if target_type:
+        where, params = ' WHERE g.target_type = %s AND g.target_id = %s', (target_type, target_id)
+    cur.execute("""
+        SELECT g.id, g.target_type, g.target_id, g.permission_code, g.scope, g.granted_at,
+               p.description,
+               CASE g.target_type
+                    WHEN 'role' THEN (SELECT name FROM rbac_role WHERE id = g.target_id)
+                    WHEN 'department' THEN (SELECT name FROM department WHERE id = g.target_id)
+                    ELSE (SELECT name FROM user WHERE id = g.target_id) END AS target_name,
+               (SELECT name FROM user WHERE id = g.granted_by) AS granted_by_name
+        FROM permission_grant g
+        JOIN permission p ON p.code = g.permission_code""" + where + """
+        ORDER BY g.target_type, target_name, g.permission_code""", params)
+    rows = cur.fetchall()
+    for row in rows:
+        row['granted_at'] = row['granted_at'].strftime('%Y-%m-%d %H:%M') if row['granted_at'] else None
+    return rows
+
+
+@app.route('/api/rbac/grants', methods=['GET'])
+@perm('role.view')
+def list_permission_grants():
+    """Extra permissions, all of them or one target's."""
+    target_type = request.args.get('target_type') or None
+    if target_type and target_type not in GRANT_TARGETS:
+        return jsonify(success=False, error='Unknown target'), 400
+    conn, cur = connection()
+    try:
+        return jsonify(success=True, grants=_permission_grants(
+            cur, target_type, request.args.get('target_id', type=int)))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/rbac/grants', methods=['POST'])
+@perm('role.grant')
+def add_permission_grant():
+    """
+    Give a role, department, team or person one extra permission. Granting
+    the same permission again changes its scope rather than adding a row.
+    """
+    data = request.get_json(silent=True) or {}
+    target_type = data.get('target_type')
+    permission_code = data.get('permission_code')
+    scope = data.get('scope') or 'all'
+    try:
+        target_id = int(data.get('target_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick who gets it'), 400
+    if target_type not in GRANT_TARGETS:
+        return jsonify(success=False, error='Unknown target'), 400
+    if permission_code not in rbac.PERMISSIONS:
+        return jsonify(success=False, error='Unknown permission'), 400
+    if permission_code in rbac.SCOPELESS_PERMISSIONS:
+        scope = 'all'
+    if scope not in rbac.SCOPES:
+        return jsonify(success=False, error='Unknown scope'), 400
+
+    table = {'role': 'rbac_role', 'department': 'department'}.get(target_type, 'user')
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id FROM " + table + " WHERE id = %s", (target_id,))
+        if not cur.fetchone():
+            return jsonify(success=False, error='Not found'), 404
+        cur.execute("""
+            INSERT INTO permission_grant (target_type, target_id, permission_code, scope, granted_by)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE scope = VALUES(scope), granted_by = VALUES(granted_by),
+                                    granted_at = NOW()
+        """, (target_type, target_id, permission_code, scope, session.get('user_id')))
+        conn.commit()
+        app.logger.info('User %s granted %s (%s) to %s %s', session.get('user_id'),
+                        permission_code, scope, target_type, target_id)
+        return jsonify(success=True, grants=_permission_grants(cur, target_type, target_id))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/rbac/grants/<int:grant_id>', methods=['DELETE'])
+@perm('role.grant')
+def remove_permission_grant(grant_id):
+    conn, cur = connection()
+    try:
+        cur.execute("DELETE FROM permission_grant WHERE id = %s", (grant_id,))
+        conn.commit()
+        if not cur.rowcount:
+            return jsonify(success=False, error='Not found'), 404
+        app.logger.info('User %s removed permission grant %s', session.get('user_id'), grant_id)
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route('/api/org-chart/pdf', methods=['GET'])

@@ -195,6 +195,7 @@ PERMISSIONS = {
     'department.edit': 'Create and rename departments',
     'role.view':   'View roles and their permissions',
     'role.assign': 'Assign a role to a user',
+    'role.grant':  'Give a role, department, team or person an extra permission',
 
     # Dashboards
     'dashboard.sales':      'View the sales dashboard',
@@ -210,7 +211,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'finance_master.view', 'finance_master.edit',
     'catalog.view', 'catalog.edit',
     'department.view', 'department.edit',
-    'role.view', 'role.assign',
+    'role.view', 'role.assign', 'role.grant',
     'supplier_report.view',
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',

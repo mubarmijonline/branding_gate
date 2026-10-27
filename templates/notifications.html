@@ -198,6 +198,22 @@
         </div>
     </div>
 
+    <!-- Important waits on you; Announcements are for your information. -->
+    <ul class="nav nav-tabs mb-3" id="notifCatTabs">
+        <li class="nav-item">
+            <a class="nav-link active" href="#" data-cat="important">
+                <i class="fas fa-exclamation-circle text-danger mr-1"></i>Important
+                <span class="badge badge-danger ml-1" id="catCountImportant"></span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#" data-cat="announcement">
+                <i class="fas fa-bullhorn text-primary mr-1"></i>Announcements
+                <span class="badge badge-secondary ml-1" id="catCountAnnouncement"></span>
+            </a>
+        </li>
+    </ul>
+
     <!-- Notifications List -->
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
@@ -249,6 +265,22 @@
 <script>
 let allNotifications = [];
 let currentFilter = 'all';
+let currentCat = 'important';
+
+// The notifications in the tab being read.
+function inCurrentTab() {
+    return allNotifications.filter(n => (currentCat === 'important') === (n.category === 'important'));
+}
+
+$(document).on('click', '#notifCatTabs [data-cat]', function (e) {
+    e.preventDefault();
+    currentCat = $(this).data('cat');
+    currentPage = 1;
+    $('#notifCatTabs .nav-link').removeClass('active');
+    $(this).addClass('active');
+    updateStatistics();
+    renderNotificationsPage();
+});
 let currentPage = 1;
 const notificationsPerPage = 20;
 
@@ -319,10 +351,14 @@ async function loadNotificationsPage() {
 
 // Update statistics
 function updateStatistics() {
-    const total = allNotifications.length;
-    const unread = allNotifications.filter(n => !n.read).length;
+    const tab = inCurrentTab();
+    const total = tab.length;
+    const unread = tab.filter(n => !n.read).length;
     const read = total - unread;
-    const today = allNotifications.filter(n => isToday(n.timeadded_datestamp)).length;
+    const today = tab.filter(n => isToday(n.timeadded_datestamp)).length;
+    const unreadOf = cat => allNotifications.filter(n => !n.read && (cat === 'important') === (n.category === 'important')).length;
+    $('#catCountImportant').text(unreadOf('important') || '');
+    $('#catCountAnnouncement').text(unreadOf('announcement') || '');
     
     document.getElementById('totalCount').textContent = total;
     document.getElementById('unreadCount').textContent = unread;
@@ -347,7 +383,7 @@ function renderNotificationsPage() {
     loadingState.style.display = 'none';
     
     // Filter notifications
-    let filteredNotifications = [...allNotifications];
+    let filteredNotifications = inCurrentTab();
     
     switch (currentFilter) {
         case 'unread':
@@ -503,13 +539,13 @@ async function markAllAsRead() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({})
+            body: JSON.stringify({ category: currentCat })
         });
         
         const data = await response.json();
         if (data.success) {
-            // Update all notifications in our local array
-            allNotifications.forEach(n => n.read = true);
+            // Only the tab being read was marked.
+            inCurrentTab().forEach(n => n.read = true);
             updateStatistics();
             renderNotificationsPage();
             
@@ -517,7 +553,7 @@ async function markAllAsRead() {
             Swal.fire({
                 icon: 'success',
                 title: 'Success',
-                text: 'All notifications marked as read!',
+                text: (currentCat === 'important' ? 'Important' : 'Announcements') + ' marked as read',
                 timer: 2000,
                 showConfirmButton: false
             });

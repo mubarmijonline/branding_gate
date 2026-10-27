@@ -316,6 +316,21 @@
       flex: 0 0 auto;
     }
     .notif-drawer-body { flex: 1 1 auto; overflow-y: auto; }
+    /* Important (waits on you) and Announcements (for your information). */
+    .notif-tabs { display: flex; border-bottom: 1px solid #eceef3; background: #fff; flex: 0 0 auto; }
+    .notif-tabs button {
+      flex: 1 1 50%; border: 0; background: transparent; padding: .6rem .5rem;
+      font-size: .85rem; font-weight: 600; color: #6c757d;
+      border-bottom: 3px solid transparent; cursor: pointer;
+    }
+    .notif-tabs button.on { color: #224abe; border-bottom-color: #224abe; }
+    .notif-tabs button[data-notif-cat="important"].on { color: #c0392b; border-bottom-color: #e74a3b; }
+    .notif-tabs .nt-count {
+      display: inline-block; min-width: 1.3rem; padding: 0 .35rem; margin-inline-start: .3rem;
+      border-radius: 10px; font-size: .7rem; line-height: 1.3rem; background: #eaecf4; color: #5a5c69;
+    }
+    .notif-tabs .nt-count:empty { display: none; }
+    .notif-tabs button[data-notif-cat="important"] .nt-count { background: #e74a3b; color: #fff; }
     .notif-drawer-footer {
       flex: 0 0 auto; padding: .65rem; text-align: center;
       border-top: 1px solid #eceef3; background: #fafbfe; font-size: .82rem;
@@ -1930,6 +1945,14 @@ function showToast(title, body) {
       </h5>
       <button type="button" class="notif-drawer-close" id="notifDrawerCloseBtn" title="Close">&times;</button>
     </div>
+    <div class="notif-tabs" role="tablist">
+      <button type="button" class="on" data-notif-cat="important" role="tab">
+        <i class="fas fa-exclamation-circle mr-1"></i>Important<span class="nt-count" id="notifCountImportant"></span>
+      </button>
+      <button type="button" data-notif-cat="announcement" role="tab">
+        <i class="fas fa-bullhorn mr-1"></i>Announcements<span class="nt-count" id="notifCountAnnouncement"></span>
+      </button>
+    </div>
     <div class="notif-drawer-tools">
       <div class="btn-group btn-group-sm" role="group" aria-label="Filter">
         <button type="button" class="btn btn-outline-secondary active" data-notif-filter="all">All</button>
@@ -2825,20 +2848,28 @@ function displayNotifications(notifications) {
   // Keep what came back, so the filter buttons need no second request.
   window.NOTIFICATIONS = notifications;
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-  updateNotificationBadge(unreadCount);
-  $('#notifDrawerCount').text(unreadCount + ' unread').toggleClass('d-none', unreadCount === 0);
+  // The bell counts what waits on you; announcements keep their own count
+  // on their tab, so news never looks like work.
+  const isImportant = n => n.category === 'important';
+  const unreadImportant = notifications.filter(n => !n.read && isImportant(n)).length;
+  const unreadNews = notifications.filter(n => !n.read && !isImportant(n)).length;
+  updateNotificationBadge(unreadImportant);
+  $('#notifDrawerCount').text(unreadImportant + ' important').toggleClass('d-none', unreadImportant === 0);
+  $('#notifCountImportant').text(unreadImportant || '');
+  $('#notifCountAnnouncement').text(unreadNews || '');
 
+  const inTab = notifications.filter(n => (window.NOTIF_CAT === 'important') === isImportant(n));
   const showing = window.NOTIF_FILTER === 'unread'
-    ? notifications.filter(n => !n.read)
-    : notifications;
+    ? inTab.filter(n => !n.read)
+    : inTab;
 
   if (showing.length === 0) {
     container.innerHTML =
       '<div class="notif-empty">' +
         '<i class="fas fa-check-circle"></i>' +
-        '<div>' + (window.NOTIF_FILTER === 'unread'
-                   ? 'Nothing unread' : 'You are all caught up') + '</div>' +
+        '<div>' + (window.NOTIF_CAT === 'important'
+                   ? 'Nothing is waiting on you' : (window.NOTIF_FILTER === 'unread'
+                   ? 'Nothing unread' : 'No announcements')) + '</div>' +
       '</div>';
     return;
   }
@@ -2879,6 +2910,7 @@ async function refreshNotifications() {
 
 // ---- the notifications panel ----------------------------------------------
 window.NOTIF_FILTER = 'all';
+window.NOTIF_CAT = 'important';
 
 function openNotifDrawer() {
   $('#notifDrawer').addClass('open').attr('aria-hidden', 'false');
@@ -2901,6 +2933,12 @@ $(function () {
   $('#notifDrawerCloseBtn, #notifDrawerOverlay').on('click', closeNotifDrawer);
   $(document).on('keydown', function (e) {
     if (e.key === 'Escape' && $('#notifDrawer').hasClass('open')) { closeNotifDrawer(); }
+  });
+  $('#notifDrawer').on('click', '[data-notif-cat]', function () {
+    window.NOTIF_CAT = $(this).data('notif-cat');
+    $('#notifDrawer [data-notif-cat]').removeClass('on');
+    $(this).addClass('on');
+    displayNotifications(window.NOTIFICATIONS || []);
   });
   $('#notifDrawer').on('click', '[data-notif-filter]', function () {
     window.NOTIF_FILTER = $(this).data('notif-filter');
@@ -2951,7 +2989,8 @@ async function markAllNotificationsAsRead() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({})
+      // Only the tab in front of the reader.
+      body: JSON.stringify({ category: window.NOTIF_CAT || null })
     });
     
     const data = await response.json();
