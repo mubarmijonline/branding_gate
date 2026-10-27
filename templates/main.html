@@ -283,7 +283,7 @@
     #notifDrawerOverlay.open { opacity: 1; pointer-events: auto; }
     #notifDrawer {
       position: fixed; top: 0; right: 0; bottom: 0;
-      width: 460px; max-width: 100vw;
+      width: 640px; max-width: 100vw;
       background: #fff; z-index: 1060;
       box-shadow: -6px 0 24px rgba(0,0,0,.25);
       transform: translateX(100%);
@@ -306,6 +306,21 @@
       background: rgba(255,255,255,.22); border-radius: 20px;
       padding: .05rem .5rem; font-size: .72rem; font-weight: 700;
     }
+    .notif-drawer-send {
+      background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 18px; margin-inline-start: auto;
+      padding: 6px 12px; font-size: .8rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .notif-drawer-send:hover { background: rgba(255,255,255,.3); }
+    .notif-drawer-send + .notif-drawer-sound { margin-inline-start: 4px; }
+    .ns-form { text-align: start; }
+    .ns-form label { font-weight: 700; font-size: .8rem; color: #4b5563; margin: .6rem 0 .25rem; display: block; }
+    .ns-form .ns-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .ns-form .ns-quick button { border: 1px solid #d1d5db; background: #f9fafb; border-radius: 14px; padding: 3px 10px; font-size: .75rem; }
+    .ns-form .ns-quick button:hover { background: #eef2ff; }
+    .ns-form .ns-count { font-size: .75rem; color: #6b7280; margin-top: 4px; }
+    .ns-form .select2-container { width: 100% !important; }
+    .ns-form .select2-selection--multiple { min-height: 42px; }
+    .swal2-container .select2-container--open { z-index: 2000; }
     .notif-drawer-sound {
       background: transparent; border: 0; color: #fff; margin-inline-start: auto;
       width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: .95rem;
@@ -1770,6 +1785,10 @@ function showToast(title, body) {
       <h5><i class="fas fa-bell mr-2"></i>Notifications
         <span class="notif-drawer-count d-none" id="notifDrawerCount">0</span>
       </h5>
+      {% if 'notification.send' in session.get('perms', {}) %}
+      <button type="button" class="notif-drawer-send" id="notifSendBtn" title="Send a notification to anyone">
+        <i class="fas fa-paper-plane mr-1"></i>Send</button>
+      {% endif %}
       <button type="button" class="notif-drawer-sound" id="notifSoundBtn" title="Notification sounds"><i class="fas fa-volume-up"></i></button>
       <button type="button" class="notif-drawer-close" id="notifDrawerCloseBtn" title="Close">&times;</button>
     </div>
@@ -2347,6 +2366,66 @@ function openNotifDrawer() {
   $('body').css('overflow', 'hidden');
   refreshNotifications();
 }
+
+// ---- sending one: admins and heads (notification.send) ---------------------
+// Pick anyone (or a whole department, or everyone), write a title and a
+// message; Important also reaches their phones.
+$(document).on('click', '#notifSendBtn', function () {
+  const esc = window.notifEscape, T = function (x) { return window.bgT ? window.bgT(x) : x; };
+  $.getJSON('/api/mention-users').done(function (r) {
+    const people = (r && r.users) || [];
+    const depts = Array.from(new Set(people.map(function (p) { return p.department_name; }).filter(Boolean))).sort();
+    Swal.fire({
+      title: T('Send a notification'),
+      width: 640,
+      html: '<div class="ns-form">' +
+        '<label for="nsTo">' + esc(T('To')) + '</label>' +
+        '<select id="nsTo" multiple>' + people.map(function (p) {
+          return '<option value="' + p.id + '" data-dept="' + esc(p.department_name || '') + '">' + esc(p.name) +
+                 (p.role_name ? ' (' + esc(p.role_name) + ')' : '') + '</option>'; }).join('') + '</select>' +
+        '<div class="ns-quick"><button type="button" data-all="1">' + esc(T('Everyone')) + '</button>' +
+          depts.map(function (d) { return '<button type="button" data-dept="' + esc(d) + '">+ ' + esc(d) + '</button>'; }).join('') +
+          '<button type="button" data-clear="1">' + esc(T('Clear')) + '</button></div>' +
+        '<div class="ns-count" id="nsCount"></div>' +
+        '<label for="nsTitle">' + esc(T('Title')) + '</label>' +
+        '<input id="nsTitle" class="form-control" maxlength="120">' +
+        '<label for="nsMsg">' + esc(T('Message')) + '</label>' +
+        '<textarea id="nsMsg" class="form-control" rows="4" maxlength="1000"></textarea>' +
+        '<div class="custom-control custom-switch mt-3"><input type="checkbox" class="custom-control-input" id="nsImportant" checked>' +
+        '<label class="custom-control-label" for="nsImportant" style="font-weight:600;margin:0;">' +
+          esc(T('Important: also send to their phones')) + '</label></div></div>',
+      showCancelButton: true, confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i>' + T('Send'), cancelButtonText: T('Cancel'),
+      confirmButtonColor: '#224abe', focusConfirm: false,
+      didOpen: function () {
+        const $to = $('#nsTo');
+        $to.select2({ dropdownParent: $('.swal2-popup'), placeholder: T('Pick people'), width: '100%' });
+        const count = function () { const n = ($to.val() || []).length; $('#nsCount').text(n ? n + ' ' + T('people') : ''); };
+        $to.on('change', count);
+        $('.ns-quick').on('click', 'button', function () {
+          let ids = $to.val() || [];
+          if ($(this).data('all')) { ids = people.map(function (p) { return String(p.id); }); }
+          else if ($(this).data('clear')) { ids = []; }
+          else { const d = $(this).data('dept'); ids = ids.concat(people.filter(function (p) { return p.department_name === d; }).map(function (p) { return String(p.id); })); }
+          $to.val(Array.from(new Set(ids))).trigger('change');
+        });
+      },
+      preConfirm: function () {
+        const body = { user_ids: $('#nsTo').val() || [], title: ($('#nsTitle').val() || '').trim(),
+                       message: ($('#nsMsg').val() || '').trim(), important: $('#nsImportant').is(':checked') };
+        if (!body.user_ids.length) { Swal.showValidationMessage(T('Pick at least one person')); return false; }
+        if (!body.title || !body.message) { Swal.showValidationMessage(T('Write a title and a message')); return false; }
+        return $.ajax({ url: '/api/notifications/send', method: 'POST', contentType: 'application/json', data: JSON.stringify(body) })
+          .then(function (res) { return res; }, function (x) {
+            Swal.showValidationMessage((x.responseJSON && x.responseJSON.error) || T('Could not send')); return false; });
+      }
+    }).then(function (res) {
+      if (res.isConfirmed && res.value && res.value.success) {
+        Swal.fire({ toast: true, position: 'top', timer: 3500, showConfirmButton: false, icon: 'success',
+                    title: T('Sent to') + ' ' + res.value.recipients + ' ' + T('people') + (res.value.important ? ' · ' + T('with phone push') : '') });
+      }
+    });
+  });
+});
 
 function paintNotifSound() {
   const on = !window.bgSound || window.bgSound.enabled('notification');

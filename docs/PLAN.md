@@ -769,3 +769,17 @@ said OK and nothing was added.
   bell still asks on first tap as before.
 - `/add_notification` (notifications written from a page) now pushes its
   Important ones too; it was the one path that never reached a phone.
+
+## Sending a notification to anyone; wider panel, 2026-10-28
+
+- New permission `notification.send` ("Send a notification (and phone push)
+  to anyone in the system"): admin and every Executive / Head-level role
+  (assistant, sales head, account director, pricing, operations, finance,
+  marketing managers, 2D / 3D heads, 3D purchasing). Others can be given it
+  from People & Access.
+- Notifications panel: a Send button for holders. Pick people (search, or
+  one tap for Everyone / a whole department), title (120), message (1000),
+  and Important (default on: Important tab + phone push; off: announcement in
+  the bell only). The recipient sees who sent it. `POST
+  /api/notifications/send`, active people only, at most 300 at a time.
+- Notifications panel widened from 460px to 640px (phones stay full width).

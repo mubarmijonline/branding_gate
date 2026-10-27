@@ -2285,6 +2285,41 @@ def add_notification():
         push_to_users([uid], title, content, data.get('link'))
 
     return jsonify(success=True, message_id=str(inserted))
+@app.route('/api/notifications/send', methods=['POST'])
+@perm('notification.send')
+def send_direct_notification():
+    """
+    A notification written by an admin or a head, to the people they pick.
+    Important: the Important tab and a phone push. Otherwise an announcement
+    in the bell only. The recipient sees who sent it.
+    """
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip()
+    message = (data.get('message') or '').strip()
+    if not title or not message:
+        return jsonify(success=False, error='Write a title and a message'), 400
+    if len(title) > 120 or len(message) > 1000:
+        return jsonify(success=False, error='Title up to 120 characters, message up to 1000'), 400
+    ids = sorted({int(u) for u in (data.get('user_ids') or []) if str(u).isdigit()})
+    if not ids:
+        return jsonify(success=False, error='Pick at least one person'), 400
+    if len(ids) > 300:
+        return jsonify(success=False, error='At most 300 people at a time'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id FROM user WHERE is_active = 1 AND id IN (" + ",".join(["%s"] * len(ids)) + ")", ids)
+        live = [r['id'] for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+    if not live:
+        return jsonify(success=False, error='Those people are not active'), 400
+    important = data.get('important', True) not in (False, 0, '0', 'false')
+    sent = notify_users(live, title, message, link='/notifications',
+                        category='important' if important else 'announcement')
+    return jsonify(success=True, sent=sent, recipients=len(live), important=important)
+
+
 @app.route('/get_notifications')
 def get_notifications():
     try:

@@ -197,6 +197,7 @@ PERMISSIONS = {
     'role.assign': 'Assign a role to a user',
     'role.grant':  'Give a role, department, team or person an extra permission',
     'system.storage': 'See how much disk space uploads and the database use',
+    'notification.send': 'Send a notification (and phone push) to anyone in the system',
 
     # Dashboards
     'dashboard.sales':      'View the sales dashboard',
@@ -212,7 +213,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'finance_master.view', 'finance_master.edit',
     'catalog.view', 'catalog.edit',
     'department.view', 'department.edit',
-    'role.view', 'role.assign', 'role.grant', 'system.storage',
+    'role.view', 'role.assign', 'role.grant', 'system.storage', 'notification.send',
     'supplier_report.view',
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
@@ -829,6 +830,12 @@ _TARGETS_BY_LEVEL = {
 for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
     if _level in _TARGETS_BY_LEVEL and _role_code in SEED_MATRIX:
         SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], _TARGETS_BY_LEVEL[_level])
+
+# Heads and executives can send a notification to anyone (the notifications
+# panel's Send button). Others can be given it from People & Access.
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    if _level <= LEVEL_HEAD and _role_code in SEED_MATRIX:
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {'notification.send': 'all'})
 
 # Self-service: what every employee needs regardless of job. The navbar balance
 # widget and the item-catalog lookup in main.html are rendered for everyone, so
