@@ -580,9 +580,13 @@ leader.
   someone who leaves is switched off rather than deleted.
 - New role `digital_marketing_team_leader` (Marketing, team leader).
 - Data (done 2026-10-27): Kerolos inactive (backup in private_backups/kerolos_before_deactivation_20261027.json); vacancies Marketing Manager (under Beshoy) and
-  Digital Marketing Team Leader (under it). The two Digital Marketing members
-  are added under it once Beshoy names them; seats under Mariam Magdy and
+  Digital Marketing Team Leader (under it). Seats under Mariam Magdy and
   Sarah Gaber wait on Gamal saying how many.
+- Data (done 2026-10-28): Michael Ehab filled the Digital Marketing Team
+  Leader seat (so he sits under the vacant Marketing Manager; reports to
+  Beshoy until it is filled); Mira Maher and Mariam Osama added as Marketing
+  Members under him. Accounts made through /api/users/add with temporary
+  passwords handed to Ahmed.
 
 ## Group chats, 2026-10-27
 
