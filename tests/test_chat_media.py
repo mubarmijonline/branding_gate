@@ -262,6 +262,53 @@ class MentionAllTest(_ChatHarness):
         self.assertTrue(branding_gate.chat_mentions_all('@Everyone, look', []))
 
 
+class StickerTest(_ChatHarness):
+
+    def _add(self, user):
+        r = self._client_for(user).post('/api/chat/stickers', data={'file': (_png(), 's.png', 'image/png')},
+                                        content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        return r.get_json()['sticker']
+
+    def test_add_list_and_send(self):
+        st = self._add(self.seller)
+        listed = self._client_for(self.head).get('/api/chat/stickers').get_json()['stickers']
+        self.assertIn(st['id'], [x['id'] for x in listed])
+        self.assertEqual(self._client_for(self.head).get(st['url']).status_code, 200)
+        r = self._client_for(self.seller).post('/api/sales/requests/%d/comments' % self.request_id,
+                                               json={'comment_text': '', 'sticker_id': st['id']})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        msg = self._messages(self.seller)[0]
+        self.assertEqual(msg['attachments'][0]['kind'], 'sticker')
+        self.assertEqual(msg['caption'], '')
+        # In a group too.
+        r = self._client_for(self.member).post('/api/chat/groups/operations/messages', json={'sticker_id': st['id']})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+
+    def test_a_chat_photo_becomes_a_sticker(self):
+        self._client_for(self.seller).post(
+            '/api/sales/requests/%d/comments' % self.request_id,
+            data={'kind': 'image', 'file': (_png(), 'p.png', 'image/png')}, content_type='multipart/form-data')
+        att = self._messages(self.seller)[0]['attachments'][0]
+        r = self._client_for(self.head).post('/api/chat/stickers', json={'from_attachment': att['id']})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        # Someone who cannot read that chat cannot lift its photos.
+        self.assertEqual(self._client_for(self.stranger).post('/api/chat/stickers',
+                                                              json={'from_attachment': att['id']}).status_code, 403)
+
+    def test_only_the_owner_or_an_admin_removes(self):
+        st = self._add(self.seller)
+        self.assertEqual(self._client_for(self.head).delete('/api/chat/stickers/%d' % st['id']).status_code, 403)
+        self.assertEqual(self._client_for(self.seller).delete('/api/chat/stickers/%d' % st['id']).status_code, 200)
+        listed = self._client_for(self.head).get('/api/chat/stickers').get_json()['stickers']
+        self.assertNotIn(st['id'], [x['id'] for x in listed])
+
+    def test_not_an_image(self):
+        r = self._client_for(self.seller).post('/api/chat/stickers', data={'file': (io.BytesIO(b'x'), 's.png', 'image/png')},
+                                               content_type='multipart/form-data')
+        self.assertEqual(r.status_code, 400)
+
+
 class ItemFilesSurviveEditTest(_CostingHarness):
 
     def test_files_follow_the_reinserted_item(self):

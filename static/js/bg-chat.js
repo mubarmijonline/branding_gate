@@ -27,6 +27,23 @@
                         && window.isSecureContext);
     var MAX_VOICE_MS = 5 * 60 * 1000;
     var MENTION_ALL = /(^|\s)@(all|everyone)(?=$|[\s.,!?;:)\]}])/i;
+    // The emoji picker: what a team uses at work, grouped as on a phone keyboard.
+    var EMOJI = [
+        ['fa-smile', 'Smileys', '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😛 😜 🤪 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🥵 🥶 😵 🤯 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 💀 💩 🤡 👻 👽 🤖'],
+        ['fa-hand-paper', 'Gestures', '👍 👎 👌 🤌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 👏 🙌 👐 🤲 💪 ✍️ 💅 🤳 👀 🧠 🫡 🙋 🙆 🙅 🤷 🤦 💁 🙇'],
+        ['fa-heart', 'Hearts', '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 ✨ ⭐ 🌟 🔥 💥 💫 🎉 🎊 🎈 🎁 🏆 🥇 🥈 🥉 🎯'],
+        ['fa-briefcase', 'Work', '✅ ☑️ ✔️ ❌ ❎ ⚠️ ❗ ❓ ⏰ ⏳ 📅 📆 🗓️ 📌 📍 📎 🖊️ 📝 📋 📁 📂 📊 📈 📉 💼 💰 💵 💳 🧾 📦 🚚 🚛 🏗️ 🛠️ 🔧 🔨 ⚙️ 🖨️ 💻 🖥️ 📱 ☎️ 📞 📧 📨 💡 🔑 🔒 🏢 🏬 🎪 🎤 🎬 📸 🖼️ 🎨 🧵 ☕ 🍕 🍔 🥤 🍰'],
+        ['fa-flag', 'Signs', '🟢 🟡 🔴 🔵 🟣 ⚫ ⚪ 🟥 🟧 🟨 🟩 🟦 ➡️ ⬅️ ⬆️ ⬇️ 🔄 🔁 ➕ ➖ ✖️ ➗ 🆗 🆕 🆙 🔝 🆘 ⛔ 🚫 🇪🇬']
+    ].map(function (g) { return { icon: g[0], title: g[1], list: g[2].split(' ') }; });
+    // Big ones that send on a tap, as stickers do.
+    var BIG_EMOJI = '👍 ❤️ 😂 😮 😢 🙏 👏 🔥 🎉 💯 ✅ 👌 🤝 💪 😎 🥳 🤔 😅 😍 🫡'.split(' ');
+    var JUMBO = (function () { try { return new RegExp('^(?:\\p{Extended_Pictographic}(?:\\uFE0F|\\u200D\\p{Extended_Pictographic}|[\\u{1F3FB}-\\u{1F3FF}])*|[\\u{1F1E6}-\\u{1F1FF}]{2}|\\s){1,8}$', 'u'); } catch (e) { return null; } })();
+    function jumboCount(text) {
+        if (!JUMBO || !text || !JUMBO.test(text)) { return 0; }
+        var n = (text.match(/\p{Extended_Pictographic}/gu) || []).length;
+        return n >= 1 && n <= 3 ? n : 0;
+    }
+    var stickers = null;       // the company pack, once loaded
     var AUTHOR_COLOURS = ['#e542a3', '#1f7aec', '#d3396d', '#00a884', '#a62c71', '#c75300', '#7f66ff', '#02a698'];
 
     var $drawer = $('#chatDrawer'), $overlay = $('#chatDrawerOverlay'), $badge = $('#chatUnreadBadge');
@@ -109,6 +126,10 @@
     // Shared by the request page's own comment views.
     function mediaHtml(atts, progress) {
         return (atts || []).map(function (a) {
+            if (a.kind === 'sticker') {
+                return '<div class="bgc-media bgc-sticker-wrap"><img class="bgc-sticker" loading="lazy" alt="' + esc(T('Sticker')) +
+                    '" src="' + esc(a.url) + '"></div>';
+            }
             if (a.kind === 'image') {
                 var ratio = (a.width && a.height) ? ' style="aspect-ratio:' + a.width + '/' + a.height + '"' : '';
                 return '<div class="bgc-media"><img class="bgc-img" loading="lazy" alt="' + esc(T('Photo')) + '" src="' +
@@ -402,7 +423,9 @@
             '<div class="bgc-composer" id="chatComposerBar">' +
               '<div class="bgc-suggest" id="chatMentionSuggest"></div>' +
               '<div class="bgc-replybar" id="chatReplyBar"></div>' +
+              '<div class="bgc-emoji-panel" id="chatEmojiPanel"></div>' +
               '<div class="bgc-crow">' +
+                '<button type="button" class="bgc-icon-btn bgc-emoji-btn" title="' + esc(T('Emoji and stickers')) + '"><i class="far fa-smile"></i></button>' +
                 '<button type="button" class="bgc-icon-btn bgc-attach" title="' + esc(T('Photo')) + '"><i class="fas fa-paperclip"></i></button>' +
                 (COARSE.matches ? '<button type="button" class="bgc-icon-btn bgc-camera" title="' + esc(T('Camera')) + '"><i class="fas fa-camera"></i></button>' : '') +
                 '<div class="bgc-input"><textarea id="chatComposer" rows="1" placeholder="' + esc(T('Type a message')) + '" enterkeyhint="' + (COARSE.matches ? 'enter' : 'send') + '"></textarea></div>' +
@@ -415,7 +438,8 @@
             '</div>' +
             '<div class="bgc-drop">' + esc(T('Drop photos to send')) + '</div>' +
             '<input type="file" id="chatFileInput" accept="image/*" multiple hidden>' +
-            '<input type="file" id="chatCameraInput" accept="image/*" capture="environment" hidden>');
+            '<input type="file" id="chatCameraInput" accept="image/*" capture="environment" hidden>' +
+            '<input type="file" id="chatStickerInput" accept="image/png,image/webp,image/gif,image/jpeg" hidden>');
         updateSendButton();
     }
 
@@ -466,7 +490,10 @@
         var own = m.user_id === ME;
         var names = cur.members.map(function (u) { return u.name; }).concat(['all', 'everyone']);
         var text = (m.attachments && m.attachments.length) ? (m.caption || '') : (m.comment_text || '');
+        var isSticker = m.attachments && m.attachments.length && m.attachments[0].kind === 'sticker';
+        var big = !(m.attachments && m.attachments.length) && !m.reply ? jumboCount(text) : 0;
         return '<div class="bgc-msg' + (own ? ' own' : '') + (first ? ' first' : '') + (m.temp ? ' pending' : '') +
+            (isSticker ? ' sticker' : '') + (big ? ' jumbo jumbo-' + big : '') +
             '" data-id="' + esc(m.id) + '">' +
             '<div class="bgc-bubble">' +
               (m.temp ? '' : '<button type="button" class="bgc-reply-btn" title="' + esc(T('Reply')) + '"><i class="fas fa-reply"></i></button>') +
@@ -482,8 +509,9 @@
     function quoteText(q) {
         if (!q) { return ''; }
         if (q.deleted) { return '<i>' + esc(T('This message was deleted')) + '</i>'; }
-        var icon = q.kind === 'image' ? '<i class="fas fa-camera"></i> ' : q.kind === 'voice' ? '<i class="fas fa-microphone"></i> ' : '';
-        var t = q.text || (q.kind === 'image' ? T('Photo') : q.kind === 'voice' ? T('Voice note') : '');
+        var icon = q.kind === 'image' ? '<i class="fas fa-camera"></i> ' : q.kind === 'voice' ? '<i class="fas fa-microphone"></i> '
+                 : q.kind === 'sticker' ? '<i class="far fa-sticky-note"></i> ' : '';
+        var t = q.text || (q.kind === 'image' ? T('Photo') : q.kind === 'voice' ? T('Voice note') : q.kind === 'sticker' ? T('Sticker') : '');
         return icon + '<span data-no-i18n>' + esc(t) + '</span>';
     }
     function quoteHtml(q, inBubble) {
@@ -612,7 +640,8 @@
             if (msg.duration_ms) { fd.append('duration_ms', String(msg.duration_ms)); }
         } else {
             data = JSON.stringify({ comment_text: msg.comment_text, source: 'general', is_note: false,
-                                    mentioned_users: msg.mentions || [], reply_to: msg.reply ? msg.reply.id : null });
+                                    mentioned_users: msg.mentions || [], reply_to: msg.reply ? msg.reply.id : null,
+                                    sticker_id: msg.sticker_id || null });
         }
         msg.receipt = 'sending'; msg.progress = msg.blob ? 0 : null; redrawPending(msg);
         $.ajax({
@@ -818,6 +847,126 @@
         hideSuggest(); updateSendButton(); autosize(ta);
     }
 
+    // ---------------------------------------------------------------- emoji + stickers
+    var pickerTab = 'emoji';
+    function recentEmoji() { try { return JSON.parse(localStorage.getItem('bg.chat.recentEmoji') || '[]'); } catch (e) { return []; } }
+    function rememberEmoji(e) {
+        var list = recentEmoji().filter(function (x) { return x !== e; }); list.unshift(e);
+        try { localStorage.setItem('bg.chat.recentEmoji', JSON.stringify(list.slice(0, 24))); } catch (err) { /* ignore */ }
+    }
+    function renderPicker() {
+        var $p = $('#chatEmojiPanel');
+        var tabs = '<div class="bgc-ep-tabs">' +
+            '<button type="button" class="bgc-ep-tab' + (pickerTab === 'emoji' ? ' on' : '') + '" data-tab="emoji"><i class="far fa-smile"></i> ' + esc(T('Emoji')) + '</button>' +
+            '<button type="button" class="bgc-ep-tab' + (pickerTab === 'stickers' ? ' on' : '') + '" data-tab="stickers"><i class="far fa-sticky-note"></i> ' + esc(T('Stickers')) + '</button></div>';
+        var body = '';
+        if (pickerTab === 'emoji') {
+            var recent = recentEmoji();
+            var groups = (recent.length ? [{ title: 'Recent', list: recent }] : []).concat(EMOJI);
+            body = groups.map(function (g) {
+                return '<div class="bgc-ep-title">' + esc(T(g.title)) + '</div><div class="bgc-ep-grid">' +
+                    g.list.map(function (e) { return '<button type="button" class="bgc-ep-emoji" data-e="' + esc(e) + '">' + e + '</button>'; }).join('') + '</div>';
+            }).join('');
+        } else {
+            body = '<div class="bgc-ep-title">' + esc(T('Big emoji')) + '</div><div class="bgc-ep-grid big">' +
+                BIG_EMOJI.map(function (e) { return '<button type="button" class="bgc-ep-big" data-e="' + esc(e) + '">' + e + '</button>'; }).join('') + '</div>' +
+                '<div class="bgc-ep-title">' + esc(T('Company stickers')) + '</div><div class="bgc-ep-stickers">' +
+                '<button type="button" class="bgc-ep-add" title="' + esc(T('Add a sticker')) + '"><i class="fas fa-plus"></i><small>' + esc(T('Add')) + '</small></button>' +
+                (stickers === null ? '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>'
+                    : stickers.map(function (st) {
+                        return '<button type="button" class="bgc-ep-sticker" data-id="' + st.id + '" data-url="' + esc(st.url) + '"' +
+                            (st.mine || canRemoveAny ? ' data-removable="1"' : '') + '><img loading="lazy" alt="" src="' + esc(st.url) + '"></button>';
+                    }).join('')) + '</div>' +
+                (stickers && !stickers.length ? '<div class="bgc-ep-hint">' + esc(T('No stickers yet. Add one, or hold a photo in a chat and pick "Add to stickers".')) + '</div>' : '');
+        }
+        $p.html(tabs + '<div class="bgc-ep-body">' + body + '</div>');
+    }
+    var canRemoveAny = false;
+    function loadStickers() {
+        $.ajax({ url: '/api/chat/stickers', cache: false, silent: true }).done(function (r) {
+            if (!r || !r.success) { return; }
+            stickers = r.stickers || []; canRemoveAny = !!r.can_remove_any;
+            if (pickerTab === 'stickers' && $('#chatEmojiPanel').hasClass('open')) { renderPicker(); }
+        });
+    }
+    function togglePicker(force) {
+        var $p = $('#chatEmojiPanel'), open = force === undefined ? !$p.hasClass('open') : force;
+        $p.toggleClass('open', open);
+        $('.bgc-emoji-btn').toggleClass('on', open).find('i').attr('class', open ? 'fas fa-keyboard' : 'far fa-smile');
+        if (open) { hideSuggest(); renderPicker(); if (stickers === null) { loadStickers(); } }
+    }
+    function insertAtCursor(text) {
+        var ta = document.getElementById('chatComposer'); if (!ta) { return; }
+        var a = ta.selectionStart || ta.value.length, b = ta.selectionEnd || a;
+        ta.value = ta.value.slice(0, a) + text + ta.value.slice(b);
+        ta.setSelectionRange(a + text.length, a + text.length);
+        autosize(ta); updateSendButton();
+        if (!COARSE.matches) { ta.focus(); }
+    }
+    function sendSticker(st) {
+        var reply = replyTo; clearReply(); togglePicker(false);
+        post(addPending({ kind: 'sticker', sticker_id: st.id, comment_text: '', mentions: [], reply: reply,
+                          attachments: [{ kind: 'sticker', url: st.url }] }));
+    }
+    function sendBigEmoji(e) {
+        var reply = replyTo; clearReply(); togglePicker(false); rememberEmoji(e);
+        post(addPending({ comment_text: e, mentions: [], attachments: [], reply: reply }));
+    }
+    $(document).on('click', '.bgc-emoji-btn', function () { togglePicker(); });
+    $(document).on('click', '.bgc-ep-tab', function () { pickerTab = $(this).data('tab'); renderPicker(); if (pickerTab === 'stickers') { loadStickers(); } });
+    $(document).on('click', '.bgc-ep-emoji', function () { var e = String($(this).data('e')); rememberEmoji(e); insertAtCursor(e); });
+    $(document).on('click', '.bgc-ep-big', function () { sendBigEmoji(String($(this).data('e'))); });
+    $(document).on('click', '.bgc-ep-sticker', function () {
+        if ($(this).data('holding')) { return; }
+        sendSticker({ id: $(this).data('id'), url: $(this).data('url') });
+    });
+    $(document).on('click', '.bgc-ep-add', function () { $('#chatStickerInput').val('').click(); });
+    $(document).on('contextmenu', '.bgc-ep-sticker[data-removable]', function (e) { e.preventDefault(); removeSticker($(this)); });
+    var stPress = null;
+    $(document).on('touchstart', '.bgc-ep-sticker[data-removable]', function () {
+        var $b = $(this); stPress = setTimeout(function () { $b.data('holding', 1); removeSticker($b); setTimeout(function () { $b.data('holding', 0); }, 600); }, 600);
+    });
+    $(document).on('touchend touchmove touchcancel', '.bgc-ep-sticker', function () { clearTimeout(stPress); });
+    function removeSticker($b) {
+        var go = function () {
+            $.ajax({ url: '/api/chat/stickers/' + $b.data('id'), type: 'DELETE', silent: true }).done(function () {
+                stickers = (stickers || []).filter(function (x) { return x.id !== $b.data('id'); }); renderPicker();
+            });
+        };
+        if (window.Swal) { Swal.fire({ title: T('Remove this sticker from the pack?'), icon: 'question', showCancelButton: true,
+                                        confirmButtonText: T('Remove'), cancelButtonText: T('Cancel') }).then(function (r) { if (r.isConfirmed) { go(); } }); }
+        else if (confirm(T('Remove this sticker from the pack?'))) { go(); }
+    }
+    $(document).on('change', '#chatStickerInput', function () {
+        var f = this.files && this.files[0]; if (!f) { return; }
+        stickerFromFile(f).then(function (blob) {
+            var fd = new FormData(); fd.append('file', blob, 'sticker.' + (blob.type === 'image/gif' ? 'gif' : blob.type === 'image/png' ? 'png' : 'webp'));
+            $.ajax({ url: '/api/chat/stickers', type: 'POST', data: fd, processData: false, contentType: false, silent: true })
+                .done(function (r) { if (r && r.success) { (stickers = stickers || []).unshift(r.sticker); pickerTab = 'stickers'; renderPicker(); toast('success', T('Added to stickers')); } })
+                .fail(function (x) { toast('error', (x.responseJSON && x.responseJSON.error) || T('Could not add the sticker')); });
+        });
+    });
+    function stickerFromFile(file) {
+        // 512px, transparency kept (WebP, else PNG). GIFs stay as they are so they still move.
+        return new Promise(function (resolve) {
+            if (file.type === 'image/gif') { return resolve(file); }
+            var url = URL.createObjectURL(file), img = new Image();
+            img.onload = function () {
+                var k = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight));
+                var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+                c.toBlob(function (b) {
+                    if (b && b.type === 'image/webp') { return resolve(b); }
+                    c.toBlob(function (p) { resolve(p || file); }, 'image/png');
+                }, 'image/webp', 0.9);
+            };
+            img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+            img.src = url;
+        });
+    }
+    // Typing closes the picker on a phone, as the keyboard takes the room.
+    $(document).on('focus', '#chatComposer', function () { if (COARSE.matches) { togglePicker(false); } });
+
     // ---------------------------------------------------------------- info sheets
     function personRow(p, right) {
         return '<div class="bgc-person"><div class="bgc-avatar sm" style="background:' + colourFor(p.id) + '">' + esc(initials(p.name)) + '</div>' +
@@ -862,9 +1011,11 @@
         if (!cur || String(id).indexOf('tmp') === 0) { return; }
         var m = cache[id] || {}, own = m.user_id === ME;
         var text = (m.attachments && m.attachments.length) ? (m.caption || '') : (m.comment_text || '');
+        var photo = (m.attachments || []).filter(function (a) { return a.kind === 'image' || a.kind === 'sticker'; })[0];
         var $menu = $('<div class="bgc-menu" role="menu">' +
             '<button type="button" data-act="reply"><i class="fas fa-reply"></i> ' + esc(T('Reply')) + '</button>' +
             (text ? '<button type="button" data-act="copy"><i class="far fa-copy"></i> ' + esc(T('Copy')) + '</button>' : '') +
+            (photo ? '<button type="button" data-act="sticker"><i class="far fa-sticky-note"></i> ' + esc(T('Add to stickers')) + '</button>' : '') +
             (own ? '<button type="button" data-act="info"><i class="fas fa-info-circle"></i> ' + esc(T('Message info')) + '</button>' : '') +
             '</div>');
         $('body').append($menu);
@@ -875,6 +1026,12 @@
             closeMenu();
             if (act === 'reply') { startReply(id); }
             if (act === 'info') { showInfo(id); }
+            if (act === 'sticker' && photo) {
+                $.ajax({ url: '/api/chat/stickers', type: 'POST', contentType: 'application/json', silent: true,
+                         data: JSON.stringify({ from_attachment: photo.id }) })
+                    .done(function (r) { if (r && r.success) { if (stickers) { stickers.unshift(r.sticker); } toast('success', T('Added to stickers')); } })
+                    .fail(function (x) { toast('error', (x.responseJSON && x.responseJSON.error) || T('Could not add the sticker')); });
+            }
             if (act === 'copy' && navigator.clipboard) { navigator.clipboard.writeText(text).then(function () { toast('success', T('Copied')); }); }
         });
     }
@@ -938,6 +1095,7 @@
         if ($('.bgc-lightbox').length) { $('.bgc-lightbox').remove(); return; }
         if ($('#chatThreadPane .bgc-sheet').length) { closeSheet($('#chatThreadPane .bgc-sheet')); return; }
         if ($('.bgc-menu').length) { closeMenu(); return; }
+        if ($('#chatEmojiPanel').hasClass('open')) { togglePicker(false); return; }
         if (rec) { stopRecording(true); return; }
         if (sug.on) { hideSuggest(); return; }
         if (replyTo) { clearReply(); return; }

@@ -28,6 +28,7 @@ import target_pdf
 import zipfile
 import ssl
 import shutil
+import io
 from io import StringIO
 import random
 import glob
@@ -4387,6 +4388,8 @@ PUBLIC_ENDPOINTS = {
     'chat_groups', 'chat_group_messages', 'chat_group_post', 'chat_group_read',
     # Any chat's members, message info and media: access is checked inside.
     'chat_thread_members', 'chat_message_info', 'chat_media',
+    # The company sticker pack: any signed-in user; removal checked inside.
+    'chat_stickers', 'chat_sticker_add', 'chat_sticker_remove', 'chat_sticker_image',
     # Names / roles for @mentions (group rooms are open to people with no
     # request-chat permission), and per-item approval counts that check each
     # permission themselves and are zero for everyone else.
@@ -19536,6 +19539,9 @@ def add_sales_request_comment(request_id):
     try:
         data, upload = chat_request_payload()
         comment_text = (data.get('comment_text') or '').strip()
+        if data.get('sticker_id') and not upload:
+            data['kind'] = 'sticker'
+            comment_text = CHAT_PLACEHOLDER['sticker']
         if upload and not comment_text:
             comment_text = CHAT_PLACEHOLDER.get(data.get('kind'), '')
         source = data.get('source', 'general')
@@ -19580,9 +19586,10 @@ def add_sales_request_comment(request_id):
         """, (request_id, user_id, comment_text, source, is_note, parent_comment_id))
         
         comment_id = cur.lastrowid
-        if upload:
-            error = chat_save_attachment(cur, 'sr:%d' % request_id, comment_id, upload,
-                                         data.get('kind'), data.get('duration_ms'))
+        if upload or data.get('sticker_id'):
+            error = (chat_save_attachment(cur, 'sr:%d' % request_id, comment_id, upload,
+                                          data.get('kind'), data.get('duration_ms'))
+                     if upload else chat_attach_sticker(cur, 'sr:%d' % request_id, comment_id, data.get('sticker_id')))
             if error:
                 conn.rollback()
                 cur.close()
@@ -20063,6 +20070,9 @@ def chat_group_post(room):
         return jsonify(success=False, error='Not authenticated'), 401
     data, upload = chat_request_payload()
     text = (data.get('comment_text') or data.get('text') or '').strip()
+    if data.get('sticker_id') and not upload:
+        data['kind'] = 'sticker'
+        text = CHAT_PLACEHOLDER['sticker']
     if upload and not text:
         text = CHAT_PLACEHOLDER.get(data.get('kind'), '')
     if not text:
@@ -20075,9 +20085,9 @@ def chat_group_post(room):
         cur.execute("INSERT INTO group_chat_message (room, user_id, body, reply_to_id) VALUES (%s, %s, %s, %s)",
                     (room, me, text[:4000], reply_to))
         message_id = cur.lastrowid
-        if upload:
-            error = chat_save_attachment(cur, 'g:' + room, message_id, upload, data.get('kind'),
-                                         data.get('duration_ms'))
+        if upload or data.get('sticker_id'):
+            error = (chat_save_attachment(cur, 'g:' + room, message_id, upload, data.get('kind'), data.get('duration_ms'))
+                     if upload else chat_attach_sticker(cur, 'g:' + room, message_id, data.get('sticker_id')))
             if error:
                 conn.rollback()
                 return jsonify(success=False, error=error), 400
@@ -20129,7 +20139,9 @@ CHAT_MEDIA_MAX_BYTES = 16 * 1024 * 1024
 CHAT_IMAGE_TYPES = {'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif'}
 CHAT_VOICE_TYPES = {'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
                     'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav'}
-CHAT_PLACEHOLDER = {'image': '\U0001F4F7 Photo', 'voice': '\U0001F3A4 Voice note'}
+CHAT_PLACEHOLDER = {'image': '\U0001F4F7 Photo', 'voice': '\U0001F3A4 Voice note', 'sticker': '\u2728 Sticker'}
+CHAT_STICKER_MAX_BYTES = 1024 * 1024
+CHAT_STICKER_TYPES = {'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/jpeg': 'jpg'}
 
 
 def chat_thread(thread):
@@ -20375,7 +20387,7 @@ def chat_request_payload():
         return {'comment_text': form.get('comment_text') or '', 'source': form.get('source') or 'general',
                 'is_note': form.get('is_note') in ('1', 'true'), 'mentioned_users': mentioned,
                 'kind': form.get('kind'), 'duration_ms': form.get('duration_ms'),
-                'reply_to': form.get('reply_to')}, request.files.get('file')
+                'reply_to': form.get('reply_to'), 'sticker_id': form.get('sticker_id')}, request.files.get('file')
     return (request.get_json(silent=True) or {}), None
 
 
@@ -20463,6 +20475,172 @@ def chat_media(attachment_id):
         abort(404)
     response = send_file(path, mimetype=row['mime'], conditional=True)
     response.headers['Cache-Control'] = 'private, max-age=86400'
+    return response
+
+
+# ---- stickers -----------------------------------------------------------------
+# One pack for the whole company. Anyone may add a sticker (an image, or a
+# photo already in a chat they can read) and remove their own; an admin may
+# remove any. Sending one makes a chat attachment that points at the same
+# file, so a sticker removed from the pack still shows where it was sent.
+
+def chat_attach_sticker(cur, thread, message_id, sticker_id):
+    try:
+        sticker_id = int(sticker_id)
+    except (TypeError, ValueError):
+        return 'Pick a sticker'
+    cur.execute("SELECT path, mime, bytes, width, height FROM chat_sticker WHERE id = %s AND is_deleted = 0",
+                (sticker_id,))
+    st = cur.fetchone()
+    if not st:
+        return 'That sticker has been removed'
+    cur.execute("""INSERT INTO chat_attachment (thread, message_id, user_id, kind, path, mime, bytes, width, height)
+                   VALUES (%s, %s, %s, 'sticker', %s, %s, %s, %s, %s)""",
+                (thread, message_id, session['user_id'], st['path'], st['mime'], st['bytes'],
+                 st['width'], st['height']))
+    return None
+
+
+def _store_sticker(cur, data, mime):
+    """Check, save and register one sticker image. Returns (row dict, error)."""
+    import uuid
+    from PIL import Image
+    if mime not in CHAT_STICKER_TYPES:
+        return None, 'Stickers are PNG, WebP, GIF or JPEG images'
+    if not data:
+        return None, 'The file is empty'
+    if len(data) > CHAT_STICKER_MAX_BYTES:
+        return None, 'Stickers up to 1 MB'
+    folder = os.path.join(UPLOADS_DIR, 'chat', 'stickers')
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, '%s.%s' % (uuid.uuid4().hex, CHAT_STICKER_TYPES[mime]))
+    with open(path, 'wb') as handle:
+        handle.write(data)
+    try:
+        with Image.open(path) as img:
+            img.verify()
+        with Image.open(path) as img:
+            width, height = img.size
+    except Exception:
+        os.remove(path)
+        return None, 'That image could not be read'
+    cur.execute("""INSERT INTO chat_sticker (user_id, path, mime, bytes, width, height)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (session['user_id'], os.path.relpath(path, UPLOADS_DIR), mime, len(data), width, height))
+    return {'id': cur.lastrowid, 'url': '/api/chat/stickers/%d/image' % cur.lastrowid, 'mine': True,
+            'width': width, 'height': height}, None
+
+
+@app.route('/api/chat/stickers', methods=['GET'])
+def chat_stickers():
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    me = session['user_id']
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, user_id, width, height FROM chat_sticker WHERE is_deleted = 0 ORDER BY id DESC LIMIT 300")
+        rows = [{'id': r['id'], 'url': '/api/chat/stickers/%d/image' % r['id'], 'width': r['width'],
+                 'height': r['height'], 'mine': r['user_id'] == me} for r in cur.fetchall()]
+        return jsonify(success=True, stickers=rows, can_remove_any=has('user.create'))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/stickers', methods=['POST'])
+def chat_sticker_add():
+    """Add a sticker: an uploaded image, or `from_attachment` (a photo in a chat I can read)."""
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    conn, cur = connection()
+    try:
+        upload = request.files.get('file')
+        if upload:
+            mime = (upload.mimetype or '').split(';')[0].strip().lower()
+            data = upload.read(CHAT_STICKER_MAX_BYTES + 1)
+        else:
+            body = request.get_json(silent=True) or {}
+            cur.execute("SELECT thread, path, mime, kind FROM chat_attachment WHERE id = %s",
+                        (body.get('from_attachment'),))
+            att = cur.fetchone()
+            if not att or att['kind'] not in ('image', 'sticker'):
+                return jsonify(success=False, error='Only a photo can become a sticker'), 400
+            chat_thread_or_403(cur, att['thread'])
+            source = os.path.realpath(os.path.join(UPLOADS_DIR, att['path']))
+            if not source.startswith(os.path.realpath(UPLOADS_DIR) + os.sep) or not os.path.isfile(source):
+                return jsonify(success=False, error='That photo is no longer there'), 404
+            mime = att['mime']
+            data = _sticker_from_photo(source)
+            if data is not None:
+                mime = 'image/webp'
+            else:
+                with open(source, 'rb') as handle:
+                    data = handle.read(CHAT_STICKER_MAX_BYTES + 1)
+        row, error = _store_sticker(cur, data, mime)
+        if error:
+            return jsonify(success=False, error=error), 400
+        conn.commit()
+        return jsonify(success=True, sticker=row)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _sticker_from_photo(path):
+    """A chat photo shrunk to sticker size (512px, WebP); None to keep it as it is."""
+    from PIL import Image
+    try:
+        with Image.open(path) as img:
+            if getattr(img, 'is_animated', False):
+                return None
+            img.thumbnail((512, 512))
+            buf = io.BytesIO()
+            img.save(buf, 'WEBP', quality=85)
+            return buf.getvalue()
+    except Exception:
+        return None
+
+
+@app.route('/api/chat/stickers/<int:sticker_id>', methods=['DELETE'])
+def chat_sticker_remove(sticker_id):
+    if 'user_id' not in session:
+        return jsonify(success=False, error='Not authenticated'), 401
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT user_id FROM chat_sticker WHERE id = %s AND is_deleted = 0", (sticker_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Sticker not found'), 404
+        if row['user_id'] != session['user_id'] and not has('user.create'):
+            return jsonify(success=False, error='Only whoever added a sticker, or an admin, can remove it'), 403
+        # The file stays: messages that already carry it still show it.
+        cur.execute("UPDATE chat_sticker SET is_deleted = 1 WHERE id = %s", (sticker_id,))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/chat/stickers/<int:sticker_id>/image', methods=['GET'])
+def chat_sticker_image(sticker_id):
+    if 'user_id' not in session:
+        abort(401)
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT path, mime FROM chat_sticker WHERE id = %s", (sticker_id,))
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not row:
+        abort(404)
+    root = os.path.realpath(UPLOADS_DIR)
+    path = os.path.realpath(os.path.join(root, row['path']))
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        abort(404)
+    response = send_file(path, mimetype=row['mime'], conditional=True)
+    response.headers['Cache-Control'] = 'private, max-age=604800'
     return response
 
 

@@ -395,3 +395,51 @@ body.bgc-lock { overflow: hidden; }
 .bgc-msg.flash .bgc-bubble { animation: bgc-flash 1.4s ease; }
 @keyframes bgc-flash { 0%, 60% { box-shadow: 0 0 0 3px rgba(6, 207, 156, .55); } 100% { box-shadow: 0 1px .5px rgba(11, 20, 26, .13); } }
 .bgc-bubble { touch-action: pan-y; }
+
+/* ---- emoji + stickers ---- */
+.bgc-emoji-btn.on { color: #008069 !important; }
+.bgc-emoji-panel {
+  display: none; background: #fff; border-radius: 12px; margin-bottom: 6px;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, .08); height: 300px; flex-direction: column; overflow: hidden;
+}
+.bgc-emoji-panel.open { display: flex; }
+.bgc-ep-tabs { display: flex; border-bottom: 1px solid var(--bgc-line); flex: 0 0 auto; }
+.bgc-ep-tab {
+  flex: 1; border: 0; background: transparent; padding: 10px; font-weight: 700; font-size: .85rem;
+  color: var(--bgc-muted); border-bottom: 3px solid transparent; cursor: pointer;
+}
+.bgc-ep-tab.on { color: #008069; border-bottom-color: #008069; }
+.bgc-ep-body { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px 10px; overscroll-behavior: contain; }
+.bgc-ep-title { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--bgc-muted); margin: 8px 4px 4px; }
+.bgc-ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); }
+.bgc-ep-grid.big { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+.bgc-ep-emoji, .bgc-ep-big {
+  border: 0; background: transparent; font-size: 1.45rem; height: 40px; border-radius: 8px; cursor: pointer; line-height: 1;
+}
+.bgc-ep-big { font-size: 2.3rem; height: 60px; }
+.bgc-ep-emoji:hover, .bgc-ep-big:hover { background: #f0f2f5; }
+.bgc-ep-stickers { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.bgc-ep-sticker, .bgc-ep-add {
+  border: 0; background: transparent; aspect-ratio: 1; border-radius: 10px; cursor: pointer; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+}
+.bgc-ep-sticker:hover { background: #f0f2f5; }
+.bgc-ep-sticker img { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-user-drag: none; }
+.bgc-ep-add { border: 2px dashed #c4ccd1; color: #54656f; flex-direction: column; gap: 4px; }
+.bgc-ep-add small { font-size: .7rem; font-weight: 700; }
+.bgc-ep-hint { font-size: .78rem; color: var(--bgc-muted); padding: 8px 4px; }
+
+/* A sticker and a message of only emoji go out without a bubble, big. */
+.bgc-msg.sticker .bgc-bubble, .bgc-msg.jumbo .bgc-bubble { background: transparent !important; box-shadow: none; padding: 2px 4px; }
+.bgc-msg.sticker .bgc-bubble .bgc-quote, .bgc-msg.jumbo .bgc-bubble .bgc-quote { background: #fff; }
+.bgc-msg.sticker .bgc-author { background: #fff; border-radius: 6px; padding: 1px 6px; display: inline-block; }
+.bgc-sticker-wrap { margin: 0; border-radius: 0; overflow: visible; }
+.bgc-sticker { display: block; width: 150px; height: 150px; object-fit: contain; }
+.bgc-msg.sticker .bgc-meta, .bgc-msg.jumbo .bgc-meta {
+  float: none; display: flex; justify-content: flex-end; top: 0; background: rgba(255, 255, 255, .85);
+  border-radius: 8px; padding: 2px 6px; width: max-content; margin-inline-start: auto;
+}
+.bgc-msg.jumbo .bgc-text { font-size: 2.6rem; line-height: 1.15; }
+.bgc-msg.jumbo-2 .bgc-text { font-size: 2.2rem; }
+.bgc-msg.jumbo-3 .bgc-text { font-size: 1.9rem; }
+@media (max-width: 767.98px) { .bgc-emoji-panel { height: 42vh; } .bgc-sticker { width: 130px; height: 130px; } }

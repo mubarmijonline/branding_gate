@@ -705,3 +705,20 @@ said OK and nothing was added.
   on the current page instead of reloading; a phone push goes to the link and
   the chat opens there. The `chat=` parameter is removed from the address
   once used.
+
+## Stickers and emoji in chats, 2026-10-28
+
+- Smiley button in the composer opens a panel with two tabs. Emoji: about
+  250 work-friendly emoji in five groups plus "Recent" (kept in the browser);
+  a tap puts it in the text. Stickers: 20 big emoji that send on a tap, and
+  the company sticker pack.
+- Company pack (`chat_sticker`): anyone adds one with "+" (image shrunk to
+  512px in the browser, transparency kept, GIFs untouched, 1 MB cap, checked
+  with Pillow) or from a photo in a chat with "Add to stickers" in the message
+  menu (only from a chat they can read). Whoever added it, or an admin,
+  removes it (long press / right click in the pack); removal hides it from
+  the pack, and messages that already carry it keep showing it.
+- Sending: `sticker_id` on either message route makes a `chat_attachment` of
+  kind `sticker` pointing at the same file. Stickers and messages of only 1-3
+  emoji show big with no bubble, as on WhatsApp. Lists show "Sticker".
+  `chat_sticker_migration.sql`.
