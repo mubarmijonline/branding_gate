@@ -671,3 +671,21 @@ not change.
   Request, with its message count and a red dot for unread mentions of me;
   it opens that request's chat in the drawer. Shown to whoever may write in
   request chats.
+
+## Adding items to an existing request, 2026-10-27
+
+Gamal added "Screen For VIP" to request 17593 (all 11 items costed): the save
+said OK and nothing was added.
+
+- Cause: `submitted_items` read `template_instances` / `items`, but the edit
+  modal posts `template_fields.instances`. With locked items the route saw an
+  empty payload: inserted nothing and reported every locked item as removed,
+  still answering success. Now reads all three shapes.
+- Items Operations is costing (an open costing assignment) are now locked as
+  "out for costing": a sales edit used to delete and re-insert them, which
+  cascaded their assignment and proposals away.
+- Items added on an edit keep their comment, and Operations gets an
+  Important notification "New items on request #N" with the names, linked to
+  the operations page; the save message says how many went to costing.
+- Gamal's lost test item was not recreated: saving it again goes through the
+  normal path (insert, notification, costing).

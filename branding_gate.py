@@ -913,16 +913,21 @@ def item_lock_reason(row):
         return 'costed'
     if row.get('approval_status') in ('approved', 'pending_negotiation'):
         return 'with the client'
+    # Operations is costing it: changing it under them would cost the wrong
+    # thing, and re-inserting it would delete their assignment and proposals.
+    if row.get('in_costing'):
+        return 'out for costing'
     return None
 
 
 def locked_items_for(cur, request_id):
     """Every item on this request that is past editing, by name."""
     cur.execute("""
-        SELECT id, name, request_type, qty, unit, attributes, sell_type, rental_days,
-               dimension_calc, cost_per_item, sell_per_item, approval_status
-        FROM sales_request_items
-        WHERE request_id = %s
+        SELECT i.id, i.name, i.request_type, i.qty, i.unit, i.attributes, i.sell_type, i.rental_days,
+               i.dimension_calc, i.cost_per_item, i.sell_per_item, i.approval_status,
+               EXISTS (SELECT 1 FROM costing_assignment a WHERE a.item_id = i.id AND a.status = 'open') AS in_costing
+        FROM sales_request_items i
+        WHERE i.request_id = %s
     """, (request_id,))
     locked = {}
     for row in cur.fetchall():
@@ -942,7 +947,19 @@ def submitted_items(data):
     caller.
     """
     out = []
-    for instance in (data.get('template_instances') or []):
+    # The edit modal posts template_fields.instances; reading only
+    # template_instances saw no items at all, so on a request with locked
+    # items an added item was never inserted and the save still said OK
+    # (Gamal, request 17593, 2026-10-27).
+    template_fields = data.get('template_fields') or {}
+    if isinstance(template_fields, str):
+        try:
+            template_fields = json.loads(template_fields)
+        except ValueError:
+            template_fields = {}
+    instances = data.get('template_instances') or (template_fields.get('instances')
+                                                   if isinstance(template_fields, dict) else None) or []
+    for instance in instances:
         for item in (instance.get('items') or []):
             out.append(item)
     if not out:
@@ -1601,6 +1618,7 @@ def notifications_disabled():
 IMPORTANT_TITLES = re.compile(r"""^(
       approval\ needed
     | new\ sales\ request\ \#                 # operations: add costing
+    | new\ items\ on\ request\ \#              # operations: cost the added items
     | request\ \#\d+\ (re-)?costing\ completed  # pricing: set the price
     | re-costing\ done                         # pricing: re-price
     | costing\ assigned
@@ -11013,6 +11031,9 @@ def get_single_sales_request(request_id):
 
             # Whether this item can still be edited, so the form can say so
             # rather than accepting a change it is going to refuse.
+            cur.execute("SELECT 1 FROM costing_assignment WHERE item_id = %s AND status = 'open' LIMIT 1",
+                        (item.get('id'),))
+            item['in_costing'] = cur.fetchone() is not None
             item_dict['lock_reason'] = item_lock_reason(item)
             item_dict['is_locked'] = bool(item_dict['lock_reason'])
 
@@ -13618,6 +13639,21 @@ def get_pending_approvals():
             'success': False,
             'error': str(e)
         }), 500
+
+def notify_items_added_to_operations(request_id, title, by, names):
+    """Items added to a request that already exists: they need costing too."""
+    if not names:
+        return 0
+    try:
+        return send_notification_to_role(
+            'operation', f"New items on request #{request_id:06d}",
+            f'{by} added {len(names)} item(s) to "{title}": {", ".join(names[:6])}'
+            + ('...' if len(names) > 6 else '') + '. Please add costing.',
+            link=f'/operation_request?request={request_id}')
+    except Exception as e:
+        print(f"Error notifying operations: {e}")
+        return 0
+
 
 def notify_new_request_to_operations(request_id, title, by):
     """Tell Operations a request is waiting for costing (one wording, wherever it was created)."""
@@ -16339,6 +16375,15 @@ def update_request_with_template(request_id):
             locked_report.append(entry)
 
         refused = [e for e in locked_report if e['changes']]
+        # Items that were not on the request before this save: Operations
+        # has to cost them, so they are told once it commits.
+        old_names = {(row.get('name') or '').strip().lower() for row in old_items_list}
+        added_names = []
+        for item in incoming:
+            name = (item.get('name') or item.get('item_name') or '').strip()
+            if name and name.lower() not in old_names and name not in added_names:
+                added_names.append(name)
+        request_title = data.get('title') or existing_request.get('title') or 'a sales request'
 
         cur.execute("""
             SELECT id, name, cost_per_item, sell_per_item, total_cost, total_sell,
@@ -16412,7 +16457,7 @@ def update_request_with_template(request_id):
                         request_id,
                         item.get('request_type') or existing_request.get('request_type'),
                         name,
-                        item.get('description') or item.get('notes') or '',
+                        item.get('comment') or item.get('description') or item.get('notes') or '',
                         item.get('quantity', item.get('qty', 1)) or 1,
                         item.get('unit') or 'pcs',
                         item.get('sell_type') or 'rent',
@@ -16434,6 +16479,7 @@ def update_request_with_template(request_id):
             conn.commit()
             cur.close()
             conn.close()
+            notify_items_added_to_operations(request_id, request_title, session.get('name') or 'Sales', added_names)
 
             # What the reader needs to know, in the order they need it: what was
             # refused, then what was kept.
@@ -16443,6 +16489,8 @@ def update_request_with_template(request_id):
                     '; '.join('%s is %s' % (e['name'], e['reason']) for e in refused))
             else:
                 headline = 'Request updated. %d item(s) are locked and were left as they are.' % len(locked_rows)
+            if added_names:
+                headline += ' Added %d new item(s); Operations has been asked to cost them.' % len(added_names)
 
             return jsonify({
                 'success': True,
@@ -16826,6 +16874,7 @@ def update_request_with_template(request_id):
         conn.commit()
         cur.close()
         conn.close()
+        notify_items_added_to_operations(request_id, request_title, session.get('name') or 'Sales', added_names)
         
         # Log the update with SMART field-level change detection - ONLY log actual changes
         # NOTE: old_items_list and old_template_fields were retrieved BEFORE deletion above
