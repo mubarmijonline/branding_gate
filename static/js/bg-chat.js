@@ -1201,18 +1201,16 @@
                         }).join('') + '</div>' : '') + '</div>';
                 }).join('');
         }
+        // No link to the request page: not everyone in the chat may open it,
+        // and the sheet already holds the details, dates and items (Ahmed, 2026-10-29).
         body += '<button type="button" class="bgc-sheet-btn bgc-details-members"><i class="fas fa-users"></i> ' + esc(T('Members')) +
-            ' (' + (cur.members || []).length + ')</button>' +
-            '<button type="button" class="bgc-sheet-btn bgc-details-open"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open request')) + '</button>';
+            ' (' + (cur.members || []).length + ')</button>';
         // Already open: refresh in place, so a late load adds no history step.
         var $open = $('#chatThreadPane .bgc-sheet.is-details');
         if ($open.length) { $open.find('.bgc-sheet-body').html(body); return; }
         openSheet('SR-' + cur.key + ' · ' + T('Request details'), body).addClass('is-details');
     }
     $(document).on('click', '.bgc-details-members', showMembers);
-    $(document).on('click', '.bgc-details-open', function () {
-        if (cur && cur.kind === 'sr') { window.location.href = '/sales_request_details/' + cur.key; }
-    });
 
     function showAddPeople() {
         var $s = openSheet(T('Add people'), '<input type="search" class="bgc-people-search" placeholder="' + esc(T('Search people')) + '">' +

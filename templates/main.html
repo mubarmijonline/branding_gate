@@ -1876,7 +1876,7 @@ function showToast(title, body) {
     </div>
   </aside>
   <script>window.BG_CHAT = { meId: {{ (session.get('user_id') or 0) | tojson }}, meName: {{ (session.get('name') or '') | tojson }} };</script>
-  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261029c"></script>
+  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261029d"></script>
 
   {% if can_view_costing %}
   <script>
