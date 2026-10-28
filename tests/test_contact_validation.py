@@ -101,6 +101,10 @@ class ContactValidationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()['state'], 'success')
+        # A dated cookie: an iPhone Home Screen app drops undated ones on close.
+        cookie = next(h for h in response.headers.getlist('Set-Cookie') if h.startswith('session='))
+        self.assertIn('Expires=', cookie)
+        self.assertIn('Secure', cookie)
 
     def test_permission_gate_refreshes_stale_session_before_forbidden(self):
         with self.client.session_transaction() as flask_session:

@@ -798,7 +798,17 @@ def mongo_id(value):
 app = Flask(__name__)
 CORS(app)
 #Bootst/projects/psCalc/templatesrap(app)
-app.secret_key = "branding gate api secret key"
+# The key that signs the login cookie. It lived here in the code, in a public
+# repository, so anyone could have signed a cookie for any account; now it is
+# in .env (BG_SECRET_KEY). Without one, a random key: sessions then last only
+# until a restart.
+app.secret_key = os.environ.get('BG_SECRET_KEY') or os.urandom(32)
+# Signed in stays signed in for 30 days of disuse (each visit renews it). A
+# cookie without an expiry was dropped every time the iPhone Home Screen app
+# closed, so the app asked for a password on every open.
+app.config.update(PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+                  SESSION_COOKIE_SECURE=True, SESSION_COOKIE_HTTPONLY=True,
+                  SESSION_COOKIE_SAMESITE='Lax')
 
 # Set maximum file upload size to 25MB (allowing a small buffer over our 20MB limit)
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
@@ -2207,6 +2217,7 @@ def login():
         cur.close()
         conn.close()
         # user is now a dict, use column names
+        session.permanent = True
         session['user_id'] = user['id']
         session['mobile'] = user['mobile']
         session['email'] = user['email']

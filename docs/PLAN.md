@@ -801,3 +801,19 @@ Important ones, and for an unread badge on the Home Screen icon.
   not push; tagged messages and request chats do.
 - Tests: `tests/test_push_payload.py` (badge in payload, Operations-only,
   muted chat left out).
+
+## Staying signed in on the Home Screen app, 2026-10-29
+
+The iPhone Home Screen app asked for a password on every open: the login
+cookie had no expiry (a browser-session cookie), and iOS drops those whenever
+a Home Screen app is closed.
+
+- Login sets `session.permanent`; `PERMANENT_SESSION_LIFETIME` is 30 days,
+  renewed on every visit, so only 30 days without opening it signs you out.
+  The cookie is `Secure`, `HttpOnly`, `SameSite=Lax`.
+- The signing key was a fixed string in `branding_gate.py`, in a public
+  repository, so anyone could sign a cookie for any account. It is now
+  `BG_SECRET_KEY` in `.env` (random, git-ignored). The change signed everyone
+  out once.
+- Test: `test_contact_validation` checks the login cookie carries `Expires`
+  and `Secure`.
