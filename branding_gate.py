@@ -3835,7 +3835,13 @@ def _target_people(cur):
         FROM user u
         LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
         LEFT JOIN team t ON t.leader_id = u.id
+        WHERE u.is_active = 1
+           OR EXISTS (SELECT 1 FROM sales_target st WHERE st.user_id = u.id)
+           OR EXISTS (SELECT 1 FROM sales_request sr WHERE sr.owner_user_id = u.id)
     """)
+    # A switched-off account is left out (Gamal saw "Account Team Leader 2 -- 0
+    # of no target", a placeholder, beside Sarah), unless it ever had a target
+    # or owned a request: someone who left keeps their numbers in the totals.
     return list(cur.fetchall())
 
 
