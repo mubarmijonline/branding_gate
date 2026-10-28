@@ -65,24 +65,29 @@
       font-size: 0.8rem !important;
     }
 
-    /* Loading Animation */
-    .loading-container-class {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(255, 255, 255, 0.8);
-      z-index: 9999;
+    /* Loading: the logo as a circle (it is a navy square, which read as a
+       frame inside the old popup box) with a gold ring turning round it, on a
+       soft blur. Ahmed, 2026-10-29. */
+    #bgLoader {
+      position: fixed; inset: 0; z-index: 2050;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(244, 246, 249, .55);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+      opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility 0s linear .2s;
     }
-
-    .popup-class {
-      max-width: 90vw !important;
-      margin: 1rem !important;
+    #bgLoader.on { opacity: 1; visibility: visible; transition: opacity .2s ease; }
+    #bgLoader .bg-loader-mark { position: relative; width: 112px; height: 112px; }
+    #bgLoader img {
+      width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
+      box-shadow: 0 10px 30px rgba(14, 27, 77, .35);
     }
+    #bgLoader .bg-loader-ring {
+      position: absolute; inset: -9px; border-radius: 50%;
+      border: 3px solid rgba(226, 168, 40, .2); border-top-color: #e2a828;
+      animation: bgLoaderSpin .9s linear infinite;
+    }
+    @keyframes bgLoaderSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #bgLoader .bg-loader-ring { animation-duration: 2.4s; } }
 
     #transfer_request_modal .modal-body {
       max-height: 70vh;
@@ -536,6 +541,12 @@
 </head>
 
 <body class="bg-shell"{% if embed %} data-embed="1"{% endif %} style="background-color:#f4f6f9;">
+  <div id="bgLoader" role="status" aria-live="polite" aria-hidden="true">
+    <div class="bg-loader-mark">
+      <span class="bg-loader-ring"></span>
+      <img src="{{ url_for('static', filename='img/branding_gate_logo.jpg') }}" alt="Loading">
+    </div>
+  </div>
   {# ---------- Reusable permission shortcuts (used across navbar & FAB) ----------
      Driven by session['perms'], the permission set loaded at login and refreshed
      by /api/refresh-roles. The variable names are kept so the twenty-odd places
@@ -1988,20 +1999,9 @@ function showToast(title, body) {
         ajaxLoadingTimer = setTimeout(function() {
           if (activeAjaxRequests > 0 && !loadingShown) {
             loadingShown = true;
-            Swal.fire({
-              imageUrl: "{{ url_for('static', filename='img/branding_gate_logo.jpg') }}",
-              imageWidth: 150,
-              imageHeight: 150,
-              background: 'transparent',
-              allowOutsideClick: false,
-              showConfirmButton: false,
-              timer: 30000,
-              customClass: {
-                container: 'loading-container-class',
-                popup: 'popup-class',
-                backdrop: 'true'
-              }
-            });
+            // Its own overlay, not a SweetAlert: closing that one also closed
+            // whatever real dialog was open when the request finished.
+            $('#bgLoader').addClass('on').attr('aria-hidden', 'false');
           }
         }, 400);
       }
@@ -2019,7 +2019,7 @@ function showToast(title, body) {
           ajaxLoadingTimer = null;
         }
         if (loadingShown) {
-          Swal.close();
+          $('#bgLoader').removeClass('on').attr('aria-hidden', 'true');
           loadingShown = false;
         }
         skipAjaxLoading = false;
