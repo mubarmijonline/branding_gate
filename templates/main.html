@@ -530,7 +530,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/branding-gate-system.css') }}?v=20260910-responsive-tables">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-mobile.css') }}?v=20261026">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-chat.css') }}?v=20261028d">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bg-chat.css') }}?v=20261029a">
 
   {% include '_i18n_head.html' %}
 </head>
@@ -1851,7 +1851,7 @@ function showToast(title, body) {
     </div>
   </aside>
   <script>window.BG_CHAT = { meId: {{ (session.get('user_id') or 0) | tojson }}, meName: {{ (session.get('name') or '') | tojson }} };</script>
-  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261028e"></script>
+  <script src="{{ url_for('static', filename='js/bg-chat.js') }}?v=20261029a"></script>
 
   {% if can_view_costing %}
   <script>

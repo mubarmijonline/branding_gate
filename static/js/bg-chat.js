@@ -592,7 +592,9 @@
         $.ajax({ url: '/api/chat/thread/' + encodeURIComponent(t) + '/members', cache: false, silent: true }).done(function (r) {
             if (!r || !r.success || !cur || cur.thread !== t) { return; }
             cur.members = r.members || [];
+            cur.canManage = !!r.can_manage;
             if (cur.kind === 'g') { $('#chatThreadMeta').text(cur.members.length + ' ' + T('members')); }
+            if ($('#chatThreadPane .bgc-sheet.is-members').length) { showMembers(); }
         });
     }
 
@@ -1142,11 +1144,60 @@
             $s.find('.bgc-info-lists').html(html);
         }).fail(function () { $s.find('.bgc-info-lists').html('<div class="bgc-empty">' + esc(T('Could not load message info.')) + '</div>'); });
     }
+    // A group's members. Admin and Heads (chat.group_members) add anyone on
+    // top of the group's rule, and can take out the ones who were added.
     function showMembers() {
         if (!cur) { return; }
         var list = cur.members || [];
-        openSheet(T('Members') + ' (' + list.length + ')', list.length ? list.map(function (p) { return personRow(p); }).join('') : '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>');
+        var manage = cur.kind === 'g' && cur.canManage;
+        var body = (manage ? '<button type="button" class="bgc-add-people"><i class="fas fa-user-plus"></i> ' + esc(T('Add people')) + '</button>' : '') +
+            (list.length ? list.map(function (p) {
+                return personRow(p, manage && p.added
+                    ? '<button type="button" class="bgc-icon-btn bgc-remove-member" data-id="' + p.id + '" title="' + esc(T('Remove from group')) + '"><i class="fas fa-user-minus"></i></button>'
+                    : (p.added ? '<small>' + esc(T('Added')) + '</small>' : ''));
+            }).join('') : '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>');
+        openSheet(T('Members') + ' (' + list.length + ')', body).addClass('is-members');
     }
+    function showAddPeople() {
+        var $s = openSheet(T('Add people'), '<input type="search" class="bgc-people-search" placeholder="' + esc(T('Search people')) + '">' +
+            '<div class="bgc-people-list"><div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div></div>');
+        var inGroup = {};
+        (cur.members || []).forEach(function (m) { inGroup[m.id] = true; });
+        $.ajax({ url: '/api/mention-users', cache: false, silent: true }).done(function (r) {
+            var people = ((r && r.users) || []).filter(function (p) { return !inGroup[p.id]; });
+            var paint = function () {
+                var q = ($s.find('.bgc-people-search').val() || '').toLowerCase();
+                var hits = people.filter(function (p) {
+                    return !q || [p.name, p.role_name, p.department_name].join(' ').toLowerCase().indexOf(q) >= 0;
+                });
+                $s.find('.bgc-people-list').html(hits.length ? hits.map(function (p) {
+                    return personRow(p, '<button type="button" class="bgc-icon-btn bgc-add-member" data-id="' + p.id + '" title="' + esc(T('Add')) + '"><i class="fas fa-plus"></i></button>');
+                }).join('') : '<div class="bgc-empty">' + esc(T('Everyone is already in this group')) + '</div>');
+            };
+            $s.on('input', '.bgc-people-search', paint);
+            paint();
+            $s.find('.bgc-people-search').trigger('focus');
+        });
+    }
+    $(document).on('click', '.bgc-add-people', showAddPeople);
+    $(document).on('click', '.bgc-add-member', function () {
+        var $b = $(this).prop('disabled', true), id = $b.data('id'), t = cur.thread;
+        $.ajax({ url: '/api/chat/groups/' + encodeURIComponent(cur.key) + '/members', type: 'POST',
+                 contentType: 'application/json', data: JSON.stringify({ user_ids: [id] }) })
+            .done(function () {
+                $b.closest('.bgc-person').remove();
+                if (cur && cur.thread === t) { loadMembers(); }
+            })
+            .fail(function () { $b.prop('disabled', false); });
+    });
+    $(document).on('click', '.bgc-remove-member', function () {
+        var $b = $(this), id = $b.data('id'), t = cur.thread;
+        var who = ((cur.members || []).filter(function (m) { return m.id === id; })[0] || {}).name || '';
+        if (!window.confirm(T('Remove {0} from this group?').replace('{0}', who))) { return; }
+        $b.prop('disabled', true);
+        $.ajax({ url: '/api/chat/groups/' + encodeURIComponent(cur.key) + '/members/' + id, type: 'DELETE' })
+            .always(function () { if (cur && cur.thread === t) { loadMembers(); } });
+    });
 
     // A message's menu: long press on a phone, right click on a computer.
     function openMenu(id, x, y) {

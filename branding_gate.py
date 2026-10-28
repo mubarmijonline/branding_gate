@@ -20162,11 +20162,23 @@ def chat_everywhere():
     return set(users_holding('chat.all', include_root=True))
 
 
-def chat_room_members(cur, room):
+def chat_room_rule_members(cur, room):
+    """The ones the room's rule brings in (and the CEO): nobody can remove these."""
     cur.execute("""SELECT u.id FROM user u LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
                    LEFT JOIN department d ON d.id = u.department_id
                    WHERE u.is_active = 1 AND """ + _ROOM_MEMBERS_SQL[room])
-    return sorted({row['id'] for row in cur.fetchall()} | chat_everywhere())
+    return {row['id'] for row in cur.fetchall()} | chat_everywhere()
+
+
+def chat_room_added(cur, room):
+    """The ones added by hand (chat_group_member), active only."""
+    cur.execute("""SELECT m.user_id FROM chat_group_member m JOIN user u ON u.id = m.user_id
+                   WHERE m.room = %s AND u.is_active = 1""", (room,))
+    return {row['user_id'] for row in cur.fetchall()}
+
+
+def chat_room_members(cur, room):
+    return sorted(chat_room_rule_members(cur, room) | chat_room_added(cur, room))
 
 
 def chat_rooms_for(cur, user_id):
@@ -20179,6 +20191,8 @@ def chat_rooms_for(cur, user_id):
     me = cur.fetchone()
     if not me:
         return []
+    cur.execute("SELECT room FROM chat_group_member WHERE user_id = %s", (user_id,))
+    added = {row['room'] for row in cur.fetchall()}
     rooms = []
     if me['level'] is not None and me['level'] <= 1:
         rooms.append('managers')
@@ -20186,7 +20200,7 @@ def chat_rooms_for(cur, user_id):
         rooms.append('operations')
     if me['code'] in ('sales', 'account'):
         rooms.append('sales')
-    return rooms
+    return [room for room in CHAT_ROOMS if room in set(rooms) | added]
 
 
 def _room_or_403(cur, room):
@@ -20600,6 +20614,8 @@ def chat_thread_members(thread):
     try:
         kind, key = chat_thread_or_403(cur, thread)
         ids = chat_members(cur, kind, key)
+        # In a group, who was added by hand (and so can be taken out again).
+        added = chat_room_added(cur, key) - chat_room_rule_members(cur, key) if kind == 'g' else set()
         people = []
         if ids:
             cur.execute("""SELECT u.id, u.name, r.name AS role_name, d.name AS department_name FROM user u
@@ -20608,11 +20624,63 @@ def chat_thread_members(thread):
                            WHERE u.id IN (""" + ",".join(["%s"] * len(ids)) + ") ORDER BY u.name", ids)
             people = [{'id': p['id'], 'name': p['name'], 'role_name': p['role_name'] or '',
                        'department_name': p['department_name'] or '',
-                       'is_me': p['id'] == session['user_id']} for p in cur.fetchall()]
-        return jsonify(success=True, members=people)
+                       'is_me': p['id'] == session['user_id'], 'added': p['id'] in added}
+                      for p in cur.fetchall()]
+        return jsonify(success=True, members=people,
+                       can_manage=kind == 'g' and has('chat.group_members'))
     finally:
         cur.close()
         conn.close()
+
+
+@app.route('/api/chat/groups/<room>/members', methods=['POST'])
+@perm('chat.group_members')
+def chat_group_add_members(room):
+    """Add people to a group on top of its rule; they are told and the group appears for them."""
+    if room not in CHAT_ROOMS:
+        abort(404)
+    data = request.get_json(silent=True) or {}
+    ids = sorted({int(u) for u in (data.get('user_ids') or []) if str(u).isdigit()})
+    if not ids or len(ids) > 100:
+        return jsonify(success=False, error='Pick one to 100 people.'), 400
+    conn, cur = connection()
+    try:
+        marks = ','.join(['%s'] * len(ids))
+        cur.execute("SELECT id FROM user WHERE is_active = 1 AND id IN (%s)" % marks, ids)
+        live = [row['id'] for row in cur.fetchall()]
+        already = set(chat_room_members(cur, room))
+        new = [u for u in live if u not in already]
+        for user_id in new:
+            cur.execute("INSERT IGNORE INTO chat_group_member (room, user_id, added_by) VALUES (%s, %s, %s)",
+                        (room, user_id, session['user_id']))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    if new:
+        notify_users(new, 'You were added to the %s group' % CHAT_ROOMS[room]['title'],
+                     '%s added you to the %s group chat.' % (session.get('name') or 'Someone', CHAT_ROOMS[room]['title']),
+                     link='/home?chat=g:%s' % room, category='announcement')
+    return jsonify(success=True, added=len(new))
+
+
+@app.route('/api/chat/groups/<room>/members/<int:user_id>', methods=['DELETE'])
+@perm('chat.group_members')
+def chat_group_remove_member(room, user_id):
+    """Take out someone who was added by hand; the rule's members stay."""
+    if room not in CHAT_ROOMS:
+        abort(404)
+    conn, cur = connection()
+    try:
+        if user_id in chat_room_rule_members(cur, room):
+            return jsonify(success=False, error='They are in this group by their role or department.'), 400
+        cur.execute("DELETE FROM chat_group_member WHERE room = %s AND user_id = %s", (room, user_id))
+        removed = cur.rowcount
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=bool(removed), error=None if removed else 'Not in this group.'), (200 if removed else 404)
 
 
 @app.route('/api/chat/thread/<thread>/messages/<int:message_id>/info', methods=['GET'])

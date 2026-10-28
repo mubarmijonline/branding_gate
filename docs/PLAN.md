@@ -910,3 +910,25 @@ it. Their whole level must never see cost.
   approval-stage table and the cost lines of the items list, and "Not Priced"
   now reads the sell price only.
 - Test: `tests/test_cost_hidden.py`.
+
+## Adding people to chat groups, 2026-10-29
+
+Groups were fixed by rule (Managers: role level <= 1; Operations: the
+department; Sales: Sales and Account). Now people can be added by hand.
+
+- `chat_group_member(room, user_id, added_by, added_at)`
+  (`chat_group_member_migration.sql`, applied).
+- `chat_room_rule_members` (the rule, plus `chat.all`) and `chat_room_added`;
+  `chat_room_members` is both; `chat_rooms_for` adds the rooms a person was
+  added to.
+- Permission `chat.group_members` ("Add people to chat groups, and remove the
+  ones added"), given to every Head/Executive role with `notification.send`;
+  others from People & Access. `seed_rbac.py` re-run (110 permissions).
+- `POST /api/chat/groups/<room>/members {user_ids}` adds (1-100, active only,
+  already-in skipped) and tells them ("You were added to the X group", opens
+  the group). `DELETE /api/chat/groups/<room>/members/<id>` removes someone
+  added by hand; a rule member answers 400.
+- `/api/chat/thread/<t>/members` marks `added` per member and `can_manage`.
+- `bg-chat.js`: the members sheet shows "Add people" (searchable picker of
+  everyone not in the group) and a remove button on added members.
+- Test: `tests/test_chat_group_members.py`.
