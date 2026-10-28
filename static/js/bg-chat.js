@@ -329,7 +329,7 @@
             if (!q) { return true; }
             return ('sr-' + c.request_id).indexOf(q) >= 0 || String(c.request_id).indexOf(q) >= 0 ||
                 (c.title || '').toLowerCase().indexOf(q) >= 0 || (c.client_name || '').toLowerCase().indexOf(q) >= 0 ||
-                (c.company_name || '').toLowerCase().indexOf(q) >= 0;
+                (c.company_name || '').toLowerCase().indexOf(q) >= 0 || (c.owner_name || '').toLowerCase().indexOf(q) >= 0;
         });
         rs.sort(function (a, b) {
             if (sort === 'id_desc') { return b.request_id - a.request_id; }
@@ -367,6 +367,9 @@
                     '<span class="bgc-time">' + (isMuted(t) ? '<i class="fas fa-bell-slash bgc-muted-ico" title="' + esc(mutedLabel(t)) + '"></i> ' : '') +
                     (c.last_message_at ? listTime(c.last_message_at) : '') + '</span></div>' +
                     '<div class="bgc-sub">' + esc(c.client_name || '-') + (c.company_name ? ' · ' + esc(c.company_name) : '') + '</div>' +
+                    // Whose request it is (David, 2026-10-29).
+                    (c.owner_name ? '<div class="bgc-sub bgc-owner" data-no-i18n><i class="fas fa-user-tie"></i> ' + esc(c.owner_name) +
+                        (c.owner_mobile ? ' <small>' + esc(c.owner_mobile) + '</small>' : '') + '</div>' : '') +
                     '<div class="bgc-row"><span class="bgc-preview" data-no-i18n>' +
                     (c.last_message_at ? esc((c.last_message_user || '').split(' ')[0]) + ': ' + esc(c.last_message_text || '')
                                        : '<i>' + esc(T('No messages yet')) + '</i>') + '</span>' +
@@ -480,10 +483,11 @@
             '<div class="bgc-thead">' +
               '<button type="button" class="bgc-icon-btn bgc-back" title="' + esc(T('Back')) + '"><i class="fas fa-arrow-left fa-flip-rtl"></i></button>' +
               '<div class="bgc-avatar' + (h.group ? ' group' : '') + '">' + h.icon + '</div>' +
-              '<div class="bgc-thead-main" title="' + esc(T('Members')) + '">' +
+              '<div class="bgc-thead-main" title="' + esc(T(h.group ? 'Members' : 'Request details')) + '">' +
                 '<div class="bgc-thead-title" data-no-i18n>' + esc(h.title) + '</div>' +
                 '<div class="bgc-thead-sub" id="chatThreadMeta">' + esc(h.sub) + '</div></div>' +
               (h.group ? '' : '<button type="button" class="bgc-open-btn" id="chatDetailsBtn"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open')) + '</button>') +
+              (h.group ? '' : '<button type="button" class="bgc-icon-btn bgc-info-btn" title="' + esc(T('Request details')) + '"><i class="fas fa-info-circle"></i></button>') +
               '<button type="button" class="bgc-icon-btn bgc-mute-btn" title="' + esc(T('Mute notifications')) + '"><i class="fas fa-bell"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-members-btn" title="' + esc(T('Members')) + '"><i class="fas fa-users"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-thread-close" title="' + esc(T('Close')) + '"><i class="fas fa-times"></i></button>' +
@@ -578,12 +582,15 @@
         $('#chatSoundBtn i').attr('class', 'fas fa-' + (off ? 'volume-mute' : 'volume-up'));
     }
 
+    // The request's owner and details, money-free, from the chat's own route
+    // so whoever is in the chat can read them (David, 2026-10-29).
     function fetchSrMeta(id) {
-        $.ajax({ url: '/api/sales/requests/' + id, silent: true }).done(function (r) {
-            if (!r || !r.success || !r.request || !cur || cur.key !== String(id)) { return; }
-            var sr = r.request, bits = [sr.client_name, sr.company_name, sr.status].filter(Boolean);
-            $('#chatThreadMeta').text(bits.join(' · '));
-            if (sr.title) { $('.bgc-thead-title').text('SR-' + id + ' · ' + sr.title); }
+        $.ajax({ url: '/api/chat/sr/' + id + '/details', cache: false, silent: true }).done(function (r) {
+            if (!r || !r.success || !cur || cur.key !== String(id)) { return; }
+            cur.details = r;
+            $('#chatThreadMeta').text([r.client_name, r.owner.name, r.company_name, r.status].filter(Boolean).join(' · '));
+            if (r.title) { $('.bgc-thead-title').text('SR-' + id + ' · ' + r.title); }
+            if ($('#chatThreadPane .bgc-sheet.is-details').length) { showDetails(); }
         });
     }
 
@@ -595,6 +602,7 @@
             cur.canManage = !!r.can_manage;
             if (cur.kind === 'g') { $('#chatThreadMeta').text(cur.members.length + ' ' + T('members')); }
             if ($('#chatThreadPane .bgc-sheet.is-members').length) { showMembers(); }
+            if ($('#chatThreadPane .bgc-sheet.is-details').length) { showDetails(); }
         });
     }
 
@@ -1158,6 +1166,35 @@
             }).join('') : '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>');
         openSheet(T('Members') + ' (' + list.length + ')', body).addClass('is-members');
     }
+    // A request chat's details: owner, client, dates, venue, template fields.
+    // No money: the server leaves it out (David, 2026-10-29).
+    function showDetails() {
+        if (!cur || cur.kind !== 'sr') { return; }
+        var d = cur.details, body;
+        if (!d) {
+            body = '<div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+        } else {
+            body = '<div class="bgc-sheet-section">' + esc(T('Account manager')) + '</div>' +
+                personRow({ id: d.owner.id, name: d.owner.name || '-', role_name: d.owner.mobile }) +
+                '<div class="bgc-sheet-section">' + esc(T('Details')) + '</div><dl class="bgc-details">' +
+                d.details.map(function (f) {
+                    var v = String(f.value);
+                    if (f.label === 'Status' || f.label === 'Priority') { v = T(v); }
+                    return '<dt>' + esc(T(f.label)) + '</dt><dd data-no-i18n>' + (/^https?:\/\/\S+$/.test(v)
+                        ? '<a href="' + esc(v) + '" target="_blank" rel="noopener">' + esc(T('Open link')) + '</a>' : esc(v)) + '</dd>';
+                }).join('') + '</dl>';
+        }
+        body += '<button type="button" class="bgc-sheet-btn bgc-details-members"><i class="fas fa-users"></i> ' + esc(T('Members')) +
+            ' (' + (cur.members || []).length + ')</button>' +
+            '<button type="button" class="bgc-sheet-btn bgc-details-open"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open request')) + '</button>';
+        // Already open: refresh in place, so a late load adds no history step.
+        var $open = $('#chatThreadPane .bgc-sheet.is-details');
+        if ($open.length) { $open.find('.bgc-sheet-body').html(body); return; }
+        openSheet('SR-' + cur.key + ' · ' + T('Request details'), body).addClass('is-details');
+    }
+    $(document).on('click', '.bgc-details-members', showMembers);
+    $(document).on('click', '.bgc-details-open', function () { $('#chatDetailsBtn').trigger('click'); });
+
     function showAddPeople() {
         var $s = openSheet(T('Add people'), '<input type="search" class="bgc-people-search" placeholder="' + esc(T('Search people')) + '">' +
             '<div class="bgc-people-list"><div class="bgc-empty"><i class="fas fa-spinner fa-spin"></i></div></div>');
@@ -1331,7 +1368,10 @@
     $(document).on('click', '.bgc-camera', function () { $('#chatCameraInput').val('').click(); });
     $(document).on('change', '#chatFileInput, #chatCameraInput', function () { previewPhotos(this.files); });
     $(document).on('click', '#chatDetailsBtn', function () { if (cur && cur.kind === 'sr') { window.open('/sales_request_details/' + cur.key, '_blank'); } });
-    $(document).on('click', '.bgc-members-btn, .bgc-thead-main', showMembers);
+    $(document).on('click', '.bgc-members-btn', showMembers);
+    $(document).on('click', '.bgc-info-btn', showDetails);
+    // The header opens a request's details (members are one tap further), a group's members.
+    $(document).on('click', '.bgc-thead-main', function () { if (cur && cur.kind === 'sr') { showDetails(); } else { showMembers(); } });
     $(document).on('paste', '#chatComposer', function (e) {
         var items = (e.originalEvent.clipboardData || {}).files;
         if (items && items.length) { e.preventDefault(); previewPhotos(items); }

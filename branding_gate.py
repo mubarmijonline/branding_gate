@@ -20836,8 +20836,11 @@ def get_chat_sr_list():
                 lm.user_id       AS last_message_user_id,
                 lu.name          AS last_message_user_name,
                 COALESCE(unread.unread_mentions, 0) AS unread_mentions,
-                sr.created_at    AS sr_created_at
+                sr.created_at    AS sr_created_at,
+                ou.name          AS owner_name,
+                ou.mobile        AS owner_mobile
             FROM sales_request sr
+            LEFT JOIN user ou ON ou.id = sr.owner_user_id
             LEFT JOIN (
                 SELECT request_id,
                        COUNT(*)        AS total_messages,
@@ -20889,6 +20892,9 @@ def get_chat_sr_list():
                 'last_message_at': last_at.strftime('%Y-%m-%d %H:%M:%S') if last_at else None,
                 'sr_created_at': r['sr_created_at'].strftime('%Y-%m-%d %H:%M:%S') if r.get('sr_created_at') else None,
                 'unread_mentions': unread,
+                # Whose request it is, on the row (David, 2026-10-29).
+                'owner_name': r.get('owner_name') or '',
+                'owner_mobile': r.get('owner_mobile') or '',
             })
 
         cur.close()
@@ -20903,6 +20909,46 @@ def get_chat_sr_list():
     except Exception as e:
         print(f"Error fetching chat SR list: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/chat/sr/<int:request_id>/details', methods=['GET'])
+@perm('sales_request.comment', 'chat.all')
+def chat_sr_details(request_id):
+    """
+    The request as its chat shows it: whose it is, client, status and every
+    date and template field, never money -- the same brief costing reads, for
+    anyone who may open the chat (David, 2026-10-29). /api/chat is outside
+    the cost scrubber's prefixes, so costing_brief's money filter is the guard.
+    """
+    conn, cur = connection()
+    try:
+        if not chat_may_open(cur, 'sr', request_id):
+            return jsonify(success=False, error='Forbidden'), 403
+        cur.execute("""SELECT sr.title, sr.status, sr.priority, sr.start_date, sr.end_date, sr.description,
+                              sr.general_notes, sr.request_data, sr.created_at, sr.created_by,
+                              cl.client_name, comp.company_name, ou.id AS owner_id, ou.name AS owner_name,
+                              ou.mobile AS owner_mobile
+                       FROM sales_request sr
+                       LEFT JOIN client cl ON cl.id = sr.client_id
+                       LEFT JOIN company comp ON comp.id = sr.company_id
+                       LEFT JOIN user ou ON ou.id = sr.owner_user_id
+                       WHERE sr.id = %s""", (request_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Not found'), 404
+        creator = person_of(people_index(cur), row['created_by'])
+        details = [{'label': label, 'value': value} for label, value in (
+            ('Client', row['client_name']), ('Company', row['company_name']), ('Status', row['status']),
+            ('Created', row['created_at'].strftime('%Y-%m-%d') if row['created_at'] else None),
+            ('Created by', creator['name'] if creator['user_id'] != row['owner_id'] else None)) if value]
+        return jsonify(success=True, request_id=request_id, title=row['title'] or '',
+                       client_name=row['client_name'] or '', company_name=row['company_name'] or '',
+                       status=row['status'] or '',
+                       owner={'id': row['owner_id'], 'name': row['owner_name'] or '', 'mobile': row['owner_mobile'] or ''},
+                       details=details + costing_brief(row))
+    finally:
+        cur.close()
+        conn.close()
 
 
 # ---- group chats --------------------------------------------------------------

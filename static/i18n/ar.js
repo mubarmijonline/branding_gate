@@ -4280,5 +4280,15 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"Request details": "تفاصيل الطلب",
+"Account manager": "مدير الحساب",
+"Open request": "فتح الطلب",
+"Open link": "فتح الرابط",
+"Created by": "أنشأه",
+"Start date": "تاريخ البداية",
+"End date": "تاريخ النهاية",
+"Event Duration": "مدة الحدث",
+"Location Governorate": "المحافظة",
+"Location Google Maps Link": "رابط الموقع على خرائط جوجل"
 };
