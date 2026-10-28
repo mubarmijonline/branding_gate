@@ -5883,6 +5883,65 @@ def operations_team_ids(cur, exclude=None):
     return sorted(people)
 
 
+CLIENT_DECISION_NOTICES = {
+    'approved': ('Client approved: {0}', 'Request #{1}: the client approved "{0}".'),
+    'rejected': ('Client rejected: {0}', 'Request #{1}: the client rejected "{0}".'),
+    'negotiation': ('Client wants to negotiate: {0}',
+                    'Request #{1}: the client asked to negotiate the price of "{0}".'),
+}
+
+
+def notify_ops_of_client_decision(cur, item, decision):
+    """
+    Tell the Operations people on a request what the client said about an item.
+
+    David Osama (Operations Manager), 2026-10-29: Operations costed the item
+    and then never heard whether the client took it, turned it down or pushed
+    back on the price. The people who costed it (assignees and whoever handed
+    it to them) and the Operations Managers are told; the person recording the
+    answer is not. No amounts: the decision and the item are the news.
+
+    Returns who was told, so a wider notice can leave them out. Never raises:
+    the decision is already committed.
+    """
+    try:
+        request_id = item['request_id']
+        cur.execute("""SELECT DISTINCT assignee_id, assigned_by FROM costing_assignment
+                       WHERE request_id = %s AND status <> 'withdrawn'""", (request_id,))
+        people = {uid for row in cur.fetchall() for uid in (row['assignee_id'], row['assigned_by'])}
+        cur.execute("""SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
+                       WHERE r.code = 'operations_manager' AND u.is_active = 1""")
+        people |= {row['id'] for row in cur.fetchall()}
+        people.discard(None)
+        people.discard(session.get('user_id'))
+        cur.execute("SELECT title FROM sales_request WHERE id = %s", (request_id,))
+        row = cur.fetchone()
+        where = '%s (%s)' % (request_id, row['title']) if row and row.get('title') else str(request_id)
+        title, body = CLIENT_DECISION_NOTICES[decision]
+        notify_users(sorted(people), title.format(item['name']), body.format(item['name'], where),
+                     link='/operation_request?request=%s' % request_id, category='announcement')
+        return people
+    except Exception as notify_error:
+        print(f"Client decision notification failed: {notify_error}")
+        return set()
+
+
+def client_status_of(item):
+    """
+    Where an item stands with the client, for the Operations cost modal
+    (David Osama, 2026-10-29). Priced and still pending is what the Client
+    Approval page treats as waiting on the client.
+    """
+    status = item.get('approval_status')
+    if status in ('approved', 'rejected'):
+        return status
+    if status == 'pending_negotiation':
+        return 'recosting' if item.get('awaiting_recost') else 'negotiation'
+    if status == 'submitted' or item.get('is_priced') or item.get('submitted_for_approval_date'):
+        return 'waiting'
+    return 'not_sent'
+
+
 def notify_low_stock(cur, item_id, new_stock, previous_stock=None):
     """
     Tell Operations when a movement takes an item down to its minimum.
@@ -11931,7 +11990,11 @@ def get_single_operations_request(request_id):
             SELECT id, name, qty as quantity, description as item_comment, 
                    cost_per_item, total_cost, unit, attributes,
                    approval_status, negotiation_status, negotiation_reason, negotiation_count,
-                   sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc
+                   sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc,
+                   submitted_for_approval_date, sell_per_item IS NOT NULL AS is_priced,
+                   EXISTS (SELECT 1 FROM negotiation_requests nr
+                           WHERE nr.item_id = sales_request_items.id
+                             AND nr.status = 'pending_costing') AS awaiting_recost
             FROM sales_request_items 
             WHERE request_id = %s 
             ORDER BY id
@@ -12002,7 +12065,9 @@ def get_single_operations_request(request_id):
                 'approval_status': item.get('approval_status'),
                 'negotiation_status': item.get('negotiation_status'),
                 'negotiation_reason': item.get('negotiation_reason'),
-                'negotiation_count': item.get('negotiation_count', 0)
+                'negotiation_count': item.get('negotiation_count', 0),
+                # Where it stands with the client; a label, never the price.
+                'client_status': client_status_of(item)
             }
             
             # Add dimensions from attributes
@@ -19198,15 +19263,20 @@ def approve_item(item_id):
         
         conn.commit()
 
+        told = notify_ops_of_client_decision(cur, item, 'approved')
+
         # A client's yes is where Operations' work starts, and nothing told
         # them: the item simply appeared on the Approved Items page for
-        # whoever happened to open it. The whole team hears now.
+        # whoever happened to open it. The whole team hears now -- except the
+        # request's own costing people and managers, told just above.
         try:
-            notify_users(operations_team_ids(cur),
-                         'Client approved: %s' % item['name'],
-                         'The client approved "%s" on request #%s. It is ready for '
-                         'Operations to source and deliver.' % (item['name'], item['request_id']),
-                         link='/approved-items?request=%s' % item['request_id'])
+            rest = operations_team_ids(cur, exclude=told)
+            if rest:
+                notify_users(rest,
+                             'Client approved: %s' % item['name'],
+                             'The client approved "%s" on request #%s. It is ready for '
+                             'Operations to source and deliver.' % (item['name'], item['request_id']),
+                             link='/approved-items?request=%s' % item['request_id'])
         except Exception as notify_error:
             print(f"Approval notification failed: {notify_error}")
 
@@ -19300,11 +19370,12 @@ def reject_item(item_id):
         
         # Update request's overall approval stage
         update_request_approval_stage(item['request_id'], conn, cur)
-        
+
         conn.commit()
+        notify_ops_of_client_decision(cur, item, 'rejected')
         cur.close()
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'message': 'Item rejected'
@@ -19469,8 +19540,9 @@ def negotiate_item_price(item_id):
         owner_department = owner_row['department_id'] if owner_row else None
         line = negotiation_line_for(owner_row['department_code'] if owner_row else None)
         decide_code, head_title, head_page = NEGOTIATION_LINES[line]
-        
+
         conn.commit()
+        notify_ops_of_client_decision(cur, item, 'negotiation')
         cur.close()
         conn.close()
         

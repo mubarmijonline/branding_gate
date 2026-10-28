@@ -108,14 +108,19 @@ class ClientApprovalTellsOperationsTest(_Harness):
         self.assertEqual(response.status_code, 200, response.data[:300])
 
         told = [n for n in self.sent if n['title'].startswith('Client approved')]
-        self.assertEqual(len(told), 1, 'one notice per approval')
         cur = self._cursor()
         everyone = branding_gate.operations_team_ids(cur)
         cur.close()
         self.assertTrue(everyone, 'there is nobody in Operations to tell')
-        self.assertEqual(told[0]['to'], sorted(everyone))
-        self.assertEqual(told[0]['link'], '/approved-items?request=%d' % request_id)
-        self.assertIn('Ops probe item', told[0]['body'])
+        # Since 2026-10-29 the request's own Operations people (its costing
+        # people and the Operations Managers) get their own notice, linked to
+        # the request; the rest of the team gets this one. Nobody gets both.
+        reached = [uid for n in told for uid in n['to']]
+        self.assertEqual(len(reached), len(set(reached)), 'one notice per person')
+        self.assertTrue(set(everyone) <= set(reached))
+        team = [n for n in told if n['link'] == '/approved-items?request=%d' % request_id]
+        self.assertEqual(len(team), 1)
+        self.assertIn('Ops probe item', team[0]['body'])
 
 
 class ExportColumnsTest(_Harness):

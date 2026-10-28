@@ -4280,5 +4280,16 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"Not sent to client": "لم يُرسل إلى العميل",
+"Waiting for client": "بانتظار العميل",
+"Client rejected": "رفض العميل",
+"In negotiation": "قيد التفاوض",
+"Re-costing requested": "مطلوب إعادة التكلفة",
+"Client decision": "قرار العميل",
+"Client rejected: {0}": "رفض العميل: {0}",
+"Client wants to negotiate: {0}": "العميل يريد التفاوض: {0}",
+"Request #{1}: the client approved \"{0}\".": "الطلب رقم {1}: وافق العميل على \"{0}\".",
+"Request #{1}: the client rejected \"{0}\".": "الطلب رقم {1}: رفض العميل \"{0}\".",
+"Request #{1}: the client asked to negotiate the price of \"{0}\".": "الطلب رقم {1}: طلب العميل التفاوض على سعر \"{0}\"."
 };
