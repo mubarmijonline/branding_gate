@@ -932,3 +932,20 @@ department; Sales: Sales and Account). Now people can be added by hand.
 - `bg-chat.js`: the members sheet shows "Add people" (searchable picker of
   everyone not in the group) and a remove button on added members.
 - Test: `tests/test_chat_group_members.py`.
+
+## Photo viewer for the whole site (2026-10-29)
+
+Costing (and everyone else on the home-screen app) could not open a photo:
+item thumbnails and photo attachments opened with `window.open` or a
+`target=_blank` link, which in the installed app does nothing or leaves the app.
+
+- `static/js/bg-viewer.js`, loaded by `main.html` on every page:
+  `bgViewImage(src)` opens the photo full screen over any modal (chat's
+  lightbox styles), with Download and Close; tap or Escape closes it and the
+  modal underneath stays open.
+- No page edits: it wraps `window.open` for photo URLs, catches taps on links
+  to photos and anywhere on an `.enhanced-image-thumbnail` (its "View Full"
+  strip covered part of the picture). Other files (PDF, Word) open as before.
+- Verified at 390px as David on request 23645: thumbnail and attachment open
+  the viewer (image loads, 1182px wide), close keeps the costing modal open,
+  PDF `window.open` passes through. Suite 810 OK.
