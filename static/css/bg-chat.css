@@ -334,7 +334,9 @@ body.bgc-lock { overflow: hidden; }
   .bgc-back, .bgc-thread-close { display: inline-flex; }
   .bgc-msgs { padding: 10px 10px 6px; }
   .bgc-bubble { max-width: 86%; font-size: .95rem; }
-  .bgc-open-btn { display: none; }
+  /* The request's Details stay one tap away on a phone, as an icon. */
+  .bgc-open-btn { padding: 6px 9px; }
+  .bgc-open-label { display: none; }
   .bgc-input textarea { font-size: 16px; }    /* no iOS zoom on focus */
   .bgc-search-box input { font-size: 16px; }
   .bgc-sort { display: none; }
@@ -459,12 +461,13 @@ body.bgc-lock { overflow: hidden; }
 }
 .bgc-switch.on { background: #00a884; }
 .bgc-switch.on::after { inset-inline-start: 18px; }
-@media (max-width: 767.98px) { .bgc-thead .bgc-members-btn { display: none; } }
+/* A phone taps the header for details and members; the icons are for a computer. */
+@media (max-width: 767.98px) { .bgc-thead .bgc-members-btn, .bgc-thead .bgc-info-btn { display: none; } }
 
 /* Adding people to a group (Admin and Heads). */
-.bgc-add-people { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; margin-bottom: 6px;
+.bgc-add-people, .bgc-sheet-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; margin-bottom: 6px;
     border: 1px dashed var(--bgc-line); border-radius: 10px; background: transparent; color: #008069; font-weight: 700; }
-.bgc-add-people:hover { background: rgba(0, 128, 105, .06); }
+.bgc-add-people:hover, .bgc-sheet-btn:hover { background: rgba(0, 128, 105, .06); }
 .bgc-people-search { width: 100% !important; padding: 9px 12px !important; margin-bottom: 8px; border: 1px solid var(--bgc-line) !important;
     border-radius: 10px !important; font-size: 16px; background: transparent; color: inherit; }
 .bgc-person .bgc-add-member, .bgc-person .bgc-remove-member { flex: 0 0 auto; }
@@ -479,3 +482,21 @@ body.bgc-lock { overflow: hidden; }
 .bgat-text { white-space: pre-wrap; word-break: break-word; }
 .bgat-at { color: #2449a8; font-weight: 600; }
 .bgat-suggest { position: absolute; bottom: 100%; left: 0; right: 0; z-index: 5; max-height: 220px; overflow-y: auto; }
+
+/* Request chats: whose request it is on the list row, and its details sheet (David, 2026-10-29). */
+.bgc-owner i { font-size: .7rem; margin-inline-end: 2px; }
+.bgc-owner small { opacity: .85; }
+.bgc-details { margin: 0 0 12px; }
+.bgc-details dt { font-size: .72rem; font-weight: 600; color: var(--bgc-muted); margin-top: 8px; }
+.bgc-details dd { margin: 0; padding-bottom: 6px; border-bottom: 1px solid var(--bgc-line); font-size: .9rem;
+    white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A request's items in the details sheet (David, 2026-10-29) */
+.bgc-item-card { border: 1px solid var(--bgc-line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+.bgc-item-name { font-weight: 600; font-size: .9rem; }
+.bgc-item-name small { color: var(--bgc-muted); font-weight: 400; margin-left: 4px; }
+.bgc-item-facts { font-size: .8rem; color: var(--bgc-muted); margin-top: 2px; }
+.bgc-item-comment { font-size: .85rem; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.bgc-item-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.bgc-item-files img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--bgc-line); }
+.bgc-item-file { font-size: .8rem; }

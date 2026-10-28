@@ -4321,5 +4321,15 @@ window.BG_AR = {
 "Client wants to negotiate: {0}": "العميل يريد التفاوض: {0}",
 "Request #{1}: the client approved \"{0}\".": "الطلب رقم {1}: وافق العميل على \"{0}\".",
 "Request #{1}: the client rejected \"{0}\".": "الطلب رقم {1}: رفض العميل \"{0}\".",
-"Request #{1}: the client asked to negotiate the price of \"{0}\".": "الطلب رقم {1}: طلب العميل التفاوض على سعر \"{0}\"."
+"Request #{1}: the client asked to negotiate the price of \"{0}\".": "الطلب رقم {1}: طلب العميل التفاوض على سعر \"{0}\".",
+"Request details": "تفاصيل الطلب",
+"Account manager": "مدير الحساب",
+"Open request": "فتح الطلب",
+"Open link": "فتح الرابط",
+"Created by": "أنشأه",
+"Start date": "تاريخ البداية",
+"End date": "تاريخ النهاية",
+"Event Duration": "مدة الحدث",
+"Location Governorate": "المحافظة",
+"Location Google Maps Link": "رابط الموقع على خرائط جوجل"
 };

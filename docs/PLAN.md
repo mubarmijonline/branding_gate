@@ -1074,3 +1074,26 @@ the cost modal did not show it.
   `tests/test_operations_requests_batch.py` now asserts one notice per person.
 - Branch `wa-request/client-feedback-ops`, not deployed. No schema or RBAC
   change: deploy is a code restart only.
+
+## Whose request it is, and its details, inside the request chat (2026-10-29, David)
+
+Request chats (`sr:<id>`) showed only the request's title and client.
+
+- `/api/chat/sr-list` rows carry `owner_name` / `owner_mobile`
+  (`sales_request.owner_user_id`); the drawer shows them as a line under the
+  client, and the search matches the owner.
+- New `GET /api/chat/sr/<id>/details` (`chat_sr_details`), gated by
+  `@perm('sales_request.comment', 'chat.all')` and `chat_may_open` (403
+  otherwise): owner, client, company, status, created date / creator, then
+  `costing_brief` (title, start/end, priority, description, notes, request
+  types, every template field: setup, event, dismantle dates, hotel, hall,
+  location, governorate, duration...). No money for anyone: `/api/chat` is
+  outside the cost scrubber's prefixes, so `costing_brief`'s `MONEY_FIELD`
+  filter is the guard, and the SELECT reads no money column.
+- `bg-chat.js`: a "Request details" sheet (members-sheet pattern). Phone:
+  tap the header (members are a button inside the sheet). Computer: the new
+  info button or the header. The header subtitle now comes from this route
+  (client, owner, company, status: the owner early so a phone does not cut it off) instead of `/api/sales/requests/<id>`.
+- Tests: `tests/test_chat_request_details.py`.
+- Branch `wa-request/chat-request-details`, not deployed. No migration, no
+  permission seeding; static files are cache-busted in `main.html`.
