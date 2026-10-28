@@ -1047,3 +1047,30 @@ Operations members could not open a request's chat: they did not hold
 - Branch `wa-request/operation-request-chat`, not deployed. **Deploy order:**
   the code first, then `seed_rbac.py`; seeding before the code would let
   every member into every chat under the old rule.
+
+## The client's answer reaches Operations (2026-10-29, David Osama)
+
+Operations costed items and never heard what the client said about them, and
+the cost modal did not show it.
+
+- `notify_ops_of_client_decision(cur, item, decision)` is called from all
+  three routes that record a client decision (`/api/client-approval/items/<id>/`
+  `approve`, `reject`, `negotiate`; there are no bulk or quick-approval
+  variants for the client's answer). It tells the request's costing people
+  (`costing_assignment` assignees and assigners, not withdrawn) and every
+  active `operations_manager` (by role code: `users_holding` would add
+  admins), minus the actor. Link `/operation_request?request=<id>`, category
+  announcement, item name and request number/title only: no amounts, no free
+  text (feedback and reasons can carry prices).
+- Approve already told the whole Operations department (link
+  `/approved-items`); those just told are left out of it, so nobody gets two.
+- `/api/operations/requests/<id>` items carry `client_status`
+  (`not_sent | waiting | approved | rejected | negotiation | recosting`),
+  from `client_status_of()`. "Waiting" is priced and still pending, the rule
+  the Client Approval page uses; the sell price itself is not sent.
+- The cost modal's item header shows it as a chip (`.op-ci-client`, not
+  `.ok`/`.warn`, which the toolbar counts as costed). Arabic keys appended.
+- Tests: `tests/test_client_feedback_ops.py`; the existing whole-team test in
+  `tests/test_operations_requests_batch.py` now asserts one notice per person.
+- Branch `wa-request/client-feedback-ops`, not deployed. No schema or RBAC
+  change: deploy is a code restart only.

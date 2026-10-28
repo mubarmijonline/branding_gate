@@ -350,6 +350,13 @@
     .op-ci-summary-chip.ok   { background:#ecfdf5; border-color:#bbf7d0; color:#14532d; }
     .op-ci-summary-chip.warn { background:#fffbeb; border-color:#fde68a; color:#78350f; }
     .op-ci-summary-chip i { font-size:10px; opacity:.8; }
+    /* Where the item stands with the client (David Osama, 2026-10-29). Not
+       .ok/.warn: those mark "costed" and are counted by the toolbar. */
+    .op-ci-client.c-waiting     { background:#eff6ff; border-color:#bfdbfe; color:#1e3a8a; }
+    .op-ci-client.c-approved    { background:#dcfce7; border-color:#86efac; color:#14532d; }
+    .op-ci-client.c-rejected    { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+    .op-ci-client.c-negotiation { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+    .op-ci-client.c-recosting   { background:#fdf4ff; border-color:#f0abfc; color:#86198f; }
     .op-ci-quickinput { padding:8px 14px; background:#fafbfc;
                         border-bottom:1px solid #eef0f5; }
     .op-ci-quickinput label { font-size:11px; color:#4b5563; font-weight:600;
@@ -2586,6 +2593,20 @@ $(document).ready(function() {
                             : (isCosted
                                 ? '<span class="enhanced-badge status-costed"><i class="fas fa-check mr-1"></i>COSTED</span>'
                                 : '<span class="enhanced-badge status-pending"><i class="fas fa-clock mr-1"></i>PENDING</span>');
+                        // David Osama, 2026-10-29: Operations could not see whether the
+                        // client had answered on an item they costed.
+                        var clientStatus = {
+                            not_sent:    ['c-not-sent',    'fa-paper-plane',   'Not sent to client'],
+                            waiting:     ['c-waiting',     'fa-hourglass-half', 'Waiting for client'],
+                            approved:    ['c-approved',    'fa-check-circle',  'Client approved'],
+                            rejected:    ['c-rejected',    'fa-times-circle',  'Client rejected'],
+                            negotiation: ['c-negotiation', 'fa-handshake',     'In negotiation'],
+                            recosting:   ['c-recosting',   'fa-redo',          'Re-costing requested']
+                        }[item.client_status];
+                        var clientBadgeHtml = clientStatus
+                            ? '<span class="op-ci-summary-chip op-ci-client ' + clientStatus[0] + '" title="Client decision">'
+                              + '<i class="fas ' + clientStatus[1] + '"></i> ' + clientStatus[2] + '</span>'
+                            : '';
                         var dimsSummary = dimensionDisplay
                             ? '<span class="op-ci-summary-chip"><i class="fas fa-ruler-combined"></i> ' + dimensionDisplay + '</span>'
                             : '';
@@ -2622,6 +2643,7 @@ $(document).ready(function() {
                                         ${daysSummary}
                                         ${costSummaryNow}
                                         ${statusBadgeHtml}
+                                        ${clientBadgeHtml}
                                     </div>
                                 </div>
 
