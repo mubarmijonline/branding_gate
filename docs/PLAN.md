@@ -888,3 +888,25 @@ whole request they were typing.
 - Found while testing: a request with no company failed with MySQL 1366 (''
   into an INT column). `add_sales_request` and `create_request_with_template`
   now store None. Test: `tests/test_add_request_company.py`.
+
+## Cost never reaches Account or Sales, 2026-10-29
+
+Gamal: Sarah Gaber (Account Team Leader) saw item cost on the request details
+page. Nobody in Account holds "See item cost"; the page and its APIs ignored
+it. Their whole level must never see cost.
+
+- Rule `may_see_cost()`: holds `sales_item.cost` (Operations, admin),
+  `sales_item.price` (Pricing) or `finance_txn.approve` (Finance). Also a
+  template global.
+- One guard, `hide_cost_from_sales` (after_request): every JSON response under
+  `/api/sales/`, `/api/sales-requests`, `/api/workflow/`, `/api/client-approval`
+  goes through `scrub_cost` for anyone else: keys matching cost/profit/margin
+  are removed at any depth (counts like `costed_items_count` stay), and log
+  entries about costing are dropped whole (their text carries the amounts).
+  Covered: request details, list, timeline and price history, items,
+  approval stage.
+- Pages: `sales_request_details.html` drops the Total Cost header and the
+  Unit/Total Cost tiles; `sales_request.html` drops the Cost column of the
+  approval-stage table and the cost lines of the items list, and "Not Priced"
+  now reads the sell price only.
+- Test: `tests/test_cost_hidden.py`.

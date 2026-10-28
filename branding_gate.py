@@ -4538,6 +4538,54 @@ def no_stale_api_reads(response):
     return response
 
 
+# What a job costs is for the desks that cost it (Operations), price from it
+# (Pricing) and account for it (Finance), and the admin. Account Management
+# and Sales see what the client is quoted, never the cost (Gamal, 2026-10-29:
+# Sarah Gaber's level saw item cost on the request details page).
+COST_API_PREFIXES = ('/api/sales/', '/api/sales-requests', '/api/workflow/', '/api/client-approval')
+COST_KEY = re.compile(r'cost|profit|margin', re.I)
+COST_KEY_KEEP = re.compile(r'costed|has_cost|cost_status', re.I)   # counts and flags, no money
+COST_EVENT = re.compile(r'\b(costs?|costed|costing|re-?cost\w*|cost_\w+|\w+_cost\w*|profit\w*|margin\w*)\b', re.I)
+COST_EVENT_FIELDS = ('action_type', 'field_name', 'change_description', 'change_type')
+
+
+def may_see_cost():
+    return any(has(code) for code in ('sales_item.cost', 'sales_item.price', 'finance_txn.approve'))
+
+
+app.jinja_env.globals['may_see_cost'] = may_see_cost
+
+
+def scrub_cost(value):
+    """
+    Cost, profit and margin out of a JSON value, at any depth: the money keys
+    go, and a log entry about costing goes whole (its text carries the
+    amounts). Counts like costed_items_count stay.
+    """
+    if isinstance(value, dict):
+        return {k: scrub_cost(v) for k, v in value.items()
+                if not (COST_KEY.search(k) and not COST_KEY_KEEP.search(k))}
+    if isinstance(value, list):
+        return [scrub_cost(v) for v in value
+                if not (isinstance(v, dict) and any(
+                    isinstance(v.get(f), str) and COST_EVENT.search(v[f]) for f in COST_EVENT_FIELDS))]
+    return value
+
+
+@app.after_request
+def hide_cost_from_sales(response):
+    """
+    One guard for every sales-side read, so no route can forget it: whoever may
+    not see cost gets the response with it taken out.
+    """
+    if (request.path.startswith(COST_API_PREFIXES) and response.is_json
+            and 'user_id' in session and not may_see_cost()):
+        data = response.get_json(silent=True)
+        if data is not None:
+            response.set_data(app.json.dumps(scrub_cost(data)))
+    return response
+
+
 @app.before_request
 def require_login():
     """

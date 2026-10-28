@@ -281,7 +281,7 @@
           <div><div class="lbl">Created</div><div class="val" id="srdCreated">-</div></div>
           <div><div class="lbl">Created By</div><div class="val" id="srdCreatedBy">-</div></div>
           <div><div class="lbl">Last Modified</div><div class="val" id="srdModified">-</div></div>
-          <div><div class="lbl">Total Cost</div><div class="val" id="srdTotalCost">-</div></div>
+          {% if may_see_cost() %}<div><div class="lbl">Total Cost</div><div class="val" id="srdTotalCost">-</div></div>{% endif %}
           <div><div class="lbl">Total Sell</div><div class="val" id="srdTotalSell">-</div></div>
         </div>
         <div id="srdDescriptionWrap" style="margin-top: 16px; display: none;">
@@ -347,6 +347,8 @@
 <script>
 (function(){
   var REQUEST_ID = {{ request_id|int }};
+  // Account and Sales never see cost; the server leaves it out for them too.
+  var CAN_SEE_COST = {{ may_see_cost()|tojson }};
   var flowEvents = [];
 
   function esc(s){
@@ -540,9 +542,9 @@
       facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || ''), '']);
       if (it.sell_type === 'rent' || it.rental_days)
         facts.push(['Rental Days', esc(it.rental_days || 1), '']);
-      facts.push(['Unit Cost', money(it.cost_per_item), 'money']);
+      if (CAN_SEE_COST) facts.push(['Unit Cost', money(it.cost_per_item), 'money']);
       facts.push(['Unit Sell', money(it.sell_per_item), 'money money-sell']);
-      facts.push(['Total Cost', money(it.total_cost), 'money']);
+      if (CAN_SEE_COST) facts.push(['Total Cost', money(it.total_cost), 'money']);
       facts.push(['Total Sell', money(it.total_sell), 'money money-sell']);
 
       var factsHtml = facts.map(function(f){

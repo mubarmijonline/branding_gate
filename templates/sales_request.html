@@ -3466,6 +3466,7 @@ window.chartPieDemo = function() {
 <div class="container-fluid sales-request-page" 
      data-admin-privileges="{% if 'sales_item.cost' in _p or 'sales_item.price' in _p %}true{% else %}false{% endif %}"
      data-is-admin-user="{% if 'sales_item.cost' in _p %}true{% else %}false{% endif %}">
+<script>window.CAN_SEE_COST = {{ may_see_cost()|tojson }};</script>
     {% if 'sales_request.view' in _p or pricing_mode %}
     
     <!-- Sales Request Management Header -->
@@ -14487,7 +14488,7 @@ window.chartPieDemo = function() {
             itemsHtml += '<th style="width: 20%;">Item Name</th>';
             itemsHtml += '<th style="width: 25%;">Description</th>';
             itemsHtml += '<th style="width: 8%;">Qty</th>';
-            itemsHtml += '<th style="width: 10%;">Cost</th>';
+            if (window.CAN_SEE_COST) itemsHtml += '<th style="width: 10%;">Cost</th>';
             itemsHtml += '<th style="width: 10%;">Sell</th>';
             itemsHtml += '<th style="width: 12%;">Status</th>';
             itemsHtml += '<th style="width: 10%;">Date</th>';
@@ -14499,7 +14500,9 @@ window.chartPieDemo = function() {
                 var statusBadge = '';
                 var statusDate = '';
                 
-                if (!item.cost_per_item || !item.sell_per_item) {
+                // Priced means a sell price is set (an item cannot be priced
+                // before it is costed); cost itself is not sent to everyone.
+                if (!item.sell_per_item) {
                     statusBadge = '<span class="badge badge-secondary"><i class="fas fa-dollar-sign mr-1"></i>Not Priced</span>';
                     statusDate = '-';
                 } else if (item.approval_status === 'approved') {
@@ -14524,7 +14527,7 @@ window.chartPieDemo = function() {
                 itemsHtml += '<td>' + (item.item_name || 'Unnamed') + '</td>';
                 itemsHtml += '<td><small>' + (item.description || 'No description') + '</small></td>';
                 itemsHtml += '<td class="text-center">' + (item.qty || 0) + '</td>';
-                itemsHtml += '<td class="text-right">' + (item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : '-') + '</td>';
+                if (window.CAN_SEE_COST) itemsHtml += '<td class="text-right">' + (item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : '-') + '</td>';
                 itemsHtml += '<td class="text-right">' + (item.sell_per_item ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : '-') + '</td>';
                 itemsHtml += '<td class="text-center">' + statusBadge;
                 
@@ -15028,11 +15031,11 @@ window.chartPieDemo = function() {
                     costColumn = `
                         <div class="col-md-4">
                             <p><strong>Quantity:</strong> ${item.quantity || item.qty || 1} ${item.unit || 'pcs'}</p>
-                            <p><strong>Cost per Item:</strong> ${item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : 'Not set'}</p>
+                            ${window.CAN_SEE_COST ? `<p><strong>Cost per Item:</strong> ${item.cost_per_item ? 'EGP ' + parseFloat(item.cost_per_item).toFixed(2) : 'Not set'}</p>` : ''}
                         </div>
                         <div class="col-md-4">
                             <p><strong>Sell per Item:</strong> ${item.sell_per_item ? 'EGP ' + parseFloat(item.sell_per_item).toFixed(2) : 'Not set'}</p>
-                            <p><strong>Total Cost:</strong> ${item.total_cost ? bgMoney(item.total_cost) : 'Not set'}</p>
+                            ${window.CAN_SEE_COST ? `<p><strong>Total Cost:</strong> ${item.total_cost ? bgMoney(item.total_cost) : 'Not set'}</p>` : ''}
                         </div>
                     `;
                 } else {
