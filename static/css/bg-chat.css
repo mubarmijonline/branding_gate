@@ -498,5 +498,6 @@ body.bgc-lock { overflow: hidden; }
 .bgc-item-facts { font-size: .8rem; color: var(--bgc-muted); margin-top: 2px; }
 .bgc-item-comment { font-size: .85rem; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
 .bgc-item-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.bgc-item-files img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--bgc-line); }
+/* Big enough to see what the item is; a tap opens the viewer. */
+.bgc-item-files img { width: 96px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--bgc-line); }
 .bgc-item-file { font-size: .8rem; }

@@ -35,7 +35,9 @@
   #main_nav_bar #navbarDropdown > span { display: none; }
   #main_nav_bar .navbar-brand img { height: 30px; }
   #main_nav_bar .brand-separator, #main_nav_bar .brand-text small { display: none; }
-  #main_nav_bar .brand-text span { font-size: .95rem; }
+  /* Logo only on a phone: the words ran under the balance icon on every page
+     (Ahmed, 2026-10-29). */
+  #main_nav_bar .brand-text { display: none; }
   #main_nav_bar .dropdown-menu { position: fixed !important; top: var(--bgm-topbar) !important; inset-inline: 8px !important;
     width: auto !important; min-width: 0 !important; max-height: 70vh; overflow-y: auto; transform: none !important; }
 
