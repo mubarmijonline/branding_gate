@@ -14381,7 +14381,17 @@ def get_pending_approvals():
                 approval_dict['requested_at'] = approval_dict['requested_at'].strftime('%Y-%m-%d %H:%M:%S')
             
             approvals_list.append(approval_dict)
-        
+
+        # The discussion badge on each card: how many messages, and whether
+        # the last word is still waiting for the requester's side.
+        side = {}
+        for a in approvals_list:
+            requester, manager, _ = approval_thread_people(cur, a)
+            side[a['id']] = {requester, manager} - {None}
+        counts = approval_thread_counts(cur, [a['id'] for a in approvals_list], side)
+        for a in approvals_list:
+            a['thread_count'], a['thread_waiting'] = counts.get(a['id'], (0, False))
+
         cur.close()
         conn.close()
         
@@ -14520,6 +14530,14 @@ def approve_request(approval_id):
             cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s", 
                        (items_count, sales_request_id))
         
+        # The discussion before approval goes into the new request's comments,
+        # so whoever opens the request later sees why it was let through.
+        cur.execute("""
+            INSERT INTO sales_request_comments (request_id, user_id, comment_text, source, created_at)
+            SELECT %s, user_id, CONCAT('[Before approval] ', body), 'approval_discussion', created_at
+            FROM approval_comment WHERE approval_id = %s ORDER BY id
+        """, (sales_request_id, approval_id))
+
         # Update approval record
         cur.execute("""
             UPDATE sales_request_approvals 
@@ -14634,6 +14652,150 @@ def reject_request(approval_id):
             'error': str(e)
         }), 500
 
+# ---------------------------------------------------------------------------
+# Discussing a pending approval (Beshoy, 2026-10-28). The approver asks the
+# requester or their manager before deciding ("why is this urgent request so
+# late?"). The thread is the approval's: a pending approval is not a sales
+# request yet. It closes when the approval is decided, stays readable, and the
+# approve route copies it into the new request's comments.
+# ---------------------------------------------------------------------------
+
+APPROVAL_THREAD_PERMS = ('sales_request.approve', 'sales_request.discuss_approval', 'sales_request.comment')
+
+
+def approval_thread_people(cur, approval):
+    """(requester id, their manager id, ids tagged in the thread) for one approval row."""
+    cur.execute("SELECT id, manager_id FROM user WHERE username = %s", (approval['requested_by'],))
+    row = cur.fetchone() or {}
+    cur.execute("""SELECT DISTINCT m.user_id FROM approval_comment_mention m
+                   JOIN approval_comment c ON c.id = m.comment_id WHERE c.approval_id = %s""", (approval['id'],))
+    return row.get('id'), row.get('manager_id'), {r['user_id'] for r in cur.fetchall()}
+
+
+def may_discuss_approval(cur, approval):
+    """Approvers, the requester, the requester's manager, and anyone tagged in it."""
+    if has('sales_request.approve'):
+        return True
+    requester, manager, tagged = approval_thread_people(cur, approval)
+    return session.get('user_id') in ({requester, manager} | tagged) - {None}
+
+
+def approval_thread_counts(cur, approval_ids, requester_side):
+    """
+    {approval id: (messages, waiting)} for the cards. `waiting` is true when the
+    last word is not from the requester's side (`requester_side`: approval id ->
+    ids of requester and manager), i.e. a question nobody has answered yet.
+    """
+    if not approval_ids:
+        return {}
+    marks = ','.join(['%s'] * len(approval_ids))
+    cur.execute("""SELECT c.approval_id, COUNT(*) AS n,
+                          SUBSTRING_INDEX(GROUP_CONCAT(c.user_id ORDER BY c.id DESC), ',', 1) AS last_user
+                   FROM approval_comment c WHERE c.approval_id IN (%s) GROUP BY c.approval_id""" % marks,
+                list(approval_ids))
+    return {r['approval_id']: (r['n'], int(r['last_user']) not in requester_side.get(r['approval_id'], set()))
+            for r in cur.fetchall()}
+
+
+@app.route('/api/approvals/<int:approval_id>/thread', methods=['GET'])
+@perm(*APPROVAL_THREAD_PERMS)
+def approval_thread(approval_id):
+    """The discussion on one approval, oldest first."""
+    me = session.get('user_id')
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM sales_request_approvals WHERE id = %s", (approval_id,))
+        approval = cur.fetchone()
+        if not approval:
+            return jsonify(success=False, error='No such approval'), 404
+        if not may_discuss_approval(cur, approval):
+            return jsonify(success=False, error='This discussion is between the approver, the requester and their manager.'), 403
+        requester, manager, _ = approval_thread_people(cur, approval)
+        cur.execute("""SELECT c.id, c.user_id, c.body, c.created_at, u.name FROM approval_comment c
+                       JOIN user u ON u.id = c.user_id WHERE c.approval_id = %s ORDER BY c.id""", (approval_id,))
+        messages = [{'id': r['id'], 'user_id': r['user_id'], 'name': r['name'], 'body': r['body'],
+                     'at': r['created_at'].strftime('%d %b %Y %H:%M'), 'mine': r['user_id'] == me,
+                     'side': ('requester' if r['user_id'] == requester else
+                              'manager' if r['user_id'] == manager else 'approver')}
+                    for r in cur.fetchall()]
+        names = {}
+        for uid in (requester, manager):
+            if uid:
+                cur.execute("SELECT name FROM user WHERE id = %s", (uid,))
+                names[uid] = (cur.fetchone() or {}).get('name')
+        data = approval['request_data']
+        data = json.loads(data) if isinstance(data, str) else (data or {})
+        return jsonify(success=True, status=approval['status'], open=approval['status'] == 'pending',
+                       title=data.get('title') or 'Untitled Request', start_date=data.get('start_date'),
+                       reason=approval['approval_reason'], sales_request_id=approval['sales_request_id'],
+                       requester_name=names.get(requester), manager_name=names.get(manager),
+                       is_approver=has('sales_request.approve'), messages=messages)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/approvals/<int:approval_id>/thread', methods=['POST'])
+@perm(*APPROVAL_THREAD_PERMS)
+def approval_thread_post(approval_id):
+    """Add a message; the others in the discussion are told, with a link to it."""
+    me = session.get('user_id')
+    data = request.get_json(silent=True) or {}
+    body = (data.get('comment_text') or '').strip()
+    if not body:
+        return jsonify(success=False, error='Write something first'), 400
+    if len(body) > 4000:
+        return jsonify(success=False, error='Keep it under 4000 characters'), 400
+    try:
+        tagged_now = {int(x) for x in (data.get('mentioned_users') or [])[:20]}
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Unknown person tagged'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT * FROM sales_request_approvals WHERE id = %s", (approval_id,))
+        approval = cur.fetchone()
+        if not approval:
+            return jsonify(success=False, error='No such approval'), 404
+        if not may_discuss_approval(cur, approval):
+            return jsonify(success=False, error='This discussion is between the approver, the requester and their manager.'), 403
+        if approval['status'] != 'pending':
+            return jsonify(success=False, error='This request was %s; the discussion is closed.' % approval['status']), 400
+        if tagged_now:
+            cur.execute("SELECT id FROM user WHERE is_active = 1 AND id IN (%s)" % ','.join(['%s'] * len(tagged_now)),
+                        list(tagged_now))
+            tagged_now = {r['id'] for r in cur.fetchall()}
+        requester, manager, _ = approval_thread_people(cur, approval)
+        cur.execute("SELECT DISTINCT user_id FROM approval_comment WHERE approval_id = %s", (approval_id,))
+        posters = {r['user_id'] for r in cur.fetchall()}
+        cur.execute("INSERT INTO approval_comment (approval_id, user_id, body) VALUES (%s, %s, %s)",
+                    (approval_id, me, body))
+        comment_id = cur.lastrowid
+        for uid in tagged_now:
+            cur.execute("INSERT IGNORE INTO approval_comment_mention (comment_id, user_id) VALUES (%s, %s)",
+                        (comment_id, uid))
+        conn.commit()
+
+        # Who hears of it: the requester, their manager, whoever already spoke
+        # and whoever was tagged. When no approver has spoken yet, the approvers.
+        approvers = set(users_holding('sales_request.approve', include_root=True))
+        audience = ({requester, manager} | posters | tagged_now) - {None}
+        if not (posters & approvers):
+            audience |= approvers
+        audience.discard(me)
+        data = approval['request_data']
+        data = json.loads(data) if isinstance(data, str) else (data or {})
+        title = 'Discussion on a pending request: %s' % (data.get('title') or 'Untitled Request')
+        content = '%s: %s' % (session.get('name'), body[:200])
+        to_approvers = sorted(audience & approvers)
+        to_others = sorted(audience - approvers)
+        notify_users(to_approvers, title, content, link='/approvals?request=%d' % approval_id, category='important')
+        notify_users(to_others, title, content, link='/sales_request?approval=%d' % approval_id, category='important')
+        return jsonify(success=True, id=comment_id)
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/api/approvals/my-requests', methods=['GET'])
 @perm('sales_request.view')
 def get_my_pending_requests():
@@ -14672,6 +14834,10 @@ def get_my_pending_requests():
                 approval_dict['reviewed_at'] = approval_dict['reviewed_at'].strftime('%Y-%m-%d %H:%M:%S')
             
             approvals_list.append(approval_dict)
+        counts = approval_thread_counts(cur, [a['id'] for a in approvals_list],
+                                        {a['id']: {session.get('user_id')} for a in approvals_list})
+        for a in approvals_list:
+            a['thread_count'], a['thread_waiting'] = counts.get(a['id'], (0, False))
         
         cur.close()
         conn.close()

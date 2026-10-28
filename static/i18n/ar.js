@@ -4267,5 +4267,18 @@ window.BG_AR = {
 "Design request #{0} sent to Operation": "طلب التصميم رقم {0} اتبعت للتشغيل",
 "Design request #{0} cancelled": "اتلغى طلب التصميم رقم {0}",
 "Design approved the work. Open it to send it to Operation.": "التصميم وافق على الشغل. افتحه وابعته للتشغيل.",
-"Video": "فيديو"
+"Video": "فيديو",
+"Discuss before approving": "نقاش قبل الموافقة",
+"Discuss": "نقاش",
+"Approver": "المعتمِد",
+"Requester": "صاحب الطلب",
+"No messages yet. Ask your question below.": "لسه مفيش رسايل. اكتب سؤالك تحت.",
+"This request was {0}; the discussion is closed.": "الطلب ده اتعمله {0}، والنقاش اتقفل.",
+"Open the request": "افتح الطلب",
+"Why is this request late?": "ليه الطلب ده متأخر؟",
+"Write a message, @ to tag someone": "اكتب رسالة، و@ علشان تعمل منشن",
+"Could not open the discussion": "تعذر فتح النقاش",
+"Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
+"Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
 };

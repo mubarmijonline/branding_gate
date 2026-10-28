@@ -469,3 +469,13 @@ body.bgc-lock { overflow: hidden; }
     border-radius: 10px !important; font-size: 16px; background: transparent; color: inherit; }
 .bgc-person .bgc-add-member, .bgc-person .bgc-remove-member { flex: 0 0 auto; }
 .bgc-person .bgc-remove-member { color: #c0392b; }
+
+/* Discussion on a pending approval (static/js/bg-approval-thread.js) */
+#bgApprovalThread .bgat-body { background: #f4f6fb; min-height: 220px; }
+.bgat-msg { background: #fff; border-radius: 10px; padding: .5rem .75rem; margin: 0 2.5rem .6rem 0; box-shadow: 0 1px 1px rgba(0,0,0,.05); }
+.bgat-msg.mine { background: #e7f0ff; margin: 0 0 .6rem 2.5rem; }
+.bgat-meta { font-size: .75rem; color: #6b7280; margin-bottom: .15rem; }
+.bgat-side { background: #eef1fa; color: #3a4fa0; border-radius: 6px; padding: 0 .35rem; font-size: .7rem; }
+.bgat-text { white-space: pre-wrap; word-break: break-word; }
+.bgat-at { color: #2449a8; font-weight: 600; }
+.bgat-suggest { position: absolute; bottom: 100%; left: 0; right: 0; z-index: 5; max-height: 220px; overflow-y: auto; }
