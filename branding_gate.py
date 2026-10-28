@@ -23,6 +23,7 @@ import invoicing
 import finance_chart
 from decimal import Decimal
 import costing
+import design_workflow
 import org_chart_pdf
 import target_pdf
 import zipfile
@@ -9841,6 +9842,8 @@ def costing_item_log(item_id):
 
 TEAM_ACTIONS = {
     'operations': [
+        ('Design Requests', 'Ask Design for work and follow it', 'fas fa-palette',
+         'design_requests_page', ('design_request.create', 'design_request.operate')),
         ('Operation Requests', 'Cost the items on a request', 'fas fa-tools',
          'operation_request', ('approved_item.view',)),
         ('Costing desk', 'Assign items and decide proposals', 'fas fa-calculator',
@@ -9859,6 +9862,8 @@ TEAM_ACTIONS = {
          'targets_page', ('target.view',)),
     ],
     'sales': [
+        ('Design Requests', 'Ask Design for work and follow it', 'fas fa-palette',
+         'design_requests_page', ('design_request.create', 'design_request.operate')),
         ('Invoices', 'Draft a client invoice from a request and send it to Finance',
          'fas fa-file-invoice', 'client_invoices_page', ('invoice.create',)),
         ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
@@ -9908,6 +9913,8 @@ TEAM_ACTIONS = {
          'targets_page', ('target.view',)),
     ],
     'account': [
+        ('Design Requests', 'Ask Design for work and follow it', 'fas fa-palette',
+         'design_requests_page', ('design_request.create', 'design_request.operate')),
         ('Invoices', 'Draft a client invoice from a request and send it to Finance',
          'fas fa-file-invoice', 'client_invoices_page', ('invoice.create',)),
         ('Sales Requests', 'Raise and follow client requests', 'fas fa-clipboard-list',
@@ -10074,15 +10081,574 @@ def account_portal():
 @app.route('/design-2d', methods=['GET'])
 @perm('portal.design_2d')
 def design_2d_portal():
-    """2D Design portal. Empty for now."""
-    return _blank_portal('design_2d')
+    """2D Design portal: the design requests, 2D only, and the team's cards."""
+    return render_template('design_requests.html', discipline='2d', portal_area='design_2d',
+                           portal_title='2D Design')
 
 
 @app.route('/design-3d', methods=['GET'])
 @perm('portal.design_3d')
 def design_3d_portal():
-    """3D Design portal. Empty for now."""
-    return _blank_portal('design_3d')
+    """3D Design portal: the design requests, 3D only, and the team's cards."""
+    return render_template('design_requests.html', discipline='3d', portal_area='design_3d',
+                           portal_title='3D Design')
+
+
+# ---------------------------------------------------------------------------
+# Design requests (Gamal, 2026-10-28). Behaviour: docs/PRD.md "Design
+# Requests"; rules: design_workflow.py.
+# ---------------------------------------------------------------------------
+
+DESIGN_PAGE_PERMS = ('design_request.view', 'design_request.create', 'design_request.operate',
+                     'design_request.deliver', 'design_request.assign', 'design_request.approve')
+DESIGN_FILE_TYPES = {'pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic',
+                     'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'ai', 'psd', 'eps', 'zip'}
+DESIGN_FILE_MAX = 20 * 1024 * 1024
+
+
+@app.route('/design-requests', methods=['GET'])
+@perm(*DESIGN_PAGE_PERMS)
+def design_requests_page():
+    """Every design request the caller may see, 2D and 3D."""
+    return render_template('design_requests.html', discipline=None, portal_area=None,
+                           portal_title=None)
+
+
+def design_request_visible(dr):
+    """May the caller see this design request (a row with created_by, designer_id, status)?"""
+    if dr['designer_id'] and dr['designer_id'] == session.get('user_id'):
+        return True
+    if dr['status'] == design_workflow.SENT and has('design_request.operate'):
+        return True
+    return _scope_covers('design_request.view', dr['created_by'])
+
+
+def _design_requester_side(dr):
+    """The requester, or someone above them on the Sales / Account line."""
+    return has('design_request.create') and (
+        dr['created_by'] == session.get('user_id')
+        or _scope_covers('design_request.view', dr['created_by']))
+
+
+def _design_load(cur, request_id):
+    """The request, or a 404 / 403 the route can return as it is."""
+    cur.execute("SELECT * FROM design_request WHERE id = %s", (request_id,))
+    dr = cur.fetchone()
+    if not dr:
+        return None, (jsonify(success=False, error='No such design request'), 404)
+    if not design_request_visible(dr):
+        return None, (jsonify(success=False, error='That request is not yours to see.'), 403)
+    return dr, None
+
+
+def _design_log(cur, request_id, action, note=None):
+    cur.execute("INSERT INTO design_request_log (request_id, actor_id, action, note) VALUES (%s, %s, %s, %s)",
+                (request_id, session.get('user_id'), action, (note or None) and note[:1000]))
+
+
+def _design_save_files(cur, request_id, item_id, kind, handles):
+    """Save uploads under uploads/design/<id>/; returns the names kept and the ones refused."""
+    folder = os.path.join(UPLOADS_DIR, 'design', str(request_id))
+    saved, refused = [], []
+    for handle in handles:
+        if not handle or not handle.filename:
+            continue
+        extension = handle.filename.rsplit('.', 1)[-1].lower() if '.' in handle.filename else ''
+        handle.seek(0, 2)
+        size = handle.tell()
+        handle.seek(0)
+        if extension not in DESIGN_FILE_TYPES or size > DESIGN_FILE_MAX:
+            refused.append(handle.filename)
+            continue
+        os.makedirs(folder, exist_ok=True)
+        name = '%s_%s' % (datetime.now().strftime('%Y%m%d_%H%M%S_%f'),
+                          secure_filename(handle.filename) or 'file.' + extension)
+        handle.save(os.path.join(folder, name))
+        cur.execute("""INSERT INTO design_request_file (request_id, item_id, kind, file_url, original_name,
+                                                        file_type, file_size, uploaded_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (request_id, item_id, kind, '/uploads/design/%d/%s' % (request_id, name),
+                     handle.filename[:255], extension, size, session.get('user_id')))
+        saved.append(handle.filename)
+    return saved, refused
+
+
+def _design_desk(cur, permission, discipline=None):
+    """Who to tell: holders of `permission`, without the other design department."""
+    ids = users_holding(permission)
+    if not ids or discipline not in design_workflow.DISCIPLINES:
+        return ids
+    other = 'design_3d' if discipline == '2d' else 'design_2d'
+    cur.execute("SELECT u.id FROM user u JOIN department d ON d.id = u.department_id WHERE d.code = %s",
+                (other,))
+    skip = {row['id'] for row in cur.fetchall()}
+    return [uid for uid in ids if uid not in skip]
+
+
+def _design_notify(user_ids, request_id, title, content):
+    notify_users([uid for uid in user_ids if uid != session.get('user_id')], title, content,
+                 link='/design-requests?open=%d' % request_id, category='important')
+
+
+@app.route('/api/design-requests/options', methods=['GET'])
+@perm(*DESIGN_PAGE_PERMS)
+def design_request_options():
+    """What the forms pick from: companies, clients, designers, and the fixed lists."""
+    conn, cur = connection()
+    try:
+        out = {'categories': [{'code': code, 'label': label, 'fields': list(fields)}
+                              for code, (label, fields) in design_workflow.CATEGORIES.items()],
+               'printing_types': list(design_workflow.PRINTING_TYPES),
+               'units': list(design_workflow.UNITS),
+               'companies': [], 'clients': [], 'designers': []}
+        if has('design_request.create'):
+            cur.execute("SELECT id, company_name FROM company ORDER BY company_name")
+            out['companies'] = [{'id': r['id'], 'name': r['company_name']} for r in cur.fetchall()]
+            cur.execute("SELECT id, client_name, parent_company_id FROM client ORDER BY client_name")
+            out['clients'] = [{'id': r['id'], 'name': r['client_name'], 'company_id': r['parent_company_id']}
+                              for r in cur.fetchall()]
+        if has('design_request.assign'):
+            cur.execute("""SELECT u.id, u.name, d.code AS dept FROM user u
+                           JOIN department d ON d.id = u.department_id
+                           WHERE u.is_active = 1 AND d.code IN ('design_2d', 'design_3d')
+                           ORDER BY u.name""")
+            out['designers'] = [{'id': r['id'], 'name': r['name'],
+                                 'discipline': '3d' if r['dept'] == 'design_3d' else '2d'}
+                                for r in cur.fetchall()]
+        return jsonify(success=True, **out)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests', methods=['GET'])
+@perm(*DESIGN_PAGE_PERMS)
+def design_request_list():
+    """The list: what the caller may see, newest first, optionally one discipline / status."""
+    me = session.get('user_id')
+    parts, params = ['dr.designer_id = %s'], [me]
+    if has('design_request.view'):
+        ids = visible_user_ids('design_request.view')
+        if ids is None:
+            parts.append('1=1')
+        elif ids:
+            parts.append('dr.created_by IN (%s)' % ','.join(['%s'] * len(ids)))
+            params += list(ids)
+    if has('design_request.operate'):
+        parts.append("dr.status = 'sent_to_operation'")
+    where = '(' + ' OR '.join(parts) + ')'
+    discipline = request.args.get('discipline')
+    if discipline in design_workflow.DISCIPLINES:
+        where += ' AND dr.discipline = %s'
+        params.append(discipline)
+    status = request.args.get('status')
+    if status in design_workflow.STATES:
+        where += ' AND dr.status = %s'
+        params.append(status)
+    elif status == 'mine':
+        where += ' AND dr.designer_id = %s'
+        params.append(me)
+    conn, cur = connection()
+    try:
+        cur.execute("""
+            SELECT dr.id, dr.discipline, dr.status, dr.event_date, dr.deadline, dr.created_at,
+                   dr.created_by, dr.designer_id, c.client_name, co.company_name,
+                   cu.name AS created_by_name, du.name AS designer_name,
+                   (SELECT COUNT(*) FROM design_request_item i WHERE i.request_id = dr.id) AS item_count,
+                   (SELECT GROUP_CONCAT(DISTINCT i.category) FROM design_request_item i
+                     WHERE i.request_id = dr.id) AS categories,
+                   (SELECT i.title FROM design_request_item i WHERE i.request_id = dr.id
+                     ORDER BY i.sort_order, i.id LIMIT 1) AS first_title
+            FROM design_request dr
+            JOIN client c ON c.id = dr.client_id
+            LEFT JOIN company co ON co.id = dr.company_id
+            JOIN user cu ON cu.id = dr.created_by
+            LEFT JOIN user du ON du.id = dr.designer_id
+            WHERE """ + where + " ORDER BY dr.id DESC LIMIT 500", params)
+        rows = []
+        for r in cur.fetchall():
+            r['event_date'] = r['event_date'].isoformat() if r['event_date'] else None
+            r['deadline'] = r['deadline'].isoformat() if r['deadline'] else None
+            r['created_at'] = r['created_at'].strftime('%d %b %Y %H:%M')
+            r['categories'] = (r['categories'] or '').split(',') if r['categories'] else []
+            rows.append(r)
+        return jsonify(success=True, requests=rows,
+                       can_create=has('design_request.create'))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests', methods=['POST'])
+@perm('design_request.create')
+def design_request_create():
+    """
+    A new request. Multipart: `data` is the JSON (header and items), and
+    `files_<n>` are the attachments of item n, so a file always lands on the
+    item it was picked for.
+    """
+    try:
+        data = json.loads(request.form.get('data') or 'null') if request.form else request.get_json(silent=True)
+    except ValueError:
+        data = None
+    data = data or {}
+    try:
+        header = design_workflow.clean_header(data)
+        raw_items = data.get('items') or []
+        if not raw_items:
+            raise design_workflow.WorkflowError('Add at least one item')
+        if len(raw_items) > 50:
+            raise design_workflow.WorkflowError('At most 50 items in one request')
+        items = [design_workflow.clean_item(raw, header['deadline']) for raw in raw_items]
+    except design_workflow.WorkflowError as e:
+        return jsonify(success=False, error=str(e)), 400
+    me = session.get('user_id')
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, parent_company_id FROM client WHERE id = %s", (header['client_id'],))
+        client_row = cur.fetchone()
+        if not client_row:
+            return jsonify(success=False, error='Unknown client'), 400
+        if header['company_id'] is None:
+            header['company_id'] = client_row['parent_company_id']
+        elif not cur.execute("SELECT 1 FROM company WHERE id = %s", (header['company_id'],)):
+            return jsonify(success=False, error='Unknown company'), 400
+        cur.execute("""INSERT INTO design_request (discipline, company_id, client_id, event_date, deadline,
+                                                   created_by)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (header['discipline'], header['company_id'], header['client_id'],
+                     header['event_date'], header['deadline'], me))
+        request_id = cur.lastrowid
+        refused = []
+        for n, item in enumerate(items):
+            cur.execute("""INSERT INTO design_request_item (request_id, category, title, deadline, description,
+                                                            size_h, size_w, size_l, quantity, unit,
+                                                            printing_type, duration, sort_order)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (request_id, item['category'], item['title'], item['deadline'], item['description'],
+                         item['size_h'], item['size_w'], item['size_l'], item['quantity'], item['unit'],
+                         item['printing_type'], item['duration'], n))
+            _, bad = _design_save_files(cur, request_id, cur.lastrowid, 'brief',
+                                        request.files.getlist('files_%d' % n))
+            refused += bad
+        _design_log(cur, request_id, 'submitted')
+        conn.commit()
+        _design_notify(_design_desk(cur, 'design_request.assign', header['discipline']), request_id,
+                       'New design request #%d' % request_id,
+                       '%s asked Design for %d item(s). Assign a designer.' % (session.get('name'), len(items)))
+        return jsonify(success=True, id=request_id, refused=refused)
+    except HTTPException:
+        raise
+    except Exception:
+        conn.rollback()
+        app.logger.exception('design request create failed')
+        return jsonify(success=False, error='Could not save the request'), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests/<int:request_id>', methods=['GET'])
+@perm(*DESIGN_PAGE_PERMS)
+def design_request_detail(request_id):
+    """One request: header, items with their files, the work, the history, and what the caller may do."""
+    me = session.get('user_id')
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        cur.execute("""SELECT c.client_name, co.company_name, cu.name AS created_by_name,
+                              du.name AS designer_name, au.name AS assigned_by_name, xu.name AS decided_by_name,
+                              su.name AS sent_by_name
+                       FROM design_request dr JOIN client c ON c.id = dr.client_id
+                       LEFT JOIN company co ON co.id = dr.company_id
+                       JOIN user cu ON cu.id = dr.created_by
+                       LEFT JOIN user du ON du.id = dr.designer_id
+                       LEFT JOIN user au ON au.id = dr.assigned_by
+                       LEFT JOIN user xu ON xu.id = dr.decided_by
+                       LEFT JOIN user su ON su.id = dr.sent_by
+                       WHERE dr.id = %s""", (request_id,))
+        dr.update(cur.fetchone())
+        cur.execute("SELECT * FROM design_request_item WHERE request_id = %s ORDER BY sort_order, id",
+                    (request_id,))
+        items = cur.fetchall()
+        cur.execute("""SELECT f.*, u.name AS uploaded_by_name FROM design_request_file f
+                       JOIN user u ON u.id = f.uploaded_by WHERE f.request_id = %s ORDER BY f.id""",
+                    (request_id,))
+        files = cur.fetchall()
+        cur.execute("""SELECT l.action, l.note, l.at, u.name AS actor_name FROM design_request_log l
+                       JOIN user u ON u.id = l.actor_id WHERE l.request_id = %s ORDER BY l.id""",
+                    (request_id,))
+        log = [{'action': r['action'], 'note': r['note'], 'actor_name': r['actor_name'],
+                'at': r['at'].strftime('%d %b %Y %H:%M')} for r in cur.fetchall()]
+
+        def file_out(f):
+            return {'id': f['id'], 'url': f['file_url'] or f['link_url'], 'is_link': not f['file_url'],
+                    'name': f['original_name'] or f['link_url'], 'type': f['file_type'],
+                    'uploaded_by_name': f['uploaded_by_name'],
+                    'uploaded_at': f['uploaded_at'].strftime('%d %b %Y %H:%M')}
+
+        def num(v):
+            return float(v) if v is not None else None
+
+        status = dr['status']
+        is_designer = dr['designer_id'] == me and has('design_request.deliver')
+        requester = _design_requester_side(dr)
+        out_items = []
+        for i in items:
+            out_items.append({
+                'id': i['id'], 'category': i['category'],
+                'category_label': design_workflow.CATEGORIES[i['category']][0],
+                'title': i['title'], 'description': i['description'],
+                'deadline': i['deadline'].isoformat() if i['deadline'] else None,
+                'size_h': num(i['size_h']), 'size_w': num(i['size_w']), 'size_l': num(i['size_l']),
+                'quantity': num(i['quantity']), 'unit': i['unit'], 'printing_type': i['printing_type'],
+                'duration': i['duration'],
+                'files': [file_out(f) for f in files if f['item_id'] == i['id'] and f['kind'] == 'brief'],
+            })
+        stamp = lambda v: v.strftime('%d %b %Y %H:%M') if v else None
+        return jsonify(success=True, request={
+            'id': dr['id'], 'discipline': dr['discipline'], 'status': status,
+            'client_name': dr['client_name'], 'company_name': dr['company_name'],
+            'event_date': dr['event_date'].isoformat() if dr['event_date'] else None,
+            'deadline': dr['deadline'].isoformat() if dr['deadline'] else None,
+            'created_by_name': dr['created_by_name'], 'created_at': stamp(dr['created_at']),
+            'designer_id': dr['designer_id'], 'designer_name': dr['designer_name'],
+            'assigned_by_name': dr['assigned_by_name'], 'assigned_at': stamp(dr['assigned_at']),
+            'decided_by_name': dr['decided_by_name'], 'decided_at': stamp(dr['decided_at']),
+            'decision_note': dr['decision_note'], 'sent_by_name': dr['sent_by_name'],
+            'sent_at': stamp(dr['sent_at']),
+            'items': out_items,
+            'brief_files': [file_out(f) for f in files if f['item_id'] is None and f['kind'] == 'brief'],
+            'deliverables': [file_out(f) for f in files if f['kind'] == 'deliverable'],
+            'log': log,
+        }, can={
+            'assign': has('design_request.assign') and status in design_workflow.TRANSITIONS['assign'][0],
+            'upload': is_designer and status in design_workflow.UPLOAD_STATES,
+            'decide': has('design_request.approve') and status == design_workflow.IN_REVIEW,
+            'send': requester and status == design_workflow.APPROVED,
+            'cancel': requester and status in design_workflow.TRANSITIONS['cancel'][0],
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _design_step(request_id, action, check, apply, notify=None):
+    """
+    The shape every workflow step shares: load, check who may, move the state,
+    write the log, tell the next person. `check(dr)` returns an error or None;
+    `apply(cur, dr, status)` writes the step's own columns.
+    """
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        error = check(dr)
+        if error:
+            return jsonify(success=False, error=error), 403
+        try:
+            status = design_workflow.transition(dr['status'], action)
+        except design_workflow.WorkflowError as e:
+            return jsonify(success=False, error=str(e)), 400
+        # A step refuses before it writes anything, so a refusal leaves nothing to undo.
+        result = apply(cur, dr, status)
+        if isinstance(result, tuple):
+            return result
+        cur.execute("UPDATE design_request SET status = %s WHERE id = %s", (status, request_id))
+        conn.commit()
+        if notify:
+            notify(cur, dr)
+        return jsonify(success=True, status=status)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests/<int:request_id>/assign', methods=['POST'])
+@perm('design_request.assign')
+def design_request_assign(request_id):
+    """Give the request to a designer (or to another one)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        designer_id = int(data.get('designer_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick a designer'), 400
+
+    def apply(cur, dr, status):
+        cur.execute("""SELECT u.id, u.name FROM user u JOIN department d ON d.id = u.department_id
+                       WHERE u.id = %s AND u.is_active = 1 AND d.code IN ('design_2d', 'design_3d')""",
+                    (designer_id,))
+        designer = cur.fetchone()
+        if not designer:
+            return jsonify(success=False, error='That person is not a designer'), 400
+        cur.execute("""UPDATE design_request SET designer_id = %s, assigned_by = %s, assigned_at = NOW()
+                       WHERE id = %s""", (designer_id, session.get('user_id'), request_id))
+        _design_log(cur, request_id, 'assigned', designer['name'])
+
+    def notify(cur, dr):
+        _design_notify([designer_id], request_id, 'Design request #%d is yours' % request_id,
+                       '%s assigned you design request #%d.' % (session.get('name'), request_id))
+
+    return _design_step(request_id, 'assign', lambda dr: None, apply, notify)
+
+
+@app.route('/api/design-requests/<int:request_id>/files', methods=['POST'])
+@perm('design_request.deliver')
+def design_request_upload(request_id):
+    """The designer's work: files (files[]) and/or a link."""
+    link = (request.form.get('link') or '').strip()
+    if link and not re.match(r'^https?://\S+$', link):
+        return jsonify(success=False, error='A link starts with http:// or https://'), 400
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        if dr['designer_id'] != session.get('user_id'):
+            return jsonify(success=False, error='Only the assigned designer uploads the work.'), 403
+        if dr['status'] not in design_workflow.UPLOAD_STATES:
+            return jsonify(success=False, error='The work cannot be changed now.'), 400
+        saved, refused = _design_save_files(cur, request_id, None, 'deliverable',
+                                            request.files.getlist('files[]'))
+        if link:
+            cur.execute("""INSERT INTO design_request_file (request_id, kind, link_url, uploaded_by)
+                           VALUES (%s, 'deliverable', %s, %s)""", (request_id, link[:1000], session.get('user_id')))
+            saved.append(link)
+        if not saved:
+            return jsonify(success=False, refused=refused,
+                           error='Nothing was saved: PDF, images, Office or design files up to 20 MB, or a link.'), 400
+        _design_log(cur, request_id, 'uploaded', ', '.join(saved)[:1000])
+        conn.commit()
+        return jsonify(success=True, saved=saved, refused=refused)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests/<int:request_id>/files/<int:file_id>', methods=['DELETE'])
+@perm('design_request.deliver')
+def design_request_file_delete(request_id, file_id):
+    """Take back a deliverable before it is submitted."""
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        if dr['designer_id'] != session.get('user_id') or dr['status'] not in design_workflow.UPLOAD_STATES:
+            return jsonify(success=False, error='The work cannot be changed now.'), 403
+        cur.execute("""SELECT * FROM design_request_file WHERE id = %s AND request_id = %s
+                       AND kind = 'deliverable' AND uploaded_by = %s""",
+                    (file_id, request_id, session.get('user_id')))
+        f = cur.fetchone()
+        if not f:
+            return jsonify(success=False, error='No such file'), 404
+        cur.execute("DELETE FROM design_request_file WHERE id = %s", (file_id,))
+        _design_log(cur, request_id, 'removed', f['original_name'] or f['link_url'])
+        conn.commit()
+        if f['file_url']:
+            try:
+                os.remove(os.path.join(UPLOADS_DIR, f['file_url'].split('/uploads/', 1)[1]))
+            except OSError:
+                pass
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests/<int:request_id>/submit', methods=['POST'])
+@perm('design_request.deliver')
+def design_request_submit(request_id):
+    """The designer hands the work to the Design Manager."""
+    def check(dr):
+        return None if dr['designer_id'] == session.get('user_id') else 'Only the assigned designer submits the work.'
+
+    def apply(cur, dr, status):
+        cur.execute("SELECT COUNT(*) AS n FROM design_request_file WHERE request_id = %s AND kind = 'deliverable'",
+                    (request_id,))
+        if not cur.fetchone()['n']:
+            return jsonify(success=False, error='Upload the work (a file or a link) first.'), 400
+        cur.execute("UPDATE design_request SET submitted_at = NOW() WHERE id = %s", (request_id,))
+        _design_log(cur, request_id, 'submitted_for_approval')
+
+    def notify(cur, dr):
+        _design_notify(users_holding('design_request.approve'), request_id,
+                       'Design request #%d waits for your approval' % request_id,
+                       '%s submitted the work on design request #%d.' % (session.get('name'), request_id))
+
+    return _design_step(request_id, 'submit', check, apply, notify)
+
+
+@app.route('/api/design-requests/<int:request_id>/decide', methods=['POST'])
+@perm('design_request.approve')
+def design_request_decide(request_id):
+    """The Design Manager approves the work or sends it back with a note."""
+    data = request.get_json(silent=True) or {}
+    decision = data.get('decision')
+    note = (data.get('note') or '').strip()
+    if decision not in ('approve', 'changes'):
+        return jsonify(success=False, error='Approve or ask for changes'), 400
+    if decision == 'changes' and not note:
+        return jsonify(success=False, error='Say what needs changing'), 400
+
+    def apply(cur, dr, status):
+        cur.execute("""UPDATE design_request SET decided_by = %s, decided_at = NOW(), decision_note = %s
+                       WHERE id = %s""", (session.get('user_id'), note[:1000] or None, request_id))
+        _design_log(cur, request_id, 'approved' if decision == 'approve' else 'changes_requested', note)
+
+    def notify(cur, dr):
+        if decision == 'approve':
+            _design_notify([dr['created_by']], request_id, 'Design request #%d is approved' % request_id,
+                           'Design approved the work. Open it to send it to Operation.')
+            notify_users([dr['designer_id']], 'Design request #%d approved' % request_id,
+                         '%s approved your work.' % session.get('name'),
+                         link='/design-requests?open=%d' % request_id, category='announcement')
+        else:
+            _design_notify([dr['designer_id']], request_id, 'Changes on design request #%d' % request_id,
+                           '%s: %s' % (session.get('name'), note[:200]))
+
+    return _design_step(request_id, decision, lambda dr: None, apply, notify)
+
+
+@app.route('/api/design-requests/<int:request_id>/send', methods=['POST'])
+@perm('design_request.create')
+def design_request_send(request_id):
+    """The requester sends the approved work on to Operation."""
+    def check(dr):
+        return None if _design_requester_side(dr) else 'Only the requester sends it to Operation.'
+
+    def apply(cur, dr, status):
+        cur.execute("UPDATE design_request SET sent_by = %s, sent_at = NOW() WHERE id = %s",
+                    (session.get('user_id'), request_id))
+        _design_log(cur, request_id, 'sent_to_operation')
+
+    def notify(cur, dr):
+        _design_notify(users_holding('design_request.operate'), request_id,
+                       'Design request #%d sent to Operation' % request_id,
+                       '%s sent the approved design to Operation.' % session.get('name'))
+
+    return _design_step(request_id, 'send', check, apply, notify)
+
+
+@app.route('/api/design-requests/<int:request_id>/cancel', methods=['POST'])
+@perm('design_request.create')
+def design_request_cancel(request_id):
+    """The requester withdraws a request before the work is submitted."""
+    def check(dr):
+        return None if _design_requester_side(dr) else 'Only the requester cancels it.'
+
+    def apply(cur, dr, status):
+        _design_log(cur, request_id, 'cancelled')
+
+    def notify(cur, dr):
+        if dr['designer_id']:
+            notify_users([dr['designer_id']], 'Design request #%d cancelled' % request_id,
+                         '%s cancelled it.' % session.get('name'), category='announcement')
+
+    return _design_step(request_id, 'cancel', check, apply, notify)
 
 
 @app.route('/workflow_timeline')
@@ -15672,11 +16238,15 @@ def upload_access_allowed(cur, parts):
         return _request_file_allowed(cur, request_id)
     if folder == 'sales_requests':
         return _request_file_allowed(cur, owner_id)
+    if folder == 'design' and owner_id is not None:
+        cur.execute("SELECT created_by, designer_id, status FROM design_request WHERE id = %s", (owner_id,))
+        row = cur.fetchone()
+        return bool(row) and design_request_visible(row)
     return False
 
 
 @app.route('/uploads/<path:subpath>')
-@perm('sales_request.view', 'company.view', 'client.view', *ITEM_FILE_DESKS)
+@perm('sales_request.view', 'company.view', 'client.view', *ITEM_FILE_DESKS, *DESIGN_PAGE_PERMS)
 def serve_upload(subpath):
     """Any file under uploads/, to whoever may see the record it belongs to."""
     root = os.path.realpath(UPLOADS_DIR)

@@ -683,6 +683,11 @@
               <a class="dropdown-item" href="{{ url_for('sales_request') }}">
                 <i class="fas fa-shopping-cart"></i> Sales Request
               </a>
+              {% if 'design_request.create' in _p %}
+              <a class="dropdown-item" href="{{ url_for('design_requests_page') }}">
+                <i class="fas fa-palette"></i> Design Requests
+              </a>
+              {% endif %}
               {% if 'invoice.create' in _p %}
               <a class="dropdown-item" href="{{ url_for('client_invoices_page') }}">
                 <i class="fas fa-file-invoice"></i> Invoices
@@ -740,6 +745,11 @@
               <a class="dropdown-item" href="{{ url_for('operation_request') }}">
                 <i class="fas fa-tools"></i> Operation Request
               </a>
+              {% if 'design_request.operate' in _p %}
+              <a class="dropdown-item" href="{{ url_for('design_requests_page') }}">
+                <i class="fas fa-palette"></i> Design Requests
+              </a>
+              {% endif %}
               {% if can_view_costing %}
               <a class="dropdown-item" href="{{ url_for('costing_page') }}">
                 <i class="fas fa-calculator"></i> Costing

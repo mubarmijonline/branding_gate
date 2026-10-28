@@ -201,6 +201,17 @@ PERMISSIONS = {
     'chat.all': 'Be in every chat and group, always',
     'chat.group_members': 'Add people to chat groups, and remove the ones added',
 
+    # Design requests (docs/PRD.md). Sales and Account ask, Design assigns and
+    # delivers, the Design Manager approves, the requester sends it on to
+    # Operation. View is scoped on the requester; the rest are checked against
+    # the request in the route (the designer is the one assigned, and so on).
+    'design_request.view':    'See design requests',
+    'design_request.create':  'Ask Design for work (a design request)',
+    'design_request.assign':  'Assign a designer to a design request',
+    'design_request.deliver': 'Upload the work on a design request assigned to you',
+    'design_request.approve': 'Approve the work on a design request as Design Manager',
+    'design_request.operate': 'See the design requests sent to Operation',
+
     # Dashboards
     'dashboard.sales':      'View the sales dashboard',
     'dashboard.operations': 'View the operations dashboard',
@@ -220,6 +231,8 @@ SCOPELESS_PERMISSIONS = frozenset({
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
     'section.sales', 'section.operations', 'section.finance',
+    'design_request.assign', 'design_request.deliver', 'design_request.approve',
+    'design_request.operate',
 })
 
 
@@ -266,6 +279,9 @@ ROLES = {
 
     'design_2d_head':         ('2D Designer Head',       'design_2d',  LEVEL_HEAD),
     'design_2d_member':       ('2D Designer',            'design_2d',  LEVEL_MEMBER),
+    # Approves Design's work on a design request, for 2D and 3D. A Design
+    # decision, kept apart from Account Director (Gamal, 2026-10-28).
+    'design_manager':         ('Design Manager',         'design_2d',  LEVEL_HEAD),
 
     'design_3d_head':         ('3D Head',                'design_3d',  LEVEL_HEAD),
     # One person wears both hats today. A role of its own rather than widening
@@ -335,6 +351,8 @@ def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=Fa
         # Finance posts them.
         'invoice.view': scope,
         'invoice.create': 'own',
+        'design_request.view': scope,
+        'design_request.create': 'own',
     }
     if approve:
         grants['sales_request.approve'] = scope
@@ -692,6 +710,19 @@ SEED_MATRIX = {
             'expense_tracking.create': 'own',
         },
     ),
+    'design_manager': _merge(
+        _OWN_EXPENSES,
+        _manager_expense_approval('department'),
+        {
+            'sales_request.view': 'all',
+            'approved_item.view': 'all',
+            'catalog.view': 'all',
+            'catalog.edit': 'all',
+            'client.view': 'all',
+            'portal.design_3d': 'all',
+            'design_request.approve': 'all',
+        },
+    ),
     'design_3d_head': _merge(
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
@@ -832,6 +863,20 @@ _TARGETS_BY_LEVEL = {
 for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
     if _level in _TARGETS_BY_LEVEL and _role_code in SEED_MATRIX:
         SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], _TARGETS_BY_LEVEL[_level])
+
+# Design requests on the Design side: both departments see every request and
+# deliver what is assigned to them, their heads assign. Operations sees what
+# was sent to it.
+for _role_code, (_role_name, _dept_code, _level) in ROLES.items():
+    if _role_code not in SEED_MATRIX:
+        continue
+    if _dept_code in ('design_2d', 'design_3d'):
+        _grants = {'design_request.view': 'all', 'design_request.deliver': 'all'}
+        if _level <= LEVEL_HEAD:
+            _grants['design_request.assign'] = 'all'
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], _grants)
+    elif _dept_code == 'operations':
+        SEED_MATRIX[_role_code] = _merge(SEED_MATRIX[_role_code], {'design_request.operate': 'all'})
 
 # Heads and executives can send a notification to anyone (the notifications
 # panel's Send button) and add people to chat groups. Others can be given

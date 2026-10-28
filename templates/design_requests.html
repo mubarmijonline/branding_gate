@@ -1,0 +1,531 @@
+{% extends "main.html" %}
+
+{# Design requests (Gamal, 2026-10-28; docs/PRD.md "Design Requests").
+   One page for everybody: the requester's list and New request, Design's
+   queue, the designer's work, the Design Manager's approvals and what was sent
+   to Operation. /design-2d and /design-3d render it fixed to their discipline,
+   with the team's cards on top. What each person may do comes from the API
+   (`can`), so this page never offers a button the server would refuse. #}
+
+{% block body %}
+<div class="container-fluid dr-page">
+
+  <header class="dr-head">
+    <span class="dr-head-icon"><i class="fas {{ 'fa-cube' if discipline == '3d' else ('fa-pencil-ruler' if discipline == '2d' else 'fa-palette') }}"></i></span>
+    <div>
+      <h1>{{ portal_title or 'Design Requests' }}</h1>
+      <p>{% if portal_title %}Design requests and the team's pages.{% else %}Ask Design for work, and follow it to Operation.{% endif %}</p>
+    </div>
+    {% if portal_area %}
+    <a class="btn btn-outline-secondary btn-sm ml-auto" href="{{ url_for('home') }}">
+      <i class="fas fa-arrow-left mr-1"></i>All portals
+    </a>
+    {% endif %}
+  </header>
+
+  {% if portal_area %}
+  {% set team_area = portal_area %}
+  {% set team_actions_title = portal_title + ' — what you can do' %}
+  {% include 'team_actions_section.html' %}
+  {% endif %}
+
+  <div class="dr-toolbar">
+    {% if not discipline %}
+    <div class="dr-chips" id="drDisciplineChips">
+      <button type="button" class="dr-chip on" data-v="">All</button>
+      <button type="button" class="dr-chip" data-v="2d">2D</button>
+      <button type="button" class="dr-chip" data-v="3d">3D</button>
+    </div>
+    {% endif %}
+    <div class="dr-chips" id="drStatusChips">
+      <button type="button" class="dr-chip on" data-v="">All</button>
+      {% if 'design_request.deliver' in session.get('perms', {}) %}
+      <button type="button" class="dr-chip" data-v="mine">Assigned to me</button>
+      {% endif %}
+      <button type="button" class="dr-chip" data-v="submitted">Waiting for a designer</button>
+      <button type="button" class="dr-chip" data-v="assigned">With the designer</button>
+      <button type="button" class="dr-chip" data-v="in_review">Waiting for approval</button>
+      <button type="button" class="dr-chip" data-v="changes">Changes requested</button>
+      <button type="button" class="dr-chip" data-v="approved">Approved</button>
+      <button type="button" class="dr-chip" data-v="sent_to_operation">Sent to Operation</button>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm ml-auto d-none" id="drNewBtn">
+      <i class="fas fa-plus mr-1"></i>New design request
+    </button>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 dr-table" id="drTable" data-mobile-title="1" data-mobile-actions="last">
+          <thead><tr>
+            <th>#</th><th>Request</th><th>Client</th><th>Type</th><th>Status</th>
+            <th>Deadline</th><th>Designer</th><th>Requested by</th><th></th>
+          </tr></thead>
+          <tbody><tr><td colspan="9" class="text-center text-muted py-4">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New request -->
+<div class="modal fade" id="drNewModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-palette mr-2"></i>New design request</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <form id="drNewForm" autocomplete="off" onsubmit="return false">
+          <div class="dr-section-title">General information <small>shared by all items</small></div>
+          <div class="form-row">
+            <div class="form-group col-md-2">
+              <label for="drDiscipline">2D / 3D</label>
+              <select class="form-control" id="drDiscipline">
+                <option value="2d">2D</option><option value="3d">3D</option>
+              </select>
+            </div>
+            <div class="form-group col-md-3">
+              <label for="drCompany">Company Name</label>
+              <select class="form-control" id="drCompany"><option value="">Any company</option></select>
+            </div>
+            <div class="form-group col-md-3">
+              <label for="drClient">Client Name <span class="text-danger">*</span></label>
+              <select class="form-control" id="drClient"><option value="">Pick the client</option></select>
+            </div>
+            <div class="form-group col-6 col-md-2">
+              <label for="drEventDate">Event Date</label>
+              <input type="date" class="form-control" id="drEventDate">
+            </div>
+            <div class="form-group col-6 col-md-2">
+              <label for="drDeadline">Deadline</label>
+              <input type="date" class="form-control" id="drDeadline">
+            </div>
+          </div>
+
+          <div class="dr-section-title">Request category <small>pick a tab, then Add item</small></div>
+          <div class="dr-tabs" id="drTabs" role="tablist"></div>
+          <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="drAddItem">
+            <i class="fas fa-plus mr-1"></i><span>Add item</span>
+          </button>
+          <div id="drItems"></div>
+          <div class="text-muted small" id="drNoItems">No items yet.</div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="drSubmit"><i class="fas fa-paper-plane mr-1"></i>Submit Request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- One request -->
+<div class="modal fade" id="drDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="drDetailTitle">Design request</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="drDetailBody"></div>
+      <div class="modal-footer" id="drDetailFoot">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Prefixed dr-: sb-admin-2 owns .card and friends. */
+  .dr-page { padding-top: 1.5rem; }
+  .dr-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+  .dr-head-icon { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 14px; background: #eef1fa;
+                  color: #3a4fa0; font-size: 1.3rem; display: inline-flex; align-items: center; justify-content: center; }
+  .dr-head h1 { font-size: 1.5rem; font-weight: 700; color: #2e3650; margin: 0; }
+  .dr-head p { color: #8891a8; margin: .15rem 0 0; font-size: .9rem; }
+  .dr-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: 1rem; }
+  .dr-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .dr-chip { border: 1px solid #d5dbea; background: #fff; color: #4a5470; border-radius: 999px;
+             padding: .25rem .75rem; font-size: .8rem; }
+  .dr-chip.on { background: #26306b; border-color: #26306b; color: #fff; }
+  .dr-table td { vertical-align: middle; }
+  .dr-title { font-weight: 600; color: #2e3650; }
+  .dr-cats { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .2rem; }
+  .dr-cat { background: #fdf3dc; color: #8a5a00; border-radius: 6px; padding: 0 .4rem; font-size: .72rem; }
+  .dr-status { border-radius: 999px; padding: .15rem .6rem; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+  .dr-status.submitted { background: #fff4d6; color: #8a5a00; }
+  .dr-status.assigned { background: #e3ecff; color: #2449a8; }
+  .dr-status.in_review { background: #efe4ff; color: #5b2aa8; }
+  .dr-status.changes { background: #ffe3e3; color: #a12a2a; }
+  .dr-status.approved { background: #dff5e7; color: #1d7a45; }
+  .dr-status.sent_to_operation { background: #26306b; color: #fff; }
+  .dr-status.cancelled { background: #eceef3; color: #6b7280; }
+  .dr-section-title { font-weight: 700; color: #26306b; text-transform: uppercase; font-size: .8rem;
+                      letter-spacing: .04em; margin: .5rem 0 .6rem; }
+  .dr-section-title small { text-transform: none; color: #8891a8; font-weight: 400; letter-spacing: 0; margin-left: .4rem; }
+  .dr-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+  .dr-tab { border: 1px solid #d5dbea; background: #f6f7fb; color: #26306b; border-radius: 10px;
+            padding: .45rem .9rem; font-weight: 600; font-size: .85rem; }
+  .dr-tab.on { background: #26306b; border-color: #26306b; color: #fff; }
+  .dr-item { border: 1px solid #e3e6f0; border-left: 4px solid #e2a828; border-radius: 10px; padding: .9rem 1rem .2rem;
+             margin-bottom: .9rem; background: #fff; }
+  .dr-item-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+  .dr-item-head .dr-cat { font-size: .8rem; padding: .1rem .5rem; }
+  .dr-item-head .btn { margin-left: auto; }
+  .dr-item label { font-size: .8rem; font-weight: 600; color: #4a5470; margin-bottom: .2rem; }
+  .dr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .5rem 1rem; margin-bottom: .75rem; }
+  .dr-kv { font-size: .85rem; }
+  .dr-kv b { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8891a8; font-weight: 600; }
+  .dr-files { display: flex; flex-wrap: wrap; gap: .4rem; margin: .3rem 0 .6rem; }
+  .dr-file { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid #e3e6f0; border-radius: 8px;
+             padding: .25rem .6rem; font-size: .8rem; background: #f8f9fc; color: #2e3650; max-width: 100%; }
+  .dr-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dr-box { border: 1px solid #e3e6f0; border-radius: 10px; padding: .9rem 1rem; margin-bottom: 1rem; }
+  .dr-box h6 { font-weight: 700; color: #26306b; margin-bottom: .6rem; }
+  .dr-log { list-style: none; padding: 0; margin: 0; font-size: .82rem; }
+  .dr-log li { padding: .3rem 0; border-bottom: 1px solid #f1f3f7; }
+  .dr-note { background: #fff6e5; border-radius: 8px; padding: .5rem .75rem; font-size: .85rem; margin-bottom: .75rem; }
+  @media (max-width: 767.98px) {
+    .dr-toolbar .ml-auto { margin-left: 0 !important; width: 100%; }
+    .dr-chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: .2rem; }
+    .dr-chip { white-space: nowrap; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  var FIXED = {{ discipline|tojson }};
+  var T = function (x) { return window.bgT ? window.bgT(x) : x; };
+  var STATUS = {
+    submitted: 'Waiting for a designer', assigned: 'With the designer', in_review: 'Waiting for approval',
+    changes: 'Changes requested', approved: 'Approved', sent_to_operation: 'Sent to Operation', cancelled: 'Cancelled'
+  };
+  var LOG = {
+    submitted: 'Request submitted', assigned: 'Assigned to', uploaded: 'Uploaded', removed: 'Removed',
+    submitted_for_approval: 'Submitted for approval', approved: 'Approved', changes_requested: 'Asked for changes',
+    sent_to_operation: 'Sent to Operation', cancelled: 'Cancelled'
+  };
+  var UNIT_LABELS = { pcs: 'Pieces (pcs)', set: 'Set', box: 'Box', m: 'Meters (m)', m2: 'Square Meters (m²)',
+                      kg: 'Kilograms (kg)', liter: 'Liters (L)', hours: 'Hours', days: 'Days' };
+  var OPT = null, filter = { discipline: FIXED || '', status: '' }, tab = 'social_media', itemSeq = 0, current = null;
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fail(xhr, fallback) {
+    Swal.fire('', (xhr && xhr.responseJSON && xhr.responseJSON.error) || T(fallback || 'Something went wrong'), 'error');
+  }
+  function date(d) {
+    if (!d) return '—';
+    var t = new Date(d + 'T00:00:00');
+    return t.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function category(code) { return (OPT.categories.filter(function (c) { return c.code === code; })[0] || {}); }
+  function status(s) { return '<span class="dr-status ' + s + '">' + esc(T(STATUS[s] || s)) + '</span>'; }
+
+  // ---------------------------------------------------------------- list
+  function load() {
+    $.getJSON('/api/design-requests', { discipline: filter.discipline, status: filter.status }).done(function (r) {
+      $('#drNewBtn').toggleClass('d-none', !r.can_create);
+      var rows = r.requests.map(function (q) {
+        var more = q.item_count > 1 ? ' <span class="text-muted">+' + (q.item_count - 1) + '</span>' : '';
+        return '<tr data-id="' + q.id + '" class="dr-row" style="cursor:pointer">' +
+          '<td>' + q.id + '</td>' +
+          '<td><div class="dr-title">' + esc(q.first_title || '') + more + '</div><div class="dr-cats">' +
+            q.categories.map(function (c) { return '<span class="dr-cat">' + esc(T(category(c).label || c)) + '</span>'; }).join('') +
+          '</div></td>' +
+          '<td>' + esc(q.client_name) + (q.company_name ? '<div class="small text-muted">' + esc(q.company_name) + '</div>' : '') + '</td>' +
+          '<td>' + q.discipline.toUpperCase() + '</td>' +
+          '<td>' + status(q.status) + '</td>' +
+          '<td>' + date(q.deadline) + '</td>' +
+          '<td>' + (q.designer_name ? esc(q.designer_name) : '<span class="text-muted">—</span>') + '</td>' +
+          '<td>' + esc(q.created_by_name) + '<div class="small text-muted">' + esc(q.created_at) + '</div></td>' +
+          '<td class="text-right"><button type="button" class="btn btn-sm btn-outline-primary dr-open" data-id="' + q.id + '">' + T('Open') + '</button></td>' +
+        '</tr>';
+      });
+      $('#drTable tbody').html(rows.length ? rows.join('')
+        : '<tr><td colspan="9" class="text-center text-muted py-4">' + T('No design requests here yet.') + '</td></tr>');
+    }).fail(function (xhr) { fail(xhr, 'Could not load the design requests'); });
+  }
+  $(document).on('click', '#drStatusChips .dr-chip, #drDisciplineChips .dr-chip', function () {
+    $(this).addClass('on').siblings().removeClass('on');
+    filter[$(this).closest('#drStatusChips').length ? 'status' : 'discipline'] = $(this).data('v');
+    load();
+  });
+  $(document).on('click', '.dr-row, .dr-open', function (e) {
+    e.stopPropagation();
+    openRequest(Number($(this).data('id')));
+  });
+
+  // ---------------------------------------------------------------- new request
+  function tabs() {
+    $('#drTabs').html(OPT.categories.map(function (c) {
+      return '<button type="button" class="dr-tab' + (c.code === tab ? ' on' : '') + '" data-code="' + c.code + '">' + esc(T(c.label)) + '</button>';
+    }).join(''));
+    $('#drAddItem span').text(T('Add item') + ': ' + T(category(tab).label));
+  }
+  $(document).on('click', '.dr-tab', function () { tab = $(this).data('code'); tabs(); });
+
+  function field(label, html, cls) {
+    return '<div class="form-group ' + (cls || 'col-md-3') + '"><label>' + esc(T(label)) + '</label>' + html + '</div>';
+  }
+  function addItem(code) {
+    var c = category(code), f = c.fields, n = ++itemSeq, has = function (x) { return f.indexOf(x) >= 0; };
+    var extra = '';
+    if (has('size_h')) {
+      var dims = has('size_l') ? ['size_h', 'size_w', 'size_l'] : ['size_h', 'size_w'];
+      extra += field(has('size_l') ? 'Size (cm): H × W × L' : 'Size: H × W',
+        '<div class="d-flex" style="gap:.35rem">' + dims.map(function (d) {
+          return '<input type="number" min="0" step="any" class="form-control" data-f="' + d + '" placeholder="' + d.slice(-1).toUpperCase() + '">';
+        }).join('') + '</div>', 'col-md-4');
+    }
+    if (has('quantity')) {
+      extra += field('Quantity (Units)', '<div class="d-flex" style="gap:.35rem">' +
+        '<input type="number" min="0" step="any" class="form-control" data-f="quantity" value="1">' +
+        '<select class="form-control" data-f="unit">' + OPT.units.map(function (u) {
+          return '<option value="' + u + '">' + esc(T(UNIT_LABELS[u] || u)) + '</option>';
+        }).join('') + '</select></div>', 'col-md-4');
+    }
+    if (has('printing_type')) {
+      extra += field('Type of Printing', '<select class="form-control" data-f="printing_type"><option value="">' + T('Pick one') + '</option>' +
+        OPT.printing_types.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select>', 'col-md-4');
+    }
+    if (has('duration')) {
+      extra += field('Duration', '<input type="text" class="form-control" data-f="duration" maxlength="50" placeholder="' + T('e.g. 30 seconds') + '">', 'col-md-4');
+    }
+    var $item = $('<div class="dr-item" data-category="' + code + '">' +
+      '<div class="dr-item-head"><span class="dr-cat">' + esc(T(c.label)) + '</span>' +
+        '<button type="button" class="btn btn-sm btn-outline-danger dr-remove-item" title="' + T('Remove item') + '"><i class="fas fa-trash"></i></button></div>' +
+      '<div class="form-row">' +
+        field('Request Title', '<input type="text" class="form-control" data-f="title" maxlength="255" required>', 'col-md-8') +
+        field('Deadline', '<input type="date" class="form-control" data-f="deadline" value="' + esc($('#drDeadline').val()) + '">', 'col-md-4') +
+        extra +
+        field('Attachment', '<input type="file" class="form-control-file" data-files multiple ' +
+          'accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.ai,.psd,.eps,.zip">', 'col-md-12') +
+        field('Description', '<textarea class="form-control" data-f="description" rows="2"></textarea>', 'col-md-12') +
+      '</div></div>');
+    $('#drItems').append($item);
+    $('#drNoItems').hide();
+    $item.find('[data-f=title]').trigger('focus');
+    void n;
+  }
+  $('#drAddItem').on('click', function () { addItem(tab); });
+  $(document).on('click', '.dr-remove-item', function () {
+    $(this).closest('.dr-item').remove();
+    $('#drNoItems').toggle(!$('#drItems .dr-item').length);
+  });
+
+  function clients() {
+    var company = $('#drCompany').val(), keep = $('#drClient').val();
+    var list = OPT.clients.filter(function (c) { return !company || String(c.company_id) === company; });
+    $('#drClient').html('<option value="">' + T('Pick the client') + '</option>' + list.map(function (c) {
+      return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+    }).join('')).val(list.some(function (c) { return String(c.id) === keep; }) ? keep : '').trigger('change.select2');
+  }
+  $('#drCompany').on('change', clients);
+  $('#drClient').on('change', function () {
+    var c = OPT.clients.filter(function (x) { return String(x.id) === $(this).val(); }, this)[0];
+    if (c && c.company_id && !$('#drCompany').val()) { $('#drCompany').val(String(c.company_id)).trigger('change.select2'); }
+  });
+
+  $('#drNewBtn').on('click', function () {
+    $('#drNewForm')[0].reset();
+    $('#drDiscipline').val(FIXED || filter.discipline || '2d').prop('disabled', !!FIXED);
+    $('#drItems').empty(); $('#drNoItems').show();
+    tab = 'social_media'; tabs();
+    $('#drCompany').html('<option value="">' + T('Any company') + '</option>' + OPT.companies.map(function (c) {
+      return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+    }).join(''));
+    clients();
+    $('#drNewModal').modal('show');
+  });
+  $('#drNewModal').on('shown.bs.modal', function () {
+    if ($.fn.select2) {
+      $('#drCompany, #drClient').each(function () {
+        if (!$(this).data('select2')) { $(this).select2({ dropdownParent: $('#drNewModal'), width: '100%' }); }
+      });
+    }
+  });
+
+  $('#drSubmit').on('click', function () {
+    var data = {
+      discipline: $('#drDiscipline').val(), company_id: $('#drCompany').val() || null,
+      client_id: $('#drClient').val(), event_date: $('#drEventDate').val() || null,
+      deadline: $('#drDeadline').val() || null, items: []
+    };
+    var form = new FormData(), problem = null;
+    if (!data.client_id) problem = 'Pick the client';
+    $('#drItems .dr-item').each(function (n) {
+      var item = { category: $(this).data('category') };
+      $(this).find('[data-f]').each(function () { item[$(this).data('f')] = $(this).val(); });
+      if (!String(item.title || '').trim()) problem = problem || 'Every item needs a request title';
+      data.items.push(item);
+      var input = $(this).find('[data-files]')[0];
+      for (var i = 0; i < input.files.length; i++) { form.append('files_' + n, input.files[i]); }
+    });
+    if (!data.items.length) problem = problem || 'Add at least one item';
+    if (problem) { Swal.fire('', T(problem), 'warning'); return; }
+    form.append('data', JSON.stringify(data));
+    var $b = $(this).prop('disabled', true);
+    $.ajax({ url: '/api/design-requests', method: 'POST', data: form, processData: false, contentType: false })
+      .done(function (r) {
+        $('#drNewModal').modal('hide');
+        Swal.fire({ icon: 'success', title: T('Design request #{0} submitted').replace('{0}', r.id),
+                    text: r.refused && r.refused.length ? T('Not attached (type or size): {0}').replace('{0}', r.refused.join(', ')) : '' });
+        load();
+      })
+      .fail(function (xhr) { fail(xhr, 'Could not save the request'); })
+      .always(function () { $b.prop('disabled', false); });
+  });
+
+  // ---------------------------------------------------------------- one request
+  function files(list, removable) {
+    if (!list.length) return '<div class="text-muted small mb-2">' + T('None') + '</div>';
+    return '<div class="dr-files">' + list.map(function (f) {
+      var icon = f.is_link ? 'fa-link' : (/^(jpe?g|png|gif|webp|bmp|heic)$/i.test(f.type || '') ? 'fa-file-image'
+               : (f.type === 'pdf' ? 'fa-file-pdf' : 'fa-file'));
+      return '<a class="dr-file" href="' + esc(f.url) + '" target="_blank" rel="noopener" title="' +
+        esc((f.uploaded_by_name || '') + ' · ' + (f.uploaded_at || '')) + '"><i class="fas ' + icon + '"></i><span>' + esc(f.name) + '</span></a>' +
+        (removable ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 dr-del-file" data-id="' + f.id + '" title="' + T('Remove') + '"><i class="fas fa-times"></i></button>' : '');
+    }).join('') + '</div>';
+  }
+  function kv(label, value) { return '<div class="dr-kv"><b>' + esc(T(label)) + '</b>' + (value || '—') + '</div>'; }
+  function num(v) { return v == null ? null : (Math.round(v * 100) / 100).toString(); }
+
+  function render(q, can) {
+    current = q;
+    $('#drDetailTitle').html(T('Design request') + ' #' + q.id + ' · ' + q.discipline.toUpperCase() + ' ' + status(q.status));
+    var html = '<div class="dr-grid">' +
+      kv('Client Name', esc(q.client_name)) + kv('Company Name', esc(q.company_name)) +
+      kv('Event Date', date(q.event_date)) + kv('Deadline', date(q.deadline)) +
+      kv('Requested by', esc(q.created_by_name) + '<div class="small text-muted">' + esc(q.created_at) + '</div>') +
+      kv('Designer', q.designer_name ? esc(q.designer_name) + (q.assigned_by_name ? '<div class="small text-muted">' + T('by') + ' ' + esc(q.assigned_by_name) + '</div>' : '') : '') +
+      '</div>';
+    if (q.decision_note) {
+      html += '<div class="dr-note"><i class="fas fa-comment-dots mr-1"></i><b>' + esc(q.decided_by_name || '') + ':</b> ' + esc(q.decision_note) + '</div>';
+    }
+    html += '<div class="dr-section-title">' + T('Items') + ' (' + q.items.length + ')</div>';
+    q.items.forEach(function (i) {
+      var size = [i.size_h, i.size_w, i.size_l].filter(function (v) { return v != null; }).map(num).join(' × ');
+      html += '<div class="dr-item"><div class="dr-item-head"><span class="dr-cat">' + esc(T(i.category_label)) + '</span><b>' + esc(i.title) + '</b></div>' +
+        '<div class="dr-grid">' + kv('Deadline', date(i.deadline)) +
+        (size ? kv('Size (cm)', size) : '') +
+        (i.quantity != null ? kv('Quantity', num(i.quantity) + ' ' + esc(T(UNIT_LABELS[i.unit] || i.unit || ''))) : '') +
+        (i.printing_type ? kv('Type of Printing', esc(i.printing_type)) : '') +
+        (i.duration ? kv('Duration', esc(i.duration)) : '') + '</div>' +
+        (i.description ? '<p class="mb-2" style="white-space:pre-wrap">' + esc(i.description) + '</p>' : '') +
+        (i.files.length ? '<div class="dr-kv"><b>' + T('Attachment') + '</b></div>' + files(i.files) : '') +
+        '</div>';
+    });
+
+    html += '<div class="dr-box"><h6><i class="fas fa-paint-brush mr-1"></i>' + T('The work') + '</h6>' + files(q.deliverables, can.upload);
+    if (can.upload) {
+      html += '<div class="form-row align-items-end">' +
+        '<div class="form-group col-md-5"><label class="small font-weight-bold">' + T('Files (PDF, JPG...)') + '</label>' +
+        '<input type="file" class="form-control-file" id="drWorkFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.ai,.psd,.eps,.zip"></div>' +
+        '<div class="form-group col-md-5"><label class="small font-weight-bold">' + T('or a link') + '</label>' +
+        '<input type="url" class="form-control" id="drWorkLink" placeholder="https://"></div>' +
+        '<div class="form-group col-md-2"><button type="button" class="btn btn-outline-primary btn-block" id="drUpload"><i class="fas fa-upload mr-1"></i>' + T('Upload') + '</button></div>' +
+        '</div>';
+    }
+    html += '</div>';
+
+    if (can.assign) {
+      var designers = OPT.designers.filter(function (d) { return d.discipline === q.discipline; });
+      if (!designers.length) designers = OPT.designers;
+      html += '<div class="dr-box"><h6><i class="fas fa-user-plus mr-1"></i>' + T(q.designer_id ? 'Reassign' : 'Assign a designer') + '</h6>' +
+        '<div class="d-flex flex-wrap" style="gap:.5rem"><select class="form-control" id="drDesigner" style="max-width:320px">' +
+        '<option value="">' + T('Pick a designer') + '</option>' + designers.map(function (d) {
+          return '<option value="' + d.id + '"' + (d.id === q.designer_id ? ' selected' : '') + '>' + esc(d.name) + '</option>';
+        }).join('') + '</select><button type="button" class="btn btn-primary" id="drAssign">' + T('Assign') + '</button></div></div>';
+    }
+    if (can.decide) {
+      html += '<div class="dr-box"><h6><i class="fas fa-check-double mr-1"></i>' + T('Design Manager approval') + '</h6>' +
+        '<textarea class="form-control mb-2" id="drDecisionNote" rows="2" placeholder="' + T('Note (needed when asking for changes)') + '"></textarea>' +
+        '<button type="button" class="btn btn-success mr-2" id="drApprove"><i class="fas fa-check mr-1"></i>' + T('Approve') + '</button>' +
+        '<button type="button" class="btn btn-outline-danger" id="drChanges"><i class="fas fa-undo mr-1"></i>' + T('Ask for changes') + '</button></div>';
+    }
+
+    html += '<div class="dr-section-title">' + T('History') + '</div><ul class="dr-log">' + q.log.map(function (l) {
+      return '<li><b>' + esc(T(LOG[l.action] || l.action)) + '</b>' + (l.note ? ' ' + esc(l.note) : '') +
+        ' <span class="text-muted">— ' + esc(l.actor_name) + ', ' + esc(l.at) + '</span></li>';
+    }).join('') + '</ul>';
+    $('#drDetailBody').html(html);
+
+    var foot = '';
+    if (can.cancel) foot += '<button type="button" class="btn btn-outline-danger mr-auto" id="drCancelReq">' + T('Cancel request') + '</button>';
+    if (can.upload) foot += '<button type="button" class="btn btn-primary" id="drSubmitWork"' + (q.deliverables.length ? '' : ' disabled') + '><i class="fas fa-paper-plane mr-1"></i>' + T('Submit for approval') + '</button>';
+    if (can.send) foot += '<button type="button" class="btn btn-success" id="drSend"><i class="fas fa-truck mr-1"></i>' + T('Send to Operation') + '</button>';
+    $('#drDetailFoot').html(foot + '<button type="button" class="btn btn-secondary" data-dismiss="modal">' + T('Close') + '</button>');
+  }
+
+  function openRequest(id) {
+    $.getJSON('/api/design-requests/' + id).done(function (r) {
+      render(r.request, r.can);
+      if (!$('#drDetailModal').hasClass('show')) $('#drDetailModal').modal('show');
+    }).fail(function (xhr) { fail(xhr, 'Could not open the request'); });
+  }
+  function step(path, body, done) {
+    return $.ajax({ url: '/api/design-requests/' + current.id + '/' + path, method: 'POST',
+                    contentType: 'application/json', data: JSON.stringify(body || {}) })
+      .done(function () { openRequest(current.id); load(); if (done) done(); })
+      .fail(function (xhr) { fail(xhr); });
+  }
+
+  $(document).on('click', '#drAssign', function () {
+    var id = $('#drDesigner').val();
+    if (!id) { Swal.fire('', T('Pick a designer'), 'warning'); return; }
+    step('assign', { designer_id: Number(id) });
+  });
+  $(document).on('click', '#drUpload', function () {
+    var form = new FormData(), input = $('#drWorkFiles')[0], link = $('#drWorkLink').val().trim();
+    for (var i = 0; i < input.files.length; i++) form.append('files[]', input.files[i]);
+    if (link) form.append('link', link);
+    if (!input.files.length && !link) { Swal.fire('', T('Pick a file or paste a link'), 'warning'); return; }
+    var $b = $(this).prop('disabled', true);
+    $.ajax({ url: '/api/design-requests/' + current.id + '/files', method: 'POST', data: form, processData: false, contentType: false })
+      .done(function (r) {
+        if (r.refused && r.refused.length) Swal.fire('', T('Not attached (type or size): {0}').replace('{0}', r.refused.join(', ')), 'warning');
+        openRequest(current.id);
+      })
+      .fail(function (xhr) { fail(xhr); })
+      .always(function () { $b.prop('disabled', false); });
+  });
+  $(document).on('click', '.dr-del-file', function () {
+    var id = $(this).data('id');
+    $.ajax({ url: '/api/design-requests/' + current.id + '/files/' + id, method: 'DELETE' })
+      .done(function () { openRequest(current.id); }).fail(function (xhr) { fail(xhr); });
+  });
+  $(document).on('click', '#drSubmitWork', function () { step('submit'); });
+  $(document).on('click', '#drApprove', function () { step('decide', { decision: 'approve', note: $('#drDecisionNote').val() }); });
+  $(document).on('click', '#drChanges', function () {
+    var note = $('#drDecisionNote').val().trim();
+    if (!note) { Swal.fire('', T('Say what needs changing'), 'warning'); return; }
+    step('decide', { decision: 'changes', note: note });
+  });
+  $(document).on('click', '#drSend', function () {
+    Swal.fire({ title: T('Send to Operation?'), icon: 'question', showCancelButton: true,
+                confirmButtonText: T('Send'), cancelButtonText: T('Cancel') })
+      .then(function (a) { if (a.isConfirmed) step('send'); });
+  });
+  $(document).on('click', '#drCancelReq', function () {
+    Swal.fire({ title: T('Cancel this request?'), icon: 'warning', showCancelButton: true,
+                confirmButtonText: T('Cancel request'), cancelButtonText: T('Keep it') })
+      .then(function (a) { if (a.isConfirmed) step('cancel'); });
+  });
+
+  $.getJSON('/api/design-requests/options').done(function (r) {
+    OPT = r;
+    load();
+    var open = Number(new URLSearchParams(location.search).get('open'));
+    if (open) openRequest(open);
+  }).fail(function (xhr) { fail(xhr, 'Could not load the design requests'); });
+})();
+</script>
+{% endblock %}

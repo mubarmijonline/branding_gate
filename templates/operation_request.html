@@ -1469,7 +1469,10 @@ function proposalRowsHtml(proposals) {
             '<td>' + costEsc(p.author_name) + (p.is_mine ? ' <em class="text-muted">(you)</em>' : '') + '</td>' +
             '<td class="text-right font-weight-bold">' + formatNum(p.amount) + '</td>' +
             '<td>' + (p.notes ? costEsc(p.notes) : '<span class="text-muted">&mdash;</span>') + '</td>' +
-            '<td>' + (p.file_count ? p.file_count + ' file(s)' : '<span class="text-muted">none</span>') + '</td>' +
+            // A button, not text: the count was all anybody got, so a photo
+            // attached to a proposal could not be opened (David, 2026-10-28).
+            '<td>' + (p.file_count ? '<button type="button" class="btn btn-link btn-sm p-0 op-prop-files" data-id="' + p.id + '">' +
+                '<i class="fas fa-paperclip mr-1"></i>' + p.file_count + ' file(s)</button>' : '<span class="text-muted">none</span>') + '</td>' +
             '<td><span class="badge badge-' + state + '">' + p.status + '</span>' + why + '</td>' +
             '<td class="text-muted small">' + costEsc(p.added_date || '') + '</td>' +
             '<td class="text-right">' + decide + '</td>' +
@@ -1988,6 +1991,23 @@ function opDecideProposal(id, decision) {
         }
     });
 }
+$(document).on('click', '.op-prop-files', function (e) {
+    e.preventDefault();
+    $.getJSON('/api/costing/proposals/' + Number($(this).data('id')) + '/files').done(function (r) {
+        if (!r || !r.success || !r.files.length) { Swal.fire('', bgT('Could not load the files'), 'error'); return; }
+        var photos = r.files.filter(function (f) { return /^(jpe?g|png|gif|bmp|webp|heic)$/i.test(f.type || ''); });
+        if (r.files.length === 1 && photos.length === 1) { bgViewImage(r.files[0].url); return; }
+        Swal.fire({
+            title: bgT('Attachments'),
+            html: '<ul class="list-unstyled text-left mb-0">' + r.files.map(function (f) {
+                return '<li class="mb-2"><a href="' + costEsc(f.url) + '" target="_blank" rel="noopener">' +
+                    '<i class="fas fa-file mr-1"></i>' + costEsc(f.name) + '</a> ' +
+                    '<span class="text-muted small">' + costEsc(f.uploaded_at || '') + '</span></li>';
+            }).join('') + '</ul>',
+            confirmButtonText: bgT('Close')
+        });
+    }).fail(function () { Swal.fire('', bgT('Could not load the files'), 'error'); });
+});
 $(document).on('click', '.op-accept', function (e) { e.preventDefault(); opDecideProposal(Number($(this).data('id')), 'accept'); });
 $(document).on('click', '.op-reject', function (e) { e.preventDefault(); opDecideProposal(Number($(this).data('id')), 'reject'); });
 

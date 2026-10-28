@@ -40,6 +40,7 @@ EXPECTED = {
     'account_member':         ['sales', 'account'],
     'design_2d_head':         ['design_2d'],
     'design_2d_member':       ['design_2d'],
+    'design_manager':         ['design_2d', 'design_3d'],
     'design_3d_head':         ['design_3d'],
     # Purchasing brings supplier.edit, and Supplier lives on the Admin menu --
     # the same reason the Operations Manager sees it.

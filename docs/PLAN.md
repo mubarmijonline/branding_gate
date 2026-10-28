@@ -949,3 +949,51 @@ item thumbnails and photo attachments opened with `window.open` or a
 - Verified at 390px as David on request 23645: thumbnail and attachment open
   the viewer (image loads, 1182px wide), close keeps the costing modal open,
   PDF `window.open` passes through. Suite 810 OK.
+
+## Design Requests (2026-10-28, Gamal; milestone 11)
+
+Behaviour: `docs/PRD.md`, "Design Requests". How:
+
+- **Tables** (`design_request_migration.sql`): `design_request` (header,
+  `discipline` 2d/3d, status, designer, who/when per step), `design_request_item`
+  (category, title, deadline, description, size H/W/L cm, quantity + unit,
+  printing type, duration), `design_request_file` (kind brief/deliverable, an
+  uploaded file or a link, optional item), `design_request_log` (history).
+- **Rules in `design_workflow.py`** (pure, like `costing.py`): categories and
+  which fields each keeps, printing types, units (the sales item list),
+  `clean_item()`, and `transition(status, action)`.
+- **Permissions** (rbac.py): `design_request.view` (scoped on the requester),
+  `.create` (own), `.assign`, `.deliver`, `.approve`, `.operate`.
+  - Sales and Account ladders get view at their sales scope and create.
+  - Both Design departments get view all and deliver; their heads get assign.
+  - New role **Design Manager** (`design_manager`, 2D Design, head level):
+    assign and approve, both portals.
+  - Operations get operate (sees sent requests only).
+  - Gamal keeps Account Director and is given the Design Manager permissions
+    from People & Access (user grants), so his approval is recorded as Design's.
+- **Routes**: `/design-requests` page; `/design-2d` and `/design-3d` render it
+  fixed to their discipline; `/api/design-requests` list/create, `/<id>`
+  detail, `/<id>/assign|files|submit|decide|send|cancel`,
+  `/api/design-requests/options` (companies, clients, designers). Files under
+  `uploads/design/<id>/`, served by `/uploads` when the caller may see the
+  request.
+- **UI**: `templates/design_requests.html` (list, new-request modal with
+  category tabs, detail modal), Arabic strings in `static/i18n/ar.js`.
+- **Users**: Mayar Eid (2D Designer, 01050296696), reporting to Gamal.
+
+Recommendation, not built: a **client asset library**. Keep logos and brand
+files on the client (or company) record, as files that belong to it, not to a
+request. The new-request form then lists that client's assets as tick boxes
+("use the saved logo"), and an upload can be ticked "save to this client".
+That needs one table (`client_asset`: client, file, label, uploaded by) and
+the `/uploads/companies` style access rule. Build when Gamal confirms the
+client (not the company) is the right owner.
+
+Shipped 2026-10-28 with the above:
+- **Cost-sheet files (David):** a costing proposal's "1 file(s)" on the
+  Operations cost modal was plain text, so a photo attached to a proposal
+  could not be opened by anyone. Now a button: one photo opens in the viewer,
+  several files open as a list. (The Costing desk page already had a link.)
+- Browser check note: Chromium does not hand file bytes to Playwright's
+  request interception, so uploads through the e2e proxy arrive empty; the
+  bytes round-trip is asserted in `tests/test_design_requests.py` instead.
