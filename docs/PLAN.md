@@ -1047,3 +1047,31 @@ Operations members could not open a request's chat: they did not hold
 - Branch `wa-request/operation-request-chat`, not deployed. **Deploy order:**
   the code first, then `seed_rbac.py`; seeding before the code would let
   every member into every chat under the old rule.
+
+## Pending approvals on a phone, and past approvals (2026-10-29, Ahmed for Beshoy)
+
+Beshoy decides urgent requests from the home-screen app at ~390px; the old
+cards wrapped the urgent badge, crowded the buttons and hid the details behind
+a slide-down. He also had no way to look back at what was decided.
+
+- `/approvals` has two tabs. **Pending**: one card per request with title,
+  a coloured "starts in N days" chip (computed from the start date, not the
+  stale `approval_reason`), client and company **names**, requester name and
+  tappable mobile, dates, duration, types, priority, requested-at; description,
+  the reason and the items (qty, unit, given dimensions, note) are one tap away
+  in a native `<details>`. Approve / Reject / Discuss share one row.
+- **Past approvals**: approved and rejected, newest decision first, with who
+  decided (name, not username), when, the notes or the rejection reason, the
+  discussion read-only, and "Open request #N" for approved ones. Filter All /
+  Approved / Rejected, search (title, client, requester), 20 per "Load more".
+- `approval_cards()` builds both lists (parse JSON, name client/company,
+  `stamp_person` requester and reviewer, discussion counts), so pending and
+  past cannot drift. New `GET /api/approvals/history` (`sales_request.approve`).
+- Fixed: titles were pasted into `onclick="approveRequest(id, '${title}')"`,
+  so a quote broke the buttons and the title was unescaped HTML. Buttons carry
+  `data-id`; every stored value is escaped. Dropped the unused DataTables and
+  the second SweetAlert bundle (main.html already loads one).
+- `?request=N` still narrows with its notice; when that request was already
+  decided the page now says it is in Past approvals instead of "No pending".
+- Tests: `tests/test_approvals_history.py`. Branch `wa-request/approvals-history`,
+  not deployed. No migration, no seed; deploy is code + restart.

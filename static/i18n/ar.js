@@ -4280,5 +4280,19 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"Past approvals": "الموافقات السابقة",
+"Search title, client or requester": "ابحث بالعنوان أو العميل أو مقدّم الطلب",
+"Load more": "تحميل المزيد",
+"This request is no longer pending. It is in Past approvals.": "الطلب ده مبقاش مستني موافقة. هتلاقيه في الموافقات السابقة.",
+"Failed to load past approvals.": "تعذّر تحميل الموافقات السابقة.",
+"No past approvals match.": "مفيش موافقات سابقة مطابقة.",
+"Started {0} day(s) ago": "بدأ من {0} يوم",
+"Starts today": "يبدأ النهارده",
+"Starts tomorrow": "يبدأ بكرة",
+"Starts in {0} days": "يبدأ بعد {0} يوم",
+"{0} day(s)": "{0} يوم",
+"Discussion": "النقاش",
+"Open request": "فتح الطلب",
+"Details and {0} item(s)": "التفاصيل ({0} بند)"
 };
