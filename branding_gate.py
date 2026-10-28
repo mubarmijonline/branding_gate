@@ -10803,7 +10803,6 @@ def get_operations_requests():
                 'total_cost': float(
                     (req.get('visible_total_cost') if restricted
                      else req.get('total_cost')) or 0),
-                'total_sell': float(req.get('total_sell', 0)) if req.get('total_sell') else 0,
                 'sales_added_date': req['sales_added_date'].strftime('%Y-%m-%d %H:%M:%S') if req.get('sales_added_date') else '',
                 'sales_added_by': req.get('sales_added_by', ''),
                 # The mobile that was being shown as a name.
@@ -11206,6 +11205,46 @@ def get_single_sales_request(request_id):
             'error': str(e)
         }), 500
 
+# A brief field whose name talks about money is left out: costing works out
+# what the job costs and is not told what it sells for (David, 2026-10-29).
+MONEY_FIELD = re.compile(r'budget|price|cost|sell|amount|fee|profit|margin|egp|total|value', re.I)
+
+
+def costing_brief(row):
+    """
+    The request as costing needs it: title, dates, priority, notes and the
+    template fields sales filled in (hotel, hall, setup and dismantle dates,
+    location...), as [{label, value}] in the form's order. No money.
+    """
+    def fmt(v):
+        return v.strftime('%Y-%m-%d') if hasattr(v, 'strftime') else str(v).strip()
+
+    brief = []
+    for label, key in (('Title', 'title'), ('Start date', 'start_date'), ('End date', 'end_date'),
+                       ('Priority', 'priority'), ('Description', 'description'), ('Notes', 'general_notes')):
+        if row.get(key) not in (None, ''):
+            brief.append({'label': label, 'value': fmt(row[key])})
+    try:
+        data = json.loads(row.get('request_data') or '{}')
+    except (TypeError, ValueError):
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    types = [t for t in (data.get('request_types') or []) if isinstance(t, str)]
+    if types:
+        brief.append({'label': 'Request types', 'value': ', '.join(types)})
+    fields = data.get('template_fields')
+    for key, value in (fields.items() if isinstance(fields, dict) else ()):
+        if isinstance(value, (dict, list)) or value in (None, '') or MONEY_FIELD.search(key):
+            continue
+        # "Booth_hotel_name" -> "Hotel Name", or "Booth: Hotel Name" when the
+        # request has more than one type and the reader must tell them apart.
+        kind, _, name = key.partition('_') if key.split('_')[0] in types else ('', '', key)
+        label = name.replace('_', ' ').strip().title()
+        brief.append({'label': ('%s: %s' % (kind, label)) if kind and len(types) > 1 else label,
+                      'value': fmt(value)})
+    return brief
+
+
 @app.route('/api/operations/requests/<int:request_id>', methods=['GET'])
 @perm('sales_request.view')
 def get_single_operations_request(request_id):
@@ -11234,11 +11273,13 @@ def get_single_operations_request(request_id):
                        comp.company_name,
                        sr.title,
                        sr.request_type,
-                       sr.total_sell, sr.total_cost, 
+                       sr.total_cost,
                        sr.status,
                        sr.created_at as sales_added_date, 
                        sr.created_by as sales_added_by, 
-                       sr.modified_at as modified_date
+                       sr.modified_at as modified_date,
+                       sr.start_date, sr.end_date, sr.priority, sr.description,
+                       sr.general_notes, sr.request_data
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
                 LEFT JOIN company comp ON sr.company_id = comp.id
@@ -11251,11 +11292,13 @@ def get_single_operations_request(request_id):
                        comp.company_name,
                        sr.title,
                        sr.request_type,
-                       sr.total_sell, sr.total_cost, 
+                       sr.total_cost,
                        sr.status,
                        sr.created_at as sales_added_date, 
                        sr.created_by as sales_added_by, 
-                       sr.modified_at as modified_date
+                       sr.modified_at as modified_date,
+                       sr.start_date, sr.end_date, sr.priority, sr.description,
+                       sr.general_notes, sr.request_data
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
                 LEFT JOIN company comp ON c.parent_company_id = comp.id
@@ -11272,7 +11315,7 @@ def get_single_operations_request(request_id):
         # Get items for this request (using correct table names)
         cur.execute("""
             SELECT id, name, qty as quantity, description as item_comment, 
-                   cost_per_item, sell_per_item, total_cost, total_sell, unit, attributes,
+                   cost_per_item, total_cost, unit, attributes,
                    approval_status, negotiation_status, negotiation_reason, negotiation_count,
                    sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc
             FROM sales_request_items 
@@ -11280,8 +11323,6 @@ def get_single_operations_request(request_id):
             ORDER BY id
         """, (request_id,))
         items_data = cur.fetchall()
-        
-        print(f"DEBUG: Found {len(items_data)} items for request {request_id}")
         
         # Calculate status based on costed items
         total_items = len(items_data)
@@ -11309,7 +11350,8 @@ def get_single_operations_request(request_id):
             'total_items': total_items,
             'costed_items': costed_items,
             'total_cost': float(request_data.get('total_cost', 0)) if request_data.get('total_cost') else 0,
-            'total_sell': float(request_data.get('total_sell', 0)) if request_data.get('total_sell') else 0,
+            # Everything costing needs to know about the job, never what it sells for.
+            'brief': costing_brief(request_data),
             'sales_added_date': request_data['sales_added_date'].strftime('%Y-%m-%d %H:%M:%S') if request_data.get('sales_added_date') else '',
             'sales_added_by': request_data.get('sales_added_by', ''),
             'sales_added_by_name': _raised_by['name'],
@@ -11340,9 +11382,7 @@ def get_single_operations_request(request_id):
                 'unit': item.get('unit', 'pcs'),
                 'item_comment': item.get('item_comment', ''),
                 'unit_cost': unit_cost,
-                'selling_price': float(item.get('sell_per_item', 0)) if item.get('sell_per_item') else 0,
                 'total_cost': float(item.get('total_cost', 0)) if item.get('total_cost') else 0,
-                'total_sell': float(item.get('total_sell', 0)) if item.get('total_sell') else 0,
                 'has_cost': has_cost,
                 'cost_status': 'Costed' if has_cost else 'Pending',
                 'approval_status': item.get('approval_status'),

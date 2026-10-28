@@ -391,6 +391,9 @@
     .opd-info-grid > div .v { font-size:13px; color:#1e3a5f; font-weight:500;
                               margin-top:2px; word-break:break-word; }
     .opd-items-table { width:100%; font-size:12.5px; }
+    @media (max-width: 575.98px) {
+        #requestBriefDisplay .opd-info-grid, #opdBody .opd-info-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; }
+    }
     .opd-items-table th { background:#f8fafc; color:#1e3a5f; font-weight:600;
                           font-size:11px; text-transform:uppercase;
                           padding:8px 10px; border-bottom:2px solid #e0e6ed; }
@@ -1072,6 +1075,7 @@ window.chartPieDemo = function() {
                                     <strong>Client:</strong> <span id="clientNameDisplay"></span>
                                 </div>
                             </div>
+                            <div id="requestBriefDisplay" class="mt-3"></div>
                         </div>
                     </div>
                     
@@ -2329,6 +2333,7 @@ $(document).ready(function() {
                 // Populate request info
                 $('#requestIdDisplay').text(request.request_id);
                 $('#clientNameDisplay').text(request.client_name);
+                $('#requestBriefDisplay').html(window.opBriefHtml(request));
                 $('#costRequestId').val(request.request_id);
                 
                 // Load items for costing
@@ -2995,6 +3000,21 @@ $(document).ready(function() {
             });
     }
 
+    // The job as costing needs it: dates, hotel, hall, location... (the
+    // server's `brief`; it carries no money). Links open in a new tab.
+    window.opBriefHtml = function (r) {
+        var rows = (r.brief || []).slice();
+        if (r.company_name) rows.splice(1, 0, {label: 'Company', value: r.company_name});
+        if (r.sales_added_by_name) rows.push({label: 'Sales', value: r.sales_added_by_name});
+        if (!rows.length) return '';
+        return '<div class="opd-info-grid">' + rows.map(function (b) {
+            var v = /^https?:\/\//i.test(b.value)
+                ? '<a href="' + escHtml(b.value) + '" target="_blank" rel="noopener"><i class="fas fa-map-marker-alt mr-1"></i>Open link</a>'
+                : escHtml(b.value);
+            return '<div><div class="k">' + escHtml(b.label) + '</div><div class="v">' + v + '</div></div>';
+        }).join('') + '</div>';
+    };
+
     function isCostRelatedLog(log){
         var at = (log.action_type || '').toUpperCase();
         var fn = (log.field_name || '').toLowerCase();
@@ -3024,7 +3044,7 @@ $(document).ready(function() {
                    '<div><div class="k">Total Items</div><div class="v">' + ((r.items && r.items.length) || 0) + '</div></div>' +
                    '<div><div class="k">Total Cost</div><div class="v">' + (r.total_cost ? 'EGP ' + formatNum(r.total_cost) : '<span class="text-muted">Not costed</span>') + '</div></div>' +
                    '<div><div class="k">Sales Added</div><div class="v">' + escHtml(r.sales_added_date || '-') + '</div></div>' +
-                   '</div></div>';
+                   '</div>' + (window.opBriefHtml(r) ? '<div class="mt-3">' + window.opBriefHtml(r) + '</div>' : '') + '</div>';
 
         // Items table (no selling/profit/percentage columns)
         var rows = '';

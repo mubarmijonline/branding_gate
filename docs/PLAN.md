@@ -817,3 +817,22 @@ a Home Screen app is closed.
   out once.
 - Test: `test_contact_validation` checks the login cookie carries `Expires`
   and `Secure`.
+
+## The job brief in costing, no money, 2026-10-29
+
+David: costing needs everything about the request (title, dates, hotel, hall,
+location, setup and dismantle dates...) and nothing about what it sells for.
+
+- `costing_brief(row)`: title, start/end date, priority, description, notes,
+  request types and every template field sales filled in (`request_data`),
+  labelled from the key ("Booth_hotel_name" -> "Hotel Name"; the type is kept
+  as a prefix only when the request has several). A field whose name talks
+  about money (`MONEY_FIELD`: budget, price, cost, sell, amount...) is left out.
+- `/api/operations/requests/<id>` returns it as `brief`, and no longer sends
+  `total_sell`, item `selling_price` or item `total_sell` (the page never
+  showed them, but they were readable in the browser). The list API drops
+  `total_sell` too.
+- `operation_request.html`: `window.opBriefHtml` shows the brief in the cost
+  modal's Request Information and in the details view; two columns on phones,
+  links open in a new tab.
+- Tests: `tests/test_costing_brief.py`.
