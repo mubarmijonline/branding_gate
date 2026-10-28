@@ -836,3 +836,19 @@ location, setup and dismantle dates...) and nothing about what it sells for.
   modal's Request Information and in the details view; two columns on phones,
   links open in a new tab.
 - Tests: `tests/test_costing_brief.py`.
+
+## The CEO in every chat, 2026-10-29
+
+Beshoy (CEO) must be in every request chat and every group by default, and
+cannot be left out.
+
+- New permission `chat.all` (scopeless), held by the admin role ("Admin /
+  CEO"), so both admin accounts have it; People & Access can give it to anyone
+  else. `chat_everywhere()` = `users_holding('chat.all', include_root=True)`.
+- Groups: `chat_rooms_for` returns every room for them and
+  `chat_room_members` always includes them, whatever their department.
+- Request chats: `chat_members` always includes them, `chat_may_open` lets
+  them in, and `/api/chat/sr-list` lists every request for them.
+- Membership is rule-based; there is no removal, so nobody can take them out.
+  They can still mute a chat for themselves.
+- `seed_rbac.py` re-run (109 permissions). Test: `tests/test_chat_everywhere.py`.

@@ -20002,7 +20002,8 @@ def get_chat_sr_list():
         conn, cur = connection()
         user_id = session['user_id']
 
-        scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+        scope_sql, scope_params = (('', []) if has('chat.all') else
+                                   scope_clause('sales_request.view', 'sr.owner_user_id'))
 
         cur.execute(
             """
@@ -20105,15 +20106,23 @@ _ROOM_MEMBERS_SQL = {
 }
 
 
+def chat_everywhere():
+    """Who is in every chat and group whatever their department: chat.all,
+    held by the CEO (Beshoy, 2026-10-29) and anyone given it."""
+    return set(users_holding('chat.all', include_root=True))
+
+
 def chat_room_members(cur, room):
     cur.execute("""SELECT u.id FROM user u LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
                    LEFT JOIN department d ON d.id = u.department_id
                    WHERE u.is_active = 1 AND """ + _ROOM_MEMBERS_SQL[room])
-    return [row['id'] for row in cur.fetchall()]
+    return sorted({row['id'] for row in cur.fetchall()} | chat_everywhere())
 
 
 def chat_rooms_for(cur, user_id):
     """The rooms this person belongs to, in CHAT_ROOMS order."""
+    if user_id in chat_everywhere():
+        return list(CHAT_ROOMS)
     cur.execute("""SELECT r.level, d.code FROM user u LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
                    LEFT JOIN department d ON d.id = u.department_id
                    WHERE u.id = %s AND u.is_active = 1""", (user_id,))
@@ -20326,7 +20335,7 @@ def chat_members(cur, kind, key):
             continue
         if person['id'] in involved or _scope_reaches(perms.get('sales_request.view'), person, owner):
             members.append(person['id'])
-    return members
+    return sorted(set(members) | chat_everywhere())
 
 
 def chat_may_open(cur, kind, key):
@@ -20334,6 +20343,8 @@ def chat_may_open(cur, kind, key):
     me = session.get('user_id')
     if kind == 'g':
         return key in chat_rooms_for(cur, me)
+    if has('chat.all'):
+        return True
     if not has('sales_request.comment'):
         return False
     cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (key,))

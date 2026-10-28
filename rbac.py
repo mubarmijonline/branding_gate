@@ -198,6 +198,7 @@ PERMISSIONS = {
     'role.grant':  'Give a role, department, team or person an extra permission',
     'system.storage': 'See how much disk space uploads and the database use',
     'notification.send': 'Send a notification (and phone push) to anyone in the system',
+    'chat.all': 'Be in every chat and group, always',
 
     # Dashboards
     'dashboard.sales':      'View the sales dashboard',
@@ -213,7 +214,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'finance_master.view', 'finance_master.edit',
     'catalog.view', 'catalog.edit',
     'department.view', 'department.edit',
-    'role.view', 'role.assign', 'role.grant', 'system.storage', 'notification.send',
+    'role.view', 'role.assign', 'role.grant', 'system.storage', 'notification.send', 'chat.all',
     'supplier_report.view',
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
