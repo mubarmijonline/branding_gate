@@ -4,6 +4,7 @@
 <!-- DataTables CSS -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/colreorder/1.7.0/css/colReorder.bootstrap4.min.css">
 <!-- Select2 CSS -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 <!-- SweetAlert2 - loaded with defer to prevent render blocking -->
@@ -4642,6 +4643,7 @@ window.chartPieDemo = function() {
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.colVis.min.js"></script>
+<script src="https://cdn.datatables.net/colreorder/1.7.0/js/dataTables.colReorder.min.js"></script>
 <!-- JSZip for Excel export -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <!-- pdfMake for PDF export -->
@@ -5215,6 +5217,16 @@ window.chartPieDemo = function() {
 
     $(window).on('resize.salesRequestActionMenu scroll.salesRequestActionMenu', closeSalesRequestActionMenu);
 
+    // Per person and per desk: the cost columns differ by role, and the
+    // Pricing desk is laid out apart from the Sales list.
+    var SR_COLUMNS_KEY = 'bgSrColumns:{{ session.user_id }}:' + (window.PRICING_MODE ? 'pricing' : 'sales');
+    function keepLayoutOnly(data) {
+        delete data.search;
+        delete data.order;
+        delete data.start;
+        (data.columns || []).forEach(function (c) { delete c.search; });
+    }
+
     // Initialize DataTable
     var table = $('#requests-table').DataTable({
         "ajax": {
@@ -5297,8 +5309,33 @@ window.chartPieDemo = function() {
                 extend: 'colvis',
                 text: '<i class="fas fa-columns"></i> Columns',
                 className: 'btn btn-sm btn-primary'
+            },
+            {
+                text: '<i class="fas fa-undo"></i> Reset columns',
+                className: 'btn btn-sm btn-outline-secondary',
+                action: function (e, dt) {
+                    try { localStorage.removeItem(SR_COLUMNS_KEY); } catch (err) {}
+                    dt.colReorder.reset();
+                    dt.columns().visible(true);
+                }
             }
         ],
+        // Drag a header to move its column; the order and the Columns
+        // show / hide are kept for this person in this browser (Gamal,
+        // 2026-10-28). Actions stays last. Only the layout is remembered:
+        // searches, filters, sorting and paging start fresh every visit, so a
+        // forgotten filter can never hide requests.
+        "colReorder": { "fixedColumnsRight": 1 },
+        "stateSave": true,
+        "stateDuration": 0,
+        "stateSaveCallback": function (settings, data) {
+            try { localStorage.setItem(SR_COLUMNS_KEY, JSON.stringify(data)); } catch (err) {}
+        },
+        "stateLoadCallback": function () {
+            try { return JSON.parse(localStorage.getItem(SR_COLUMNS_KEY) || 'null'); } catch (err) { return null; }
+        },
+        "stateSaveParams": function (settings, data) { keepLayoutOnly(data); },
+        "stateLoadParams": function (settings, data) { keepLayoutOnly(data); },
         "language": {
             "search": "Search requests:",
             "lengthMenu": "Show _MENU_ requests per page",
