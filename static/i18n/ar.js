@@ -4285,5 +4285,20 @@ window.BG_AR = {
 "Selling prices are saved.": "أسعار البيع اتحفظت.",
 "Venue / Hotel Name": "المكان / اسم الفندق",
 "TBD (not fixed yet)": "لسه مش محدد (TBD)",
-"Please fill in: {0}": "لازم تملا: {0}"
+"Please fill in: {0}": "لازم تملا: {0}",
+"With Pricing": "مع التسعير",
+"Cost changed": "التكلفة اتغيرت",
+"{0} of {1} items costed": "{0} من {1} بنود متكلفة",
+"not with Pricing yet": "لسه ما اتبعتش للتسعير",
+"Cost every item first": "كلّف كل البنود الأول",
+"Send to Pricing?": "تبعته للتسعير؟",
+"Pricing will see this request and its costs. A cost changed later is flagged to them.": "التسعير هيشوف الطلب وتكاليفه. أي تكلفة تتغير بعد كده هتوصلهم كتنبيه.",
+"Send to Pricing": "ابعت للتسعير",
+"Sent to Pricing.": "اتبعت للتسعير.",
+"Operation has not sent this request to Pricing yet.": "التشغيل لسه ما بعتش الطلب ده للتسعير.",
+"Request #{0} is ready for pricing": "الطلب رقم {0} جاهز للتسعير",
+"Request #{0} is with Pricing": "الطلب رقم {0} مع التسعير",
+"Request #{0} is fully costed": "الطلب رقم {0} اتكلف بالكامل",
+"Cost changed on request #{0}": "التكلفة اتغيرت على الطلب رقم {0}",
+"Every item has a cost. Send it to Pricing when the costs are final.": "كل البنود ليها تكلفة. ابعته للتسعير لما التكاليف تبقى نهائية."
 };

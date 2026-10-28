@@ -4713,8 +4713,14 @@ window.chartPieDemo = function() {
                 // column, because that column is off the right of the screen
                 // as often as not.
                 var notPricedCount = (stats.not_priced || 0);
-                if (type !== 'display' || (repricingCount === 0 && notPricedCount === 0)) return title;
+                var costChanged = !!row.cost_changed;
+                if (type !== 'display' || (repricingCount === 0 && notPricedCount === 0 && !costChanged)) return title;
                 var marks = '';
+                // Operation changed a cost after sending it to Pricing.
+                if (costChanged) {
+                    marks += '<span class="repricing-row-alert" title="A cost changed after this was sent to Pricing">' +
+                        '<i class="fas fa-exclamation-triangle"></i>Cost changed</span>';
+                }
                 if (notPricedCount > 0) {
                     marks += '<span class="pricing-row-alert" title="Costed items with no price yet">' +
                         '<i class="fas fa-tag"></i>Needs Pricing (' + notPricedCount + ')</span>';
@@ -5027,7 +5033,8 @@ window.chartPieDemo = function() {
                     html += '<button type="button" class="btn btn-sm btn-primary edit-btn" data-id="' + row.request_id + '" title="Edit"><i class="fas fa-edit"></i></button>';
                 }
                 html += '<button type="button" class="btn btn-sm btn-info details-btn" data-id="' + row.request_id + '" title="View"><i class="fas fa-eye"></i></button>';
-                if (window.CAN_CONTROL_PRICING) {
+                // Pricing acts once Operation has sent the request over.
+                if (window.CAN_CONTROL_PRICING && row.with_pricing) {
                     html += '<button type="button" class="btn btn-sm btn-success set-price-btn" data-id="' + row.request_id + '" title="Set Selling Price"><i class="fas fa-dollar-sign"></i></button>';
                 }
                 html += '<button type="button" class="btn btn-sm btn-with-badge comments-btn' + (unread > 0 ? ' has-unread' : '') + '" style="background:#6f42c1;color:white;border-color:#6f42c1;" data-id="' + row.request_id + '" data-count="' + commentCount + '" title="Comments' + (unread > 0 ? ' (' + unread + ' unread)' : '') + '">' +
@@ -5230,7 +5237,8 @@ window.chartPieDemo = function() {
     // Initialize DataTable
     var table = $('#requests-table').DataTable({
         "ajax": {
-            "url": "/api/sales/requests",
+            // The Pricing desk asks for what Operation has handed over only.
+            "url": window.PRICING_MODE ? "/api/sales/requests?desk=pricing" : "/api/sales/requests",
             "type": "GET",
             "dataSrc": function(json) {
                 if (json.success) {
