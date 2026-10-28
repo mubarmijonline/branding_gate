@@ -1,5 +1,8 @@
 {# Arabic: RTL styles, the dictionary and the translator. Included last in <head>,
    after every other stylesheet, so its overrides win. English loads nothing. #}
+{# bgT() for every page: in English it hands the text back. Pages call it
+   bare, and it used to exist only in Arabic, so English threw. #}
+<script>window.bgT = window.bgT || function (s) { return s; };</script>
 {% if ui_lang == 'ar' %}
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
