@@ -1,85 +1,95 @@
 {% extends "main.html" %}
 
 {% block head %}
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
-<!-- SweetAlert2 -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
-    .approval-card {
-        border-left: 4px solid #ffc107;
-        transition: all 0.3s;
-    }
-    
-    .approval-card:hover {
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        transform: translateY(-2px);
-    }
-    
-    .approval-badge {
-        font-size: 0.9rem;
-        padding: 0.5rem 1rem;
-    }
-    
-    .approval-details {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-top: 1rem;
-    }
-    
-    .urgent-label {
-        background-color: #dc3545;
-        color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        font-weight: bold;
+    /* Cards that fit a 390px phone (Ahmed for Beshoy, 2026-10-29): Beshoy
+       decides from the home-screen app, so everything needed to decide is on
+       the card or one tap away, and the three actions share one row. */
+    .apv-tabs .nav-link { font-weight: 600; }
+    .apv-card { background: #fff; border: 1px solid #e3e6f0; border-inline-start: 4px solid #f6c23e;
+        border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .apv-card.apv-hot { border-inline-start-color: #e74a3b; }
+    .apv-card.apv-approved { border-inline-start-color: #1cc88a; }
+    .apv-card.apv-rejected { border-inline-start-color: #858796; }
+    .apv-head { display: flex; align-items: flex-start; gap: 0.5rem; }
+    .apv-title { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 700; color: #2e2f37; overflow-wrap: anywhere; }
+    .apv-chip { flex: none; white-space: nowrap; font-size: 0.78rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; }
+    .apv-chip.hot { background: #e74a3b; color: #fff; }
+    .apv-chip.warm { background: #fdf0d5; color: #8a5a00; }
+    .apv-chip.calm { background: #eaecf4; color: #5a5c69; }
+    .apv-chip.ok { background: #d4f5e6; color: #13855c; }
+    .apv-chip.no { background: #f1f1f4; color: #5a5c69; }
+    .apv-party { color: #4e73df; font-weight: 600; margin-top: 0.15rem; overflow-wrap: anywhere; }
+    .apv-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.55rem 1rem; margin: 0.75rem 0 0; }
+    .apv-facts dt { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: #858796; margin: 0; }
+    .apv-facts dd { margin: 0; color: #3a3b45; overflow-wrap: anywhere; }
+    .apv-facts a[href^="tel:"] { font-size: 0.85rem; }
+    .apv-more { margin-top: 0.75rem; border-top: 1px dashed #e3e6f0; padding-top: 0.5rem; }
+    .apv-more > summary { cursor: pointer; color: #4e73df; font-weight: 600; padding: 0.35rem 0; }
+    .apv-desc { white-space: pre-wrap; overflow-wrap: anywhere; background: #f8f9fc; border-radius: 6px; padding: 0.5rem 0.65rem; margin: 0.35rem 0 0.6rem; }
+    .apv-type { font-size: 0.8rem; font-weight: 700; color: #5a5c69; margin: 0.5rem 0 0.25rem; }
+    .apv-item { display: flex; gap: 0.5rem; padding: 0.45rem 0; border-bottom: 1px solid #f1f1f4; }
+    .apv-item:last-child { border-bottom: 0; }
+    .apv-item-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .apv-item-qty { flex: none; font-weight: 700; white-space: nowrap; }
+    .apv-item-note { font-size: 0.82rem; color: #858796; white-space: pre-wrap; }
+    .apv-decision { margin-top: 0.75rem; border-radius: 6px; padding: 0.55rem 0.7rem; background: #f8f9fc; overflow-wrap: anywhere; }
+    .apv-why { white-space: pre-wrap; color: #3a3b45; }
+    .apv-decision.ok { background: #effbf5; }
+    .apv-decision.no { background: #fdf1f0; }
+    /* Buttons share the row by their content, so "Discuss 3" is never cut off at 390px. */
+    .apv-actions { display: flex; gap: 0.5rem; margin-top: 0.85rem; }
+    .apv-actions .btn { flex: 1 1 auto; min-height: 42px; white-space: nowrap; padding-left: 0.5rem; padding-right: 0.5rem; }
+    .apv-ltr { unicode-bidi: isolate; white-space: nowrap; }
+    .apv-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .apv-tools .form-control { flex: 1 1 200px; min-width: 0; }
+    @media (min-width: 768px) {
+        .apv-actions { justify-content: flex-end; }
+        .apv-actions .btn { flex: 0 0 auto; min-height: 0; min-width: 120px; }
     }
 </style>
 {% endblock %}
 
 {% block body %}
-{% set user_roles = session.get('roles', []) %}
-    {% set _p = session.get('perms', {}) %}
+{% set _p = session.get('perms', {}) %}
 <div class="container-fluid">
     {% if 'sales_request.approve' in _p %}
-    
-    <!-- Page Header -->
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-gray-800">
-            <i class="fas fa-clipboard-check mr-2"></i>Pending Approvals
-        </h1>
-        <div>
-            <button class="btn btn-primary btn-sm" onclick="refreshApprovals()">
-                <i class="fas fa-sync-alt mr-1"></i> Refresh
-            </button>
-        </div>
+
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-clipboard-check mr-2"></i>Approvals</h1>
+        <button class="btn btn-primary btn-sm" onclick="refreshApprovals()" aria-label="Refresh">
+            <i class="fas fa-sync-alt"></i><span class="d-none d-sm-inline ml-1">Refresh</span>
+        </button>
     </div>
 
-    <!-- Approvals List -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="fas fa-list mr-2"></i>Pending Requests
-                    </h6>
-                    <span id="approvalCount" class="badge badge-warning">Loading...</span>
-                </div>
-                <div class="card-body">
-                    <div id="approvalsNarrowed" class="alert alert-info d-none align-items-center justify-content-between">
-                        <span><i class="fas fa-filter mr-1"></i>Showing one request from your notification.</span>
-                        <a class="btn btn-sm btn-outline-primary" href="/approvals">Show all requests</a>
-                    </div>
-                    <div id="approvalsContainer">
-                        <div class="text-center py-5">
-                            <i class="fas fa-spinner fa-spin fa-3x text-primary mb-3"></i>
-                            <p class="text-muted">Loading approvals...</p>
-                        </div>
-                    </div>
-                </div>
+    <ul class="nav nav-pills apv-tabs mb-3" role="tablist">
+        <li class="nav-item"><a class="nav-link active" data-toggle="pill" href="#apvPending" role="tab">
+            Pending <span id="approvalCount" class="badge badge-warning ml-1">…</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-toggle="pill" href="#apvPast" role="tab" id="apvPastTab">Past approvals</a></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="apvPending" role="tabpanel">
+            <div id="approvalsNarrowed" class="alert alert-info d-none align-items-center justify-content-between flex-wrap">
+                <span class="mr-2"><i class="fas fa-filter mr-1"></i>Showing one request from your notification.</span>
+                <a class="btn btn-sm btn-outline-primary" href="/approvals">Show all requests</a>
             </div>
+            <div id="approvalsContainer">
+                <div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x mb-2"></i><p>Loading approvals...</p></div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="apvPast" role="tabpanel">
+            <div class="apv-tools">
+                <div class="btn-group btn-group-sm" role="group" id="apvStatus">
+                    <button type="button" class="btn btn-outline-secondary active" data-status="">All</button>
+                    <button type="button" class="btn btn-outline-success" data-status="approved">Approved</button>
+                    <button type="button" class="btn btn-outline-danger" data-status="rejected">Rejected</button>
+                </div>
+                <input type="search" id="apvSearch" class="form-control form-control-sm" placeholder="Search title, client or requester">
+            </div>
+            <div id="historyContainer"></div>
+            <div class="text-center"><button type="button" id="apvMore" class="btn btn-outline-primary btn-sm d-none">Load more</button></div>
         </div>
     </div>
 
@@ -91,15 +101,19 @@
     {% endif %}
 </div>
 
-<!-- DataTables JS -->
-<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
-
 <script>
 // ?request=N comes from a discussion notification: that one card, said so,
 // and its discussion opened.
 var NARROW = Number(new URLSearchParams(location.search).get('request')) || null;
-var THREADS = {};
+var THREADS = {};   // pending approvals by id: discussion state and title
+var HISTORY = { status: '', q: '', offset: 0, seq: 0, loaded: false };
+var T = function (x) { return window.bgT ? window.bgT(x) : x; };
+
+function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
 
 $(document).ready(function() {
     loadPendingApprovals();
@@ -108,22 +122,43 @@ $(document).ready(function() {
     setInterval(refreshThreadBadges, 30000);
     $(document).on('bg:approval-thread', refreshThreadBadges);
     $(document).on('hidden.bs.modal', '#bgApprovalThread', refreshThreadBadges);
+
+    // Titles travel by id, never inside an onclick string: a quote in a
+    // title used to break the button (fixed 2026-10-29).
+    $(document).on('click', '.apv-approve', function () { approveRequest($(this).data('id')); });
+    $(document).on('click', '.apv-reject', function () { rejectRequest($(this).data('id')); });
+    $(document).on('click', '.discuss-btn', function () { bgApprovalThread.open($(this).data('id')); });
+
+    $('#apvPastTab').on('shown.bs.tab', function () { if (!HISTORY.loaded) loadHistory(true); });
+    $('#apvStatus').on('click', '.btn', function () {
+        $('#apvStatus .btn').removeClass('active');
+        HISTORY.status = $(this).addClass('active').data('status');
+        loadHistory(true);
+    });
+    var typing;
+    $('#apvSearch').on('input', function () {
+        clearTimeout(typing);
+        var q = this.value.trim();
+        typing = setTimeout(function () { HISTORY.q = q; loadHistory(true); }, 300);
+    });
+    $('#apvMore').on('click', function () { loadHistory(false); });
 });
 
-function threadButton(approval, urgent) {
+function threadButton(approval, past) {
     var n = approval.thread_count || 0;
-    return '<button class="btn btn-sm mb-2 ' + (urgent ? 'btn-warning font-weight-bold' : 'btn-outline-secondary') +
-        ' discuss-btn" data-id="' + approval.id + '" onclick="bgApprovalThread.open(' + approval.id + ')">' +
-        '<i class="fas fa-comments mr-1"></i> Discuss' +
-        '<span class="badge ' + (approval.thread_waiting ? 'badge-danger' : 'badge-light') + ' ml-1 discuss-count"' +
-        (n ? '' : ' style="display:none"') + '>' + n + '</span></button> ';
+    var hot = !past && approval.thread_waiting;
+    return '<button type="button" class="btn btn-sm ' + (hot ? 'btn-warning' : 'btn-outline-secondary') +
+        ' discuss-btn" data-id="' + approval.id + '"><i class="fas fa-comments mr-1"></i>' +
+        '<span>' + (past ? 'Discussion' : 'Discuss') + '</span>' +
+        '<span class="badge ' + (approval.thread_waiting && !past ? 'badge-danger' : 'badge-light') + ' ml-1 discuss-count"' +
+        (n ? '' : ' style="display:none"') + '>' + n + '</span></button>';
 }
 
 function refreshThreadBadges() {
     $.ajax({ url: '/api/approvals/pending', cache: false, silent: true }).done(function (r) {
         (r.approvals || []).forEach(function (a) {
             THREADS[a.id] = a;
-            var $c = $('.discuss-btn[data-id="' + a.id + '"] .discuss-count');
+            var $c = $('#approvalsContainer .discuss-btn[data-id="' + a.id + '"] .discuss-count');
             $c.text(a.thread_count || 0).toggle(!!a.thread_count)
               .toggleClass('badge-danger', !!a.thread_waiting).toggleClass('badge-light', !a.thread_waiting);
         });
@@ -135,152 +170,157 @@ function loadPendingApprovals() {
         url: '/api/approvals/pending',
         type: 'GET',
         success: function(response) {
-            if (response.success) {
-                var shown = response.approvals;
-                response.approvals.forEach(function (a) { THREADS[a.id] = a; });
-                if (NARROW) { shown = shown.filter(function (a) { return a.id === NARROW; }); }
-                $('#approvalsNarrowed').toggleClass('d-none', !NARROW).toggleClass('d-flex', !!NARROW);
-                displayApprovals(shown);
-                $('#approvalCount').text(response.count + ' Pending');
-            } else {
-                Swal.fire('Error', response.error || 'Failed to load approvals', 'error');
+            if (!response.success) {
+                Swal.fire(T('Error'), response.error || T('Failed to load approvals'), 'error');
+                return;
             }
+            THREADS = {};
+            response.approvals.forEach(function (a) { THREADS[a.id] = a; });
+            var shown = NARROW ? response.approvals.filter(function (a) { return a.id === NARROW; }) : response.approvals;
+            $('#approvalsNarrowed').toggleClass('d-none', !NARROW).toggleClass('d-flex', !!NARROW);
+            $('#approvalCount').text(response.count);
+            if (!shown.length) {
+                // A notification can outlive the decision: say where it went.
+                $('#approvalsContainer').html(NARROW
+                    ? '<div class="text-center py-5 text-muted"><i class="fas fa-history fa-2x mb-2"></i>' +
+                      '<p>This request is no longer pending. It is in Past approvals.</p></div>'
+                    : '<div class="text-center py-5"><i class="fas fa-check-circle fa-3x text-success mb-3"></i>' +
+                      '<h5 class="text-muted">No pending approvals</h5><p class="text-muted">All requests have been processed</p></div>');
+                return;
+            }
+            $('#approvalsContainer').html(shown.map(function (a) { return approvalCard(a, false); }).join(''));
         },
-        error: function(xhr) {
-            console.error('Error loading approvals:', xhr);
-            $('#approvalsContainer').html(`
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle mr-2"></i>
-                    Failed to load approvals. Please refresh the page.
-                </div>
-            `);
+        error: function() {
+            $('#approvalsContainer').html('<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-2"></i>' +
+                'Failed to load approvals. Please refresh the page.</div>');
         }
     });
 }
 
-function displayApprovals(approvals) {
-    const container = $('#approvalsContainer');
-    
-    if (approvals.length === 0) {
-        container.html(`
-            <div class="text-center py-5">
-                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                <h5 class="text-muted">No pending approvals</h5>
-                <p class="text-muted">All requests have been processed</p>
-            </div>
-        `);
-        return;
+function loadHistory(reset) {
+    if (reset) { HISTORY.offset = 0; }
+    var seq = ++HISTORY.seq;   // a slow answer to an older search must not overwrite a newer one
+    if (reset) { $('#historyContainer').html('<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin"></i></div>'); }
+    $('#apvMore').prop('disabled', true);
+    $.ajax({ url: '/api/approvals/history', cache: false,
+             data: { status: HISTORY.status, q: HISTORY.q, offset: HISTORY.offset, limit: 20 } })
+        .done(function (r) {
+            if (seq !== HISTORY.seq) return;
+            HISTORY.loaded = true;
+            HISTORY.offset += r.approvals.length;
+            var html = r.approvals.map(function (a) { return approvalCard(a, true); }).join('');
+            if (reset) {
+                $('#historyContainer').html(html || '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No past approvals match.</p></div>');
+            } else {
+                $('#historyContainer').append(html);
+            }
+            $('#apvMore').toggleClass('d-none', !r.has_more).prop('disabled', false);
+        })
+        .fail(function () {
+            if (seq !== HISTORY.seq) return;
+            $('#historyContainer').html('<div class="alert alert-danger">Failed to load past approvals.</div>');
+            $('#apvMore').addClass('d-none');
+        });
+}
+
+// Whole days from today to the start date, both at local midnight.
+function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    var d = new Date(dateStr + 'T00:00:00'), now = new Date();
+    if (isNaN(d)) return null;
+    now.setHours(0, 0, 0, 0);
+    return Math.round((d - now) / 86400000);
+}
+
+function urgencyChip(days) {
+    if (days === null) return '';
+    var text = days < 0 ? T('Started {0} day(s) ago').replace('{0}', -days)
+             : days === 0 ? T('Starts today')
+             : days === 1 ? T('Starts tomorrow')
+             : T('Starts in {0} days').replace('{0}', days);
+    var cls = days <= 1 ? 'hot' : days <= 3 ? 'warm' : 'calm';
+    return '<span class="apv-chip ' + cls + '" data-no-i18n><i class="fas fa-clock mr-1"></i>' + esc(text) + '</span>';
+}
+
+// A date or time, kept left to right and on one line inside Arabic text.
+function when(v) {
+    return v ? '<span class="apv-ltr" dir="ltr" data-no-i18n>' + esc(v) + '</span>' : '';
+}
+
+function fact(label, valueHtml) {
+    return valueHtml ? '<div><dt>' + label + '</dt><dd>' + valueHtml + '</dd></div>' : '';
+}
+
+function approvalCard(a, past) {
+    var d = a.request_data || {};
+    var days = daysUntil(d.start_date);
+    var status = past ? a.status : 'pending';
+    var cls = past ? (status === 'approved' ? 'apv-approved' : 'apv-rejected') : (days !== null && days <= 1 ? 'apv-hot' : '');
+    var chip = past
+        ? '<span class="apv-chip ' + (status === 'approved' ? 'ok' : 'no') + '">' + (status === 'approved' ? 'Approved' : 'Rejected') + '</span>'
+        : urgencyChip(days);
+    var party = [a.client_name, a.company_name].filter(Boolean).map(esc).join(' · ');
+    var requester = a.requested_by_name ? '<span data-no-i18n>' + esc(a.requested_by_name) + '</span>' +
+        (a.requested_by_mobile ? '<br><a href="tel:' + esc(a.requested_by_mobile) + '" data-no-i18n>' + esc(a.requested_by_mobile) + '</a>' : '') : '';
+    var dates = when(d.start_date) + (d.start_date && d.end_date && d.end_date !== d.start_date ? ' – ' + when(d.end_date) : '');
+    var duration = d.duration_days ? T('{0} day(s)').replace('{0}', d.duration_days) : '';
+    var types = (d.request_types && d.request_types.length ? d.request_types : [d.request_type || 'General']).map(esc).join(', ');
+
+    var html = '<div class="apv-card ' + cls + '" data-id="' + a.id + '">' +
+        '<div class="apv-head"><div class="apv-title" dir="auto" data-no-i18n>' + esc(d.title || T('Untitled Request')) + '</div>' + chip + '</div>' +
+        (party ? '<div class="apv-party" dir="auto" data-no-i18n>' + party + '</div>' : '') +
+        '<dl class="apv-facts">' +
+            fact('Requested By', requester) +
+            fact('Dates', dates) +
+            fact('Duration', esc(duration)) +
+            fact('Request Types', types) +
+            fact('Priority', '<span class="badge badge-' + getPriorityClass(d.priority) + '">' + esc(d.priority || 'normal') + '</span>') +
+            fact('Requested At', when((a.requested_at || '').slice(0, 16))) +
+        '</dl>' + requestDetails(a, d);
+
+    if (past) {
+        var ok = status === 'approved';
+        var why = ok ? a.notes : a.rejection_reason;
+        html += '<div class="apv-decision ' + (ok ? 'ok' : 'no') + '">' +
+            '<span>' + (ok ? 'Approved by' : 'Rejected by') + '</span> <b data-no-i18n>' + esc(a.reviewed_by_name || a.reviewed_by || '-') + '</b>' +
+            ' <span class="text-muted small">' + when((a.reviewed_at || '').slice(0, 16)) + '</span>' +
+            (why ? '<div class="mt-1"><span class="small font-weight-bold">' + (ok ? 'Notes' : 'Rejection Reason') + '</span>' +
+                   '<div class="apv-why" dir="auto" data-no-i18n>' + esc(why) + '</div></div>' : '') +
+            '</div>' +
+            '<div class="apv-actions">' + threadButton(a, true) +
+            (a.sales_request_id ? '<a class="btn btn-sm btn-outline-primary" href="/sales_request?request=' + a.sales_request_id + '">' +
+                '<i class="fas fa-external-link-alt mr-1"></i><span>Open request</span> <span data-no-i18n>#' + a.sales_request_id + '</span></a>' : '') +
+            '</div>';
+    } else {
+        html += '<div class="apv-actions">' +
+            '<button type="button" class="btn btn-success btn-sm apv-approve" data-id="' + a.id + '"><i class="fas fa-check mr-1"></i>Approve</button>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm apv-reject" data-id="' + a.id + '"><i class="fas fa-times mr-1"></i>Reject</button>' +
+            threadButton(a, false) + '</div>';
     }
-    
-    let html = '';
-    
-    approvals.forEach(function(approval) {
-        const requestData = approval.request_data || {};
-        const startDate = requestData.start_date || 'N/A';
-        const endDate = requestData.end_date || 'N/A';
-        const title = requestData.title || 'Untitled Request';
-        const requestTypes = (requestData.request_types || []).join(', ') || 'General';
-        
-        // Calculate days until start
-        const daysUntilStart = calculateDaysUntil(startDate);
-        const urgencyClass = daysUntilStart <= 2 ? 'urgent-label' : 'badge badge-warning';
-        
-        html += `
-            <div class="approval-card card mb-3">
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h5 class="card-title mb-2">
-                                ${title}
-                                <span class="${urgencyClass} ml-2">
-                                    <i class="fas fa-clock mr-1"></i>${approval.approval_reason}
-                                </span>
-                            </h5>
-                            <p class="card-text mb-2">
-                                <strong>Request Types:</strong> ${requestTypes}<br>
-                                <strong>Start Date:</strong> ${startDate} | <strong>End Date:</strong> ${endDate}<br>
-                                <strong>Requested By:</strong> ${approval.requested_by_name || approval.requested_by}<br>
-                                <strong>Requested At:</strong> ${approval.requested_at}
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-right">
-                            <button class="btn btn-success btn-sm mb-2" onclick="approveRequest(${approval.id}, '${title}')">
-                                <i class="fas fa-check mr-1"></i> Approve
-                            </button>
-                            <button class="btn btn-danger btn-sm mb-2" onclick="rejectRequest(${approval.id}, '${title}')">
-                                <i class="fas fa-times mr-1"></i> Reject
-                            </button>
-                            <button class="btn btn-info btn-sm mb-2" onclick="viewDetails(${approval.id})">
-                                <i class="fas fa-eye mr-1"></i> View Details
-                            </button>
-                            ${threadButton(approval, daysUntilStart <= 2)}
-                        </div>
-                    </div>
-                    
-                    <!-- Collapsible Details -->
-                    <div id="details-${approval.id}" class="approval-details" style="display: none;">
-                        <h6 class="font-weight-bold mb-3">Request Details</h6>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Priority:</strong> <span class="badge badge-${getPriorityClass(requestData.priority)}">${requestData.priority || 'normal'}</span></p>
-                                <p><strong>Duration:</strong> ${requestData.duration_days || 0} days</p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Description:</strong><br>${requestData.description || 'No description'}</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Items if any -->
-                        ${displayItems(requestData.template_fields)}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.html(html);
+    return html + '</div>';
 }
 
-function displayItems(templateFields) {
-    if (!templateFields || !templateFields.instances || templateFields.instances.length === 0) {
-        return '';
-    }
-    
-    let html = '<div class="mt-3"><h6 class="font-weight-bold">Items:</h6><ul class="list-group">';
-    
-    templateFields.instances.forEach(function(instance) {
-        const items = instance.items || [];
-        const requestType = instance.request_type || 'General';
-        
-        if (items.length > 0) {
-            html += `<li class="list-group-item"><strong>${requestType}:</strong><ul class="mt-2">`;
-            items.forEach(function(item) {
-                html += `<li>${item.name} - Qty: ${item.quantity} ${item.unit || 'pcs'}`;
-                if (item.width || item.height || item.depth) {
-                    html += ` (${item.width || 0} x ${item.height || 0} x ${item.depth || 0})`;
-                }
-                html += `</li>`;
-            });
-            html += '</ul></li>';
-        }
-    });
-    
-    html += '</ul></div>';
-    return html;
-}
-
-function viewDetails(approvalId) {
-    const detailsDiv = $(`#details-${approvalId}`);
-    detailsDiv.slideToggle();
-}
-
-function calculateDaysUntil(dateStr) {
-    if (!dateStr) return 999;
-    const targetDate = new Date(dateStr);
-    const today = new Date();
-    const diffTime = targetDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+// Description, the reason it needed approval and the items, behind one tap.
+function requestDetails(a, d) {
+    var instances = ((d.template_fields || {}).instances || []).filter(function (i) { return (i.items || []).length; });
+    var count = instances.reduce(function (n, i) { return n + i.items.length; }, 0);
+    var items = instances.map(function (inst) {
+        return '<div class="apv-type" data-no-i18n>' + esc(inst.request_type || 'General') + '</div>' +
+            inst.items.map(function (item) {
+                var given = [item.width, item.height, item.depth].filter(function (v) { return Number(v); });
+                var dims = given.length ? given.join(' × ') + ' m' : '';
+                return '<div class="apv-item"><div class="apv-item-name"><span dir="auto" data-no-i18n>' + esc(item.name) + '</span>' +
+                    (dims ? '<div class="apv-item-note">' + when(dims) + '</div>' : '') +
+                    (item.comment ? '<div class="apv-item-note" dir="auto" data-no-i18n>' + esc(item.comment) + '</div>' : '') +
+                    '</div><div class="apv-item-qty" data-no-i18n>' + esc(item.quantity) + ' ' + esc(item.unit || 'pcs') + '</div></div>';
+            }).join('');
+    }).join('');
+    var summary = count ? T('Details and {0} item(s)').replace('{0}', count) : T('Details');
+    return '<details class="apv-more"><summary data-no-i18n>' + esc(summary) + '</summary>' +
+        (a.approval_reason ? '<div class="small text-danger mb-1">' + esc(a.approval_reason) + '</div>' : '') +
+        '<div class="small font-weight-bold">Description</div>' +
+        '<div class="apv-desc" dir="auto" data-no-i18n>' + (d.description ? esc(d.description) : '-') + '</div>' +
+        (items || '<div class="text-muted small">No items</div>') + '</details>';
 }
 
 function getPriorityClass(priority) {
@@ -292,90 +332,86 @@ function getPriorityClass(priority) {
     }
 }
 
-function approveRequest(approvalId, title) {
+function titleOf(approvalId) {
+    var a = THREADS[approvalId];
+    return (a && a.request_data && a.request_data.title) || T('Untitled Request');
+}
+
+function approveRequest(approvalId) {
     // An unanswered question warns; it does not block (an urgent request
     // cannot wait on a reply that may never come).
     var waiting = THREADS[approvalId] && THREADS[approvalId].thread_waiting;
+    var title = titleOf(approvalId);
     Swal.fire({
-        title: 'Approve Request?',
-        text: waiting ? `Your question in the discussion has no answer yet. Approve "${title}" anyway?` : `Approve "${title}"?`,
+        title: T('Approve Request?'),
+        text: waiting ? T('Your question in the discussion has no answer yet. Approve "{0}" anyway?').replace('{0}', title)
+                      : T('Approve "{0}"?').replace('{0}', title),
         icon: 'question',
         input: 'textarea',
-        inputLabel: 'Admin Notes (optional)',
-        inputPlaceholder: 'Add any notes or comments...',
+        inputLabel: T('Admin Notes (optional)'),
+        inputPlaceholder: T('Add any notes or comments...'),
         showCancelButton: true,
         confirmButtonColor: '#28a745',
-        confirmButtonText: 'Yes, Approve',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: `/api/approvals/${approvalId}/approve`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    notes: result.value || ''
-                }),
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Approved!', 'Request has been approved and created.', 'success');
-                        refreshApprovals();
-                    } else {
-                        Swal.fire('Error', response.error || 'Failed to approve request', 'error');
-                    }
-                },
-                error: function(xhr) {
-                    Swal.fire('Error', 'Failed to approve request', 'error');
+        confirmButtonText: T('Yes, Approve'),
+        cancelButtonText: T('Cancel')
+    }).then(function (result) {
+        if (!result.isConfirmed) return;
+        $.ajax({
+            url: '/api/approvals/' + approvalId + '/approve',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ notes: result.value || '' }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire(T('Approved!'), T('Request has been approved and created.'), 'success');
+                    refreshApprovals();
+                } else {
+                    Swal.fire(T('Error'), response.error || T('Failed to approve request'), 'error');
                 }
-            });
-        }
+            },
+            error: function() { Swal.fire(T('Error'), T('Failed to approve request'), 'error'); }
+        });
     });
 }
 
-function rejectRequest(approvalId, title) {
+function rejectRequest(approvalId) {
+    var title = titleOf(approvalId);
     Swal.fire({
-        title: 'Reject Request?',
-        text: `Reject "${title}"?`,
+        title: T('Reject Request?'),
+        text: T('Reject "{0}"?').replace('{0}', title),
         icon: 'warning',
         input: 'textarea',
-        inputLabel: 'Rejection Reason (required)',
-        inputPlaceholder: 'Please explain why this request is being rejected...',
-        inputValidator: (value) => {
-            if (!value) {
-                return 'Please provide a reason for rejection';
-            }
-        },
+        inputLabel: T('Rejection Reason (required)'),
+        inputPlaceholder: T('Please explain why this request is being rejected...'),
+        inputValidator: function (value) { if (!value) return T('Please provide a reason for rejection'); },
         showCancelButton: true,
         confirmButtonColor: '#dc3545',
-        confirmButtonText: 'Yes, Reject',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: `/api/approvals/${approvalId}/reject`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    reason: result.value
-                }),
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Rejected', 'Request has been rejected.', 'success');
-                        refreshApprovals();
-                    } else {
-                        Swal.fire('Error', response.error || 'Failed to reject request', 'error');
-                    }
-                },
-                error: function(xhr) {
-                    Swal.fire('Error', 'Failed to reject request', 'error');
+        confirmButtonText: T('Yes, Reject'),
+        cancelButtonText: T('Cancel')
+    }).then(function (result) {
+        if (!result.isConfirmed) return;
+        $.ajax({
+            url: '/api/approvals/' + approvalId + '/reject',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ reason: result.value }),
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire(T('Rejected'), T('Request has been rejected.'), 'success');
+                    refreshApprovals();
+                } else {
+                    Swal.fire(T('Error'), response.error || T('Failed to reject request'), 'error');
                 }
-            });
-        }
+            },
+            error: function() { Swal.fire(T('Error'), T('Failed to reject request'), 'error'); }
+        });
     });
 }
 
 function refreshApprovals() {
     loadPendingApprovals();
+    // A decision just made belongs in the history too.
+    if (HISTORY.loaded) loadHistory(true);
 }
 </script>
 {% endblock %}

@@ -14673,73 +14673,114 @@ def get_request_changelog(request_id):
 # APPROVAL SYSTEM API ENDPOINTS
 # ============================================================================
 
+def approval_cards(cur, rows):
+    """
+    Approval rows as the /approvals cards show them (Ahmed for Beshoy,
+    2026-10-29): request_data parsed, the client and company named (the JSON
+    holds only their ids), requester and reviewer resolved to a name and mobile
+    (the columns hold a username or a mobile), dates as text, and the
+    discussion badge. Pending and past cards both come through here so they
+    cannot drift apart.
+    """
+    people = people_index(cur)
+    cards = []
+    for row in rows:
+        a = dict(row)
+        data = a.get('request_data')
+        try:
+            data = json.loads(data) if isinstance(data, str) else (data or {})
+        except ValueError:
+            data = {}
+        a['request_data'] = data
+        for col in ('requested_at', 'reviewed_at'):
+            if a.get(col):
+                a[col] = a[col].strftime('%Y-%m-%d %H:%M:%S')
+        stamp_person(a, 'requested_by', people)
+        stamp_person(a, 'reviewed_by', people)
+        cards.append(a)
+
+    def names(table, column, key):
+        ids = {str(c['request_data'].get(key)) for c in cards
+               if str(c['request_data'].get(key) or '').isdigit()}
+        if not ids:
+            return {}
+        cur.execute("SELECT id, %s AS name FROM %s WHERE id IN (%s)"
+                    % (column, table, ','.join(['%s'] * len(ids))), sorted(ids))
+        return {str(r['id']): r['name'] for r in cur.fetchall()}
+    clients = names('client', 'client_name', 'client_id')
+    companies = names('company', 'company_name', 'company_id')
+    for a in cards:
+        a['client_name'] = clients.get(str(a['request_data'].get('client_id')))
+        a['company_name'] = companies.get(str(a['request_data'].get('company_id')))
+
+    # The discussion badge on each card: how many messages, and whether
+    # the last word is still waiting for the requester's side.
+    side = {}
+    for a in cards:
+        requester, manager, _ = approval_thread_people(cur, a)
+        side[a['id']] = {requester, manager} - {None}
+    counts = approval_thread_counts(cur, [a['id'] for a in cards], side)
+    for a in cards:
+        a['thread_count'], a['thread_waiting'] = counts.get(a['id'], (0, False))
+    return cards
+
+
 @app.route('/api/approvals/pending', methods=['GET'])
 @perm('sales_request.approve')
 def get_pending_approvals():
     """Get all pending approval requests for admin review"""
-    if 'user_id' not in session:
-        return jsonify(error="Not authenticated"), 401
-    
+    conn, cur = connection()
     try:
-        conn, cur = connection()
-        
-        # Get all pending approvals with user info
-        cur.execute("""
-            SELECT 
-                a.*,
-                u.name as requested_by_name,
-                u.mobile as requested_by_mobile
-            FROM sales_request_approvals a
-            LEFT JOIN user u ON a.requested_by = u.username
-            WHERE a.status = 'pending'
-            ORDER BY a.requested_at DESC
-        """)
-        
-        approvals = cur.fetchall()
-        
-        # Parse JSON data for each approval
-        approvals_list = []
-        for approval in approvals:
-            approval_dict = dict(approval)
-            
-            # Parse request_data JSON
-            if approval_dict.get('request_data'):
-                try:
-                    approval_dict['request_data'] = json.loads(approval_dict['request_data']) if isinstance(approval_dict['request_data'], str) else approval_dict['request_data']
-                except:
-                    pass
-            
-            # Format dates
-            if approval_dict.get('requested_at'):
-                approval_dict['requested_at'] = approval_dict['requested_at'].strftime('%Y-%m-%d %H:%M:%S')
-            
-            approvals_list.append(approval_dict)
-
-        # The discussion badge on each card: how many messages, and whether
-        # the last word is still waiting for the requester's side.
-        side = {}
-        for a in approvals_list:
-            requester, manager, _ = approval_thread_people(cur, a)
-            side[a['id']] = {requester, manager} - {None}
-        counts = approval_thread_counts(cur, [a['id'] for a in approvals_list], side)
-        for a in approvals_list:
-            a['thread_count'], a['thread_waiting'] = counts.get(a['id'], (0, False))
-
-        cur.close()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'approvals': approvals_list,
-            'count': len(approvals_list)
-        })
-        
+        cur.execute("SELECT * FROM sales_request_approvals WHERE status = 'pending' ORDER BY requested_at DESC")
+        approvals = approval_cards(cur, cur.fetchall())
+        return jsonify(success=True, approvals=approvals, count=len(approvals))
     except Exception as e:
         print(f"Error getting pending approvals: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify(success=False, error=str(e)), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/approvals/history', methods=['GET'])
+@perm('sales_request.approve')
+def get_approval_history():
+    """
+    Past decisions, newest first (Ahmed for Beshoy, 2026-10-29): what was
+    approved or rejected, by whom, when and why. ?status=approved|rejected,
+    ?q= matches title, client or requester; ?offset= pages by `limit`.
+    """
+    status = request.args.get('status')
+    statuses = [status] if status in ('approved', 'rejected') else ['approved', 'rejected']
+    try:
+        limit = min(max(int(request.args.get('limit', 20)), 1), 100)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except ValueError:
+        return jsonify(success=False, error='limit and offset must be numbers'), 400
+    q = (request.args.get('q') or '').strip()
+    sql = "SELECT a.* FROM sales_request_approvals a WHERE a.status IN (%s)" % ','.join(['%s'] * len(statuses))
+    args = list(statuses)
+    if q:
+        like = '%' + q.lower() + '%'
+        sql += """ AND (LOWER(a.request_data->>'$.title') LIKE %s
+                   OR EXISTS (SELECT 1 FROM client c WHERE c.id = a.request_data->>'$.client_id'
+                              AND LOWER(c.client_name) LIKE %s)
+                   OR EXISTS (SELECT 1 FROM user u WHERE a.requested_by IN (u.username, u.mobile)
+                              AND LOWER(u.name) LIKE %s)
+                   OR a.requested_by LIKE %s)"""
+        args += [like] * 4
+    # One extra row says whether there is a next page without a COUNT(*).
+    sql += " ORDER BY a.reviewed_at DESC, a.id DESC LIMIT %s OFFSET %s"
+    args += [limit + 1, offset]
+    conn, cur = connection()
+    try:
+        cur.execute(sql, args)
+        rows = cur.fetchall()
+        approvals = approval_cards(cur, rows[:limit])
+        return jsonify(success=True, approvals=approvals, has_more=len(rows) > limit)
+    finally:
+        cur.close()
+        conn.close()
 
 def notify_items_added_to_operations(request_id, title, by, names):
     """Items added to a request that already exists: they need costing too."""

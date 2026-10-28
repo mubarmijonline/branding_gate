@@ -4331,5 +4331,19 @@ window.BG_AR = {
 "End date": "تاريخ النهاية",
 "Event Duration": "مدة الحدث",
 "Location Governorate": "المحافظة",
-"Location Google Maps Link": "رابط الموقع على خرائط جوجل"
+"Location Google Maps Link": "رابط الموقع على خرائط جوجل",
+"Past approvals": "الموافقات السابقة",
+"Search title, client or requester": "ابحث بالعنوان أو العميل أو مقدّم الطلب",
+"Load more": "تحميل المزيد",
+"This request is no longer pending. It is in Past approvals.": "الطلب ده مبقاش مستني موافقة. هتلاقيه في الموافقات السابقة.",
+"Failed to load past approvals.": "تعذّر تحميل الموافقات السابقة.",
+"No past approvals match.": "مفيش موافقات سابقة مطابقة.",
+"Started {0} day(s) ago": "بدأ من {0} يوم",
+"Starts today": "يبدأ النهارده",
+"Starts tomorrow": "يبدأ بكرة",
+"Starts in {0} days": "يبدأ بعد {0} يوم",
+"{0} day(s)": "{0} يوم",
+"Discussion": "النقاش",
+"Open request": "فتح الطلب",
+"Details and {0} item(s)": "التفاصيل ({0} بند)"
 };
