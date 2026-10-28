@@ -25,7 +25,14 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
                             'templates')
 
 # Rendered with an admin session so every gated branch is present.
-CONTEXT = {'sales_request.html': {'pricing_mode': False}}
+CONTEXT = {
+    'sales_request.html': {'pricing_mode': False},
+    'design_requests.html': {
+        'portal_title': '2D Design', 'portal_desc': 'd', 'portal_icon': 'fas fa-pencil-ruler',
+        'portal_team': '2D Design', 'portal_area': 'design_2d',
+        'dr_mode': 'team', 'dr_kind': '2d', 'dr_meta': branding_gate.design_request_meta(),
+    },
+}
 
 SCRIPT_BLOCK = re.compile(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.S | re.I)
 

@@ -179,6 +179,21 @@ PERMISSIONS = {
     'portal.design_2d': 'Open the 2D Design portal',
     'portal.design_3d': 'Open the 3D Design portal',
 
+    # Design requests. The row dimension is the requester (owner_user_id):
+    # Sales, Account and Marketing see their own ladder's requests; the design
+    # heads see the lot and decide; a designer delivers what is on their desk
+    # (`deliver` is 'own' and the route reads it as "assigned to me").
+    # Approval belongs to the head of the design team, not to the Account
+    # Director (Gamal, 2026-10-28: "as Design Manager, not as Account
+    # Director"). Sending an approved design on to Operations is the
+    # requester's own act.
+    'design_request.view':           'View design requests',
+    'design_request.create':         'Raise a design request',
+    'design_request.assign':         'Assign a design request to a designer',
+    'design_request.deliver':        'Upload the deliverable for a design request assigned to you',
+    'design_request.approve':        'Approve or send back a delivered design as the design head',
+    'design_request.send_operation': 'Send an approved design request to Operations',
+
     # Targets. Assigning is further narrowed in the route to a direct report:
     # scope says whose numbers you may read, the reporting line says whose you
     # may set.
@@ -335,6 +350,11 @@ def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=Fa
         # Finance posts them.
         'invoice.view': scope,
         'invoice.create': 'own',
+        # Asking the design team for work, and taking the approved design on
+        # to Operations, is the account people's and the sales people's job.
+        'design_request.view': scope,
+        'design_request.create': 'own',
+        'design_request.send_operation': 'own',
     }
     if approve:
         grants['sales_request.approve'] = scope
@@ -526,6 +546,9 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'dashboard.operations': 'all',
             'dashboard.supplier': 'all',
+            # An approved design is handed to the Operations Head to execute,
+            # so the Head can open what was handed over.
+            'design_request.view': 'all',
         },
     ),
     'operations_team_leader': _merge(
@@ -649,6 +672,10 @@ SEED_MATRIX = {
             'company.view': 'all',
             'catalog.view': 'all',
             'dashboard.sales': 'all',
+            # Marketing asks the design team for social-media work too.
+            'design_request.view': 'department',
+            'design_request.create': 'own',
+            'design_request.send_operation': 'own',
         },
     ),
     # Leads the Digital Marketing team under the Marketing Manager (2026-10-27).
@@ -658,6 +685,9 @@ SEED_MATRIX = {
         {
             'client.view': 'all',
             'catalog.view': 'all',
+            'design_request.view': 'team',
+            'design_request.create': 'own',
+            'design_request.send_operation': 'own',
         },
     ),
     'marketing_member': _merge(
@@ -667,6 +697,9 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',
+            'design_request.view': 'own',
+            'design_request.create': 'own',
+            'design_request.send_operation': 'own',
         },
     ),
 
@@ -680,6 +713,11 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'catalog.edit': 'all',
             'client.view': 'all',
+            # The whole design queue of this team, to assign and to decide.
+            # The route narrows 'all' to the team's own kind (2D or 3D).
+            'design_request.view': 'all',
+            'design_request.assign': 'all',
+            'design_request.approve': 'all',
         },
     ),
     'design_2d_member': _merge(
@@ -690,6 +728,9 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',
+            # What is on their desk: 'own' here means assigned to me.
+            'design_request.view': 'own',
+            'design_request.deliver': 'own',
         },
     ),
     'design_3d_head': _merge(
@@ -701,6 +742,11 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'catalog.edit': 'all',
             'client.view': 'all',
+            # The whole design queue of this team, to assign and to decide.
+            # The route narrows 'all' to the team's own kind (2D or 3D).
+            'design_request.view': 'all',
+            'design_request.assign': 'all',
+            'design_request.approve': 'all',
         },
     ),
     # 3D Head, plus what purchasing needs until purchasing is a thing of its own:
@@ -721,6 +767,9 @@ SEED_MATRIX = {
             'inventory.create': 'all',
             'inventory.edit': 'all',
             'inventory.transact': 'all',
+            'design_request.view': 'all',
+            'design_request.assign': 'all',
+            'design_request.approve': 'all',
         },
     ),
     'design_3d_member': _merge(
@@ -731,6 +780,9 @@ SEED_MATRIX = {
             'catalog.view': 'all',
             'expense_tracking.view': 'own',
             'expense_tracking.create': 'own',
+            # What is on their desk: 'own' here means assigned to me.
+            'design_request.view': 'own',
+            'design_request.deliver': 'own',
         },
     ),
 }

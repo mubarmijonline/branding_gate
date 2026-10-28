@@ -22,17 +22,18 @@ PYTHONPATH=.:tests ./branding_gate_VENV/bin/python -m unittest \
   test_rbac test_scope test_route_coverage test_hierarchy_admin \
   test_password_hashing test_template_javascript test_negotiation_workflow \
   test_negotiation_templates test_negotiation_routes test_sales_request_journey_pdf \
-  test_targets test_portals test_costing
+  test_targets test_portals test_costing test_design_requests test_upload_names
 ```
 
-169 tests. `tests/test_design_system.py` is pytest-style (bare functions) and is run by
+276 tests (113 of them need the local MySQL; `test_design_requests` and
+`test_upload_names` run against a scripted cursor and need nothing). `tests/test_design_system.py` is pytest-style (bare functions) and is run by
 calling its `test_*` functions in a loop.
 
 ## Access control
 
 Authorization is `rbac.py` (pure policy, no Flask/MySQL) plus wrappers in `branding_gate.py`.
 
-- **89 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
+- **116 permissions** as `resource.action`; **21 roles** across 4 levels (0 exec → 3 member);
   `SEED_MATRIX` maps role → {permission: scope}. Edit it, then run `seed_rbac.py`.
 - **Scope** is `own | team | department | all`. `team` = self + direct reports
   (`user.manager_id`); `department` = same `user.department_id`. Nobody sets scope by
@@ -134,9 +135,11 @@ types a cost any more.**
 ## Department portals
 
 Marketing, Account Management, 2D and 3D Design have a page of their own at
-`/marketing`, `/account`, `/design-2d`, `/design-3d`. They are **deliberately
-blank** — one shared `templates/portal_placeholder.html`, four thin routes. Filling
-one in means changing its `render_template` call, not unpicking a copy.
+`/marketing`, `/account`, `/design-2d`, `/design-3d`. Marketing and Account are
+**deliberately blank** — one shared `templates/portal_placeholder.html`, thin
+routes. Filling one in means changing its `render_template` call, not unpicking
+a copy. **The two design portals are filled in**: they render
+`design_requests.html` as that team's design-request queue (below).
 
 - Each is gated on `portal.<team>`, granted **by department** in a loop over `ROLES`
   after `SEED_MATRIX`, so a role added to a department later gets its portal by
@@ -145,6 +148,47 @@ one in means changing its `render_template` call, not unpicking a copy.
   Marketing on `client.view` (most of the company held it), Account Management on
   `client.edit` and both design portals on `catalog.edit` (their own members did
   not hold either). `tests/test_portals.py` pins that down.
+
+## Design requests
+
+`design_requests.py` is the pure half (the seven categories and their fields,
+the state machine), four tables carry it (`design_request_migration.sql`,
+**pending**), `/design_requests` is the requester's page and `/design-2d`,
+`/design-3d` are the teams' queues -- one template, `design_requests.html`,
+switched by `dr_mode` and `dr_kind`.
+
+- **One module for 2D and 3D.** `design_request.designer_kind` says which team;
+  nothing else differs. The 3D flow is the same tables with another value.
+- **Header, then items.** Company / client / event date / deadline are shared;
+  each item has a category and only that category's fields
+  (`CATEGORY_FIELDS`): `clean_item()` drops the rest, so a social-media item
+  can never grow a quantity. "Other" carries the union. Type of printing is
+  offered as a list and **stored as the word** (the supplier-type rule).
+- **submitted → assigned → delivered → approved | rejected → sent_to_operation.**
+  The design head assigns (a designer **from the same team**, checked against
+  `user.department_id`) and may reassign until approval; only the assignee
+  delivers (PDF / JPG / PNG, or a link); only the head decides, and sending
+  back **requires a reason**; only the requester sends an approved design to
+  Operation (admin may too). Every step lands in `design_request_log`.
+- **Approval is `design_request.approve`, held by the design heads and admin,
+  not the Account Director** -- Gamal approves as head of Design.
+  `tests/test_design_requests.py` pins that.
+- **Scope is the requester** (`owner_user_id`), down the Sales / Account /
+  Marketing ladders like sales requests. A designer's `view` is `own`, which
+  `_design_visible_clause()` reads as *assigned to me*. The heads and the
+  Operations Head hold `view` at `all`; the head's queue is narrowed to the
+  team's kind by the portal, and `decide` refuses the other team's request.
+- **Every hand-off notifies with a link**: the head on submit and delivery
+  (`/design-<kind>?request=N`), the designer on assignment and decision, the
+  requester on everything, the Operations Head on hand-over
+  (`/design_requests?request=N`). Both pages carry the narrowed notice and
+  **Show all requests**.
+- Files live under `uploads/design/<request_id>/`; `/uploads/` serves them by
+  the request's own rule (`_design_file_allowed`). Briefs accept design and
+  office formats; deliverables are PDF / JPG / PNG only.
+- Buttons come from `can` on each row (computed in the route), so the page
+  never offers what would 403; actions are panels inside the one detail
+  modal, because Bootstrap 4 does not stack modals.
 
 ## Numbers and people, on every page
 
@@ -285,6 +329,14 @@ value silently discarded -- the add-item form lost its minimum and its unit
 that way for months. Check the two names against each other when adding a
 field.
 
+**An upload keeps its extension.** `secure_filename('تصميم الكوست.jpg')` is
+`'jpg'`, so an Arabic-named picture was saved as `<stamp>_jpg` and `/uploads/`
+-- which types a file by its path -- sent it down as an unknown attachment
+nobody could open (David, 2026-10-28, the cost-sheet image). Every upload
+route names its file with `safe_upload_name(filename, extension)`; files
+already stored without one are typed from their first bytes
+(`sniff_upload_mimetype`). `tests/test_upload_names.py` pins both.
+
 **No menus inside table rows.** A Bootstrap dropdown in a cell is drawn
 downward and flipped up by Popper on the next frame, visibly jumping. Use the
 `.row-actions` buttons.
@@ -315,6 +367,8 @@ Applied migrations: `rbac_schema_migration.sql`, `owner_backfill_migration.sql`,
 `costing_migration.sql`, `custody_migration.sql`,
 `costing_alternatives_migration.sql`, `supplier_email_optional_migration.sql`,
 `supplier_type_backfill.sql`.
+**Pending (not applied):** `design_request_migration.sql` (four tables), then
+`seed_rbac.py` for the six `design_request.*` grants.
 Backups in `backups/` (gitignored).
 
 `fix_dimension_units.py` has been **run** (8 August 2026): six items rescaled to
