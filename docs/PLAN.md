@@ -852,3 +852,17 @@ cannot be left out.
 - Membership is rule-based; there is no removal, so nobody can take them out.
   They can still mute a chat for themselves.
 - `seed_rbac.py` re-run (109 permissions). Test: `tests/test_chat_everywhere.py`.
+
+## Created by: third column and a quick filter, 2026-10-29
+
+Gamal: in the sales request table (Sales and Pricing, the same page) show
+who created each request near the front, and pick a person to see only theirs.
+
+- `sales_request.html`: Created By moved from near the end to the third
+  column (after Title); header, colgroup, column definition and the centred
+  columns' CSS moved with it.
+- New "Created by" picker (searchable, clearable) first in the filter row,
+  filled from the people in the table; exact match on the name.
+- The Status, Priority, Client and Company filters now find their columns by
+  name (`status:name`...) instead of by position, so moving a column cannot
+  point them at the wrong one again.

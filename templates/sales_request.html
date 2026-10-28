@@ -1383,8 +1383,6 @@
     /* Center columns */
     #requests-table th:nth-child(1),
     #requests-table td:nth-child(1),
-    #requests-table th:nth-child(6),
-    #requests-table td:nth-child(6),
     #requests-table th:nth-child(7),
     #requests-table td:nth-child(7),
     #requests-table th:nth-child(8),
@@ -1392,7 +1390,9 @@
     #requests-table th:nth-child(9),
     #requests-table td:nth-child(9),
     #requests-table th:nth-child(10),
-    #requests-table td:nth-child(10) {
+    #requests-table td:nth-child(10),
+    #requests-table th:nth-child(11),
+    #requests-table td:nth-child(11) {
         text-align: center !important;
     }
     
@@ -3652,7 +3652,13 @@ window.chartPieDemo = function() {
         <div class="card-body">
             <!-- Advanced Filters Row -->
             <div class="row mb-3">
-                <div class="col-md-3">
+                <div class="col-12 col-lg mb-2">
+                    <label for="filterCreatedBy"><i class="fas fa-user mr-1"></i>Created by:</label>
+                    <select class="form-control form-control-sm" id="filterCreatedBy">
+                        <option value="">All users</option>
+                    </select>
+                </div>
+                <div class="col-6 col-lg mb-2">
                     <label for="filterStatus">Filter by Status:</label>
                     <select class="form-control form-control-sm" id="filterStatus">
                         <option value="">All Statuses</option>
@@ -3663,7 +3669,7 @@ window.chartPieDemo = function() {
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-lg mb-2">
                     <label for="filterPriority">Filter by Priority:</label>
                     <select class="form-control form-control-sm" id="filterPriority">
                         <option value="">All Priorities</option>
@@ -3673,13 +3679,13 @@ window.chartPieDemo = function() {
                         <option value="urgent">Urgent</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-lg mb-2">
                     <label for="filterClient">Filter by Client:</label>
                     <select class="form-control form-control-sm" id="filterClient">
                         <option value="">All Clients</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-lg mb-2">
                     <label for="filterCompany">Filter by Company:</label>
                     <select class="form-control form-control-sm" id="filterCompany">
                         <option value="">All Companies</option>
@@ -3706,6 +3712,7 @@ window.chartPieDemo = function() {
                     <colgroup>
                         <col class="srq-col-id">
                         <col class="srq-col-title">
+                        <col class="srq-col-created">
                         <col class="srq-col-types">
                         <col class="srq-col-client">
                         <col class="srq-col-company">
@@ -3718,13 +3725,13 @@ window.chartPieDemo = function() {
                         {% if 'sales_item.cost' in _p %}<col class="srq-col-money">{% endif %}
                         <col class="srq-col-money">
                         <col class="srq-col-approval">
-                        <col class="srq-col-created">
                         <col class="srq-col-actions">
                     </colgroup>
                     <thead>
                         <tr>
                             <th>ID</th>
                             <th>Title</th>
+                            <th>Created By</th>
                             <th>Request Types</th>
                             <th>Client</th>
                             <th>Company</th>
@@ -3737,7 +3744,6 @@ window.chartPieDemo = function() {
                             {% if 'sales_item.cost' in _p %}<th>Total Cost</th>{% endif %}
                             <th>Total Sell</th>
                             <th>Client Approval</th>
-                            <th>Created By</th>
                             <th class="action-column">Actions</th>
                         </tr>
                     </thead>
@@ -4718,6 +4724,26 @@ window.chartPieDemo = function() {
             }
         },
         { 
+            "data": "sales_added_by",
+            "name": "created",
+            "width": "160px",
+            "render": function(data, type, row) {
+                // The column stores a mobile number. A mobile number is not a
+                // name: the person is shown, with the number they are reached
+                // on underneath.
+                if (type !== 'display') { return row.sales_added_by_name || data || ''; }
+                var name = row.sales_added_by_name || data;
+                if (!name) { return '-'; }
+                var mobile = row.sales_added_by_mobile;
+                return '<div class="bg-person" data-user-id="' +
+                       (row.sales_added_by_user_id || '') + '">' +
+                         '<span class="bg-person-name">' + escapeHtml(name) + '</span>' +
+                         (mobile ? '<small class="bg-person-handle">' +
+                                   escapeHtml(mobile) + '</small>' : '') +
+                       '</div>';
+            }
+        },
+        { 
             "data": "request_data",
             "width": "160px",
             "render": function(data, type, row) {
@@ -4738,6 +4764,7 @@ window.chartPieDemo = function() {
         },
         { 
             "data": "client_name",
+            "name": "client",
             "width": "150px",
             "render": function(data, type, row) {
                 return data || 'Unknown Client';
@@ -4745,6 +4772,7 @@ window.chartPieDemo = function() {
         },
         { 
             "data": "company_name",
+            "name": "company",
             "width": "150px",
             "render": function(data, type, row) {
                 return data || 'Not specified';
@@ -4752,6 +4780,7 @@ window.chartPieDemo = function() {
         },
         { 
             "data": "priority",
+            "name": "priority",
             "width": "110px",
             "className": "text-center",
             "render": function(data, type, row) {
@@ -4780,6 +4809,7 @@ window.chartPieDemo = function() {
         },
         { 
             "data": "status",
+            "name": "status",
             "width": "130px",
             "className": "text-center",
             "render": function(data, type, row) {
@@ -4971,25 +5001,6 @@ window.chartPieDemo = function() {
                 html += '</div>';
                 
                 return html;
-            }
-        },
-        { 
-            "data": "sales_added_by",
-            "width": "160px",
-            "render": function(data, type, row) {
-                // The column stores a mobile number. A mobile number is not a
-                // name: the person is shown, with the number they are reached
-                // on underneath.
-                if (type !== 'display') { return row.sales_added_by_name || data || ''; }
-                var name = row.sales_added_by_name || data;
-                if (!name) { return '-'; }
-                var mobile = row.sales_added_by_mobile;
-                return '<div class="bg-person" data-user-id="' +
-                       (row.sales_added_by_user_id || '') + '">' +
-                         '<span class="bg-person-name">' + escapeHtml(name) + '</span>' +
-                         (mobile ? '<small class="bg-person-handle">' +
-                                   escapeHtml(mobile) + '</small>' : '') +
-                       '</div>';
             }
         },
         {
@@ -5434,6 +5445,15 @@ window.chartPieDemo = function() {
         // Get unique clients and companies
         const clients = [...new Set(requests.map(r => r.client_name).filter(Boolean))].sort();
         const companies = [...new Set(requests.map(r => r.company_name).filter(Boolean))].sort();
+        const creators = [...new Set(requests.map(r => r.sales_added_by_name || r.sales_added_by).filter(Boolean))].sort();
+        const creatorSelect = $('#filterCreatedBy');
+        const keep = creatorSelect.val();
+        creatorSelect.find('option:not(:first)').remove();
+        creators.forEach(name => creatorSelect.append($('<option>').val(name).text(name)));
+        if (keep && creators.includes(keep)) creatorSelect.val(keep);
+        if ($.fn.select2 && !creatorSelect.data('select2')) {
+            creatorSelect.select2({ width: '100%', placeholder: 'All users', allowClear: true });
+        }
         
         // Populate client dropdown
         const clientSelect = $('#filterClient');
@@ -5455,25 +5475,33 @@ window.chartPieDemo = function() {
     // Filter handlers
     $('#filterStatus').on('change', function() {
         const value = $(this).val();
-        table.column(6).search(value).draw(); // Status is column 6
+        table.column('status:name').search(value).draw();
         console.log('Filter by status:', value);
     });
     
     $('#filterPriority').on('change', function() {
         const value = $(this).val();
-        table.column(5).search(value).draw(); // Priority is column 5
+        table.column('priority:name').search(value).draw();
         console.log('Filter by priority:', value);
     });
     
     $('#filterClient').on('change', function() {
         const value = $(this).val();
-        table.column(3).search(value).draw(); // Client is column 3
+        table.column('client:name').search(value).draw();
         console.log('Filter by client:', value);
     });
     
+    // Gamal: pick a person, see every request they created. Exact match on
+    // the name the column sorts and searches by.
+    $('#filterCreatedBy').on('change', function() {
+        const value = $(this).val();
+        table.column('created:name')
+             .search(value ? '^' + $.fn.dataTable.util.escapeRegex(value) + '$' : '', true, false).draw();
+    });
+
     $('#filterCompany').on('change', function() {
         const value = $(this).val();
-        table.column(4).search(value).draw(); // Company is column 4
+        table.column('company:name').search(value).draw();
         console.log('Filter by company:', value);
     });
     
