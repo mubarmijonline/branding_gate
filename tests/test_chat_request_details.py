@@ -38,6 +38,13 @@ class ChatRequestDetailsTest(_ChatHarness):
                         'Booth_dismantle_date': '2026-12-03', 'Booth_location_governorate': 'Cairo',
                         'Booth_budget': '50000', 'Booth_selling_price': '88888', 'Booth_total_cost': '66666'}}),
                      self.request_id))
+        # The harness item, priced and costed, with a size, a comment and a photo.
+        cur.execute("""UPDATE sales_request_items SET request_type = 'Booth', unit = 'pcs', sell_type = 'rent',
+                       rental_days = 4, attributes = %s, description = 'Wood finish', cost_per_item = 4321,
+                       sell_per_item = 8765, total_cost = 17284, total_sell = 35060 WHERE id = %s""",
+                    (json.dumps({'width': 9, 'height': 5, 'depth': None}), self.item_id))
+        cur.execute("INSERT INTO item_images (item_id, image_path, image_type, is_alternative) VALUES (%s, %s, 'jpg', 0)",
+                    (self.item_id, 'uploads/items/%d/booth.jpg' % self.item_id))
         cur.close()
 
     def _details(self, user):
@@ -58,7 +65,11 @@ class ChatRequestDetailsTest(_ChatHarness):
                 self.assertEqual(pairs.get(label), value, label)
             self.assertEqual(money_in(body), [])
             text = json.dumps(body)
-            for amount in ('777', '999', '555', '50000', '88888', '66666'):
+            item = body['items'][0]
+            self.assertEqual((item['qty'], item['unit'], item['rent'], item['rental_days'], item['size'],
+                              item['comment']), (4.0, 'pcs', True, 4, 'W 9 x H 5', 'Wood finish'))
+            self.assertEqual(item['files'][0]['url'], '/uploads/items/%d/booth.jpg' % self.item_id)
+            for amount in ('777', '999', '555', '50000', '88888', '66666', '4321', '8765', '17284', '35060'):
                 self.assertNotIn(amount, text)
 
     def test_stranger_is_refused(self):

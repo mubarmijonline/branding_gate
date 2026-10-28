@@ -486,8 +486,7 @@
               '<div class="bgc-thead-main" title="' + esc(T(h.group ? 'Members' : 'Request details')) + '">' +
                 '<div class="bgc-thead-title" data-no-i18n>' + esc(h.title) + '</div>' +
                 '<div class="bgc-thead-sub" id="chatThreadMeta">' + esc(h.sub) + '</div></div>' +
-              (h.group ? '' : '<button type="button" class="bgc-open-btn" id="chatDetailsBtn"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open')) + '</button>') +
-              (h.group ? '' : '<button type="button" class="bgc-icon-btn bgc-info-btn" title="' + esc(T('Request details')) + '"><i class="fas fa-info-circle"></i></button>') +
+              (h.group ? '' : '<button type="button" class="bgc-open-btn" id="chatDetailsBtn" title="' + esc(T('Request details')) + '"><i class="fas fa-info-circle"></i><span class="bgc-open-label"> ' + esc(T('Details')) + '</span></button>') +
               '<button type="button" class="bgc-icon-btn bgc-mute-btn" title="' + esc(T('Mute notifications')) + '"><i class="fas fa-bell"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-members-btn" title="' + esc(T('Members')) + '"><i class="fas fa-users"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-thread-close" title="' + esc(T('Close')) + '"><i class="fas fa-times"></i></button>' +
@@ -1182,7 +1181,25 @@
                     if (f.label === 'Status' || f.label === 'Priority') { v = T(v); }
                     return '<dt>' + esc(T(f.label)) + '</dt><dd data-no-i18n>' + (/^https?:\/\/\S+$/.test(v)
                         ? '<a href="' + esc(v) + '" target="_blank" rel="noopener">' + esc(T('Open link')) + '</a>' : esc(v)) + '</dd>';
-                }).join('') + '</dl>';
+                }).join('') + '</dl>' +
+                // Every item, as Sales described it; no cost, no price.
+                '<div class="bgc-sheet-section">' + esc(T('Items')) + ' (' + (d.items || []).length + ')</div>' +
+                (d.items || []).map(function (it, n) {
+                    var facts = [
+                        it.qty !== null ? (Number(it.qty) + ' ' + T(it.unit || 'pcs')) : '',
+                        it.rent ? T('Rent') + (it.rental_days ? ' · ' + it.rental_days + ' ' + T('days') : '') : T('Sell'),
+                        it.size
+                    ].filter(Boolean).join(' · ');
+                    return '<div class="bgc-item-card"><div class="bgc-item-name" data-no-i18n>' + (n + 1) + '. ' + esc(it.name) +
+                        (it.type ? ' <small>' + esc(it.type) + '</small>' : '') + '</div>' +
+                        (facts ? '<div class="bgc-item-facts" data-no-i18n>' + esc(facts) + '</div>' : '') +
+                        (it.comment ? '<div class="bgc-item-comment" data-no-i18n>' + esc(it.comment) + '</div>' : '') +
+                        (it.files.length ? '<div class="bgc-item-files">' + it.files.map(function (f) {
+                            return f.is_image
+                                ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener"><img src="' + esc(f.url) + '" alt="" loading="lazy"></a>'
+                                : '<a class="bgc-item-file" href="' + esc(f.url) + '" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> ' + esc(f.name) + '</a>';
+                        }).join('') + '</div>' : '') + '</div>';
+                }).join('');
         }
         body += '<button type="button" class="bgc-sheet-btn bgc-details-members"><i class="fas fa-users"></i> ' + esc(T('Members')) +
             ' (' + (cur.members || []).length + ')</button>' +
@@ -1193,7 +1210,9 @@
         openSheet('SR-' + cur.key + ' · ' + T('Request details'), body).addClass('is-details');
     }
     $(document).on('click', '.bgc-details-members', showMembers);
-    $(document).on('click', '.bgc-details-open', function () { $('#chatDetailsBtn').trigger('click'); });
+    $(document).on('click', '.bgc-details-open', function () {
+        if (cur && cur.kind === 'sr') { window.location.href = '/sales_request_details/' + cur.key; }
+    });
 
     function showAddPeople() {
         var $s = openSheet(T('Add people'), '<input type="search" class="bgc-people-search" placeholder="' + esc(T('Search people')) + '">' +
@@ -1367,7 +1386,8 @@
     $(document).on('click', '.bgc-attach', function () { $('#chatFileInput').val('').click(); });
     $(document).on('click', '.bgc-camera', function () { $('#chatCameraInput').val('').click(); });
     $(document).on('change', '#chatFileInput, #chatCameraInput', function () { previewPhotos(this.files); });
-    $(document).on('click', '#chatDetailsBtn', function () { if (cur && cur.kind === 'sr') { window.open('/sales_request_details/' + cur.key, '_blank'); } });
+    // The request's whole story in the chat (David, 2026-10-29); the page itself is one tap further.
+    $(document).on('click', '#chatDetailsBtn', showDetails);
     $(document).on('click', '.bgc-members-btn', showMembers);
     $(document).on('click', '.bgc-info-btn', showDetails);
     // The header opens a request's details (members are one tap further), a group's members.

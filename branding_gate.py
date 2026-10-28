@@ -20936,6 +20936,35 @@ def chat_sr_details(request_id):
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, error='Not found'), 404
+        # Every item as Sales described it: what, how many, how long, the size,
+        # the comment and the photos -- never a cost or a price (David,
+        # 2026-10-29: "all the details" from the button inside the chat).
+        cur.execute("""SELECT id, name, request_type, qty, unit, sell_type, rental_days, attributes, description
+                       FROM sales_request_items WHERE request_id = %s ORDER BY id""", (request_id,))
+        item_rows = cur.fetchall()
+        photos = {}
+        if item_rows:
+            cur.execute("""SELECT item_id, image_path, image_type FROM item_images
+                           WHERE is_alternative = 0 AND item_id IN (%s) ORDER BY id"""
+                        % ','.join(['%s'] * len(item_rows)), [i['id'] for i in item_rows])
+            for f in cur.fetchall():
+                photos.setdefault(f['item_id'], []).append({
+                    'url': '/' + f['image_path'].lstrip('/'),
+                    'name': os.path.basename(f['image_path']),
+                    'is_image': (f['image_type'] or '').lower() in ('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic')})
+        items = []
+        for i in item_rows:
+            try:
+                dims = json.loads(i['attributes']) if isinstance(i['attributes'], str) else (i['attributes'] or {})
+            except ValueError:
+                dims = {}
+            size = ' x '.join('%s %g' % (k[0].upper(), float(dims[k])) for k in ('width', 'height', 'depth')
+                              if isinstance(dims, dict) and dims.get(k) not in (None, '', 0))
+            items.append({'name': i['name'] or '', 'type': i['request_type'] or '',
+                          'qty': float(i['qty']) if i['qty'] is not None else None, 'unit': i['unit'] or '',
+                          # Rent or buy outright; named so no "sell" key ever reaches a chat.
+                          'rent': i['sell_type'] == 'rent', 'rental_days': i['rental_days'],
+                          'size': size, 'comment': i['description'] or '', 'files': photos.get(i['id'], [])})
         creator = person_of(people_index(cur), row['created_by'])
         details = [{'label': label, 'value': value} for label, value in (
             ('Client', row['client_name']), ('Company', row['company_name']), ('Status', row['status']),
@@ -20945,7 +20974,7 @@ def chat_sr_details(request_id):
                        client_name=row['client_name'] or '', company_name=row['company_name'] or '',
                        status=row['status'] or '',
                        owner={'id': row['owner_id'], 'name': row['owner_name'] or '', 'mobile': row['owner_mobile'] or ''},
-                       details=details + costing_brief(row))
+                       details=details + costing_brief(row), items=items)
     finally:
         cur.close()
         conn.close()
