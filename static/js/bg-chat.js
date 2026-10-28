@@ -85,6 +85,15 @@
         if (dayKey(d) === dayKey(y)) { return T('Yesterday'); }
         return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
     }
+    // The request's salesperson / Account Manager, first on the line. Its own
+    // flex item, so a long client name is what the ellipsis takes, and in
+    // Arabic a Latin name is not reordered off the clipped edge.
+    function ownerLine(name, rest) {
+        if (!name) { return esc(rest); }
+        return '<span class="bgc-ownerline"><span class="bgc-owner" dir="auto" data-no-i18n title="' + esc(T('Request owner') + ': ' + name) + '">' +
+            '<i class="fas fa-user-tie"></i> ' + esc(name) + '</span>' +
+            (rest ? '<span class="bgc-owner-sep">·</span><span class="bgc-owner-rest" dir="auto">' + esc(rest) + '</span>' : '') + '</span>';
+    }
     function initials(name) {
         return (name || '?').split(/\s+/).map(function (p) { return p.charAt(0); }).slice(0, 2).join('').toUpperCase();
     }
@@ -329,7 +338,7 @@
             if (!q) { return true; }
             return ('sr-' + c.request_id).indexOf(q) >= 0 || String(c.request_id).indexOf(q) >= 0 ||
                 (c.title || '').toLowerCase().indexOf(q) >= 0 || (c.client_name || '').toLowerCase().indexOf(q) >= 0 ||
-                (c.company_name || '').toLowerCase().indexOf(q) >= 0;
+                (c.company_name || '').toLowerCase().indexOf(q) >= 0 || (c.owner_name || '').toLowerCase().indexOf(q) >= 0;
         });
         rs.sort(function (a, b) {
             if (sort === 'id_desc') { return b.request_id - a.request_id; }
@@ -366,7 +375,7 @@
                     '</span> · ' + esc(c.title || '') + '</span>' +
                     '<span class="bgc-time">' + (isMuted(t) ? '<i class="fas fa-bell-slash bgc-muted-ico" title="' + esc(mutedLabel(t)) + '"></i> ' : '') +
                     (c.last_message_at ? listTime(c.last_message_at) : '') + '</span></div>' +
-                    '<div class="bgc-sub">' + esc(c.client_name || '-') + (c.company_name ? ' · ' + esc(c.company_name) : '') + '</div>' +
+                    '<div class="bgc-sub">' + ownerLine(c.owner_name, (c.client_name || '-') + (c.company_name ? ' · ' + c.company_name : '')) + '</div>' +
                     '<div class="bgc-row"><span class="bgc-preview" data-no-i18n>' +
                     (c.last_message_at ? esc((c.last_message_user || '').split(' ')[0]) + ': ' + esc(c.last_message_text || '')
                                        : '<i>' + esc(T('No messages yet')) + '</i>') + '</span>' +
@@ -470,6 +479,7 @@
                      sub: (g.members || cur.members.length || '') + ' ' + T('members'), group: true };
         }
         var c = chats.filter(function (x) { return String(x.request_id) === cur.key; })[0] || {};
+        if (c.owner_name && !cur.owner) { cur.owner = c.owner_name; }
         return { icon: esc(initials(c.client_name || c.title || 'SR')), title: 'SR-' + cur.key + (c.title ? ' · ' + c.title : ''),
                  sub: [c.client_name, c.company_name].filter(Boolean).join(' · '), group: false };
     }
@@ -481,8 +491,8 @@
               '<button type="button" class="bgc-icon-btn bgc-back" title="' + esc(T('Back')) + '"><i class="fas fa-arrow-left fa-flip-rtl"></i></button>' +
               '<div class="bgc-avatar' + (h.group ? ' group' : '') + '">' + h.icon + '</div>' +
               '<div class="bgc-thead-main" title="' + esc(T('Members')) + '">' +
-                '<div class="bgc-thead-title" data-no-i18n>' + esc(h.title) + '</div>' +
-                '<div class="bgc-thead-sub" id="chatThreadMeta">' + esc(h.sub) + '</div></div>' +
+                '<div class="bgc-thead-title" dir="auto" data-no-i18n>' + esc(h.title) + '</div>' +
+                '<div class="bgc-thead-sub" id="chatThreadMeta">' + (h.group ? esc(h.sub) : ownerLine(cur.owner, h.sub)) + '</div></div>' +
               (h.group ? '' : '<button type="button" class="bgc-open-btn" id="chatDetailsBtn"><i class="fas fa-external-link-alt"></i> ' + esc(T('Open')) + '</button>') +
               '<button type="button" class="bgc-icon-btn bgc-mute-btn" title="' + esc(T('Mute notifications')) + '"><i class="fas fa-bell"></i></button>' +
               '<button type="button" class="bgc-icon-btn bgc-members-btn" title="' + esc(T('Members')) + '"><i class="fas fa-users"></i></button>' +
@@ -582,9 +592,16 @@
         $.ajax({ url: '/api/sales/requests/' + id, silent: true }).done(function (r) {
             if (!r || !r.success || !r.request || !cur || cur.key !== String(id)) { return; }
             var sr = r.request, bits = [sr.client_name, sr.company_name, sr.status].filter(Boolean);
-            $('#chatThreadMeta').text(bits.join(' · '));
+            cur.meta = bits.join(' · ');
+            paintSrMeta();
             if (sr.title) { $('.bgc-thead-title').text('SR-' + id + ' · ' + sr.title); }
         });
+    }
+
+    function paintSrMeta() {
+        if (!cur || cur.kind === 'g') { return; }
+        var meta = cur.meta != null ? cur.meta : headerInfo().sub;
+        $('#chatThreadMeta').html(ownerLine(cur.owner, meta));
     }
 
     function loadMembers() {
@@ -594,6 +611,7 @@
             cur.members = r.members || [];
             cur.canManage = !!r.can_manage;
             if (cur.kind === 'g') { $('#chatThreadMeta').text(cur.members.length + ' ' + T('members')); }
+            else if (r.owner && r.owner.name && r.owner.name !== cur.owner) { cur.owner = r.owner.name; paintSrMeta(); }
             if ($('#chatThreadPane .bgc-sheet.is-members').length) { showMembers(); }
         });
     }
@@ -963,10 +981,13 @@
         var q = before.substring(at + 1);
         if (/\n/.test(q) || q.length > 30) { return hideSuggest(); }
         q = q.toLowerCase();
-        sug.list = cur.members.filter(function (u) { return !u.is_me && (u.name || '').toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
-        // @all: everyone in this chat, at the top like WhatsApp's "everyone".
+        sug.list = cur.members.filter(function (u) { return !u.is_me && (u.name || '').toLowerCase().indexOf(q) >= 0; });
+        // The request's owner first: the person the team usually needs to address.
+        sug.list.sort(function (a, b) { return (b.is_owner ? 1 : 0) - (a.is_owner ? 1 : 0); });
+        sug.list = sug.list.slice(0, 8);
+        // @all: everyone in this chat, at the top like WhatsApp's "everyone" (after the owner).
         if (cur.members.length > 1 && ('all'.indexOf(q) === 0 || 'everyone'.indexOf(q) === 0)) {
-            sug.list.unshift({ id: 'all', name: 'all', everyone: true });
+            sug.list.splice(sug.list.length && sug.list[0].is_owner ? 1 : 0, 0, { id: 'all', name: 'all', everyone: true });
         }
         if (!sug.list.length) { return hideSuggest(); }
         sug.on = true; sug.start = at; sug.idx = 0;
@@ -979,7 +1000,8 @@
             }
             return '<div class="item' + (i ? '' : ' active') + '" data-i="' + i + '">' +
                 '<div class="bgc-avatar sm" style="background:' + colourFor(u.id) + '">' + esc(initials(u.name)) + '</div>' +
-                '<div><div class="who" data-no-i18n>' + esc(u.name) + '</div><small>' + esc([u.role_name, u.department_name].filter(Boolean).join(' · ')) + '</small></div></div>';
+                '<div><div class="who" data-no-i18n>' + esc(u.name) + '</div><small>' +
+                esc([u.is_owner ? T('Request owner') : '', u.role_name, u.department_name].filter(Boolean).join(' · ')) + '</small></div></div>';
         }).join('')).show();
     }
     function hideSuggest() { sug.on = false; $('#chatMentionSuggest').hide(); }

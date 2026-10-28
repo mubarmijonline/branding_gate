@@ -1091,6 +1091,35 @@ def stamp_person(row, column, index, prefix=None):
     return row
 
 
+def chat_local_time(value):
+    """
+    A stored (naive, server-local) datetime as 'YYYY-MM-DDTHH:MM:SS' with no
+    zone, which every browser reads as local time. Strings pass through.
+    """
+    if value is None or isinstance(value, str):
+        return value
+    return value.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def request_owner(index, owner_user_id, created_by=None):
+    """
+    The salesperson / Account Manager a sales request belongs to, for display.
+
+    `owner_user_id` is the canonical owner (what every scope reads); the
+    legacy `created_by` -- a mobile, a username, a name or an id -- is the
+    fallback for a row that never got one. Never returns a raw mobile or id
+    as the name: an owner nobody can resolve has no name rather than a phone
+    number on screen.
+    """
+    for raw in (owner_user_id, created_by):
+        if raw in (None, ''):
+            continue
+        person = person_of(index, raw)
+        if person['user_id'] and person['name']:
+            return {'user_id': person['user_id'], 'name': person['name']}
+    return {'user_id': None, 'name': None}
+
+
 def load_permissions(user_id):
     """
     Return (permissions, role_code) for a user, where permissions maps a
@@ -20443,7 +20472,13 @@ def get_sales_request_comments(request_id):
             conn.commit()
         members = chat_members(cur, 'sr', request_id) if request.args.get('receipts') == '1' else None
         chat_decorate(cur, thread, comments, members)
-        
+        # Times are stored as the server's local (Cairo) wall clock. Left as
+        # datetimes, jsonify writes them as "... GMT" and the browser shifts
+        # them again: a message sent at 21:02 showed as 00:02 the next day.
+        for c in comments:
+            c['created_at'] = chat_local_time(c.get('created_at'))
+            c['updated_at'] = chat_local_time(c.get('updated_at'))
+
         # Get my mentions count
         cur.execute("""
             SELECT COUNT(*) as unread_mentions
@@ -20836,7 +20871,9 @@ def get_chat_sr_list():
                 lm.user_id       AS last_message_user_id,
                 lu.name          AS last_message_user_name,
                 COALESCE(unread.unread_mentions, 0) AS unread_mentions,
-                sr.created_at    AS sr_created_at
+                sr.created_at    AS sr_created_at,
+                sr.owner_user_id AS owner_user_id,
+                sr.created_by    AS created_by
             FROM sales_request sr
             LEFT JOIN (
                 SELECT request_id,
@@ -20868,10 +20905,13 @@ def get_chat_sr_list():
             [user_id] + scope_params
         )
         rows = cur.fetchall() or []
+        people = people_index(cur) if rows else {}
 
         chats = []
         total_unread = 0
         for r in rows:
+            # Whose request it is, so the people writing know whom to address.
+            owner = request_owner(people, r.get('owner_user_id'), r.get('created_by'))
             unread = int(r.get('unread_mentions') or 0)
             total_unread += unread
             preview = (r.get('last_message_text') or '')
@@ -20883,6 +20923,8 @@ def get_chat_sr_list():
                 'title': r.get('title') or '',
                 'client_name': r.get('client_name') or '',
                 'company_name': r.get('company_name') or '',
+                'owner_user_id': owner['user_id'],
+                'owner_name': owner['name'] or '',
                 'total_messages': int(r.get('total_messages') or 0),
                 'last_message_text': preview,
                 'last_message_user': r.get('last_message_user_name') or '',
@@ -21399,7 +21441,19 @@ def chat_thread_members(thread):
                        'department_name': p['department_name'] or '',
                        'is_me': p['id'] == session['user_id'], 'added': p['id'] in added}
                       for p in cur.fetchall()]
+        owner = {'user_id': None, 'name': None}
+        if kind == 'sr':
+            # The request's salesperson / Account Manager: named in the header
+            # and first in the @ list, so the team knows whom to address.
+            cur.execute("SELECT owner_user_id, created_by FROM sales_request WHERE id = %s", (key,))
+            row = cur.fetchone()
+            if row:
+                owner = request_owner(people_index(cur), row['owner_user_id'], row['created_by'])
+            for p in people:
+                p['is_owner'] = p['id'] == owner['user_id']
+            people.sort(key=lambda p: not p['is_owner'])  # stable: the rest stay by name
         return jsonify(success=True, members=people,
+                       owner={'id': owner['user_id'], 'name': owner['name'] or ''},
                        can_manage=kind == 'g' and has('chat.group_members'))
     finally:
         cur.close()

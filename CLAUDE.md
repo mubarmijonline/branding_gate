@@ -191,6 +191,14 @@ lost. `tests/test_costing.py::CostingNotificationTest` captures the calls.
   mentioned. There is **no `notifications` table** -- notifications go through
   `notify_users()` into Mongo.
 
+- **A request chat names whose request it is.** `/api/chat/sr-list` carries
+  `owner_name`, and `/api/chat/thread/sr:<id>/members` carries `owner` and
+  `is_owner` (owner first, so first in the `@` list). `request_owner()` resolves
+  `owner_user_id`, then `created_by`, and never returns a raw mobile or id.
+- **Chat times are wall-clock local.** Comment times go out through
+  `chat_local_time()` as `YYYY-MM-DDTHH:MM:SS`. Left as datetimes, jsonify sends
+  `... GMT` and the browser shifted every message ~3 hours into the future.
+
 ## A costed item is finished
 
 - **`item_lock_reason(row)`** is the only definition: **priced** (a sell price
