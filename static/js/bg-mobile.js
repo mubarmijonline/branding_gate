@@ -243,3 +243,29 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
+
+/*
+ * A back button for the home-screen app (Ahmed, 2026-10-29). Installed to the
+ * home screen the app has no browser bar, so there was no way back on any
+ * page. On a phone, in the installed app, every page but Home gets one in the
+ * top bar: back one step, or Home when the app was opened straight onto it.
+ */
+(function () {
+    'use strict';
+    var installed = window.navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (!installed || !window.matchMedia('(max-width: 767.98px)').matches) return;
+    if (/^\/(home)?\/?$/.test(location.pathname)) return;
+    var brand = document.querySelector('#main_nav_bar .navbar-brand');
+    if (!brand) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bgm-back';
+    btn.setAttribute('aria-label', window.bgT ? window.bgT('Back') : 'Back');
+    btn.innerHTML = '<i class="fas fa-arrow-left fa-flip-rtl"></i>';
+    btn.addEventListener('click', function () {
+        var fromHere = document.referrer && document.referrer.indexOf(location.origin) === 0;
+        if (fromHere && history.length > 1) { history.back(); } else { location.href = '/home'; }
+    });
+    brand.parentNode.insertBefore(btn, brand);
+})();

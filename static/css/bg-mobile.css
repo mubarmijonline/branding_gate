@@ -216,3 +216,12 @@
   .table-hover tbody tr:hover { background: inherit; }
   a, button { -webkit-tap-highlight-color: rgba(79,70,229,.12); }
 }
+
+/* Back button in the home-screen app (static/js/bg-mobile.js) */
+@media (max-width: 767.98px) {
+  .bgm-back { flex: 0 0 auto; width: 40px; height: 40px; margin-right: 6px; border: 0; border-radius: 50%;
+              background: rgba(255, 255, 255, .16); color: #fff; font-size: 1.05rem;
+              display: inline-flex; align-items: center; justify-content: center; }
+  .bgm-back:active { background: rgba(255, 255, 255, .3); }
+  [dir="rtl"] .bgm-back { margin-right: 0; margin-left: 6px; }
+}
