@@ -4280,5 +4280,20 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"With Pricing": "مع التسعير",
+"Cost changed": "التكلفة اتغيرت",
+"{0} of {1} items costed": "{0} من {1} بنود متكلفة",
+"not with Pricing yet": "لسه ما اتبعتش للتسعير",
+"Cost every item first": "كلّف كل البنود الأول",
+"Send to Pricing?": "تبعته للتسعير؟",
+"Pricing will see this request and its costs. A cost changed later is flagged to them.": "التسعير هيشوف الطلب وتكاليفه. أي تكلفة تتغير بعد كده هتوصلهم كتنبيه.",
+"Send to Pricing": "ابعت للتسعير",
+"Sent to Pricing.": "اتبعت للتسعير.",
+"Operation has not sent this request to Pricing yet.": "التشغيل لسه ما بعتش الطلب ده للتسعير.",
+"Request #{0} is ready for pricing": "الطلب رقم {0} جاهز للتسعير",
+"Request #{0} is with Pricing": "الطلب رقم {0} مع التسعير",
+"Request #{0} is fully costed": "الطلب رقم {0} اتكلف بالكامل",
+"Cost changed on request #{0}": "التكلفة اتغيرت على الطلب رقم {0}",
+"Every item has a cost. Send it to Pricing when the costs are final.": "كل البنود ليها تكلفة. ابعته للتسعير لما التكاليف تبقى نهائية."
 };

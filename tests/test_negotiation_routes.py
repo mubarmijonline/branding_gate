@@ -54,6 +54,8 @@ class NegotiationRouteTest(unittest.TestCase):
             (client_id,),
         )
         self.request_id = cursor.lastrowid
+        # Negotiated means it was with Pricing (Send to Pricing).
+        cursor.execute("UPDATE sales_request SET pricing_handoff_at = NOW() WHERE id = %s", (self.request_id,))
         cursor.execute(
             """
             INSERT INTO sales_request_items

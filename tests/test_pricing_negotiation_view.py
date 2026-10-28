@@ -334,6 +334,8 @@ class FinishingANegotiatedItemTest(unittest.TestCase):
                        VALUES (%s, 'Negotiated save probe', CURDATE(), 'probe', 1, 1)""",
                     (client_id,))
         self.request_id = cur.lastrowid
+        # Negotiated means it was with Pricing (Send to Pricing).
+        cur.execute("UPDATE sales_request SET pricing_handoff_at = NOW() WHERE id = %s", (self.request_id,))
         # An item exactly as request 785's coffee cup stands: priced, countered,
         # and approved by the head -- waiting for Pricing to finish it.
         cur.execute("""INSERT INTO sales_request_items

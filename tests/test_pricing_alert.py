@@ -40,10 +40,13 @@ class NotPricedCountTest(unittest.TestCase):
         conn = _connect()
         cur = conn.cursor()
         cur.execute("""
-            SELECT request_id, COUNT(*) AS n
-            FROM sales_request_items
-            WHERE cost_per_item IS NOT NULL AND sell_per_item IS NULL
-            GROUP BY request_id
+            SELECT i.request_id, COUNT(*) AS n
+            FROM sales_request_items i
+            JOIN sales_request sr ON sr.id = i.request_id
+            -- Only what Operation has sent to Pricing waits for a price.
+            WHERE i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
+              AND sr.pricing_handoff_at IS NOT NULL
+            GROUP BY i.request_id
         """)
         rows = cur.fetchall()
         cur.close()
@@ -124,6 +127,7 @@ class PricingSummaryTest(unittest.TestCase):
                    COUNT(CASE WHEN approval_status = 'pending_negotiation'
                                AND negotiation_status = 'negotiated' THEN 1 END) AS to_reprice
             FROM sales_request_items
+            WHERE request_id IN (SELECT id FROM sales_request WHERE pricing_handoff_at IS NOT NULL)
         """)
         expected = cur.fetchone()
         cur.close()

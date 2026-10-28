@@ -69,6 +69,9 @@ PERMISSIONS = {
     'costing.assign':  'Assign an item for costing to your own team',
     'costing.propose': 'Put up a costing proposal for an item assigned to you',
     'costing.decide':  'Accept or reject a costing proposal you asked for',
+    # Pricing sees a request only once Operation hands it over, every item
+    # costed (David, 2026-10-28). The Team Leader and the Head do it.
+    'costing.send_to_pricing': 'Send a fully costed request to Pricing',
 
     # Client approval
     'client_approval.view':   'View items awaiting client approval',
@@ -235,7 +238,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
     'section.sales', 'section.operations', 'section.finance',
-    'sales_request.discuss_approval',
+    'sales_request.discuss_approval', 'costing.send_to_pricing',
     'design_request.assign', 'design_request.deliver', 'design_request.approve',
     'design_request.operate',
 })
@@ -505,6 +508,7 @@ SEED_MATRIX = {
         _OWN_EXPENSES,
         _manager_expense_approval('department'),
         {
+            'costing.send_to_pricing': 'all',
             'approved_item.reassign': 'all',
             'sales_request.view': 'all',
             # Operations raises and maintains its own requests through
@@ -556,6 +560,7 @@ SEED_MATRIX = {
         _OWN_EXPENSES,
         _manager_expense_approval('team'),
         {
+            'costing.send_to_pricing': 'all',
             # Reads and comments on requests because costing needs the item;
             # raising and editing one is the Operations Manager's job, not
             # theirs, and the Sales section is not theirs to see at all.

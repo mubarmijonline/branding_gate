@@ -1126,9 +1126,12 @@ window.chartPieDemo = function() {
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer flex-wrap">
+                    <div id="opPricingState" class="small mr-auto"></div>
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-warning" id="saveCostsBtn">Update Item Costs</button>
+                    <button type="button" class="btn btn-success d-none" id="sendToPricingBtn" disabled>
+                        <i class="fas fa-paper-plane mr-1"></i>Send to Pricing</button>
                 </div>
             </div>
         </div>
@@ -1320,8 +1323,44 @@ function redrawOpTable() {
     if (window.opTable) { window.opTable.rows().invalidate().draw(false); }
 }
 
+// Send to Pricing (David, 2026-10-28): a saved cost stays here until a Team
+// Leader or the Head sends the request on, which needs every item costed.
+// Once with Pricing, a cost change only flags it there.
+function renderPricingState(p) {
+    p = p || {};
+    var $state = $('#opPricingState'), $btn = $('#sendToPricingBtn');
+    if (p.with_pricing) {
+        $state.html('<span class="badge badge-success"><i class="fas fa-check mr-1"></i>' + bgT('With Pricing') + '</span> ' +
+            '<span class="text-muted">' + costEsc(p.sent_at || '') + (p.sent_by_name ? ' · ' + costEsc(p.sent_by_name) : '') + '</span>' +
+            (p.cost_changed ? ' <span class="badge badge-warning">' + bgT('Cost changed') + '</span>' : ''));
+        $btn.addClass('d-none');
+        return;
+    }
+    $state.html('<span class="text-muted">' + bgT('{0} of {1} items costed').replace('{0}', p.costed || 0).replace('{1}', p.items || 0) +
+        ' · ' + bgT('not with Pricing yet') + '</span>');
+    $btn.toggleClass('d-none', !p.can_send).prop('disabled', !p.all_costed)
+        .attr('title', p.all_costed ? '' : bgT('Cost every item first'));
+}
+
+function loadPricingState(requestId) {
+    $.ajax({ url: '/api/operations/requests/' + requestId, cache: false, silent: true })
+        .done(function (r) { if (r && r.success) { renderPricingState(r.request.pricing); } });
+}
+
+$(document).on('click', '#sendToPricingBtn', function () {
+    var id = window.currentCostingRequestId;
+    Swal.fire({ title: bgT('Send to Pricing?'), text: bgT('Pricing will see this request and its costs. A cost changed later is flagged to them.'),
+                icon: 'question', showCancelButton: true, confirmButtonText: bgT('Send to Pricing'), cancelButtonText: bgT('Cancel') })
+        .then(function (a) {
+            if (!a.isConfirmed) return;
+            $.ajax({ url: '/api/operations/requests/' + id + '/send-to-pricing', method: 'POST' })
+                .done(function () { loadPricingState(id); Swal.fire('', bgT('Sent to Pricing.'), 'success'); })
+                .fail(function (xhr) { Swal.fire('', (xhr.responseJSON || {}).error || bgT('Could not send it'), 'error'); });
+        });
+});
+
 function refreshCostingViews(requestId) {
-    if (requestId) { loadCostingState(requestId); }
+    if (requestId) { loadCostingState(requestId); loadPricingState(requestId); }
     loadCostingSummary(function () {
         if ($('#costItemsModal').hasClass('show')) { COSTING_TABLE_DIRTY = true; }
         else { redrawOpTable(); }
@@ -2354,6 +2393,7 @@ $(document).ready(function() {
                 $('#requestIdDisplay').text(request.request_id);
                 $('#clientNameDisplay').text(request.client_name);
                 $('#requestBriefDisplay').html(window.opBriefHtml(request));
+                renderPricingState(request.pricing);
                 $('#costRequestId').val(request.request_id);
                 
                 // Load items for costing
