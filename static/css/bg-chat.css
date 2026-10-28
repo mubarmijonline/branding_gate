@@ -126,6 +126,16 @@ body.bgc-lock { overflow: hidden; }
 .bgc-sub {
   font-size: .76rem; color: var(--bgc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* The request's salesperson / Account Manager, in the list row and the thread header. */
+.bgc-ownerline { display: flex; min-width: 0; }
+.bgc-owner {
+  flex: 0 1 auto; max-width: 60%; min-width: 0; color: var(--bgc-green-dark); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bgc-owner i { font-size: .7em; opacity: .8; }
+.bgc-owner-rest { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bgc-owner-sep { flex: 0 0 auto; padding: 0 .35em; }
+.bgc-thead-sub .bgc-owner { max-width: 75%; }
 .bgc-preview {
   flex: 1 1 auto; min-width: 0; font-size: .84rem; color: var(--bgc-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
