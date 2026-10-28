@@ -13388,11 +13388,36 @@ window.chartPieDemo = function() {
         });
     });
 
-    // Save selling prices
+    // Save selling prices. Each row saves itself as it is typed (above), so by
+    // the time this is pressed there is often nothing left to send: that is a
+    // save that already happened, not a mistake. It used to say "set or change
+    // at least one selling price" over a request priced 3/3 (Gamal, 2026-10-28).
     $('#savePricesBtn').click(function() {
+        var $btn = $(this).prop('disabled', true);
+        window.flushPriceEdits().always(function () {
+            $btn.prop('disabled', false);
+            saveRemainingPrices();
+        });
+    });
+
+    function closeSavedPrices() {
+        $('#setPriceModal').modal('hide');
+        Swal.fire('Saved', 'Selling prices are saved.', 'success');
+        if (typeof table !== 'undefined' && table && table.ajax) {
+            table.ajax.reload();
+        } else if (window.requestsTable && window.requestsTable.ajax) {
+            window.requestsTable.ajax.reload();
+        }
+    }
+
+    function saveRemainingPrices() {
         var requestId = $('#priceRequestId').text();
         var items = [];
-        
+        var priced = 0;
+
+        $('.item-sell-price-input').each(function() {
+            if ((parseFloat($(this).data('original-price')) || 0) > 0) { priced++; }
+        });
         $('.item-sell-price-input').each(function() {
             var itemId = $(this).data('item-id');
             var sellPerItem = parseFloat($(this).val()) || 0;
@@ -13407,11 +13432,11 @@ window.chartPieDemo = function() {
         });
         
         if (items.length === 0) {
-            Swal.fire('Warning!', 'Please set or change at least one selling price.', 'warning');
+            if (priced) { closeSavedPrices(); return; }
+            Swal.fire('Warning!', 'Please set at least one selling price.', 'warning');
             return;
         }
-        
-        console.log('Saving prices for request:', requestId, 'Items:', items);
+
         
         $.ajax({
             url: '/api/sales/requests/' + requestId + '/set-prices',
@@ -13420,14 +13445,7 @@ window.chartPieDemo = function() {
             data: JSON.stringify({ items: items }),
             success: function(response) {
                 if (response.success) {
-                    $('#setPriceModal').modal('hide');
-                    Swal.fire('Success!', 'Selling prices updated successfully!', 'success');
-                    // Reload the table
-                    if (typeof table !== 'undefined' && table && table.ajax) {
-                        table.ajax.reload();
-                    } else if (window.requestsTable && window.requestsTable.ajax) {
-                        window.requestsTable.ajax.reload();
-                    }
+                    closeSavedPrices();
                 } else {
                     Swal.fire('Error!', response.error || 'Failed to update prices', 'error');
                 }
@@ -13441,7 +13459,7 @@ window.chartPieDemo = function() {
                           ('Error saving prices: ' + error), 'error');
             }
         });
-    });
+    }
 
     // View Price History Handler
     $(document).on('click', '.view-price-history-btn', function() {
