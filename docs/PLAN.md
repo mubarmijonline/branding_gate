@@ -866,3 +866,25 @@ who created each request near the front, and pick a person to see only theirs.
 - The Status, Priority, Client and Company filters now find their columns by
   name (`status:name`...) instead of by position, so moving a column cannot
   point them at the wrong one again.
+
+## New request draft (autosave), 2026-10-29
+
+Gamal: a salesperson who pressed Cancel (or the X, or lost the tab) lost the
+whole request they were typing.
+
+- `static/js/bg-sr-draft.js`, loaded by `sales_request.html`: the New Request
+  form is saved in this browser (localStorage, one draft per user:
+  `bgSrDraft:<user id>`) 0.6 s after any change, every 10 s while open, and
+  when it closes. "Draft saved <time>" shows in the footer.
+- Reopening the form replays the draft: ticks the request types, waits for
+  their template sections, adds as many item rows per section, then sets every
+  value in page order (keyed by name/id/specific class with numbers removed,
+  matched by position). A note says it is back, with "Start fresh".
+- A successful save deletes it (`bgSrDraft.clear()` in the add success
+  path); drafts older than 7 days are ignored. An empty form never overwrites
+  a draft (the page resets the form itself when it opens).
+- Not kept: photos and files (a browser cannot store a picked file), and the
+  draft stays on that device. Server-side drafts if people switch devices.
+- Found while testing: a request with no company failed with MySQL 1366 (''
+  into an INT column). `add_sales_request` and `create_request_with_template`
+  now store None. Test: `tests/test_add_request_company.py`.

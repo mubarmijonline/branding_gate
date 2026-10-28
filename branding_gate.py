@@ -11512,7 +11512,9 @@ def add_sales_request():
         
         # Extract and validate basic fields
         client_id = data.get('client_id')
-        company_id = data.get('company_id')  # Add company support
+        # Company is optional on the form, which sends '' for none; '' into
+        # the INT column refused the whole request (MySQL 1366).
+        company_id = data.get('company_id') or None
         request_types = data.get('request_types', [])  # Support multiple types
         
         # If request_types is a string (from form), convert to list
@@ -15686,7 +15688,7 @@ def create_request_with_template():
                 data['client_id'] = client_id  # Update data for later use
         
         # Check if we have company_id or can get it from template_fields company_name
-        company_id = data.get('company_id')
+        company_id = data.get('company_id') or None
         company_name_from_template = data.get('template_fields', {}).get('company_name')
         
         if not company_id and company_name_from_template:

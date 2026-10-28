@@ -10889,6 +10889,7 @@ window.chartPieDemo = function() {
         
         console.log('Form reset complete - all items, template fields, and global state cleared');
     }
+    window.resetRequestForm = resetRequestForm;
 
     // CRITICAL: Reset form when Add Request modal is closed (hidden)
     // This prevents items from previous requests from persisting
@@ -11202,6 +11203,8 @@ window.chartPieDemo = function() {
             success: function(response) {
                 console.log('Add response:', response);
                 if (response.success) {
+                    // Saved: the draft has done its job.
+                    if (window.bgSrDraft) { window.bgSrDraft.clear(); }
                     // NEW: Check if request needs approval
                     if (response.needs_approval) {
                         $('#addRequestModal').modal('hide');
@@ -15357,5 +15360,8 @@ function loadItemPriceHistory(itemId) {
   });
 })();
 </script>
+
+<script>window.SR_DRAFT_KEY = 'bgSrDraft:{{ session.user_id }}';</script>
+<script src="{{ url_for('static', filename='js/bg-sr-draft.js') }}?v=20261029d"></script>
 
 {% endblock %}
