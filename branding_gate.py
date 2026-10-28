@@ -16419,6 +16419,11 @@ def upload_access_allowed(cur, parts):
             request_id = row['request_id'] if row else None
         return _request_file_allowed(cur, request_id)
     if folder == 'costing':
+        # A costing proposal's files are supplier quotations: cost, so only
+        # the desks that see cost (Gamal, 2026-10-28). Seeing the request was
+        # enough before, which let an Account Manager open one by its link.
+        if not (has('costing.view') or may_see_cost()):
+            return False
         request_id = None
         if owner_id is not None:
             cur.execute("SELECT request_id FROM costing_proposal WHERE id = %s", (owner_id,))
