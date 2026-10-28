@@ -268,4 +268,6 @@
         if (fromHere && history.length > 1) { history.back(); } else { location.href = '/home'; }
     });
     brand.parentNode.insertBefore(btn, brand);
+    // The button takes the room the brand's words had; the logo stays.
+    document.body.classList.add('bgm-has-back');
 })();

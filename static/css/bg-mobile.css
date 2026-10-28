@@ -219,7 +219,10 @@
 
 /* Back button in the home-screen app (static/js/bg-mobile.js) */
 @media (max-width: 767.98px) {
-  .bgm-back { flex: 0 0 auto; width: 40px; height: 40px; margin-right: 6px; border: 0; border-radius: 50%;
+  /* With the back button there is no room for "Branding Gate" beside the
+     balance icon (it ran under it); the logo says it. */
+  .bgm-has-back #main_nav_bar .brand-text { display: none; }
+  .bgm-back { flex: 0 0 auto; width: 36px; height: 36px; margin-right: 6px; border: 0; border-radius: 50%;
               background: rgba(255, 255, 255, .16); color: #fff; font-size: 1.05rem;
               display: inline-flex; align-items: center; justify-content: center; }
   .bgm-back:active { background: rgba(255, 255, 255, .3); }
