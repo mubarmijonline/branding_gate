@@ -4280,5 +4280,15 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"Launch request": "إطلاق الطلب",
+"My drafts": "المسودات بتاعتي",
+"Untitled draft": "مسودة بدون عنوان",
+"Draft \"{0}\" is open. Launch request sends it.": "المسودة \"{0}\" مفتوحة. \"إطلاق الطلب\" بيبعتها.",
+"Fill something in first.": "املا حاجة الأول.",
+"It stays with you until you launch it. Operation does not see it.": "هتفضل معاك لحد ما تطلقها، والتشغيل مش بيشوفها.",
+"Could not save the draft": "تعذر حفظ المسودة",
+"Could not open the draft": "تعذر فتح المسودة",
+"Delete this draft?": "تمسح المسودة دي؟",
+"Draft saved": "المسودة اتحفظت"
 };

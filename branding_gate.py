@@ -12101,6 +12101,120 @@ def get_single_operations_request(request_id):
             'error': str(e)
         }), 500
 
+# ---------------------------------------------------------------------------
+# Drafts (Gamal, 2026-10-28). "Save draft" keeps the New Request form on the
+# server for its author: it does not go to Operation, Pricing or approvals --
+# it is not a sales request at all until launched, which submits the form
+# normally (every check, the urgent-date approval) and deletes the draft.
+# The admin sees everyone's. Photos picked in the form are not kept.
+# ---------------------------------------------------------------------------
+
+def _draft_is_admin():
+    return session.get('role_code') == 'admin'
+
+
+@app.route('/api/sales/drafts', methods=['GET'])
+@perm('sales_request.create')
+def list_sales_drafts():
+    """My drafts, newest first (the admin: everybody's), without the form itself."""
+    conn, cur = connection()
+    try:
+        everyone = _draft_is_admin()
+        cur.execute("""SELECT d.id, d.user_id, d.title, d.updated_at, u.name AS user_name
+                       FROM sales_request_draft d JOIN user u ON u.id = d.user_id
+                       WHERE %s OR d.user_id = %s ORDER BY d.updated_at DESC LIMIT 100""",
+                    (1 if everyone else 0, session.get('user_id')))
+        return jsonify(success=True, drafts=[{
+            'id': r['id'], 'title': r['title'] or 'Untitled draft', 'mine': r['user_id'] == session.get('user_id'),
+            'user_name': r['user_name'], 'saved_at': r['updated_at'].strftime('%d %b %Y %H:%M')} for r in cur.fetchall()])
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _draft_or_404(cur, draft_id):
+    cur.execute("SELECT * FROM sales_request_draft WHERE id = %s", (draft_id,))
+    row = cur.fetchone()
+    if not row or not (row['user_id'] == session.get('user_id') or _draft_is_admin()):
+        return None
+    return row
+
+
+@app.route('/api/sales/drafts/<int:draft_id>', methods=['GET'])
+@perm('sales_request.create')
+def get_sales_draft(draft_id):
+    conn, cur = connection()
+    try:
+        row = _draft_or_404(cur, draft_id)
+        if not row:
+            return jsonify(success=False, error='No such draft'), 404
+        snapshot = row['snapshot']
+        return jsonify(success=True, id=row['id'], title=row['title'],
+                       snapshot=json.loads(snapshot) if isinstance(snapshot, str) else snapshot)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/sales/drafts', methods=['POST'])
+@perm('sales_request.create')
+def save_sales_draft():
+    """Create a draft, or update one of mine (`id`)."""
+    data = request.get_json(silent=True) or {}
+    snapshot = data.get('snapshot')
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get('values'), list):
+        return jsonify(success=False, error='Nothing to save'), 400
+    body = json.dumps(snapshot)
+    if len(body) > 2 * 1024 * 1024:
+        return jsonify(success=False, error='The draft is too large to save'), 400
+    title = (str(data.get('title') or '').strip() or None)
+    conn, cur = connection()
+    try:
+        draft_id = data.get('id')
+        if draft_id:
+            cur.execute("SELECT id FROM sales_request_draft WHERE id = %s AND user_id = %s",
+                        (draft_id, session.get('user_id')))
+            if not cur.fetchone():
+                return jsonify(success=False, error='No such draft'), 404
+            cur.execute("UPDATE sales_request_draft SET title = %s, snapshot = %s WHERE id = %s",
+                        (title and title[:255], body, draft_id))
+        else:
+            cur.execute("INSERT INTO sales_request_draft (user_id, title, snapshot) VALUES (%s, %s, %s)",
+                        (session.get('user_id'), title and title[:255], body))
+            draft_id = cur.lastrowid
+        conn.commit()
+        return jsonify(success=True, id=int(draft_id))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/sales/drafts/<int:draft_id>', methods=['DELETE'])
+@perm('sales_request.create')
+def delete_sales_draft(draft_id):
+    conn, cur = connection()
+    try:
+        if not _draft_or_404(cur, draft_id):
+            return jsonify(success=False, error='No such draft'), 404
+        cur.execute("DELETE FROM sales_request_draft WHERE id = %s", (draft_id,))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def launch_draft(cur, data):
+    """A request launched from a draft: the draft is done with (mine only)."""
+    try:
+        draft_id = int(data.get('draft_id') or 0)
+    except (TypeError, ValueError):
+        return
+    if draft_id:
+        cur.execute("DELETE FROM sales_request_draft WHERE id = %s AND user_id = %s",
+                    (draft_id, session.get('user_id')))
+
+
 @app.route('/api/sales/requests/add', methods=['POST'])
 @perm('sales_request.create')
 def add_sales_request():
@@ -12333,6 +12447,7 @@ def add_sales_request():
             ))
             
             approval_id = cur.lastrowid
+            launch_draft(cur, data)  # launched from a draft: it is done with
             conn.commit()
             cur.close()
             conn.close()
@@ -12662,6 +12777,7 @@ def add_sales_request():
             print(f"DEBUG: Failed to log request creation: {log_error}")
         
         # NOW commit and close connection
+        launch_draft(cur, data)  # launched from a draft: it is done with
         conn.commit()
         print(f"DEBUG: Transaction committed for request {request_id}")
         
