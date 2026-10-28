@@ -4036,6 +4036,7 @@ window.chartPieDemo = function() {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-primary" id="srSaveDraftBtn"><i class="fas fa-file-alt mr-1"></i>Save draft</button>
                     <button type="button" class="btn btn-primary" id="saveRequestBtn">Save Request</button>
                 </div>
             </div>
@@ -11232,6 +11233,8 @@ window.chartPieDemo = function() {
 
     // Separate function to perform the actual save
     function performRequestSave(requestData) {
+        // Launched from a saved draft: the server deletes the draft with it.
+        if (window.bgSrDraft && window.bgSrDraft.serverId()) { requestData.draft_id = window.bgSrDraft.serverId(); }
         
         console.log('DEBUG: Request data being sent:', requestData);
 
@@ -11246,7 +11249,7 @@ window.chartPieDemo = function() {
                 console.log('Add response:', response);
                 if (response.success) {
                     // Saved: the draft has done its job.
-                    if (window.bgSrDraft) { window.bgSrDraft.clear(); }
+                    if (window.bgSrDraft) { window.bgSrDraft.clear(); window.bgSrDraft.list(); }
                     // NEW: Check if request needs approval
                     if (response.needs_approval) {
                         $('#addRequestModal').modal('hide');
@@ -15426,6 +15429,6 @@ function loadItemPriceHistory(itemId) {
 </script>
 
 <script>window.SR_DRAFT_KEY = 'bgSrDraft:{{ session.user_id }}';</script>
-<script src="{{ url_for('static', filename='js/bg-sr-draft.js') }}?v=20261029d"></script>
+<script src="{{ url_for('static', filename='js/bg-sr-draft.js') }}?v=20261029e"></script>
 
 {% endblock %}

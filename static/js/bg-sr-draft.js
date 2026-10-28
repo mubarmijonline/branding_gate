@@ -12,15 +12,19 @@
  * -> items[#][name]) and matched by position, because row numbers change
  * between sessions.
  *
- * ponytail: this device only (localStorage); a server-side draft if people
- * start a request on one device and finish it on another. Photos and files are
- * not kept (a browser cannot store a picked file).
+ * Save draft (Gamal, 2026-10-28) keeps the same snapshot on the server, for
+ * its author on any device: "My drafts" above the table lists them, Open puts
+ * one back in the form, and Save -- now "Launch request" -- submits it
+ * normally and the server deletes the draft. A draft is not a sales request,
+ * so Operation, Pricing and approvals never see it. Photos and files are not
+ * kept (a browser cannot store a picked file).
  */
 (function () {
   var KEY = window.SR_DRAFT_KEY || 'bgSrDraft';
   var FORM = '#addRequestForm', MODAL = '#addRequestModal';
   var MAX_AGE = 7 * 24 * 3600 * 1000;
   var busy = false, done = false, timer = null, ticker = null;
+  var serverId = null, pending = null;   // the server draft in the form, and one waiting to open
   var T = function (x) { return window.bgT ? window.bgT(x) : x; };
 
   function controls() {
@@ -78,6 +82,7 @@
   }
   function clear() {
     done = true;
+    serverId = null;
     try { localStorage.removeItem(KEY); } catch (e) {}
     stamp(null);
   }
@@ -153,13 +158,19 @@
     $('#srDraftNote').remove();
     clearInterval(ticker);
     ticker = setInterval(save, 10000);
-    var d = read();
+    var fromServer = pending;
+    pending = null;
+    if (!fromServer) { serverId = null; }
+    launchLabel();
+    var d = fromServer ? fromServer.snapshot : read();
     if (!d) { setTimeout(function () { busy = false; }, 250); return; }
     // The page resets the form 100 ms after opening; restore after that.
     setTimeout(function () {
       restore(d).then(function () {
         $('<div id="srDraftNote" class="alert alert-info d-flex align-items-center justify-content-between py-2 mb-3">' +
-          '<span><i class="fas fa-history mr-2"></i>' + T('Your unsaved request from {0} is back.').replace('{0}', time(d.at)) +
+          '<span><i class="fas fa-history mr-2"></i>' + (fromServer
+            ? T('Draft "{0}" is open. Launch request sends it.').replace('{0}', fromServer.title || T('Untitled draft'))
+            : T('Your unsaved request from {0} is back.').replace('{0}', time(d.at))) +
           (Object.keys(d.items).length ? ' ' + T('Photos and files need adding again.') : '') + '</span>' +
           '<button type="button" class="btn btn-sm btn-outline-secondary ml-2" id="srDraftFresh">' + T('Start fresh') + '</button></div>')
           .prependTo(MODAL + ' .modal-body');
@@ -177,5 +188,67 @@
   });
   window.addEventListener('pagehide', save);
 
-  window.bgSrDraft = { clear: clear, save: save, read: read };
+  // ------------------------------------------------------------ server drafts
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function launchLabel() {
+    $('#saveRequestBtn').text(serverId ? T('Launch request') : T('Save Request'));
+  }
+  function list() {
+    $.ajax({ url: '/api/sales/drafts', cache: false, silent: true }).done(function (r) {
+      $('#srDraftsStrip').remove();
+      if (!r || !r.drafts || !r.drafts.length) return;
+      var html = '<div id="srDraftsStrip" class="alert alert-light border d-flex flex-column mb-3" style="gap:.4rem">' +
+        '<b><i class="fas fa-file-alt mr-1"></i>' + T('My drafts') + ' (' + r.drafts.length + ')</b>' +
+        r.drafts.map(function (d) {
+          return '<div class="d-flex align-items-center flex-wrap" style="gap:.5rem"><span>' + esc(d.title) +
+            ' <small class="text-muted">' + esc(d.saved_at) + (d.mine ? '' : ' · ' + esc(d.user_name)) + '</small></span>' +
+            '<span class="ml-auto"><button type="button" class="btn btn-sm btn-primary sr-draft-open" data-id="' + d.id + '">' + T('Open') + '</button> ' +
+            '<button type="button" class="btn btn-sm btn-outline-danger sr-draft-delete" data-id="' + d.id + '">' + T('Delete') + '</button></span></div>';
+        }).join('') + '</div>';
+      var $anchor = $('#requests-table').closest('.card');
+      if ($anchor.length) { $anchor.before(html); } else { $('.container-fluid').first().prepend(html); }
+    });
+  }
+  $(document).on('click', '#srSaveDraftBtn', function () {
+    var d = snapshot();
+    if (!meaningful(d)) { Swal.fire('', T('Fill something in first.'), 'warning'); return; }
+    var title = $('#requestTitle').val() || $('#clientSelect option:selected').text() || '';
+    var $b = $(this).prop('disabled', true);
+    $.ajax({ url: '/api/sales/drafts', method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ id: serverId, title: title.trim(), snapshot: d }) })
+      .done(function () {
+        // Kept on the server now; the device copy would only bring it back twice.
+        clear();
+        $(MODAL).modal('hide');
+        Swal.fire({ icon: 'success', title: T('Draft saved'), text: T('It stays with you until you launch it. Operation does not see it.') });
+        list();
+      })
+      .fail(function (xhr) { Swal.fire('', (xhr.responseJSON || {}).error || T('Could not save the draft'), 'error'); })
+      .always(function () { $b.prop('disabled', false); });
+  });
+  $(document).on('click', '.sr-draft-open', function () {
+    var id = $(this).data('id');
+    $.getJSON('/api/sales/drafts/' + id).done(function (r) {
+      serverId = r.id;
+      pending = { snapshot: r.snapshot, title: r.title };
+      if (typeof window.resetRequestForm === 'function') { window.resetRequestForm(); }
+      $(MODAL).modal('show');
+    }).fail(function () { Swal.fire('', T('Could not open the draft'), 'error'); });
+  });
+  $(document).on('click', '.sr-draft-delete', function () {
+    var id = $(this).data('id');
+    Swal.fire({ title: T('Delete this draft?'), icon: 'warning', showCancelButton: true,
+                confirmButtonText: T('Delete'), cancelButtonText: T('Cancel') }).then(function (a) {
+      if (!a.isConfirmed) return;
+      $.ajax({ url: '/api/sales/drafts/' + id, method: 'DELETE' }).done(list);
+    });
+  });
+  $(function () { if ($(MODAL).length) list(); });
+
+  window.bgSrDraft = { clear: clear, save: save, read: read, list: list,
+                       serverId: function () { return serverId; } };
 })();

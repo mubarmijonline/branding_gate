@@ -4300,5 +4300,15 @@ window.BG_AR = {
 "Request #{0} is with Pricing": "الطلب رقم {0} مع التسعير",
 "Request #{0} is fully costed": "الطلب رقم {0} اتكلف بالكامل",
 "Cost changed on request #{0}": "التكلفة اتغيرت على الطلب رقم {0}",
-"Every item has a cost. Send it to Pricing when the costs are final.": "كل البنود ليها تكلفة. ابعته للتسعير لما التكاليف تبقى نهائية."
+"Every item has a cost. Send it to Pricing when the costs are final.": "كل البنود ليها تكلفة. ابعته للتسعير لما التكاليف تبقى نهائية.",
+"Launch request": "إطلاق الطلب",
+"My drafts": "المسودات بتاعتي",
+"Untitled draft": "مسودة بدون عنوان",
+"Draft \"{0}\" is open. Launch request sends it.": "المسودة \"{0}\" مفتوحة. \"إطلاق الطلب\" بيبعتها.",
+"Fill something in first.": "املا حاجة الأول.",
+"It stays with you until you launch it. Operation does not see it.": "هتفضل معاك لحد ما تطلقها، والتشغيل مش بيشوفها.",
+"Could not save the draft": "تعذر حفظ المسودة",
+"Could not open the draft": "تعذر فتح المسودة",
+"Delete this draft?": "تمسح المسودة دي؟",
+"Draft saved": "المسودة اتحفظت"
 };
