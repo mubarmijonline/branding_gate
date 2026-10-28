@@ -4280,5 +4280,8 @@ window.BG_AR = {
 "Could not open the discussion": "تعذر فتح النقاش",
 "Showing one request from your notification.": "بيظهر طلب واحد من الإشعار.",
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
-"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟"
+"Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
+"Venue / Hotel Name": "المكان / اسم الفندق",
+"TBD (not fixed yet)": "لسه مش محدد (TBD)",
+"Please fill in: {0}": "لازم تملا: {0}"
 };

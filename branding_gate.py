@@ -12101,6 +12101,54 @@ def get_single_operations_request(request_id):
             'error': str(e)
         }), 500
 
+# Where the work is decides what it costs: a request with no governorate was
+# priced as Cairo when it was elsewhere (David, 2026-10-28). Required on
+# create and on edit, here, whatever the form did. Keyed by request type, the
+# same grouping the form's templates use (T1 events, T2 production, T5 other).
+SETUP_DATE_TBD = 'TBD'
+_EVENT_PLACE = (('location', 'Location'), ('location_governorate', 'Governorate'),
+                ('hotel_name', 'Venue / Hotel Name'), ('setup_date', 'Setup Date'))
+_DELIVERY_PLACE = (('delivery_location', 'Delivery Location'),
+                   ('delivery_location_governorate', 'Governorate'))
+REQUIRED_PLACE_FIELDS = dict(
+    [(t, _EVENT_PLACE) for t in ('event', 'booth', 'activation', 'media')] +
+    [(t, _DELIVERY_PLACE) for t in ('production', 'printing', 'giveaways', 'purchases',
+                                    'material delivery', 'receiving material')] +
+    [('others', (('location', 'Location'), ('location_governorate', 'Governorate')))])
+
+
+def missing_request_fields(request_types, instances, flat_fields):
+    """
+    The place fields a request still lacks, as labels ("Governorate", or
+    "Booth: Governorate" when there are several types). Read from the form's
+    per-type instances, or from the flat "<Type>_<field>" keys of older data.
+    Setup date may be a date or TBD.
+    """
+    by_type = {}
+    for inst in instances or []:
+        key = str(inst.get('request_type') or '').strip().lower()
+        by_type.setdefault(key, {}).update(inst.get('fields') or {})
+    types = [str(t).strip() for t in (request_types or []) if str(t).strip()]
+    missing = []
+    for request_type in types:
+        rules = REQUIRED_PLACE_FIELDS.get(request_type.lower())
+        if not rules:
+            continue
+        fields = by_type.get(request_type.lower())
+        if fields is None:
+            prefix = request_type + '_'
+            fields = {k[len(prefix):]: v for k, v in (flat_fields or {}).items() if k.startswith(prefix)}
+        for name, label in rules:
+            value = str(fields.get(name) or '').strip()
+            if name == 'setup_date':
+                ok = value.upper() == SETUP_DATE_TBD or bool(re.match(r'^\d{4}-\d{2}-\d{2}$', value))
+            else:
+                ok = bool(value)
+            if not ok:
+                missing.append('%s: %s' % (request_type, label) if len(types) > 1 else label)
+    return missing
+
+
 @app.route('/api/sales/requests/add', methods=['POST'])
 @perm('sales_request.create')
 def add_sales_request():
@@ -12286,6 +12334,11 @@ def add_sales_request():
         
         # Add request types to request_data
         request_data_json['request_types'] = request_types
+
+        missing = missing_request_fields(request_types, template_instances, template_fields)
+        if missing:
+            return jsonify({'success': False, 'missing': missing,
+                            'error': 'Please fill in: ' + ', '.join(missing)}), 400
         
         conn, cur = connection()
         
@@ -13435,6 +13488,17 @@ def edit_sales_request(request_id):
         if isinstance(request_types, str):
             request_types = [rt.strip() for rt in request_types.split(',')]
         request_type_str = ','.join(request_types) if request_types else existing_request.get('request_type', 'General')
+
+        # The same place fields as on create; an old request missing them is
+        # completed on its next edit.
+        if template_fields_data:
+            missing = missing_request_fields(request_types or request_type_str.split(','),
+                                             template_instances, template_fields)
+            if missing:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'missing': missing,
+                                'error': 'Please fill in: ' + ', '.join(missing)}), 400
         
         # Auto-generate title if not provided
         title = data.get('title')
@@ -17139,6 +17203,17 @@ def update_request_with_template(request_id):
         if isinstance(request_types, str):
             request_types = [rt.strip() for rt in request_types.split(',')]
         request_type_str = ','.join(request_types) if request_types else existing_request.get('request_type', 'General')
+
+        # The same place fields as on create; an old request missing them is
+        # completed on its next edit.
+        if template_fields_data:
+            missing = missing_request_fields(request_types or request_type_str.split(','),
+                                             template_instances, template_fields)
+            if missing:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'missing': missing,
+                                'error': 'Please fill in: ' + ', '.join(missing)}), 400
         print(f"DEBUG: Processing request types for update: {request_types} -> {request_type_str}")
         
         # Validate that end date is greater than or equal to start date

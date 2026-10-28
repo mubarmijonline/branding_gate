@@ -21,6 +21,9 @@ class AddRequestWithoutCompanyTest(_CostingHarness):
             'client_id': client_id, 'company_id': '', 'title': 'No company request',
             'priority': 'normal', 'start_date': (date.today() + timedelta(days=30)).isoformat(),
             'request_types': ['Others'],
+            # The place fields every request needs now (David, 2026-10-28).
+            'template_fields': {'instances': [{'request_type': 'Others', 'items': [],
+                                               'fields': {'location': 'Maadi', 'location_governorate': 'Cairo'}}]},
             'items': [{'name': 'Banner', 'quantity': 2, 'unit': 'pcs'}]})
         body = response.get_json()
         self.assertTrue(body.get('success'), body)
