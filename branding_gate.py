@@ -15518,6 +15518,15 @@ def get_request_comments(request_id):
     """Get all comments for a specific request from Firebase"""
     if 'user_id' not in session:
         return jsonify(error="Not authenticated"), 401
+    # Same people as the request's chat (these were never checked per request).
+    conn, cur = connection()
+    try:
+        allowed = chat_may_open(cur, 'sr', request_id)
+    finally:
+        cur.close()
+        conn.close()
+    if not allowed:
+        return jsonify(success=False, error='This request is not yours to talk on.'), 403
     
     try:
         # Get comments from Firebase
@@ -15557,6 +15566,14 @@ def add_request_comment(request_id):
     """Add a new comment to a request in Firebase"""
     if 'user_id' not in session:
         return jsonify(error="Not authenticated"), 401
+    conn, cur = connection()
+    try:
+        allowed = chat_may_open(cur, 'sr', request_id)
+    finally:
+        cur.close()
+        conn.close()
+    if not allowed:
+        return jsonify(success=False, error='This request is not yours to talk on.'), 403
     
     try:
         data = request.get_json()
@@ -20790,6 +20807,21 @@ def get_chat_sr_list():
 
         scope_sql, scope_params = (('', []) if has('chat.all') else
                                    scope_clause('sales_request.view', 'sr.owner_user_id'))
+        # The same people chat_may_open lets in: inside the comment scope, or
+        # working the request (costing assignee or assigner), or already in
+        # its thread. Without it an Operations member's list was every request
+        # (view scope 'all') and every one of them answered 403.
+        if has('sales_request.comment') and not has('chat.all'):
+            own_sql, own_params = scope_clause('sales_request.comment', 'sr.owner_user_id')
+            if own_sql:
+                inner = own_sql[len(' AND '):]
+                scope_sql = (" AND (" + inner + " OR sr.id IN (SELECT request_id FROM costing_assignment"
+                             " WHERE status <> 'withdrawn' AND (assignee_id = %s OR assigned_by = %s))"
+                             " OR sr.id IN (SELECT request_id FROM sales_request_comments"
+                             " WHERE user_id = %s AND is_deleted = 0))")
+                scope_params = own_params + [user_id, user_id, user_id]
+            else:
+                scope_sql, scope_params = '', []
 
         cur.execute(
             """
@@ -21133,7 +21165,8 @@ def chat_members(cur, kind, key):
         perms = load_permissions(person['id'])[0]
         if 'sales_request.comment' not in perms:
             continue
-        if person['id'] in involved or _scope_reaches(perms.get('sales_request.view'), person, owner):
+        # Comment scope, as in chat_may_open: who may write here, not who may read the request.
+        if person['id'] in involved or _scope_reaches(perms.get('sales_request.comment'), person, owner):
             members.append(person['id'])
     return sorted(set(members) | chat_everywhere())
 
@@ -21151,7 +21184,11 @@ def chat_may_open(cur, kind, key):
     row = cur.fetchone()
     if not row:
         return False
-    if has('sales_request.view') and _scope_covers('sales_request.view', row['owner_user_id']):
+    # The comment scope, not the view scope: an Operations member sees every
+    # request (to cost it) but talks only on the ones they work, which the
+    # audience below covers -- assigned, assigner, or already in the thread.
+    # Every other role holds comment at the same scope as view.
+    if _scope_covers('sales_request.comment', row['owner_user_id']):
         return True
     return me in sales_request_audience(cur, key)
 
@@ -21719,6 +21756,10 @@ def mark_chat_sr_read(request_id):
     try:
         conn, cur = connection()
         user_id = session['user_id']
+        if not chat_may_open(cur, 'sr', request_id):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'This request is not yours to talk on.'}), 403
         cur.execute(
             """
             UPDATE sales_request_comment_mentions m

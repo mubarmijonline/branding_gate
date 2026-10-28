@@ -595,6 +595,10 @@ SEED_MATRIX = {
             # Costs what they are asked to cost, and nothing else.
             'costing.view': 'own',
             'costing.propose': 'own',
+            # The chat on a request they are costing (David, 2026-10-28). 'own'
+            # is the scope of the rule, not of the reach: chat_may_open lets a
+            # member in on the requests they are assigned on, never the rest.
+            'sales_request.comment': 'own',
             'approved_item.view': 'all',
             'supplier.view': 'all',
             'inventory.view': 'all',

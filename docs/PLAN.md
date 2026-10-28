@@ -1023,3 +1023,27 @@ that turns red while the approver's question is unanswered).
 - Branch `wa-request/pending-discussion`, not deployed (Diab reviews first).
   The two tables are already created in the shared database (additive);
   deploying needs `seed_rbac.py` re-run for the new permission.
+
+## Operations in the chat of the requests they work (2026-10-28, David; WhatsApp request #3)
+
+Operations members could not open a request's chat: they did not hold
+`sales_request.comment`, and only the leader and the head did (at 'all').
+
+- `operations_member` gets `sales_request.comment` at 'own'.
+- `chat_may_open` and `chat_members` check the **comment** scope instead of
+  the view scope. Members read every request at 'all' to cost it; with the
+  view scope the grant would have opened every chat. Now a member is in a
+  request's chat when `sales_request_audience` has them: costing assignee or
+  assigner on it, or already in its thread. Every other role holds comment at
+  the same scope as view, so Sales and the rest are unchanged.
+- `/api/chat/sr-list` for comment holders lists the same set (comment scope,
+  or assigned / assigner, or already posted), so a member's drawer is their
+  requests, not every request answering 403.
+- The legacy Mongo comment routes (`/api/requests/<id>/comments`, `/add`) and
+  `/api/chat/sr/<id>/mark-read` now refuse whoever may not open the chat;
+  they never checked the request.
+- Decision taken (safer): assigned only, not Operation-wide.
+- Tests: `tests/test_operation_request_chat.py` (fails without the fix).
+- Branch `wa-request/operation-request-chat`, not deployed. **Deploy order:**
+  the code first, then `seed_rbac.py`; seeding before the code would let
+  every member into every chat under the old rule.
