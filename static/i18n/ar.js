@@ -4282,5 +4282,8 @@ window.BG_AR = {
 "Discussion on a pending request: {0}": "نقاش على طلب مستني موافقة: {0}",
 "Your question in the discussion has no answer yet. Approve \"{0}\" anyway?": "سؤالك في النقاش لسه ماتردش عليه. توافق على \"{0}\" برضه؟",
 "Please set at least one selling price.": "حط سعر بيع لبند واحد على الأقل.",
-"Selling prices are saved.": "أسعار البيع اتحفظت."
+"Selling prices are saved.": "أسعار البيع اتحفظت.",
+"Venue / Hotel Name": "المكان / اسم الفندق",
+"TBD (not fixed yet)": "لسه مش محدد (TBD)",
+"Please fill in: {0}": "لازم تملا: {0}"
 };

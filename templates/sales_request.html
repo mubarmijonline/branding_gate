@@ -6244,7 +6244,10 @@ window.chartPieDemo = function() {
                         field_name: 'setup_date',
                         field_label: 'Setup Date',
                         field_type: 'date',
-                        is_required: false,
+                        // Required, with a TBD box for when it is not fixed
+                        // yet (David, 2026-10-28; checked by the server too).
+                        is_required: true,
+                        allow_tbd: true,
                         auto_populate: 'request_start_date',
                         validation: 'within_request_dates'
                     },
@@ -6266,9 +6269,9 @@ window.chartPieDemo = function() {
                     },
                     {
                         field_name: 'hotel_name',
-                        field_label: 'Hotel Name',
+                        field_label: 'Venue / Hotel Name',
                         field_type: 'text',
-                        is_required: false
+                        is_required: true
                     },
                     {
                         field_name: 'hall_name',
@@ -7070,6 +7073,11 @@ window.chartPieDemo = function() {
                 fieldsHtml += `<small class="form-text text-muted">${field.help_text}</small>`;
             }
             
+            if (field.allow_tbd) {
+                fieldsHtml += `<div class="custom-control custom-checkbox mt-1">
+                    <input type="checkbox" class="custom-control-input setup-tbd" id="${fieldId}_tbd" data-target="${fieldId}">
+                    <label class="custom-control-label small" for="${fieldId}_tbd">TBD (not fixed yet)</label></div>`;
+            }
             fieldsHtml += '</div>';
 
             // === Location companion fields: Governorate + Google Maps Link ===
@@ -7103,16 +7111,18 @@ window.chartPieDemo = function() {
                         _govOpts += `<option value="${g}">${g}</option>`;
                     });
 
-                    // Governorate (optional)
+                    // Governorate: required wherever the location is (the
+                    // server refuses the request without it).
+                    const _govRequired = !!field.is_required;
                     fieldsHtml += `<div class="col-md-6 mb-3">`;
-                    fieldsHtml += `<label for="${_govId}">Governorate <small class="text-muted">(optional)</small></label>`;
+                    fieldsHtml += `<label for="${_govId}">Governorate ${_govRequired ? '<span class="text-danger">*</span>' : '<small class="text-muted">(optional)</small>'}</label>`;
                     fieldsHtml += `<select class="form-control template-field"
                                           id="${_govId}"
                                           name="${_govName}"
                                           data-field-name="${_govKey}"
                                           data-instance-id="${instanceId}"
                                           data-template-id="${templateId}"
-                                          data-request-type="${requestType}">${_govOpts}</select>`;
+                                          data-request-type="${requestType}" ${_govRequired ? 'required' : ''}>${_govOpts}</select>`;
                     fieldsHtml += `</div>`;
 
                     // Google Maps Link (optional)
@@ -7737,6 +7747,17 @@ window.chartPieDemo = function() {
     }
 
     // Add date validation for template fields
+    // Setup date "TBD": the date box becomes a read-only TBD, which is what
+    // the form sends and the server accepts; untick to pick a date again.
+    window.bgSetupTbd = function ($input, on) {
+        $input.attr('type', on ? 'text' : 'date').prop('readonly', on).val(on ? 'TBD' : '')
+              .data('manually-edited', on);
+        $('#' + $input.attr('id') + '_tbd').prop('checked', on);
+    };
+    $(document).on('change', '.setup-tbd', function () {
+        window.bgSetupTbd($('#' + $(this).data('target')), this.checked);
+    });
+
     $(document).on('change', '.template-field[data-validation="within_request_dates"]', function() {
         validateDateField(this, 'within_request_dates');
     });
@@ -11783,7 +11804,9 @@ window.chartPieDemo = function() {
                                 }
                                 
                                 // Set field value if found
-                                if (fieldValue) {
+                                if (fieldValue && String(fieldValue).toUpperCase() === 'TBD' && $field.data('field-name') === 'setup_date') {
+                                    window.bgSetupTbd($field, true);
+                                } else if (fieldValue) {
                                     $field.val(fieldValue);
                                     $field.trigger('input'); // Trigger events for any listeners
                                     console.log(`Successfully set field ${fieldName} to: ${fieldValue}`);

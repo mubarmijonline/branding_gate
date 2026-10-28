@@ -45,7 +45,9 @@ class AddItemsToExistingRequestTest(_CostingHarness):
         payload = {'title': 'Costing test request', 'client_id': str(self.client_id), 'description': '',
                    'start_date': '2026-11-01', 'end_date': '2026-11-02', 'request_types': ['Booth'],
                    'template_fields': {'instances': [{'instance_id': '1_Booth', 'template_id': 1, 'request_type': 'Booth',
-                                                      'fields': {}, 'items': [self._item('Costing test item', 4),
+                                                      'fields': {'location': 'Nasr City', 'location_governorate': 'Cairo',
+                                                                 'hotel_name': 'Citystars', 'setup_date': 'TBD'},
+                                                      'items': [self._item('Costing test item', 4),
                                                                               self._item('Being costed', 2),
                                                                               self._item('Screen For VIP', 3)]}]}}
         r = self._client_for(self.admin).post('/api/sales-requests/update-with-template/%d' % self.request_id, json=payload)
