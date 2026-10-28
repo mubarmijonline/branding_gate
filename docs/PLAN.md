@@ -997,3 +997,29 @@ Shipped 2026-10-28 with the above:
 - Browser check note: Chromium does not hand file bytes to Playwright's
   request interception, so uploads through the e2e proxy arrive empty; the
   bytes round-trip is asserted in `tests/test_design_requests.py` instead.
+
+## Discuss a pending approval (2026-10-28, Beshoy; WhatsApp request #2)
+
+On Approvals -> Pending Requests the approver could only approve, reject or
+view. Now each card has **Discuss** (prominent on urgent cards, with a count
+that turns red while the approver's question is unanswered).
+
+- Thread on the approval (`approval_comment`, `approval_comment_mention`;
+  `approval_thread_migration.sql`), since a pending approval is not a sales
+  request yet. `GET/POST /api/approvals/<id>/thread`.
+- Who: holders of `sales_request.approve`, the requester, the requester's
+  manager, anyone tagged with @ (`/api/mention-users`). Everybody else 403.
+  New permission `sales_request.discuss_approval` (Sales / Account ladders).
+- Notifications: approvers get `/approvals?request=N` (one card, a notice and
+  Show all, discussion opened); requester / manager / tagged get
+  `/sales_request?approval=N` (discussion opened). The Sales Request page shows
+  the requester's own requests waiting for approval with their Discuss button.
+- Approve / reject closes it (read-only); approving copies it into the new
+  request's comments (`source = 'approval_discussion'`).
+- Decisions taken (safer option): the manager is always in the discussion and
+  told; an unanswered question **warns** on Approve, it does not block.
+- `static/js/bg-approval-thread.js` (one window for everyone), polling 15 s
+  open / 30 s badges. Tests: `tests/test_approval_thread.py`.
+- Branch `wa-request/pending-discussion`, not deployed (Diab reviews first).
+  The two tables are already created in the shared database (additive);
+  deploying needs `seed_rbac.py` re-run for the new permission.

@@ -68,6 +68,10 @@
                     <span id="approvalCount" class="badge badge-warning">Loading...</span>
                 </div>
                 <div class="card-body">
+                    <div id="approvalsNarrowed" class="alert alert-info d-none align-items-center justify-content-between">
+                        <span><i class="fas fa-filter mr-1"></i>Showing one request from your notification.</span>
+                        <a class="btn btn-sm btn-outline-primary" href="/approvals">Show all requests</a>
+                    </div>
                     <div id="approvalsContainer">
                         <div class="text-center py-5">
                             <i class="fas fa-spinner fa-spin fa-3x text-primary mb-3"></i>
@@ -92,9 +96,39 @@
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
+// ?request=N comes from a discussion notification: that one card, said so,
+// and its discussion opened.
+var NARROW = Number(new URLSearchParams(location.search).get('request')) || null;
+var THREADS = {};
+
 $(document).ready(function() {
     loadPendingApprovals();
+    if (NARROW) { bgApprovalThread.open(NARROW); }
+    // The badges follow the discussion without reloading the page.
+    setInterval(refreshThreadBadges, 30000);
+    $(document).on('bg:approval-thread', refreshThreadBadges);
+    $(document).on('hidden.bs.modal', '#bgApprovalThread', refreshThreadBadges);
 });
+
+function threadButton(approval, urgent) {
+    var n = approval.thread_count || 0;
+    return '<button class="btn btn-sm mb-2 ' + (urgent ? 'btn-warning font-weight-bold' : 'btn-outline-secondary') +
+        ' discuss-btn" data-id="' + approval.id + '" onclick="bgApprovalThread.open(' + approval.id + ')">' +
+        '<i class="fas fa-comments mr-1"></i> Discuss' +
+        '<span class="badge ' + (approval.thread_waiting ? 'badge-danger' : 'badge-light') + ' ml-1 discuss-count"' +
+        (n ? '' : ' style="display:none"') + '>' + n + '</span></button> ';
+}
+
+function refreshThreadBadges() {
+    $.ajax({ url: '/api/approvals/pending', cache: false, silent: true }).done(function (r) {
+        (r.approvals || []).forEach(function (a) {
+            THREADS[a.id] = a;
+            var $c = $('.discuss-btn[data-id="' + a.id + '"] .discuss-count');
+            $c.text(a.thread_count || 0).toggle(!!a.thread_count)
+              .toggleClass('badge-danger', !!a.thread_waiting).toggleClass('badge-light', !a.thread_waiting);
+        });
+    });
+}
 
 function loadPendingApprovals() {
     $.ajax({
@@ -102,7 +136,11 @@ function loadPendingApprovals() {
         type: 'GET',
         success: function(response) {
             if (response.success) {
-                displayApprovals(response.approvals);
+                var shown = response.approvals;
+                response.approvals.forEach(function (a) { THREADS[a.id] = a; });
+                if (NARROW) { shown = shown.filter(function (a) { return a.id === NARROW; }); }
+                $('#approvalsNarrowed').toggleClass('d-none', !NARROW).toggleClass('d-flex', !!NARROW);
+                displayApprovals(shown);
                 $('#approvalCount').text(response.count + ' Pending');
             } else {
                 Swal.fire('Error', response.error || 'Failed to load approvals', 'error');
@@ -175,6 +213,7 @@ function displayApprovals(approvals) {
                             <button class="btn btn-info btn-sm mb-2" onclick="viewDetails(${approval.id})">
                                 <i class="fas fa-eye mr-1"></i> View Details
                             </button>
+                            ${threadButton(approval, daysUntilStart <= 2)}
                         </div>
                     </div>
                     
@@ -254,9 +293,12 @@ function getPriorityClass(priority) {
 }
 
 function approveRequest(approvalId, title) {
+    // An unanswered question warns; it does not block (an urgent request
+    // cannot wait on a reply that may never come).
+    var waiting = THREADS[approvalId] && THREADS[approvalId].thread_waiting;
     Swal.fire({
         title: 'Approve Request?',
-        text: `Approve "${title}"?`,
+        text: waiting ? `Your question in the discussion has no answer yet. Approve "${title}" anyway?` : `Approve "${title}"?`,
         icon: 'question',
         input: 'textarea',
         inputLabel: 'Admin Notes (optional)',

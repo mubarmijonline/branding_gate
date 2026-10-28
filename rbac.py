@@ -48,6 +48,10 @@ PERMISSIONS = {
     'sales_request.delete':  'Delete a sales request',
     'sales_request.approve': 'Approve urgent requests and change request status',
     'sales_request.comment': 'Comment on a sales request',
+    # A pending approval's discussion (Beshoy, 2026-10-28). Holding it lets
+    # you in only as the requester, their manager or someone tagged; the
+    # approver is in through sales_request.approve.
+    'sales_request.discuss_approval': 'Discuss a request waiting for approval with the approver',
 
     # Item money. Cost is Operations, selling price is Pricing.
     #
@@ -231,6 +235,7 @@ SCOPELESS_PERMISSIONS = frozenset({
     'dashboard.sales', 'dashboard.operations', 'dashboard.finance', 'dashboard.supplier',
     'portal.marketing', 'portal.account', 'portal.design_2d', 'portal.design_3d',
     'section.sales', 'section.operations', 'section.finance',
+    'sales_request.discuss_approval',
     'design_request.assign', 'design_request.deliver', 'design_request.approve',
     'design_request.operate',
 })
@@ -340,6 +345,7 @@ def _sales_line(scope, approve=False, decide_client=False, decide_negotiation=Fa
         'sales_request.create': 'own',
         'sales_request.edit': scope,
         'sales_request.comment': scope,
+        'sales_request.discuss_approval': 'all',
         'client_approval.view': scope,
         'client_approval.submit': scope,
         'negotiation.view': scope,
