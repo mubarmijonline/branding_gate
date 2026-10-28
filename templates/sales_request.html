@@ -1383,6 +1383,8 @@
     /* Center columns */
     #requests-table th:nth-child(1),
     #requests-table td:nth-child(1),
+    #requests-table th:nth-child(12),
+    #requests-table td:nth-child(12),
     #requests-table th:nth-child(7),
     #requests-table td:nth-child(7),
     #requests-table th:nth-child(8),
@@ -3736,6 +3738,7 @@ window.chartPieDemo = function() {
                             <th>Request Types</th>
                             <th>Client</th>
                             <th>Company</th>
+                            <th>Client Approval</th>
                             <th>Priority</th>
                             <th>Status</th>
                             <th>Start Date</th>
@@ -3744,7 +3747,6 @@ window.chartPieDemo = function() {
                             {% if 'sales_item.cost' in _p %}<th>Costed Items</th>{% endif %}
                             {% if 'sales_item.cost' in _p %}<th>Total Cost</th>{% endif %}
                             <th>Total Sell</th>
-                            <th>Client Approval</th>
                             <th class="action-column">Actions</th>
                         </tr>
                     </thead>
@@ -5050,6 +5052,16 @@ window.chartPieDemo = function() {
             }
         }
     );
+
+    // Client Approval sits right after Company, before Priority (Gamal,
+    // 2026-10-28): it is the column people scan for. Moved by name so the
+    // admin-only cost columns in between cannot shift it.
+    (function () {
+        var from = tableColumns.findIndex(function (c) { return c.data === 'client_approval_stage'; });
+        var column = tableColumns.splice(from, 1)[0];
+        column.name = 'client_approval';
+        tableColumns.splice(tableColumns.findIndex(function (c) { return c.name === 'priority'; }), 0, column);
+    })();
 
     // Verify column count matches before initializing DataTable
     console.log('JS columns count:', tableColumns.length, 'HTML header columns:', headerColumnCount);
