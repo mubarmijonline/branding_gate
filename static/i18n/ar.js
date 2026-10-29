@@ -4385,5 +4385,18 @@ window.BG_AR = {
 "Earlier rounds": "المرات اللي فاتت",
 "Round {0}": "مرة {0}",
 "Send approved items to Operation": "ابعت البنود الموافق عليها للعمليات",
-"Send the approved items to Operation?": "تبعت البنود الموافق عليها للعمليات؟"
+"Send the approved items to Operation?": "تبعت البنود الموافق عليها للعمليات؟",
+"{0} of {1} items with Pricing": "{0} من {1} بند مع التسعير",
+"Send the rest to Pricing": "ابعت الباقي للتسعير",
+"Send the rest to Pricing?": "تبعت الباقي للتسعير؟",
+"Cost every item first, or pick the costed ones and send those": "كلّف كل البنود الأول، أو اختار البنود المتكلفة وابعتها",
+"Pricing will see these items and their costs. A cost changed later is flagged to them.": "التسعير هيشوف البنود دي وتكلفتها. لو التكلفة اتغيرت بعد كده هيتبلغوا.",
+"Send {0} item(s) to Pricing now?": "تبعت {0} بند للتسعير دلوقتي؟",
+"Pick saved, costed items that are not with Pricing yet": "اختار بنود متكلفة ومتسجلة ولسه مش مع التسعير",
+"Send the picked items to Pricing now; the rest stay here": "ابعت البنود المختارة للتسعير دلوقتي، والباقي يفضل هنا",
+"Sent {0} item(s) to Pricing.": "اتبعت {0} بند للتسعير.",
+"Saved, not sent to Pricing:": "اتحفظ، بس متبعتش للتسعير:",
+"Update and Send to Pricing": "تحديث وإرسال للتسعير",
+"Still with Operation": "لسه مع العمليات",
+"Operation has not sent this item yet.": "العمليات لسه مابعتتش البند ده."
 };

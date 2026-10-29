@@ -1186,3 +1186,31 @@ The costing form posts request_id as text. add-costs compared it with integer
 ids, so a cost written after the hand-off was not flagged, and the notice
 formatted it with %d and failed (4 times on 29 Oct). The route now converts it
 once on entry. Test: test_send_to_pricing (string id).
+
+## 2026-10-30 Send part of a request to Pricing; Team Leader sees his team (David)
+
+1. Hand-off per item: `sales_request_items.pricing_sent_at/by`
+   (pricing_item_handoff_migration.sql, backfilled from the request's
+   hand-off; through a temporary table because the item triggers write
+   sales_request). `sales_request.pricing_handoff_at` stays as the first send
+   and keeps the request on the Pricing desk.
+   `send_items_to_pricing(cur, request_id, item_ids=None)` is the one writer;
+   `POST .../send-to-pricing` takes optional `item_ids`; add-costs takes
+   `send_to_pricing: true` and sends after the save commits (a refused send
+   leaves the saved costs and returns `send_error`).
+   Pricing side, per item: summary/list counts use `i.pricing_sent_at`,
+   set-prices refuses unsent items, the request detail goes through
+   `scrub_unsent_cost` (all cost out, sent items back in), list totals are
+   scrubbed while any item is unsent. `mark_cost_changed` flags only when a
+   changed item was already sent. Sales "not costed" now also counts costed
+   items not yet sent (still Operation's).
+   UI: "Update and Send to Pricing", "Send N to Pricing" on the picked items,
+   "With Pricing" chip per item, "Still with Operation" and a locked price
+   box on the Pricing window (no share-of-total fake cost for those).
+2. Team Leader visibility: the operations list and its assignment chips use
+   {me + direct reports} for a restricted viewer (as the costing queue
+   already did), and `_may_decide_proposal` lets a leader decide his direct
+   reports' proposals whoever assigned them (plus the "to decide" badge).
+   Cause: David assigned 30738's items straight to Haitham's members.
+Tests: test_send_to_pricing (part send, update and send), test_costing
+(leader sees and decides for his people).

@@ -42,7 +42,7 @@ def _badge_logic():
     # the card's markup and cannot run on its own.
     first = page.index('var activeNegotiation = item.active_negotiation || null;')
     first_end = page.index(');', page.index("item.negotiation_status === 'negotiated'", first)) + 2
-    second = page.index('var needsPricing = !isNegotiation', first_end)
+    second = page.index('var needsPricing = ', first_end)
     second_end = page.index("Awaiting Cost</span>'));", second) + len("Awaiting Cost</span>'));")
     return page[first:first_end] + '\n' + page[second:second_end]
 
@@ -52,7 +52,8 @@ def _badge_for(item):
         raise unittest.SkipTest('node is not installed')
     script = ('var item = %s;\n'
               'var sellPerItem = Number(item.sell_per_item || 0);\n'
-              'var costPerItem = Number(item.cost_per_item || 0);\n' % json.dumps(item)
+              'var costPerItem = Number(item.cost_per_item || 0);\n'
+              'var heldByOperation = item.pricing_sent === false;\n' % json.dumps(item)
               + _badge_logic() +
               "\nconsole.log(JSON.stringify({badge: statusBadge.replace(/<[^>]+>/g, '').trim(),"
               " isNegotiation: isNegotiation}));")
@@ -356,6 +357,7 @@ class FinishingANegotiatedItemTest(unittest.TestCase):
                                'approved', 'pricing')""",
                     (self.item_id, self.request_id))
         self.negotiation_id = cur.lastrowid
+        cur.execute("UPDATE sales_request_items SET pricing_sent_at = NOW() WHERE request_id = %s", (self.request_id,))
         cur.close()
 
     def _undo(self):

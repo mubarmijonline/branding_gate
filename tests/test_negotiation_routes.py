@@ -89,6 +89,7 @@ class NegotiationRouteTest(unittest.TestCase):
             (self.item_id, self.request_id),
         )
         self.negotiation_id = cursor.lastrowid
+        cursor.execute("UPDATE sales_request_items SET pricing_sent_at = NOW() WHERE request_id = %s", (self.request_id,))
         cursor.close()
 
     def tearDown(self):

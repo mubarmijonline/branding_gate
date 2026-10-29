@@ -108,3 +108,29 @@ before any work was handed in.
 - Browser at 390px and 1440px: create a request with a printing item and a
   video item and attachments, assign, upload, approve, send to Operation,
   each as the right user.
+
+## Costing hand-off to Pricing
+
+Asked for by David Osama (Operations Head), 28-29 Oct 2026.
+
+- A cost saved by Operation stays with Operation. Pricing sees an item, its
+  cost and a place to price it only once a Team Leader or the Head sends it.
+- Two ways to save: "Update Item Costs" saves only; "Update and Send to
+  Pricing" saves and sends every item not yet sent, in one click. If some
+  item still has no cost, the costs are saved and nothing is sent, with the
+  reason shown.
+- Part of a request can go early: pick costed items in the cost window and
+  "Send N to Pricing". Those items are with Pricing; the rest stay with
+  Operation and are sent later ("Send the rest to Pricing").
+- On the Pricing window an item not sent yet reads "Still with Operation",
+  shows no cost and cannot be priced. The request totals stay hidden from
+  Pricing until every item is sent.
+- A cost changed on an item Pricing already has keeps it with Pricing, marks
+  the request "Cost changed" and tells Pricing. Costing an item Pricing does
+  not have yet is not a change.
+- An Operations Team Leader sees and decides the costing of their own team's
+  members, including items the Head handed to a member directly.
+
+Done when: a request with 10 items can have 3 sent and priced while 7 are
+costed; the Team Leader of a member the Head assigned to sees the request
+and can accept that member's price.

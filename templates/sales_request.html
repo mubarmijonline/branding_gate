@@ -12603,8 +12603,10 @@ window.chartPieDemo = function() {
                 var costPerItem = item.cost_per_item ? parseFloat(item.cost_per_item) : 0;
                 var totalCost = item.total_cost ? parseFloat(item.total_cost) : 0;
                 
-                // Auto-calculate costs if needed
-                if (!costPerItem && !totalCost && requestHasTotalCost && totalQuantityAllItems > 0) {
+                // Auto-calculate costs if needed. Not for an item Operation has
+                // not sent: it has no cost here, and a share of the total is not one.
+                var heldByOperation = item.pricing_sent === false;
+                if (!heldByOperation && !costPerItem && !totalCost && requestHasTotalCost && totalQuantityAllItems > 0) {
                     var itemProportion = quantity / totalQuantityAllItems;
                     totalCost = parseFloat(request.total_cost) * itemProportion;
                     costPerItem = totalCost / quantity;
@@ -12832,7 +12834,7 @@ window.chartPieDemo = function() {
                     // no cost, which pricing cannot touch yet, and one costing
                     // has handed over and is waiting on a price. Only the second
                     // is work for whoever opened this modal, so say which.
-                    var needsPricing = !isNegotiation && sellPerItem <= 0 && costPerItem > 0;
+                    var needsPricing = !heldByOperation && !isNegotiation && sellPerItem <= 0 && costPerItem > 0;
                     // Whose move it is, on the row itself. "NEGOTIATION" covered
                     // three different states, including ones where pricing has
                     // nothing to do yet, so the list read the same whether the
@@ -12848,7 +12850,9 @@ window.chartPieDemo = function() {
                     var pricedBadge = sellPerItem > 0
                         ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
                         : '';
-                    var statusBadge = isNegotiation
+                    var statusBadge = heldByOperation
+                        ? '<span class="badge badge-secondary ml-2" title="Operation has not sent this item yet"><i class="fas fa-hourglass-half mr-1"></i>Still with Operation</span>'
+                        : isNegotiation
                         ? pricedBadge + negotiationBadge
                         : (sellPerItem > 0
                             ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
@@ -12989,8 +12993,10 @@ window.chartPieDemo = function() {
                                                            data-total-cost="${totalCost}"
                                                            data-original-price="${sellPerItem || 0}"
                                                            value="${sellPerItem || ''}"
-                                                           placeholder="Enter price...">
+                                                           ${item.pricing_sent === false ? 'disabled' : ''}
+                                                           placeholder="${item.pricing_sent === false ? 'Still with Operation' : 'Enter price...'}">
                                                 </div>
+                                                ${item.pricing_sent === false ? '<small class="text-muted d-block mt-1"><i class="fas fa-hourglass-half mr-1"></i>Operation has not sent this item yet.</small>' : ''}
                                                 <!-- What this price is worth, against the
                                                      field that sets it. The numbers already
                                                      existed further down the card; whoever is
@@ -13217,7 +13223,8 @@ window.chartPieDemo = function() {
         })();
         // Update status badge in summary
         var $summaryName = $(`.price-item-accordion[data-item-accordion-id="${itemId}"] .psum-name`);
-        if ($summaryName.length) {
+        // An item still with Operation keeps the badge that says so.
+        if ($summaryName.length && !$(`.item-sell-price-input[data-item-id="${itemId}"]`).prop('disabled')) {
             $summaryName.find('.badge').remove();
             if (sellPerItem > 0) {
                 $summaryName.append(' <span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>');

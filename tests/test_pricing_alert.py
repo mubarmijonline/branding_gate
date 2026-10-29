@@ -45,7 +45,8 @@ class NotPricedCountTest(unittest.TestCase):
             JOIN sales_request sr ON sr.id = i.request_id
             -- Only what Operation has sent to Pricing waits for a price.
             WHERE i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
-              AND sr.pricing_handoff_at IS NOT NULL
+              AND i.pricing_sent_at IS NOT NULL
+              AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
             GROUP BY i.request_id
         """)
         rows = cur.fetchall()
@@ -76,7 +77,10 @@ class NotPricedCountTest(unittest.TestCase):
         cur = conn.cursor()
         cur.execute("""
             SELECT request_id, COUNT(*) AS n FROM sales_request_items
-            WHERE cost_per_item IS NULL GROUP BY request_id
+            -- Not costed, or costed and not sent yet: still Operation's.
+            WHERE sell_per_item IS NULL AND (cost_per_item IS NULL OR pricing_sent_at IS NULL)
+              AND COALESCE(approval_status, 'pending') NOT IN ('approved', 'rejected')
+            GROUP BY request_id
         """)
         uncosted = {row['request_id']: row['n'] for row in cur.fetchall()}
         cur.close()

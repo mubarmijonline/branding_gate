@@ -775,6 +775,28 @@ class OperationsListScopeTest(_CostingHarness):
         self._assign(self.leader, [self.member])
         self.assertIn(self.request_id, self._rows(self.leader))
 
+    def test_a_leader_sees_what_the_head_gave_their_people(self):
+        # David handed items straight to Haitham's members and Haitham lost
+        # the request (2026-10-29). His team's desks are his desk.
+        self._assign(self.head, [self.member])
+        self._assign_other(self.head, [self.member_b])
+        rows = self._rows(self.leader)
+        self.assertIn(self.request_id, rows)
+        self.assertEqual(rows[self.request_id]['items_count'], 2)
+        self.assertNotIn(self.request_id, self._rows(self.leader_b))
+
+    def test_a_leader_decides_for_their_people_whoever_asked(self):
+        self._assign(self.head, [self.member])
+        proposal = self._propose(self.member, '640').get_json()['proposal_id']
+        state = self._client_for(self.leader).get('/api/costing/request/%d' % self.request_id).get_json()
+        self.assertTrue(state['items'][str(self.item_id)]['proposals'][0]['can_decide'])
+        self.assertEqual(self._client_for(self.leader_b).post(
+            '/api/costing/proposals/%d/decide' % proposal, json={'decision': 'accept'}).status_code, 403)
+        response = self._client_for(self.leader).post(
+            '/api/costing/proposals/%d/decide' % proposal, json={'decision': 'accept'})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(float(self._item_cost()['cost_per_item']), 640.0)
+
     def test_another_team_sees_none_of_it(self):
         self._assign(self.head, [self.leader])
         self._assign(self.leader, [self.member])

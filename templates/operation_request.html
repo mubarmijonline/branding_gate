@@ -1115,6 +1115,11 @@ window.chartPieDemo = function() {
                                             <i class="fas fa-user-plus"></i>
                                             Assign <span id="costSelectedCount">0</span>
                                         </button>
+                                        <button type="button" class="btn btn-sm btn-success d-none" id="costSendSelected" disabled
+                                                title="Send the picked items to Pricing now; the rest stay here">
+                                            <i class="fas fa-paper-plane"></i>
+                                            Send <span id="costSendCount">0</span> to Pricing
+                                        </button>
                                     </div>
                                 </div>
                                 <div id="costItemsContainer">
@@ -1137,6 +1142,8 @@ window.chartPieDemo = function() {
                     <div id="opPricingState" class="small mr-auto"></div>
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-warning" id="saveCostsBtn">Update Item Costs</button>
+                    <button type="button" class="btn btn-success d-none" id="saveAndSendBtn">
+                        <i class="fas fa-paper-plane mr-1"></i>Update and Send to Pricing</button>
                     <button type="button" class="btn btn-success d-none" id="sendToPricingBtn" disabled>
                         <i class="fas fa-paper-plane mr-1"></i>Send to Pricing</button>
                 </div>
@@ -1228,6 +1235,7 @@ function formatNum(n) {
 // the team leaders only; everyone else gets there by proposal.
 var CAN_COST_DIRECT   = {{ 'true' if 'sales_item.cost_direct' in _p else 'false' }};
 var CAN_ASSIGN_COSTING = {{ 'true' if 'costing.assign' in _p else 'false' }};
+var CAN_SEND_TO_PRICING = {{ 'true' if 'costing.send_to_pricing' in _p else 'false' }};
 var CAN_CHAT = {{ 'true' if 'sales_request.comment' in _p else 'false' }};
 $(document).on('click', '.op-chat-btn', function (e) {
     e.preventDefault();
@@ -1331,22 +1339,33 @@ function redrawOpTable() {
 }
 
 // Send to Pricing (David, 2026-10-28): a saved cost stays here until a Team
-// Leader or the Head sends the request on, which needs every item costed.
-// Once with Pricing, a cost change only flags it there.
+// Leader or the Head sends it on. Once with Pricing, a cost change only flags
+// it there. Per item since 2026-10-29: picked costed items can go ahead of the
+// rest, and "Update and Send" saves and sends what is left in one click.
+var PRICING_STATE = {};
+
 function renderPricingState(p) {
-    p = p || {};
+    p = PRICING_STATE = p || {};
     var $state = $('#opPricingState'), $btn = $('#sendToPricingBtn');
-    if (p.with_pricing) {
-        $state.html('<span class="badge badge-success"><i class="fas fa-check mr-1"></i>' + bgT('With Pricing') + '</span> ' +
-            '<span class="text-muted">' + costEsc(p.sent_at || '') + (p.sent_by_name ? ' · ' + costEsc(p.sent_by_name) : '') + '</span>' +
-            (p.cost_changed ? ' <span class="badge badge-warning">' + bgT('Cost changed') + '</span>' : ''));
-        $btn.addClass('d-none');
-        return;
+    var left = (p.items || 0) - (p.sent || 0);
+    var changed = p.cost_changed ? ' <span class="badge badge-warning">' + bgT('Cost changed') + '</span>' : '';
+    var by = '<span class="text-muted">' + costEsc(p.sent_at || '') + (p.sent_by_name ? ' · ' + costEsc(p.sent_by_name) : '') + '</span>';
+    if (p.all_sent) {
+        $state.html('<span class="badge badge-success"><i class="fas fa-check mr-1"></i>' + bgT('With Pricing') + '</span> ' + by + changed);
+    } else if (p.sent) {
+        $state.html('<span class="badge badge-info"><i class="fas fa-paper-plane mr-1"></i>' +
+            bgT('{0} of {1} items with Pricing').replace('{0}', p.sent).replace('{1}', p.items) + '</span> ' + by + changed);
+    } else {
+        $state.html('<span class="text-muted">' + bgT('{0} of {1} items costed').replace('{0}', p.costed || 0).replace('{1}', p.items || 0) +
+            ' · ' + bgT('not with Pricing yet') + '</span>');
     }
-    $state.html('<span class="text-muted">' + bgT('{0} of {1} items costed').replace('{0}', p.costed || 0).replace('{1}', p.items || 0) +
-        ' · ' + bgT('not with Pricing yet') + '</span>');
-    $btn.toggleClass('d-none', !p.can_send).prop('disabled', !p.all_costed)
-        .attr('title', p.all_costed ? '' : bgT('Cost every item first'));
+    var open = !!p.can_send && left > 0;
+    $btn.toggleClass('d-none', !open).prop('disabled', !p.all_costed)
+        .attr('title', p.all_costed ? '' : bgT('Cost every item first, or pick the costed ones and send those'))
+        .html('<i class="fas fa-paper-plane mr-1"></i>' + (p.sent ? bgT('Send the rest to Pricing') : bgT('Send to Pricing')));
+    $('#saveAndSendBtn').toggleClass('d-none', !(open && CAN_COST_DIRECT && $('.op-cost-item').length));
+    $('#costSendSelected').toggleClass('d-none', !open);
+    updateCostSelection();
 }
 
 function loadPricingState(requestId) {
@@ -1354,16 +1373,42 @@ function loadPricingState(requestId) {
         .done(function (r) { if (r && r.success) { renderPricingState(r.request.pricing); } });
 }
 
-$(document).on('click', '#sendToPricingBtn', function () {
+// The cards say which items Pricing already has, without reloading the modal.
+function markSentItems(ids) {
+    ids.forEach(function (id) {
+        var $card = $('.op-cost-item').filter(function () { return Number($(this).data('item-id')) === Number(id); });
+        if (!$card.length || String($card.attr('data-sent')) === 'true') { return; }
+        $card.attr('data-sent', 'true').find('.op-ci-check').prop('checked', false);
+        $card.find('.op-ci-summary').append(PRICING_CHIP);
+    });
+}
+var PRICING_CHIP = '<span class="op-ci-summary-chip ok op-ci-sent"><i class="fas fa-paper-plane"></i> With Pricing</span>';
+
+function sendToPricing(itemIds, question) {
     var id = window.currentCostingRequestId;
-    Swal.fire({ title: bgT('Send to Pricing?'), text: bgT('Pricing will see this request and its costs. A cost changed later is flagged to them.'),
+    Swal.fire({ title: question, text: bgT('Pricing will see these items and their costs. A cost changed later is flagged to them.'),
                 icon: 'question', showCancelButton: true, confirmButtonText: bgT('Send to Pricing'), cancelButtonText: bgT('Cancel') })
         .then(function (a) {
             if (!a.isConfirmed) return;
-            $.ajax({ url: '/api/operations/requests/' + id + '/send-to-pricing', method: 'POST' })
-                .done(function () { loadPricingState(id); Swal.fire('', bgT('Sent to Pricing.'), 'success'); })
+            $.ajax({ url: '/api/operations/requests/' + id + '/send-to-pricing', method: 'POST',
+                     contentType: 'application/json', data: JSON.stringify(itemIds ? { item_ids: itemIds } : {}) })
+                .done(function (r) {
+                    markSentItems(itemIds || $('.op-cost-item').map(function () { return $(this).data('item-id'); }).get());
+                    renderPricingState(Object.assign({ can_send: PRICING_STATE.can_send }, r.pricing || {}));
+                    Swal.fire('', bgT('Sent to Pricing.'), 'success');
+                    if (typeof table !== 'undefined' && table.ajax) { COSTING_TABLE_DIRTY = true; }
+                })
                 .fail(function (xhr) { Swal.fire('', (xhr.responseJSON || {}).error || bgT('Could not send it'), 'error'); });
         });
+}
+
+$(document).on('click', '#sendToPricingBtn', function () {
+    sendToPricing(null, PRICING_STATE.sent ? bgT('Send the rest to Pricing?') : bgT('Send to Pricing?'));
+});
+
+$(document).on('click', '#costSendSelected', function () {
+    var ids = selectedCostItems();
+    if (ids.length) { sendToPricing(ids, bgT('Send {0} item(s) to Pricing now?').replace('{0}', ids.length)); }
 });
 
 function refreshCostingViews(requestId) {
@@ -1670,6 +1715,15 @@ function updateCostSelection() {
     var picked = selectedCostItems();
     $('#costSelectedCount').text(picked.length);
     $('#costAssignSelected').prop('disabled', !picked.length);
+    // Only saved costs go to Pricing, and only once.
+    var sendable = picked.length && picked.every(function (id) {
+        var $card = $('.op-cost-item').filter(function () { return Number($(this).data('item-id')) === id; });
+        return String($card.attr('data-costed')) === 'true' && String($card.attr('data-sent')) !== 'true';
+    });
+    $('#costSendCount').text(picked.length);
+    $('#costSendSelected').prop('disabled', !sendable)
+        .attr('title', picked.length && !sendable ? bgT('Pick saved, costed items that are not with Pricing yet')
+                                                  : bgT('Send the picked items to Pricing now; the rest stay here'));
     var visible = $('.op-cost-item:visible .op-ci-check').length;
     $('#costSelectAll').prop('checked', visible > 0 && picked.length === visible);
 }
@@ -2390,6 +2444,7 @@ $(document).ready(function() {
         window.currentCostingRequestId = requestId;
         // Only whoever may type a cost straight in gets the save button.
         $('#saveCostsBtn').toggle(CAN_COST_DIRECT);
+        $('#costAssignSelected').toggle(CAN_ASSIGN_COSTING);
 
         // Load request details
         $.get('/api/operations/requests/' + requestId, function(response) {
@@ -2619,14 +2674,15 @@ $(document).ready(function() {
 
                         var itemHtml = `
                             <div class="enhanced-item-card op-cost-item ${cardClass}"
+                                 data-item-id="${item.id}" data-costed="${!!item.has_cost}" data-sent="${!!item.pricing_sent}"
                                  data-rental-days="${rentalDays}"
                                  data-dimension-multiplier="${dimensionMultiplier}"
                                  data-quantity="${item.total_quantity}">
                                 <!-- Collapsed Summary Header -->
                                 <div class="op-ci-head" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false">
                                     <div class="op-ci-head-main">
-                                        ${CAN_ASSIGN_COSTING ? `
-                                        <label class="op-ci-pick" title="Pick this item to assign it"
+                                        ${CAN_ASSIGN_COSTING || CAN_SEND_TO_PRICING ? `
+                                        <label class="op-ci-pick" title="Pick this item to assign it or send it to Pricing"
                                                onclick="event.stopPropagation();">
                                             <input type="checkbox" class="op-ci-check" value="${item.id}">
                                         </label>` : ''}
@@ -2644,6 +2700,7 @@ $(document).ready(function() {
                                         ${costSummaryNow}
                                         ${statusBadgeHtml}
                                         ${clientBadgeHtml}
+                                        ${item.pricing_sent ? PRICING_CHIP : ''}
                                     </div>
                                 </div>
 
@@ -2813,6 +2870,7 @@ $(document).ready(function() {
                 $('#costItemsToolbar').toggle(hasItems);
                 $('#saveCostsBtn').toggle(hasItems && CAN_COST_DIRECT);
                 $('#costItemsForm .row.mt-3').toggle(hasItems);
+                renderPricingState(PRICING_STATE);   // again, now the cards are there
 
                 $('#costItemsModal').modal('show');
             } else {
@@ -2913,7 +2971,10 @@ $(document).ready(function() {
         
     }
     // Save Costs
-    $('#saveCostsBtn').click(function() {
+    $('#saveCostsBtn').click(function() { saveCosts(false); });
+    $('#saveAndSendBtn').click(function() { saveCosts(true); });
+
+    function saveCosts(sendAfter) {
         console.log('Save costs button clicked');
         
         var requestId = $('#costRequestId').val();
@@ -2996,7 +3057,8 @@ $(document).ready(function() {
         var formData = {
             request_id: requestId,
             items: items,
-            total_cost: totalCost
+            total_cost: totalCost,
+            send_to_pricing: !!sendAfter
         };
         
         console.log('Sending cost data:', formData);
@@ -3023,7 +3085,13 @@ $(document).ready(function() {
                         }
                     }
                     
+                    if (response.sent) {
+                        message += '\n' + bgT('Sent {0} item(s) to Pricing.').replace('{0}', response.sent);
+                    }
                     costingToast(message, 'success');
+                    if (response.send_error) {
+                        costingToast(bgT('Saved, not sent to Pricing:') + ' ' + response.send_error, 'warning');
+                    }
                 } else {
                     console.error('API Error:', response.error);
                     costingToast(response.error || 'Unknown error occurred', 'danger');
@@ -3043,7 +3111,7 @@ $(document).ready(function() {
                 }
             }
         });
-    });
+    }
 
     // View Details button (opens side drawer with costing-only info)
     $(document).on('click', '.view-btn', function() {

@@ -121,6 +121,68 @@ class SendToPricingTest(_CostingHarness):
         self.assertTrue(r.get_json()['success'], r.get_json())
         self.assertTrue(any(t.startswith('Cost changed') for t, ids, link in self.sent), self.sent)
 
+    # Part of a request, and save-and-send in one click (David, 2026-10-29).
+
+    def _send_items(self, who, ids):
+        return self._client_for(who).post('/api/operations/requests/%d/send-to-pricing' % self.request_id,
+                                          json={'item_ids': ids})
+
+    def test_costed_items_go_ahead_of_the_rest(self):
+        self.assertEqual(self._send_items(self.leader, [self.second_item]).status_code, 400)   # no cost yet
+        r = self._send_items(self.leader, [self.item_id])
+        self.assertTrue(r.get_json()['success'], r.get_json())
+        self.assertEqual(r.get_json()['pricing']['sent'], 1)
+        self.assertTrue(any(t.startswith('1 item(s) of request') for t, ids, link in self.sent), self.sent)
+        self.assertEqual(self._send_items(self.leader, [self.item_id]).status_code, 400)       # already there
+        self.assertIn(self.request_id, self._desk_ids())
+        self.assertIn(self.request_id, self._summary_ids())
+
+        detail = self._client_for(self.pricer).get('/api/sales/requests/%d' % self.request_id).get_json()['request']
+        items = {i['id']: i for i in detail['items']}
+        self.assertIn('cost_per_item', items[self.item_id])
+        self.assertNotIn('cost_per_item', items[self.second_item])
+        self.assertNotIn('total_cost', detail)
+        row = [x for x in self._client_for(self.pricer).get('/api/sales/requests?desk=pricing').get_json()['requests']
+               if x['request_id'] == self.request_id][0]
+        self.assertNotIn('total_cost', row)
+
+        self.assertTrue(self._price().get_json()['success'])
+        late = self._client_for(self.pricer).post('/api/sales/requests/%d/set-prices' % self.request_id,
+                                                  json={'items': [{'item_id': self.second_item, 'sell_per_item': 90}]})
+        self.assertEqual(late.status_code, 400)
+
+        # Costing the rest of it does not read as a change to what Pricing has.
+        self._client_for(self.head).post('/api/operations/requests/add-costs', json={
+            'request_id': self.request_id,
+            'items': [{'id': self.second_item, 'cost_per_item': 60, 'total_cost': 60}]})
+        cur = self._cursor()
+        cur.execute("SELECT cost_changed_at FROM sales_request WHERE id = %s", (self.request_id,))
+        self.assertIsNone(cur.fetchone()['cost_changed_at'])
+        cur.close()
+        r = self._send(self.leader)
+        self.assertTrue(r.get_json()['pricing']['all_sent'], r.get_json())
+
+    def test_update_and_send_in_one_click(self):
+        save = lambda cost: self._client_for(self.head).post('/api/operations/requests/add-costs', json={
+            'request_id': self.request_id, 'send_to_pricing': True,
+            'items': [{'id': self.item_id, 'cost_per_item': cost, 'total_cost': cost * 4}]}).get_json()
+        partly = save(110)
+        self.assertTrue(partly['success'])
+        self.assertEqual(partly['sent'], 0)
+        self.assertIn('1 of 2', partly['send_error'])
+        self.assertNotIn(self.request_id, self._desk_ids())
+        cur = self._cursor()
+        cur.execute("UPDATE sales_request_items SET cost_per_item = 50, total_cost = 50 WHERE id = %s",
+                    (self.second_item,))
+        cur.close()
+        whole = save(120)
+        self.assertEqual(whole['sent'], 2, whole)
+        self.assertTrue(any('ready for pricing' in t for t, ids, link in self.sent))
+        self.assertIn(self.request_id, self._desk_ids())
+        member = self._client_for(self.member).post('/api/operations/requests/add-costs', json={
+            'request_id': self.request_id, 'send_to_pricing': True, 'items': []})
+        self.assertEqual(member.status_code, 403)
+
 
 if __name__ == '__main__':
     unittest.main()

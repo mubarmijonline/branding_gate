@@ -8570,6 +8570,7 @@ def pricing_summary():
         cur.execute("""
             SELECT sr.id AS request_id,
                    COUNT(CASE WHEN i.cost_per_item IS NOT NULL
+                               AND i.pricing_sent_at IS NOT NULL
                                AND i.sell_per_item IS NULL
                                AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
                                THEN 1 END) AS to_price,
@@ -8757,6 +8758,17 @@ def _direct_report_ids(cur, user_id):
     return [row['id'] for row in cur.fetchall()]
 
 
+def _may_decide_proposal(row, me, reports):
+    """
+    The one who asked decides, the Head decides anything, and a team leader
+    decides for their own people even when the Head handed the item to them
+    directly (David, 2026-10-29: Haitham could not see or answer his own
+    team's costing because David had assigned it past him).
+    """
+    return (_costing_unrestricted('costing.decide') or row['assigned_by'] == me
+            or (has('costing.decide') and row['author_id'] in reports))
+
+
 def _costing_log(cur, item_id, request_id, action, actor_id,
                  proposal_id=None, detail=None, amount=None):
     """Append one line to the trail. Never silently skipped."""
@@ -8902,7 +8914,7 @@ def costing_queue():
                 'decided_by_name': row['decided_by_name'],
                 'decision_note': row['decision_note'],
                 'can_decide': bool(row['status'] == costing.PROPOSAL_SUBMITTED
-                                   and (unrestricted or row['assigned_by'] == me)),
+                                   and _may_decide_proposal(row, me, reports)),
                 'is_mine': row['author_id'] == me,
                 'added_date': row['added_date'].strftime('%d %b %Y %H:%M')
                               if row['added_date'] else None,
@@ -9033,14 +9045,16 @@ def costing_summary():
         """, (me,))
         mine = {row['request_id']: row['n'] for row in cur.fetchall()}
 
-        # Waiting on me: live proposals from people I asked.
+        # Waiting on me: live proposals from people I asked, and from my own
+        # people whoever asked them (see _may_decide_proposal).
+        authors = _direct_report_ids(cur, me) if has('costing.decide') else []
         cur.execute("""
             SELECT p.request_id, COUNT(*) AS n
             FROM costing_proposal p
             JOIN costing_assignment a ON a.id = p.assignment_id
-            WHERE p.status = 'submitted' AND a.assigned_by = %s
+            WHERE p.status = 'submitted' AND (a.assigned_by = %s OR p.author_id IN (%s))
             GROUP BY p.request_id
-        """, (me,))
+        """ % ('%s', ",".join(["%s"] * len(authors)) or 'NULL'), [me] + authors)
         decide = {row['request_id']: row['n'] for row in cur.fetchall()}
 
         # Everything still out, for the request list, whoever it is with.
@@ -9157,7 +9171,7 @@ def costing_for_request(request_id):
                 'decision_note': row['decision_note'],
                 'is_mine': row['author_id'] == me,
                 'can_decide': bool(row['status'] == costing.PROPOSAL_SUBMITTED
-                                   and (unrestricted or row['assigned_by'] == me)),
+                                   and _may_decide_proposal(row, me, reports)),
                 'added_date': row['added_date'].strftime('%d %b %Y %H:%M')
                               if row['added_date'] else None,
             })
@@ -9839,7 +9853,7 @@ def costing_decide(proposal_id):
             return jsonify(success=False, error='No such proposal'), 404
 
         costing.check_decision(proposal['status'], me, proposal['assigned_by'],
-                               _costing_unrestricted('costing.decide'))
+                               _may_decide_proposal(proposal, me, _direct_report_ids(cur, me)))
 
         if decision == 'reject':
             cur.execute("""
@@ -9939,7 +9953,7 @@ def costing_decide(proposal_id):
         recosted = complete_recosting(
             cur, proposal['item_id'], amount, old_cost,
             session.get('name') or 'Operations', item_name=item['name'])
-        changed_after_handoff = mark_cost_changed(cur, proposal['request_id'])
+        changed_after_handoff = mark_cost_changed(cur, proposal['request_id'], [proposal['item_id']])
         handoff = pricing_state(cur, proposal['request_id'])
 
         conn.commit()
@@ -9947,7 +9961,7 @@ def costing_decide(proposal_id):
         conn.close()
         if changed_after_handoff:
             notify_cost_changed(proposal['request_id'])
-        elif handoff and handoff['all_costed']:
+        elif handoff and handoff['all_costed'] and not handoff['all_sent']:
             notify_costing_complete(proposal['request_id'])
 
         # Everybody who put a price up on this item hears what happened to it.
@@ -11347,12 +11361,14 @@ def get_sales_requests():
                            c.client_name, comp.company_name,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
-                           COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.sell_per_item IS NULL
+                                          AND (i.cost_per_item IS NULL OR i.pricing_sent_at IS NULL)
                                           AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
                                       THEN 1 END) as approval_stats_not_costed,
-                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
+                           COUNT(CASE WHEN i.pricing_sent_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
                                           AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as approval_stats_not_priced,
                            MAX(sr.pricing_handoff_at) AS pricing_handoff_at, MAX(sr.cost_changed_at) AS cost_changed_at,
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.pricing_sent_at IS NULL THEN 1 END) AS items_with_operation,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
                            COUNT(CASE WHEN i.approval_status = 'pending_negotiation' AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation') THEN 1 END) as approval_stats_negotiation,
@@ -11384,12 +11400,14 @@ def get_sales_requests():
                            comp.company_name,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
-                           COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.sell_per_item IS NULL
+                                          AND (i.cost_per_item IS NULL OR i.pricing_sent_at IS NULL)
                                           AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
                                       THEN 1 END) as approval_stats_not_costed,
-                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
+                           COUNT(CASE WHEN i.pricing_sent_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
                                           AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as approval_stats_not_priced,
                            MAX(sr.pricing_handoff_at) AS pricing_handoff_at, MAX(sr.cost_changed_at) AS cost_changed_at,
+                           COUNT(CASE WHEN i.id IS NOT NULL AND i.pricing_sent_at IS NULL THEN 1 END) AS items_with_operation,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
                            COUNT(CASE WHEN i.approval_status = 'pending_negotiation' AND (i.negotiation_status IS NULL OR i.negotiation_status = 'pending_negotiation') THEN 1 END) as approval_stats_negotiation,
@@ -11438,6 +11456,7 @@ def get_sales_requests():
                     'client_approval_stage': req.get('client_approval_stage', 'not_submitted'),
                     'comment_count': req.get('comment_count', 0),
                     'with_pricing': req.get('pricing_handoff_at') is not None,
+                    'items_with_operation': req.get('items_with_operation', 0),
                     'cost_changed': req.get('cost_changed_at') is not None,
                     'approval_stats': {
                         'not_costed': req.get('approval_stats_not_costed', 0),
@@ -11505,7 +11524,9 @@ def get_sales_requests():
         conn.close()
 
         if cost_waits_for_handoff():
-            requests_list = [row if row.get('with_pricing') else scrub_cost(row) for row in requests_list]
+            # A request partly sent still has costs Pricing may not see in its totals.
+            requests_list = [row if row.get('with_pricing') and not row.get('items_with_operation')
+                             else scrub_cost(row) for row in requests_list]
         
         return jsonify({
             'success': True,
@@ -11541,8 +11562,9 @@ def request_chat_counts(cur, request_ids, me):
 def operations_assignments(cur, request_ids, only_for=None):
     """
     Who handed which items to whom, per request: the live costing assignments
-    (withdrawn ones are history). `only_for` keeps a team leader or member to
-    the assignments they are part of, the same rule their list follows.
+    (withdrawn ones are history). `only_for`, a list of user ids (me and my
+    direct reports), keeps a team leader or member to the assignments they are
+    part of, the same rule their list follows.
 
     Returns {request_id: {'assigned_items': n, 'people': [...], 'by_item': {...}}}.
     The Operations Head reads this off the board to see whether a leader has
@@ -11558,8 +11580,9 @@ def operations_assignments(cur, request_ids, only_for=None):
              WHERE a.status <> 'withdrawn' AND a.request_id IN (%s)""" % ",".join(["%s"] * len(request_ids))
     params = list(request_ids)
     if only_for is not None:
-        sql += " AND (a.assignee_id = %s OR a.assigned_by = %s)"
-        params += [only_for, only_for]
+        marks = ",".join(["%s"] * len(only_for))
+        sql += " AND (a.assignee_id IN (%s) OR a.assigned_by IN (%s))" % (marks, marks)
+        params += list(only_for) + list(only_for)
     cur.execute(sql + " ORDER BY a.added_date", params)
     out = {}
     for row in cur.fetchall():
@@ -11616,20 +11639,28 @@ def get_operations_requests():
         # The counts and the total then cover those items alone, so a member
         # costing one item of nine does not read "9 items, 2 costed" and have
         # to work out which two were theirs.
+        #
+        # "Their own desk" takes in their direct reports': the Head often hands
+        # an item straight to a member, and the member's team leader lost the
+        # whole request until it was reassigned to them (David, 2026-10-29).
+        # The same {me + reports} the costing queue already uses.
         me = session.get('user_id')
         costing_scope = rbac.resolve(session.get('perms') or {}, 'costing.view')
         restricted = costing_scope in ('own', 'team', 'department')
         mine_only = ""
         item_params = []
+        desk = None
         if restricted:
+            desk = sorted({me, *_direct_report_ids(cur, me)})
+            marks = ",".join(["%s"] * len(desk))
             mine_only = """ AND (NOT EXISTS (SELECT 1 FROM costing_assignment ca
                                              WHERE ca.item_id = i.id
                                                AND ca.status <> 'withdrawn')
                                  OR EXISTS (SELECT 1 FROM costing_assignment ca
                                             WHERE ca.item_id = i.id
                                               AND ca.status <> 'withdrawn'
-                                              AND (ca.assignee_id = %s OR ca.assigned_by = %s)))"""
-            item_params = [me, me]
+                                              AND (ca.assignee_id IN (%s) OR ca.assigned_by IN (%s))))""" % (marks, marks)
+            item_params = desk + desk
         # A request nothing of mine hangs off is not a request I am part of.
         having = " HAVING COUNT(i.id) > 0" if restricted else ""
         
@@ -11720,8 +11751,7 @@ def get_operations_requests():
         
         # Convert to list of dictionaries for JSON response
         people = people_index(cur)
-        assignments = operations_assignments(cur, [r['request_id'] for r in requests_data],
-                                             me if restricted else None)
+        assignments = operations_assignments(cur, [r['request_id'] for r in requests_data], desk)
         chat_counts = request_chat_counts(cur, [r['request_id'] for r in requests_data], me)
         requests_list = []
         for req in requests_data:
@@ -12108,6 +12138,7 @@ def get_single_sales_request(request_id):
             item['in_costing'] = cur.fetchone() is not None
             item_dict['lock_reason'] = item_lock_reason(item)
             item_dict['is_locked'] = bool(item_dict['lock_reason'])
+            item_dict['pricing_sent'] = item.get('pricing_sent_at') is not None
 
             item_dict['attachments'] = []
             for att in attachments_data:
@@ -12161,8 +12192,8 @@ def get_single_sales_request(request_id):
         cur.close()
         conn.close()
 
-        if request_data.get('pricing_handoff_at') is None and cost_waits_for_handoff():
-            request_info = scrub_cost(request_info)
+        if cost_waits_for_handoff():
+            request_info = scrub_unsent_cost(request_info)
         
         return jsonify({
             'success': True,
@@ -12293,6 +12324,7 @@ def get_single_operations_request(request_id):
                    approval_status, negotiation_status, negotiation_reason, negotiation_count,
                    sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc,
                    submitted_for_approval_date, sell_per_item IS NOT NULL AS is_priced,
+                   pricing_sent_at IS NOT NULL AS pricing_sent,
                    EXISTS (SELECT 1 FROM negotiation_requests nr
                            WHERE nr.item_id = sales_request_items.id
                              AND nr.status = 'pending_costing') AS awaiting_recost
@@ -12371,7 +12403,8 @@ def get_single_operations_request(request_id):
                 'negotiation_reason': item.get('negotiation_reason'),
                 'negotiation_count': item.get('negotiation_count', 0),
                 # Where it stands with the client; a label, never the price.
-                'client_status': client_status_of(item)
+                'client_status': client_status_of(item),
+                'pricing_sent': bool(item.get('pricing_sent')),
             }
             
             # Add dimensions from attributes
@@ -13550,6 +13583,12 @@ def add_operation_request():
 # which they can only do once every item is costed. A cost changed after
 # that does not take it back: Pricing is told and the request is marked
 # "cost changed" until it is priced again.
+#
+# Per item since 2026-10-29 (David): three costed items of ten can go ahead
+# while the rest are still being costed, and "Update and send" saves and hands
+# over in one click. sales_request.pricing_handoff_at is the first send, which
+# puts the request on the Pricing desk; each item carries its own
+# pricing_sent_at, and Pricing sees and prices only the items that have one.
 # ---------------------------------------------------------------------------
 
 def pricing_state(cur, request_id):
@@ -13558,7 +13597,9 @@ def pricing_state(cur, request_id):
         SELECT sr.pricing_handoff_at, sr.pricing_handoff_by, sr.cost_changed_at, u.name AS handoff_by_name,
                (SELECT COUNT(*) FROM sales_request_items i WHERE i.request_id = sr.id) AS items,
                (SELECT COUNT(*) FROM sales_request_items i WHERE i.request_id = sr.id
-                  AND i.cost_per_item IS NOT NULL) AS costed
+                  AND i.cost_per_item IS NOT NULL) AS costed,
+               (SELECT COUNT(*) FROM sales_request_items i WHERE i.request_id = sr.id
+                  AND i.pricing_sent_at IS NOT NULL) AS sent
         FROM sales_request sr LEFT JOIN user u ON u.id = sr.pricing_handoff_by
         WHERE sr.id = %s""", (request_id,))
     row = cur.fetchone()
@@ -13569,9 +13610,26 @@ def pricing_state(cur, request_id):
         'sent_at': row['pricing_handoff_at'].strftime('%d %b %Y %H:%M') if row['pricing_handoff_at'] else None,
         'sent_by_name': row['handoff_by_name'],
         'cost_changed': row['cost_changed_at'] is not None,
-        'items': row['items'], 'costed': row['costed'],
+        'items': row['items'], 'costed': row['costed'], 'sent': row['sent'],
         'all_costed': row['items'] > 0 and row['costed'] == row['items'],
+        'all_sent': row['items'] > 0 and row['sent'] == row['items'],
     }
+
+
+def scrub_unsent_cost(info):
+    """
+    A request for someone who sees cost only through Pricing: every cost out
+    except on the items Operation has sent, which go back in whole.
+    """
+    sent = {i['id']: i for i in info.get('items') or [] if i.get('pricing_sent')}
+    if sent and len(sent) == len(info.get('items') or []):
+        return info
+    out = scrub_cost(info)
+    back = lambda rows: [sent.get(r.get('id'), r) for r in rows or []]
+    out['items'] = back(out.get('items'))
+    for inst in out.get('template_instances') or []:
+        inst['items'] = back(inst.get('items'))
+    return out
 
 
 def cost_waits_for_handoff():
@@ -13583,11 +13641,88 @@ def cost_waits_for_handoff():
     return not (has('sales_item.cost') or has('finance_txn.approve'))
 
 
-def mark_cost_changed(cur, request_id):
-    """A cost written on a request Pricing already has: flag it. True when it did."""
-    cur.execute("""UPDATE sales_request SET cost_changed_at = NOW()
-                   WHERE id = %s AND pricing_handoff_at IS NOT NULL""", (request_id,))
+def mark_cost_changed(cur, request_id, item_ids):
+    """A cost written on an item Pricing already has: flag the request. True when it did."""
+    if not item_ids:
+        return False
+    cur.execute("""UPDATE sales_request sr SET sr.cost_changed_at = NOW()
+                   WHERE sr.id = %%s AND EXISTS (SELECT 1 FROM sales_request_items i
+                       WHERE i.request_id = sr.id AND i.pricing_sent_at IS NOT NULL AND i.id IN (%s))"""
+                % ",".join(["%s"] * len(item_ids)), [request_id] + list(item_ids))
     return cur.rowcount > 0
+
+
+def send_items_to_pricing(cur, request_id, item_ids=None):
+    """
+    Hand items over to Pricing: the ones named, or every item not sent yet.
+    Each must be costed. Returns (sent item rows, error); nothing is written
+    on an error. Logging and telling people is the caller's, after commit.
+    """
+    cur.execute("""SELECT id, name, cost_per_item, pricing_sent_at FROM sales_request_items
+                   WHERE request_id = %s ORDER BY id""", (request_id,))
+    items = cur.fetchall()
+    if not items:
+        return [], 'This request has no items.'
+    if item_ids is None:
+        picked = [i for i in items if i['pricing_sent_at'] is None]
+        if not picked:
+            return [], 'Every item is already with Pricing.'
+        waiting = [i for i in picked if i['cost_per_item'] is None]
+        if waiting:
+            return [], ('%d of %d items are costed. Cost every item first, or pick the costed ones and send those.'
+                        % (len(items) - len(waiting), len(items)))
+    else:
+        wanted = {int(x) for x in item_ids}
+        picked = [i for i in items if i['id'] in wanted]
+        if not picked or len(picked) != len(wanted):
+            return [], 'Pick items of this request.'
+        for i in picked:
+            if i['pricing_sent_at'] is not None:
+                return [], '"%s" is already with Pricing.' % (i['name'] or 'An item')
+            if i['cost_per_item'] is None:
+                return [], '"%s" has no cost yet.' % (i['name'] or 'An item')
+    ids = [i['id'] for i in picked]
+    me = session.get('user_id')
+    cur.execute("UPDATE sales_request_items SET pricing_sent_at = NOW(), pricing_sent_by = %%s WHERE id IN (%s)"
+                % ",".join(["%s"] * len(ids)), [me] + ids)
+    cur.execute("""UPDATE sales_request SET pricing_handoff_at = COALESCE(pricing_handoff_at, NOW()),
+                   pricing_handoff_by = COALESCE(pricing_handoff_by, %s) WHERE id = %s""", (me, request_id))
+    return picked, None
+
+
+def announce_sent_to_pricing(request_id, sent, state):
+    """The log line and the notices for one send; `state` is pricing_state after it."""
+    names = ', '.join(i['name'] or 'item' for i in sent)
+    whole = len(sent) == state['items']
+    everything = state['all_sent']
+    log_request_change(request_id=request_id, action_type='SENT_TO_PRICING',
+                       action_by=session.get('name') or 'Operations',
+                       change_description=('[Operations] Sent to Pricing, every item costed' if whole else
+                                           '[Operations] Sent %d item(s) to Pricing: %s' % (len(sent), names))[:1000])
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT owner_user_id, title FROM sales_request WHERE id = %s", (request_id,))
+        row = cur.fetchone() or {}
+    finally:
+        cur.close()
+        conn.close()
+    title = row.get('title') or ''
+    if whole:
+        body = '%s sent "%s" to Pricing. Every item is costed.' % (session.get('name'), title)
+    else:
+        body = '%s sent %d item(s) of "%s" to Pricing: %s.%s' % (
+            session.get('name'), len(sent), title, names,
+            '' if everything else ' The rest are still being costed.')
+    notify_users(users_holding('sales_item.price'),
+                 'Request #%06d is ready for pricing' % request_id if whole
+                 else '%d item(s) of request #%06d ready for pricing' % (len(sent), request_id),
+                 body[:500], link='/pricing?request=%d' % request_id, category='important')
+    if row.get('owner_user_id'):
+        notify_users([row['owner_user_id']], 'Request #%06d is with Pricing' % request_id,
+                     ('Operation finished costing "%s" and sent it to Pricing.' % title) if whole else
+                     ('Operation sent %d item(s) of "%s" to Pricing.' % (len(sent), title)),
+                     link='/sales_request?request=%d' % request_id, category='announcement')
+
 
 
 def notify_cost_changed(request_id):
@@ -13609,37 +13744,26 @@ def notify_costing_complete(request_id):
 @app.route('/api/operations/requests/<int:request_id>/send-to-pricing', methods=['POST'])
 @perm('costing.send_to_pricing')
 def send_request_to_pricing(request_id):
-    """Hand a fully costed request over to Pricing."""
+    """Hand costed items over to Pricing: `item_ids`, or every item not sent yet."""
+    item_ids = (request.get_json(silent=True) or {}).get('item_ids')
+    if item_ids is not None and (not isinstance(item_ids, list)
+                                 or not all(str(x).isdigit() for x in item_ids)):
+        return jsonify(success=False, error='item_ids must be a list of item ids'), 400
     conn, cur = connection()
     try:
         state = pricing_state(cur, request_id)
         if state is None:
             return jsonify(success=False, error='No such request'), 404
-        if state['with_pricing']:
-            return jsonify(success=False, error='It is already with Pricing (sent %s by %s).'
-                           % (state['sent_at'], state['sent_by_name'] or 'someone')), 400
-        if not state['all_costed']:
-            return jsonify(success=False, error='%d of %d items are costed. Cost every item first.'
-                           % (state['costed'], state['items'])), 400
-        cur.execute("""UPDATE sales_request SET pricing_handoff_at = NOW(), pricing_handoff_by = %s,
-                       cost_changed_at = NULL WHERE id = %s""", (session.get('user_id'), request_id))
-        cur.execute("SELECT owner_user_id, title FROM sales_request WHERE id = %s", (request_id,))
-        row = cur.fetchone()
+        sent, error = send_items_to_pricing(cur, request_id, item_ids)
+        if error:
+            return jsonify(success=False, error=error), 400
+        state = pricing_state(cur, request_id)
         conn.commit()
     finally:
         cur.close()
         conn.close()
-    log_request_change(request_id=request_id, action_type='SENT_TO_PRICING',
-                       action_by=session.get('name') or 'Operations',
-                       change_description='[Operations] Sent to Pricing, every item costed')
-    notify_users(users_holding('sales_item.price'), 'Request #%06d is ready for pricing' % request_id,
-                 '%s sent "%s" to Pricing. Every item is costed.' % (session.get('name'), row['title'] or ''),
-                 link='/pricing?request=%d' % request_id, category='important')
-    if row['owner_user_id']:
-        notify_users([row['owner_user_id']], 'Request #%06d is with Pricing' % request_id,
-                     'Operation finished costing "%s" and sent it to Pricing.' % (row['title'] or ''),
-                     link='/sales_request?request=%d' % request_id, category='announcement')
-    return jsonify(success=True)
+    announce_sent_to_pricing(request_id, sent, state)
+    return jsonify(success=True, sent=len(sent), pricing=state)
 
 
 @app.route('/api/operations/requests/add-costs', methods=['POST'])
@@ -13672,11 +13796,17 @@ def add_operation_request_costs():
             data['request_id'] = int(data['request_id'])
         except (TypeError, ValueError):
             return jsonify({'success': False, 'error': 'Request ID must be a number'}), 400
+        # "Update and send to Pricing" (David, 2026-10-29): save, then hand
+        # over whatever is left with Operation, in one click.
+        send_after = bool(data.get('send_to_pricing'))
+        if send_after and not has('costing.send_to_pricing'):
+            return jsonify({'success': False, 'error': 'You cannot send to Pricing'}), 403
         
         conn, cur = connection()
         
         total_request_cost = 0
         updated_items_log = []
+        updated_item_ids = []
         recosted_negotiations = []
         
         # Update item costs (using correct table and column names)
@@ -13798,6 +13928,7 @@ def add_operation_request_costs():
                     old_price = f'EGP {old_cost_per_item:.2f}' if old_cost_per_item else 'Not set'
                     new_price = f'EGP {cost_per_item:.2f}'
                     updated_items_log.append(f'{item_name}: {old_price} → {new_price}')
+                    updated_item_ids.append(item_id)
 
                     if was_negotiation:
                         negotiation_id = complete_recosting(
@@ -13886,9 +14017,17 @@ def add_operation_request_costs():
         else:
             status = 'Pending'  # Partially costed - still pending
 
-        changed_after_handoff = bool(updated_items_log) and mark_cost_changed(cur, data['request_id'])
+        changed_after_handoff = mark_cost_changed(cur, data['request_id'], updated_item_ids)
         
         conn.commit()
+
+        # Sent after the save is committed: a request that is not fully
+        # costed keeps its new costs and says why it did not go.
+        sent, send_error, handoff = [], None, None
+        if send_after:
+            sent, send_error = send_items_to_pricing(cur, data['request_id'])
+            conn.commit()
+            handoff = pricing_state(cur, data['request_id'])
         
         # Log individual costing changes for each item with detailed tracking
         username = (session.get('name') or session.get('username') or 'Unknown')
@@ -13936,15 +14075,19 @@ def add_operation_request_costs():
         # after the hand-off, or (before it) the people who send it are told it
         # is fully costed. No amount in the text; the owner is told at hand-off.
         try:
+            if sent:
+                announce_sent_to_pricing(data['request_id'], sent, handoff)
             if changed_after_handoff:
                 notify_cost_changed(data['request_id'])
-            elif status == 'Completed':
+            elif status == 'Completed' and not sent and not (handoff or {}).get('all_sent'):
                 notify_costing_complete(data['request_id'])
         except Exception as e:
             print(f"DEBUG: Error sending costing notifications: {e}")
 
         return jsonify({
             'success': True,
+            'sent': len(sent),
+            'send_error': send_error,
             'message': 'Costs updated successfully',
             'total_cost': float(final_total_cost) if final_total_cost else 0,
             'status': status,
@@ -15546,12 +15689,19 @@ def set_item_prices(request_id):
                 'success': False,
                 'error': 'Request not found'
             }), 404
-        # Pricing works on a request only once Operation has sent it over.
-        if handoff_row['pricing_handoff_at'] is None:
+        # Pricing works on an item only once Operation has sent it over.
+        ids = [int(i.get('item_id')) for i in items if str(i.get('item_id', '')).isdigit()]
+        unsent = []
+        if ids:
+            cur.execute("SELECT name FROM sales_request_items WHERE request_id = %%s AND pricing_sent_at IS NULL AND id IN (%s)"
+                        % ",".join(["%s"] * len(ids)), [request_id] + ids)
+            unsent = [r['name'] or 'An item' for r in cur.fetchall()]
+        if handoff_row['pricing_handoff_at'] is None or unsent:
             cur.close()
             conn.close()
             return jsonify({'success': False,
-                            'error': 'Operation has not sent this request to Pricing yet.'}), 400
+                            'error': ('Operation has not sent %s to Pricing yet.' % ', '.join('"%s"' % n for n in unsent))
+                                     if unsent else 'Operation has not sent this request to Pricing yet.'}), 400
         
         # Update each item's sell_per_item price
         updated_count = 0
