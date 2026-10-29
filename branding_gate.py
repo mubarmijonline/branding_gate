@@ -13660,13 +13660,18 @@ def add_operation_request_costs():
         
         # Debug logging
         print(f"DEBUG: Received data for add-costs: {data}")
-        
+
         # Validate required fields
         if not data.get('request_id') or not data.get('items'):
             return jsonify({
                 'success': False,
                 'error': 'Request ID and items are required'
             }), 400
+        # The costing form posts the id as text; every comparison below is with ints.
+        try:
+            data['request_id'] = int(data['request_id'])
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Request ID must be a number'}), 400
         
         conn, cur = connection()
         

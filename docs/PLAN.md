@@ -1179,3 +1179,10 @@ Files: `static/js/bg-chat.js`, `static/css/bg-chat.css`, `static/i18n/ar.js`.
    route refuses them any other design file.
 Migration: design_request_items_flow_migration.sql (item state columns,
 file.submission, design_request.sales_request_id, backfill of request 117).
+
+## 2026-10-30 Costing notices dropped for a text request id
+
+The costing form posts request_id as text. add-costs compared it with integer
+ids, so a cost written after the hand-off was not flagged, and the notice
+formatted it with %d and failed (4 times on 29 Oct). The route now converts it
+once on entry. Test: test_send_to_pricing (string id).

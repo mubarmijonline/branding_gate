@@ -106,6 +106,21 @@ class SendToPricingTest(_CostingHarness):
         self.assertIsNone(cur.fetchone()['cost_changed_at'])
         cur.close()
 
+    def test_cost_change_notice_survives_a_string_request_id(self):
+        # The costing form posts the id as text; the notice formats it with %d
+        # and was silently dropped (log, 2026-10-29).
+        cur = self._cursor()
+        cur.execute("UPDATE sales_request_items SET cost_per_item = 50, total_cost = 50 WHERE id = %s",
+                    (self.second_item,))
+        cur.close()
+        self.assertTrue(self._send(self.leader).get_json()['success'])
+        self.sent.clear()
+        r = self._client_for(self.head).post('/api/operations/requests/add-costs', json={
+            'request_id': str(self.request_id),
+            'items': [{'id': self.second_item, 'cost_per_item': 90, 'total_cost': 90}]})
+        self.assertTrue(r.get_json()['success'], r.get_json())
+        self.assertTrue(any(t.startswith('Cost changed') for t, ids, link in self.sent), self.sent)
+
 
 if __name__ == '__main__':
     unittest.main()
