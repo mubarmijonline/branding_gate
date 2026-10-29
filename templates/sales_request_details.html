@@ -81,6 +81,43 @@
     .srd-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
+  /* Items open on demand (Gamal, 2026-10-30): one line each -- what it is,
+     how many, where it stands, what it sells for -- and the details under it.
+     Ten always-open cards were a long scroll to the item you wanted. */
+  .srd-items-wrap { gap: 8px; }
+  .srd-item-head { cursor: pointer; align-items: center; padding: 10px 14px; gap: 12px;
+                   background: #fff; border-bottom: 0; user-select: none; }
+  .srd-item-head:hover { background: #f8f9fc; }
+  .srd-item-head:focus { outline: 2px solid #4e73df; outline-offset: -2px; }
+  .srd-item.open .srd-item-head { background: #f6f8fc; border-bottom: 1px solid #e3e6f0; }
+  .srd-item .srd-item-body { display: none; }
+  .srd-item.open .srd-item-body { display: block; }
+  .srd-item-no { flex-basis: 28px; width: 28px; height: 28px; font-size: 12px; }
+  .srd-item-thumb { width: 44px; height: 44px; flex-basis: 44px; }
+  .srd-item-thumb.placeholder { font-size: 14px; }
+  .srd-item-title { font-size: 14px; }
+  .srd-item-chips { margin-top: 4px; }
+  .srd-item-side { text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .srd-item-side .q { color: #5a5c69; font-size: 12px; }
+  .srd-item-side .m { color: #1c7c54; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .srd-item-side .m.is-empty { color: #b9bdc7; font-weight: 600; font-size: 12px; }
+  .srd-item-chev { color: #858796; transition: transform .15s ease; flex-shrink: 0; }
+  .srd-item.open .srd-item-chev { transform: rotate(90deg); }
+  .srd-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px;
+               font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .srd-state.open    { background: #eef1f8; color: #5a5c69; }
+  .srd-state.costing { background: #e0f2fe; color: #075985; }
+  .srd-state.costed  { background: #fff3cd; color: #8a5a00; }
+  .srd-state.priced  { background: #d4edda; color: #155724; }
+  .srd-state.recost  { background: #fde68a; color: #78350f; }
+  .srd-item.state-recost { border-left-color: #d97706; }
+  .srd-items-tools { display: flex; gap: 6px; }
+  .srd-flow-more { text-align: center; margin-top: 6px; }
+  @media (max-width: 576px) {
+    .srd-item-head .srd-item-thumb { display: none !important; }
+    .srd-item-side { flex-basis: 100%; text-align: left; padding-left: 40px; }
+  }
+
   /* Embedded in the drawer: no shell, and the page uses the width it is given. */
   body[data-embed] #main_nav_bar,
   body[data-embed] .quick-add-fab { display: none !important; }
@@ -303,6 +340,10 @@
         <h5><i class="fas fa-boxes text-primary"></i> Items
           <span class="text-muted" id="srdItemsCount" style="font-weight:normal; font-size:13px;"></span>
         </h5>
+        <div class="srd-items-tools">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="srdExpandAll"><i class="fas fa-angle-double-down"></i> Expand all</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="srdCollapseAll"><i class="fas fa-angle-double-up"></i> Collapse all</button>
+        </div>
       </div>
       <div class="bd" id="srdItemsBody">
         <div class="srd-empty">No items.</div>
@@ -512,12 +553,28 @@
   }
 
   // ===== Items =====
+  // Where an item is in the work, in the words each desk uses.
+  function stageChip(it){
+    var priced = it.lock_reason === 'priced' || (it.sell_per_item && Number(it.sell_per_item) > 0);
+    if (it.recost_requested) return '<span class="srd-state recost" title="' + esc(it.recost_note || '') + '"><i class="fas fa-redo"></i> Re-cost requested</span>';
+    if (priced) return '<span class="srd-state priced"><i class="fas fa-tag"></i> Priced</span>';
+    if (it.lock_reason === 'costed' || it.is_locked) {
+      return it.pricing_sent === false
+        ? '<span class="srd-state costed"><i class="fas fa-check"></i> Costed, with Operation</span>'
+        : '<span class="srd-state costed"><i class="fas fa-check"></i> Costed</span>';
+    }
+    if (it.in_costing) return '<span class="srd-state costing"><i class="fas fa-calculator"></i> With Operations</span>';
+    return '<span class="srd-state open">Not costed yet</span>';
+  }
+
   function renderItems(items){
     if (!items || !items.length) {
       $('#srdItemsBody').html('<div class="srd-empty">No items in this request.</div>');
       return;
     }
     $('#srdItemsCount').text('(' + items.length + ')');
+    // A short list reads open; a long one opens on the item you pick.
+    var startOpen = items.length <= 2;
     var html = items.map(function(it, idx){
       var name = it.name || it.item_name || ('Item ' + (idx + 1));
       var img = (it.image_url || (it.images && it.images[0] && it.images[0].path)) || '';
@@ -559,9 +616,11 @@
       }).join('');
 
       // Where the item stands belongs beside its name, not buried between two
-      // money tiles.
-      var chips = '<span class="k">Approval</span>' +
-                  statusBadge(it.approval_status || 'pending');
+      // money tiles: its stage first, then the client's answer once there is one.
+      var chips = stageChip(it);
+      if (it.approval_status && String(it.approval_status).toLowerCase() !== 'pending') {
+        chips += '<span class="k ml-1">Client</span>' + statusBadge(it.approval_status);
+      }
       if (it.negotiation_status && String(it.negotiation_status).toLowerCase() !== 'none') {
         chips += '<span class="k ml-2">Negotiation</span>' + statusBadge(it.negotiation_status) +
                  (it.negotiation_count ? ' <span class="text-muted">&times;' + it.negotiation_count + '</span>' : '');
@@ -608,6 +667,10 @@
       }
 
       var notes = '';
+      if (it.recost_requested) {
+        notes += '<div class="srd-item-notes" style="background:#fff7e0;border-left-color:#d97706;"><b>Sent back to Operations:</b> ' +
+                 esc(it.recost_note || 'changed after costing') + '</div>';
+      }
       if (it.description || it.comment) {
         notes += '<div class="srd-item-notes"><b>Description:</b> ' + esc(it.description || it.comment) + '</div>';
       }
@@ -621,18 +684,26 @@
       // The card's edge carries the item's own state, so a request with one
       // rejected line does not read as a uniform block.
       var state = String(it.approval_status || 'pending').toLowerCase();
-      var stateClass = state.indexOf('approve') >= 0 ? 'state-approved'
+      var stateClass = it.recost_requested ? 'state-recost'
+                     : state.indexOf('approve') >= 0 ? 'state-approved'
                      : state.indexOf('reject')  >= 0 ? 'state-rejected'
                      : 'state-pending';
+      var hasSell = it.total_sell !== null && it.total_sell !== undefined && it.total_sell !== '' && Number(it.total_sell) > 0;
 
-      return '<article class="srd-item ' + stateClass + '">' +
-        '<div class="srd-item-head">' +
+      return '<article class="srd-item ' + stateClass + (startOpen ? ' open' : '') + '">' +
+        '<div class="srd-item-head" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
+          '<i class="fas fa-chevron-right srd-item-chev"></i>' +
           '<div class="srd-item-no">' + (idx + 1) + '</div>' +
           thumbHtml +
           '<div class="srd-item-id">' +
             '<div class="srd-item-title">' + esc(name) + '</div>' +
             (subBits.length ? '<div class="srd-item-sub">' + subBits.join(' · ') + '</div>' : '') +
             '<div class="srd-item-chips">' + chips + '</div>' +
+          '</div>' +
+          '<div class="srd-item-side">' +
+            '<div class="q">' + esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || '') +
+              (it.rental_days && it.sell_type !== 'sell' ? ' &middot; ' + esc(it.rental_days) + ' day(s)' : '') + '</div>' +
+            '<div class="m' + (hasSell ? '' : ' is-empty') + '">' + (hasSell ? money(it.total_sell) : 'No price yet') + '</div>' +
           '</div>' +
         '</div>' +
         '<div class="srd-item-body">' +
@@ -833,7 +904,18 @@
     }).join('');
     $('#srdFlowEmpty').hide();
     $('#srdFlow').html(html).show();
+    // The latest few, the rest on request: a busy request logged pages of it.
+    var $entries = $('#srdFlow .srd-flow-item');
+    if (!flowShowAll && $entries.length > FLOW_FIRST) {
+      $entries.slice(FLOW_FIRST).hide();
+      $('#srdFlow .srd-flow-day').each(function(){
+        if (!$(this).nextUntil('.srd-flow-day', '.srd-flow-item:visible').length) $(this).hide();
+      });
+      $('#srdFlow').append('<div class="srd-flow-more"><button type="button" class="btn btn-sm btn-outline-primary" id="srdFlowAll">' +
+        'Show all ' + $entries.length + ' entries</button></div>');
+    }
   }
+  var FLOW_FIRST = 8, flowShowAll = false;
 
   function loadFlow(){
     $.ajax({ url: '/api/workflow/request/' + REQUEST_ID + '/timeline', type: 'GET', cache: false })
@@ -951,6 +1033,20 @@
         $('#chatDrawerToggle').trigger('click');
       }
     });
+
+    $(document).on('click', '#srdFlowAll', function(){
+      flowShowAll = true;
+      renderFlow($('.srd-tabs .nav-link.active').data('flow'));
+    });
+    $(document).on('click keydown', '.srd-item-head', function(e){
+      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+      if ($(e.target).closest('a').length) return;
+      e.preventDefault();
+      var $item = $(this).closest('.srd-item').toggleClass('open');
+      $(this).attr('aria-expanded', $item.hasClass('open') ? 'true' : 'false');
+    });
+    $('#srdExpandAll').on('click', function(){ $('.srd-item').addClass('open').find('.srd-item-head').attr('aria-expanded', 'true'); });
+    $('#srdCollapseAll').on('click', function(){ $('.srd-item').removeClass('open').find('.srd-item-head').attr('aria-expanded', 'false'); });
 
     $(document).on('click', '.srd-tabs .nav-link', function(e){
       e.preventDefault();

@@ -134,3 +134,33 @@ Asked for by David Osama (Operations Head), 28-29 Oct 2026.
 Done when: a request with 10 items can have 3 sent and priced while 7 are
 costed; the Team Leader of a member the Head assigned to sees the request
 and can accept that member's price.
+
+## Editing items, and re-costing after a change
+
+Asked for by Gamal Gaber (Sales), 30 Oct 2026.
+
+- Sales can change an item freely until Operations has costed it, including
+  while it is out for costing. The person costing it is told what changed.
+  Adding or removing items never touches the others.
+- Once costed (or priced), an item's name, quantity, unit, sale or rent,
+  days and dimensions cannot be changed directly. "Change and re-cost" on
+  that item lets Sales change it with an optional note for Operations; on
+  saving, its cost and price are cleared, it leaves Pricing, it goes back to
+  whoever costed it, and Operations is told. It shows "Re-cost requested"
+  everywhere until Operations costs it again.
+- An item the client has already approved cannot be re-costed this way; it
+  goes through negotiation.
+- A request created through the urgent-date approval opens in the edit form
+  with all its items and place fields, like any other request.
+- In the edit form each item is one collapsible card: name, quantity and
+  size on the header line, with its stage (New, Not costed yet, With
+  Operations, Costed, Priced, Re-cost requested). In the request details
+  (Sales and Pricing) items are one line each with quantity, stage and selling
+  total, opening on click, with Expand all / Collapse all; the activity list
+  shows the latest entries with "Show all". The Pricing window says how many
+  items are left to price and can show only those.
+
+Done when: adding an item to a request whose items are all costed keeps every
+item; a costed item changed through "Change and re-cost" returns to
+Operations without its old cost and price, and leaves the mark when costed
+again.

@@ -3449,6 +3449,37 @@
     .no-image-placeholder span {
         font-size: 0.8rem;
     }
+
+    /* Items in the add and edit forms: one collapsible card each. The header
+       says what the item is and where it stands; the fields open on click. */
+    .modal .item-row.item-card { margin:0 0 10px; padding:0; border:1px solid #e3e6f0;
+        border-left:4px solid #4e73df; border-radius:10px; background:#fff;
+        box-shadow:0 1px 3px rgba(15,23,42,.06); overflow:visible; animation:none; }
+    .modal .item-row.item-card::before, .modal .item-row.item-card::after { display:none; content:none; }
+    .modal .item-row.item-card > .item-header { display:flex; align-items:center; gap:10px; margin:0 !important;
+        padding:10px 12px; background:#fff !important; border-top:0 !important; color:#2c3e50;
+        border-radius:10px; cursor:pointer; flex-direction:row; text-align:left; animation:none; }
+    .modal .item-row.item-card > .item-header:hover { background:#f8f9fc !important; }
+    .modal .item-row.item-card .item-number { color:#4e73df; font-weight:700; white-space:nowrap; }
+    .modal .item-row.item-card .item-summary { flex:1; min-width:0; color:#2c3e50; font-size:13px; }
+    .modal .item-row.item-card .item-summary b { font-weight:700; }
+    .modal .item-row.item-card .item-summary .dim { color:#858796; }
+    .modal .item-row.item-card > .item-fields { padding:12px 14px 4px; border-top:1px solid #eef0f5; animation:none; }
+    .modal .item-row.item-card .item-actions { display:flex; gap:6px; width:auto; }
+    .item-state { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:999px;
+        font-size:11px; font-weight:700; white-space:nowrap; background:#eef1f8; color:#5a5c69; }
+    .item-state.open    { background:#eef1f8; color:#5a5c69; }
+    .item-state.costing { background:#e0f2fe; color:#075985; }
+    .item-state.locked  { background:#fff3cd; color:#8a5a00; }
+    .item-state.recost  { background:#fde68a; color:#78350f; }
+    .modal .item-row.item-card.is-locked { border-left-color:#f6a609; background:#fffdf7; }
+    .modal .item-row.item-card.is-recost { border-left-color:#d97706; }
+    .modal .item-row.item-card.is-new { border-left-color:#1cc88a; }
+    .btn-recost-item { white-space:nowrap; }
+    @media (max-width: 576px) {
+        .modal .item-row.item-card > .item-header { flex-wrap:wrap; }
+        .modal .item-row.item-card .item-summary { flex-basis:100%; order:5; }
+    }
 </style>
 <script>
 // Override chart demo scripts to prevent errors
@@ -4579,7 +4610,8 @@ window.chartPieDemo = function() {
                     </div>
                     <div class="price-items-toolbar" id="priceItemsToolbar" style="display:none;">
                         <div class="info-text">
-                            <i class="fas fa-list-ul mr-1"></i><span id="priceItemsCount">0</span> item(s) &middot; click any row to expand
+                            <i class="fas fa-list-ul mr-1"></i><span id="priceItemsCount">0</span> item(s)<span id="priceItemsBreakdown"></span> &middot; click any row to expand
+                            <label class="ml-3 mb-0 small" style="cursor:pointer;"><input type="checkbox" id="priceOnlyToPrice" class="mr-1">Only items to price</label>
                         </div>
                         <div>
                             <button type="button" class="btn btn-sm btn-outline-secondary mr-1" id="expandAllPriceItems">
@@ -9230,6 +9262,11 @@ window.chartPieDemo = function() {
                             dimension_calc: itemDimensionCalc,
                             request_type: requestType,
                             instance_id: instanceId,
+                            // The saved row this is (edits are made in place), and
+                            // whether Sales asked for a costed item to be re-costed.
+                            id: parseInt($itemRow.attr('data-db-id'), 10) || null,
+                            recost: $itemRow.attr('data-recost') === '1',
+                            recost_note: $itemRow.data('recost-note') || '',
                             catalog_image_path: catalogImagePath, // Include catalog image path
                             attachments: attachmentFiles.length > 0 ? attachmentFiles.map(f => f.name) : [], // File names for tracking
                             has_attachments: attachmentFiles.length > 0
@@ -9600,7 +9637,8 @@ window.chartPieDemo = function() {
     }
 
     // NEW: Add item for specific request type
-    function addItemForRequestType(requestType, instanceId) {
+    function addItemForRequestType(requestType, instanceId, opts) {
+        opts = opts || {};
         console.log(`Adding item for request type: ${requestType}, instance: ${instanceId}`);
         
         const containerSelector = `#items_${instanceId}`;
@@ -9615,22 +9653,19 @@ window.chartPieDemo = function() {
         const itemId = itemCounter;
         
         const itemHtml = `
-            <div class="item-row item-row-compact" 
+            <div class="item-row item-row-compact item-card is-new" 
                  data-item-id="${itemId}"
                  data-request-type="${requestType}"
-                 data-instance-id="${instanceId}"
-                 style="border-left: 4px solid #17a2b8; margin-bottom: 10px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px;">
-                <div class="item-header d-flex align-items-center" style="margin-bottom: 8px; gap: 8px;">
+                 data-instance-id="${instanceId}">
+                <div class="item-header">
                     <button type="button" class="btn btn-sm btn-light btn-toggle-item" title="Collapse/Expand" style="padding: 2px 8px;">
                         <i class="fas fa-chevron-down"></i>
                     </button>
-                    <span class="item-number" style="font-weight: bold; color: #495057; white-space: nowrap;">
-                        <i class="fas fa-cube mr-1" style="color: #17a2b8;"></i>
-                        #${itemId}
-                    </span>
-                    <span class="item-summary text-muted small text-truncate" style="flex: 1; min-width: 0;">
+                    <span class="item-number">#${itemId}</span>
+                    <span class="item-summary text-truncate">
                         <em>New ${requestType} item</em>
                     </span>
+                    <span class="item-state open">New</span>
                     <div class="item-actions" style="flex-shrink: 0;">
                         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item" title="Remove">
                             <i class="fas fa-trash"></i>
@@ -9832,7 +9867,11 @@ window.chartPieDemo = function() {
         `;
         
         container.append(itemHtml);
-        container.find('.item-row:last').hide().fadeIn(400);
+        const $added = container.find('.item-row:last');
+        if (opts.quiet) {
+            return $added;   // loading an existing item: the caller fills it in
+        }
+        $added.hide().fadeIn(400);
         
         // Update inventory item dropdown for the new item
         updateInventoryItemDropdowns();
@@ -9849,6 +9888,154 @@ window.chartPieDemo = function() {
         }, 450);
         
         console.log(`✓ Added item #${itemId} for ${requestType}`);
+        return $added;
+    }
+
+    // ---- an existing item in the edit form ----------------------------------
+    // The same card as a new item, filled in from the saved row. There used to
+    // be a second, 300-line copy of the item form for editing, and the two had
+    // drifted (units, ids, collapse).
+    function fillItemRow($row, item) {
+        var dims = { width: item.width, height: item.height, depth: item.depth };
+        if (item.attributes) {
+            try {
+                var attrs = typeof item.attributes === 'string' ? JSON.parse(item.attributes) : item.attributes;
+                ['width', 'height', 'depth'].forEach(function (k) {
+                    if ((dims[k] === undefined || dims[k] === null) && attrs && attrs[k] !== undefined) { dims[k] = attrs[k]; }
+                });
+            } catch (e) { /* no usable dimensions */ }
+        }
+        $row.attr('data-db-id', item.id).removeClass('is-new');
+        $row.find('.item-name').val(item.name || item.item_name || '');
+        $row.find('.item-quantity').val(item.qty || item.quantity || 1);
+        var unit = item.unit || 'pcs', $unit = $row.find('.item-unit');
+        if (!$unit.find('option').filter(function () { return this.value === unit; }).length) {
+            $unit.append(new Option(unit, unit));
+        }
+        $unit.val(unit);
+        $row.find('.item-comment').val(item.description || item.comment || '');
+        var sell = item.sell_type === 'sell' ? 'sell' : 'rent';
+        $row.find('.item-sell-type').each(function () {
+            this.checked = this.value === sell;
+            $(this).closest('label').toggleClass('active', this.checked);
+        });
+        $row.find('.item-rental-days').val(item.rental_days || 1);
+        $row.find('.item-include-qty').prop('checked', item.include_qty_in_calc !== false && item.include_qty_in_calc !== 0);
+        $row.find('.item-include-days').prop('checked', item.include_days_in_calc !== false && item.include_days_in_calc !== 0);
+        ['width', 'height', 'depth'].forEach(function (k) {
+            $row.find('.item-' + k).val(dims[k] === undefined || dims[k] === null ? '' : dims[k]);
+        });
+        var calc = item.dimension_calc || '';
+        $row.find('.dim-calc-check').each(function () {
+            this.checked = calc.indexOf(this.value) >= 0;
+            $(this).closest('.dimension-checkbox').toggleClass('checked', this.checked);
+        });
+        $row.find('.item-dimension-calc').val(calc);
+        // Picking from inventory is for a new item; this one exists.
+        $row.find('.item-template-select').closest('.row').remove();
+        // Its files are already on the server: shown, and added to there directly.
+        var $files = $row.find('.item-attachments').closest('.row');
+        if (item.id) {
+            var inputId = 'edit-item-upload-' + item.id, previewId = 'preview-edit-' + item.id;
+            $files.replaceWith(
+                '<div class="row"><div class="col-md-12">' +
+                  '<div class="item-attachments-section mt-1 mb-3 p-3" style="border:1px solid #dee2e6;border-radius:8px;background:#fff;">' +
+                    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                      '<h6 class="font-weight-bold mb-0"><i class="fas fa-paperclip mr-2" style="color:#17a2b8;"></i>Item Attachments</h6>' +
+                      '<div><input type="file" id="' + inputId + '" class="d-none edit-item-attachment-input" data-item-id="' + item.id + '" accept="image/*,.pdf" multiple>' +
+                      '<button type="button" class="btn btn-sm btn-success btn-upload-edit-attachment" data-item-id="' + item.id + '" data-input-id="' + inputId + '">' +
+                        '<i class="fas fa-plus mr-1"></i> Add Files</button></div>' +
+                    '</div>' +
+                    '<div id="' + previewId + '" class="item-attachments-preview"><div class="text-center py-2"><i class="fas fa-spinner fa-spin text-muted"></i></div></div>' +
+                  '</div>' +
+                '</div></div>');
+            loadItemAttachments(item.id, previewId);
+        }
+        if (typeof updateDimensionCalculation === 'function') { updateDimensionCalculation($row); }
+        refreshItemSummary($row);
+        setItemState($row, item);
+        // Saved items open closed; the header says enough to find the one to change.
+        $row.find('.item-fields').first().hide();
+        $row.find('.btn-toggle-item i').removeClass('fa-chevron-down').addClass('fa-chevron-right');
+    }
+
+    var LOCK_LABEL = { costed: 'Costed', priced: 'Priced', 'with the client': 'With the client' };
+
+    function setItemState($row, item) {
+        var $chip = $row.find('.item-state');
+        $row.removeClass('is-locked is-recost');
+        if (item.recost_requested) {
+            $chip.attr('class', 'item-state recost').html('<i class="fas fa-redo"></i> Re-cost requested')
+                 .attr('title', item.recost_note || '');
+            $row.addClass('is-recost');
+        } else if (item.is_locked) {
+            $chip.attr('class', 'item-state locked').html('<i class="fas fa-lock"></i> ' + escapeHtml(LOCK_LABEL[item.lock_reason] || 'Costed'));
+        } else if (item.in_costing) {
+            $chip.attr('class', 'item-state costing').html('<i class="fas fa-calculator"></i> With Operations');
+        } else {
+            $chip.attr('class', 'item-state open').text('Not costed yet');
+        }
+        if (!item.is_locked) { return; }
+        $row.addClass('is-locked').attr('data-costed', 'true');
+        lockItemRow($row, item.lock_reason);
+        $row.find('.btn-remove-item').hide();   // the server keeps a costed item
+        // Costed or priced: changeable, by asking Operations for a new cost.
+        // With the client: that goes through negotiation instead.
+        if (item.lock_reason !== 'with the client' && ['approved', 'pending_negotiation'].indexOf(item.approval_status) < 0) {
+            $row.find('.item-actions').prepend(
+                '<button type="button" class="btn btn-sm btn-outline-warning btn-recost-item" title="Change this item and ask Operations to cost it again">' +
+                  '<i class="fas fa-redo mr-1"></i>Change and re-cost</button>');
+        }
+    }
+
+    function unlockItemRow($row) {
+        $row.find('.item-field-locked').prop('readonly', false).prop('disabled', false)
+            .removeClass('item-field-locked').removeAttr('title');
+        $row.find('.btn-group-toggle').css('pointer-events', '');
+        $row.find('.item-locked-note').remove();
+    }
+
+    $(document).on('click', '.btn-recost-item', function (e) {
+        e.stopPropagation();
+        var $row = $(this).closest('.item-row');
+        Swal.fire({
+            icon: 'question',
+            title: 'Change this item and re-cost it?',
+            html: '<p class="text-left mb-2">The change is saved when you press <b>Update Request</b>. ' +
+                  'The item then goes back to Operations: its cost and price are cleared and Pricing ' +
+                  'prices it again after the new cost.</p>',
+            input: 'textarea',
+            inputPlaceholder: 'What changed, for Operations (optional)',
+            showCancelButton: true,
+            confirmButtonText: 'Change and re-cost',
+            cancelButtonText: 'Cancel'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            unlockItemRow($row);
+            $row.attr('data-recost', '1').data('recost-note', (r.value || '').trim())
+                .removeClass('is-locked').addClass('is-recost');
+            $row.find('.item-state').attr('class', 'item-state recost').html('<i class="fas fa-redo"></i> Will be re-costed');
+            $row.find('.btn-recost-item').remove();
+            $row.find('.item-fields').first().prepend(
+                '<div class="item-locked-note"><i class="fas fa-redo mr-1"></i>Change what you need, then press ' +
+                '<b>Update Request</b>. The item goes back to Operations for a new cost.</div>');
+            var $fields = $row.find('.item-fields').first();
+            if (!$fields.is(':visible')) { $row.find('.btn-toggle-item').trigger('click'); }
+        });
+    });
+
+    // The header says what the item is: name, quantity and size.
+    function refreshItemSummary($row) {
+        var name = ($row.find('.item-name').val() || '').trim();
+        var qty = ($row.find('.item-quantity').val() || '').trim();
+        var unitTxt = $row.find('.item-unit option:selected').text() || '';
+        var dims = ['width', 'height', 'depth'].map(function (k) { return ($row.find('.item-' + k).val() || '').trim(); })
+                                               .filter(Boolean);
+        var parts = [];
+        if (name) { parts.push('<b>' + escapeHtml(name) + '</b>'); }
+        if (qty) { parts.push('&times; ' + escapeHtml(qty) + (unitTxt ? ' ' + escapeHtml(unitTxt) : '')); }
+        if (dims.length) { parts.push('<span class="dim">' + escapeHtml(dims.join(' × ')) + ' m</span>'); }
+        $row.find('.item-summary').first().html(parts.length ? parts.join(' &nbsp;·&nbsp; ') : '<em>New item</em>');
     }
     
     // NEW: Update item count badge for instance and toggle footer button
@@ -10079,6 +10266,11 @@ window.chartPieDemo = function() {
         addItemRow('#editItemsContainer', true);
     });
 
+    $(document).on('click', '.item-card > .item-header', function (e) {
+        if ($(e.target).closest('button, input, select, a, label').length) { return; }
+        $(this).find('.btn-toggle-item').trigger('click');
+    });
+
     // Toggle item collapse handler
     $(document).on('click', '.btn-toggle-item', function(e) {
         e.preventDefault();
@@ -10103,7 +10295,7 @@ window.chartPieDemo = function() {
         $row.find('input, select, textarea').each(function () {
             var $field = $(this);
             if ($field.attr('type') === 'hidden') { return; }
-            if ($field.is(':checkbox') || $field.is('select')) {
+            if ($field.is(':checkbox') || $field.is(':radio') || $field.is('select')) {
                 $field.prop('disabled', true);
             } else {
                 $field.prop('readonly', true);
@@ -10112,21 +10304,23 @@ window.chartPieDemo = function() {
                   .attr('title', 'Locked: this item is ' + (reason || 'costed'));
         });
         $row.find('.btn-remove-item').prop('disabled', true);
+        $row.find('.btn-group-toggle').css('pointer-events', 'none');
         if (!$row.find('.item-locked-note').length) {
             $row.find('.item-fields').first().prepend(
                 '<div class="item-locked-note">' +
                   '<i class="fas fa-lock mr-1"></i>' +
                   'This item is <strong>' + escapeHtml(reason || 'costed') + '</strong>, so its ' +
                   'name, quantity and dimensions can no longer be changed &mdash; the ' +
-                  'numbers were worked out from them. Ask operations to withdraw the ' +
-                  'cost if it has to change.' +
+                  'numbers were worked out from them. To change it, use ' +
+                  '<b>Change and re-cost</b>: it goes back to Operations for a new cost.' +
                 '</div>');
         }
     }
 
     // Live update of item-summary text from name/quantity/unit inputs
-    $(document).on('input change', '.item-row .item-name, .item-row .item-quantity, .item-row .item-unit', function() {
+    $(document).on('input change', '.item-row .item-name, .item-row .item-quantity, .item-row .item-unit, .item-row .item-width, .item-row .item-height, .item-row .item-depth', function() {
         const $row = $(this).closest('.item-row');
+        if ($row.hasClass('item-card')) { refreshItemSummary($row); return; }
         const name = ($row.find('.item-name').val() || '').trim();
         const qty  = ($row.find('.item-quantity').val() || '').trim();
         const $unitSel = $row.find('.item-unit');
@@ -11905,342 +12099,8 @@ window.chartPieDemo = function() {
                                             instanceItems.forEach(function(item, itemIdx) {
                                                 console.log(`Loading item ${itemIdx + 1} into ${instanceId}:`, item.name);
                                                 
-                                                // Extract dimensions - backend returns them as top-level fields OR in attributes JSON
-                                                let itemWidth = '';
-                                                let itemHeight = '';
-                                                let itemDepth = '';
-                                                
-                                                console.log(`===== EXTRACTING DIMENSIONS FOR ITEM: ${item.name} =====`);
-                                                console.log('Item object:', item);
-                                                
-                                                // Method 1: Check top-level fields first (backend extracts from attributes to top level)
-                                                if (item.width !== undefined && item.width !== null) {
-                                                    itemWidth = item.width;
-                                                }
-                                                if (item.height !== undefined && item.height !== null) {
-                                                    itemHeight = item.height;
-                                                }
-                                                if (item.depth !== undefined && item.depth !== null) {
-                                                    itemDepth = item.depth;
-                                                }
-                                                
-                                                console.log(`Method 1 (top-level fields): W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
-                                                
-                                                // Method 2: Fallback to attributes JSON if top-level fields are empty
-                                                if ((itemWidth === '' || itemWidth === null) && item.attributes) {
-                                                    try {
-                                                        const attrs = typeof item.attributes === 'string' ? JSON.parse(item.attributes) : item.attributes;
-                                                        console.log('Parsed attributes JSON:', attrs);
-                                                        
-                                                        if (attrs.width !== undefined && attrs.width !== null) itemWidth = attrs.width;
-                                                        if (attrs.height !== undefined && attrs.height !== null) itemHeight = attrs.height;
-                                                        if (attrs.depth !== undefined && attrs.depth !== null) itemDepth = attrs.depth;
-                                                        
-                                                        console.log(`Method 2 (attributes JSON): W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
-                                                    } catch (e) {
-                                                        console.error('❌ Failed to parse item attributes:', e);
-                                                    }
-                                                }
-                                                
-                                                console.log(`✓ FINAL EXTRACTED Dimensions: W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
-                                                console.log(`✓ Types: W=${typeof itemWidth}, H=${typeof itemHeight}, D=${typeof itemDepth}`);
-
-                                                // Metres in the box, metres in the row. There used to be a
-                                                // guess here -- multiply by 100 if the number is 10 or less --
-                                                // which meant a 5 m item opened as 500 and a legacy 300 opened
-                                                // unchanged, so what an edit saved depended on the size of the
-                                                // thing being edited.
-                                                console.log(`✓ Dimensions (metres): W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
-                                                
-                                                // Get description (could be in 'description' or 'comment' field)
-                                                const itemDescription = item.description || item.comment || '';
-                                                
-                                                // Whether this item is past editing, decided by the
-                                                // server so the form and the route cannot disagree:
-                                                // costed, priced, or already with the client.
-                                                const isCosted = item.is_locked !== undefined
-                                                    ? !!item.is_locked
-                                                    : !!(item.cost_per_item && parseFloat(item.cost_per_item) > 0);
-                                                const lockReason = item.lock_reason || 'costed';
-                                                
-                                                // Build item HTML with all fields
-                                                const itemHtml = `
-                                                    <div class="item-row ${isCosted ? 'item-costed-locked' : ''}" 
-                                                         data-item-id="edit_${idx}_${itemIdx}"
-                                                         data-request-type="${requestType}"
-                                                         data-instance-id="${instanceId}"
-                                                         data-costed="${isCosted ? 'true' : 'false'}"
-                                                         style="border-left: 4px solid ${isCosted ? '#ffc107' : '#17a2b8'}; margin-bottom: 15px; padding: 15px; background: ${isCosted ? '#fff8e1' : '#f8f9fa'}; border-radius: 8px; ${isCosted ? 'position: relative;' : ''}">
-                                                        ${isCosted ? `
-                                                        <div class="costed-lock-banner" style="background: linear-gradient(135deg, #ff8f00, #ffa000); color: white; padding: 8px 15px; margin: -15px -15px 15px -15px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
-                                                            <i class="fas fa-lock"></i>
-                                                            <strong>Locked &mdash; this item is ${lockReason}</strong>
-                                                            <span style="opacity: 0.9; margin-left: auto;">${item.cost_per_item ? 'Cost: ' + bgMoney(item.cost_per_item) : ''}</span>
-                                                        </div>
-                                                        ` : ''}
-                                                        <div class="item-header" style="margin-bottom: 15px;">
-                                                            <span class="item-number" style="font-weight-bold; color: #495057;">
-                                                                <i class="fas ${isCosted ? 'fa-lock' : 'fa-cube'} mr-2" style="color: ${isCosted ? '#ff8f00' : '#17a2b8'};"></i>
-                                                                ${requestType} Item #${itemIdx + 1}
-                                                                ${isCosted ? '<span class="badge badge-warning ml-2" style="font-size: 0.7rem;"><i class="fas fa-shield-alt mr-1"></i>Protected</span>' : ''}
-                                                            </span>
-                                                            <div class="item-actions" style="float: right; ${isCosted ? 'display:none;' : ''}">
-                                                                <button type="button" class="btn btn-sm btn-danger btn-remove-item">
-                                                                    <i class="fas fa-trash mr-1"></i> Remove
-                                                                </button>
-                                                            </div>
-                                                            <div style="clear: both;"></div>
-                                                        </div>
-                                                        <div class="item-fields">
-                                                            <input type="hidden" class="item-request-type" value="${requestType}">
-                                                            <input type="hidden" class="item-instance-id" value="${instanceId}">
-                                                            <div class="row">
-                                                                <div class="col-md-6">
-                                                                    <div class="form-group">
-                                                                        <label class="font-weight-bold">Item Name <span class="text-danger">*</span></label>
-                                                                        <input type="text" class="form-control item-name" 
-                                                                               value="${item.name || item.item_name || ''}" placeholder="Enter item name..." required>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-3">
-                                                                    <div class="form-group">
-                                                                        <label class="font-weight-bold">Quantity <span class="text-danger">*</span></label>
-                                                                        <input type="number" class="form-control item-quantity" 
-                                                                               value="${item.qty || item.quantity || 1}" min="0.01" step="0.01" placeholder="1" required>
-                                                                        <div class="include-qty-calc mt-1" title="Include quantity in cost/sell calculation">
-                                                                            <input type="checkbox" class="item-include-qty" 
-                                                                                   id="include-qty-edit-${idx}-${itemIdx}"
-                                                                                   ${(item.include_qty_in_calc !== false && item.include_qty_in_calc !== 0) ? 'checked' : ''}>
-                                                                            <label for="include-qty-edit-${idx}-${itemIdx}" class="mb-0 small text-muted">
-                                                                                <i class="fas fa-calculator"></i> Include in Calc
-                                                                            </label>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-3">
-                                                                    <div class="form-group">
-                                                                        <label class="font-weight-bold">Unit</label>
-                                                                        <select class="form-control item-unit">
-                                                                            <option value="pcs" ${(item.unit === 'pcs') ? 'selected' : ''}>Pieces (pcs)</option>
-                                                                            <option value="set" ${(item.unit === 'set') ? 'selected' : ''}>Set</option>
-                                                                            <option value="box" ${(item.unit === 'box') ? 'selected' : ''}>Box</option>
-                                                                            <option value="m" ${(item.unit === 'm') ? 'selected' : ''}>Meters (m)</option>
-                                                                            <option value="m2" ${(item.unit === 'm2') ? 'selected' : ''}>Square Meters (m²)</option>
-                                                                            <option value="kg" ${(item.unit === 'kg') ? 'selected' : ''}>Kilograms (kg)</option>
-                                                                            <option value="liter" ${(item.unit === 'liter') ? 'selected' : ''}>Liters (L)</option>
-                                                                            <option value="hours" ${(item.unit === 'hours') ? 'selected' : ''}>Hours</option>
-                                                                            <option value="days" ${(item.unit === 'days') ? 'selected' : ''}>Days</option>
-                                                                        </select>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="row">
-                                                                <div class="col-md-12">
-                                                                    <div class="form-group">
-                                                                        <label class="font-weight-bold">Description / Comments</label>
-                                                                        <textarea class="form-control item-comment" 
-                                                                                  rows="2" placeholder="Item specifications or notes...">${itemDescription}</textarea>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <!-- Sell/Rent Section -->
-                                                            <div class="row">
-                                                                <div class="col-md-12">
-                                                                    <div class="sell-rent-section">
-                                                                        <div class="d-flex align-items-center flex-wrap">
-                                                                            <div class="mr-3">
-                                                                                <label class="font-weight-bold text-secondary mb-2">
-                                                                                    <i class="fas fa-exchange-alt mr-2"></i>Transaction Type
-                                                                                </label>
-                                                                            </div>
-                                                                            <div class="sell-rent-toggle">
-                                                                                <div class="btn-group btn-group-toggle" data-toggle="buttons">
-                                                                                    <label class="btn btn-sell ${(item.sell_type === 'sell') ? 'active' : ''}">
-                                                                                        <input type="radio" class="item-sell-type" name="edit_item_sell_type_${idx}_${itemIdx}" value="sell" ${(item.sell_type === 'sell') ? 'checked' : ''}>
-                                                                                        <i class="fas fa-shopping-cart mr-1"></i> Sell
-                                                                                    </label>
-                                                                                    <label class="btn btn-rent ${(item.sell_type !== 'sell') ? 'active' : ''}">
-                                                                                        <input type="radio" class="item-sell-type" name="edit_item_sell_type_${idx}_${itemIdx}" value="rent" ${(item.sell_type !== 'sell') ? 'checked' : ''}>
-                                                                                        <i class="fas fa-clock mr-1"></i> Rent
-                                                                                    </label>
-                                                                                </div>
-                                                                                <div class="rental-days-input">
-                                                                                    <label>
-                                                                                        <i class="fas fa-calendar-day mr-1"></i>Days:
-                                                                                    </label>
-                                                                                    <input type="number" class="form-control item-rental-days" 
-                                                                                           min="1" value="${item.rental_days || 1}">
-                                                                                    <div class="include-days-calc ml-2" title="Include days in cost calculation">
-                                                                                        <input type="checkbox" class="item-include-days" 
-                                                                                               id="include-days-edit-${idx}-${itemIdx}"
-                                                                                               ${(item.include_days_in_calc !== false && item.include_days_in_calc !== 0) ? 'checked' : ''}>
-                                                                                        <label for="include-days-edit-${idx}-${itemIdx}" class="mb-0 small text-muted">
-                                                                                            <i class="fas fa-calculator"></i> Calc
-                                                                                        </label>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <!-- Dimensions Section -->
-                                                            <div class="row">
-                                                                <div class="col-md-4">
-                                                                    <div class="form-group">
-                                                                        <label>Width (m)</label>
-                                                                        <input type="number" step="0.1" class="form-control item-width" 
-                                                                               placeholder="0" value="${itemWidth}">
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-4">
-                                                                    <div class="form-group">
-                                                                        <label>Height (m)</label>
-                                                                        <input type="number" step="0.1" class="form-control item-height" 
-                                                                               placeholder="0" value="${itemHeight}">
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-4">
-                                                                    <div class="form-group">
-                                                                        <label>Depth (m)</label>
-                                                                        <input type="number" step="0.1" class="form-control item-depth" 
-                                                                               placeholder="0" value="${itemDepth}">
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <!-- Dimension Calculation Section -->
-                                                            <div class="row">
-                                                                <div class="col-md-12">
-                                                                    <div class="dimension-calc-section">
-                                                                        <div class="dimension-calc-header">
-                                                                            <label>
-                                                                                <i class="fas fa-calculator mr-2"></i>Dimension Calculation (Select for pricing)
-                                                                            </label>
-                                                                        </div>
-                                                                        <div class="dimension-checkboxes">
-                                                                            <div class="dimension-checkbox ${(item.dimension_calc && item.dimension_calc.includes('W')) ? 'checked' : ''}" data-dim="W">
-                                                                                <input type="checkbox" class="dim-calc-check" id="dim-w-edit-${idx}-${itemIdx}" value="W" ${(item.dimension_calc && item.dimension_calc.includes('W')) ? 'checked' : ''}>
-                                                                                <label for="dim-w-edit-${idx}-${itemIdx}">Width (W)</label>
-                                                                            </div>
-                                                                            <div class="dimension-checkbox ${(item.dimension_calc && item.dimension_calc.includes('H')) ? 'checked' : ''}" data-dim="H">
-                                                                                <input type="checkbox" class="dim-calc-check" id="dim-h-edit-${idx}-${itemIdx}" value="H" ${(item.dimension_calc && item.dimension_calc.includes('H')) ? 'checked' : ''}>
-                                                                                <label for="dim-h-edit-${idx}-${itemIdx}">Height (H)</label>
-                                                                            </div>
-                                                                            <div class="dimension-checkbox ${(item.dimension_calc && item.dimension_calc.includes('D')) ? 'checked' : ''}" data-dim="D">
-                                                                                <input type="checkbox" class="dim-calc-check" id="dim-d-edit-${idx}-${itemIdx}" value="D" ${(item.dimension_calc && item.dimension_calc.includes('D')) ? 'checked' : ''}>
-                                                                                <label for="dim-d-edit-${idx}-${itemIdx}">Depth (D)</label>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div class="dimension-formula mt-2">
-                                                                            <span class="text-muted">Formula:</span>
-                                                                            <span class="formula-display item-dimension-formula">-</span>
-                                                                            <span class="text-muted ml-3">Result:</span>
-                                                                            <span class="formula-result item-dimension-result">-</span>
-                                                                            <input type="hidden" class="item-dimension-calc" value="${item.dimension_calc || ''}">
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                `;
-                                                
-                                                console.log(`===== APPENDING ITEM HTML WITH DIMENSIONS =====`);
-                                                console.log(`About to append item with dimensions: W="${itemWidth}", H="${itemHeight}", D="${itemDepth}"`);
-                                                
-                                                itemsContainer.append(itemHtml);
-                                                // A locked item's fields are read-only, because typing
-                                                // into them and being told "saved" while the server
-                                                // keeps the old values is the worst of both.
-                                                if (isCosted) {
-                                                    lockItemRow(itemsContainer.find('.item-row').last(), lockReason);
-                                                }
-                                                
-                                                // VERIFICATION: Check if values actually exist in DOM after append
-                                                // Use IIFE to capture itemIdx in closure for correct item targeting
-                                                (function(capturedItemIdx, capturedWidth, capturedHeight, capturedDepth) {
-                                                    setTimeout(function() {
-                                                        // Use .eq(index) instead of .last() to get the correct item
-                                                        const $justAddedItem = itemsContainer.find('.item-row').eq(capturedItemIdx);
-                                                        const widthVal = $justAddedItem.find('.item-width').val();
-                                                        const heightVal = $justAddedItem.find('.item-height').val();
-                                                        const depthVal = $justAddedItem.find('.item-depth').val();
-                                                        console.log(`===== VERIFICATION AFTER APPEND (Item ${capturedItemIdx}) =====`);
-                                                        console.log(`DOM values: W="${widthVal}", H="${heightVal}", D="${depthVal}"`);
-                                                        
-                                                        if (widthVal === '' && capturedWidth !== '') {
-                                                            console.error(`❌ WIDTH WAS LOST! Expected "${capturedWidth}" but got "${widthVal}"`);
-                                                        }
-                                                        if (heightVal === '' && capturedHeight !== '') {
-                                                            console.error(`❌ HEIGHT WAS LOST! Expected "${capturedHeight}" but got "${heightVal}"`);
-                                                        }
-                                                        if (depthVal === '' && capturedDepth !== '') {
-                                                            console.error(`❌ DEPTH WAS LOST! Expected "${capturedDepth}" but got "${depthVal}"`);
-                                                        }
-                                                        
-                                                        // Update dimension calculation display for loaded items
-                                                        if (typeof updateDimensionCalculation === 'function') {
-                                                            updateDimensionCalculation($justAddedItem);
-                                                        }
-                                                    }, 100);
-                                                })(itemIdx, itemWidth, itemHeight, itemDepth);
-                                                
-                                                // Load attachments for this item if it has an ID
-                                                if (item.id || item.item_id) {
-                                                    const itemDbId = item.id || item.item_id;
-                                                    const previewContainerId = `preview-edit-${instanceId}-${itemIdx}`;
-                                                    
-                                                    // Add preview container to the item HTML if not already present
-                                                    setTimeout(function() {
-                                                        const $itemRow = itemsContainer.find('.item-row').eq(itemIdx);
-                                                        
-                                                        // Check if attachments section already exists
-                                                        if ($itemRow.find('.item-attachments-section').length === 0) {
-                                                            const uploadInputId = `edit-item-upload-${itemDbId}`;
-                                                            const attachmentsSectionHtml = `
-                                                                <div class="row">
-                                                                    <div class="col-md-12">
-                                                                        <div class="item-attachments-section mt-3 p-3" style="border: 1px solid #dee2e6; border-radius: 8px; background: #ffffff;">
-                                                                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                                                                <h6 class="font-weight-bold mb-0">
-                                                                                    <i class="fas fa-paperclip mr-2" style="color: #17a2b8;"></i>
-                                                                                    Item Attachments
-                                                                                </h6>
-                                                                                <div>
-                                                                                    <input type="file" 
-                                                                                           id="${uploadInputId}" 
-                                                                                           class="d-none edit-item-attachment-input"
-                                                                                           data-item-id="${itemDbId}"
-                                                                                           accept="image/*,.pdf"
-                                                                                           multiple>
-                                                                                    <button type="button" 
-                                                                                            class="btn btn-sm btn-success btn-upload-edit-attachment"
-                                                                                            data-item-id="${itemDbId}"
-                                                                                            data-input-id="${uploadInputId}"
-                                                                                            title="Upload new attachments">
-                                                                                        <i class="fas fa-plus mr-1"></i> Add Files
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div id="${previewContainerId}" class="item-attachments-preview">
-                                                                                <div class="text-center py-2">
-                                                                                    <i class="fas fa-spinner fa-spin text-muted"></i>
-                                                                                    <span class="text-muted ml-2">Loading attachments...</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            `;
-                                                            
-                                                            $itemRow.find('.item-fields').append(attachmentsSectionHtml);
-                                                            
-                                                            // Load the attachments
-                                                            console.log(`Loading attachments for item ${itemDbId} into ${previewContainerId}`);
-                                                            loadItemAttachments(itemDbId, previewContainerId);
-                                                        }
-                                                    }, 150);
-                                                }
+                                                const $row = addItemForRequestType(requestType, instanceId, { quiet: true });
+                                                fillItemRow($row, item);
                                             });
                                             
                                             // Update item count badge
@@ -12253,53 +12113,22 @@ window.chartPieDemo = function() {
                             }
                             console.log('===== ITEMS LOADING COMPLETE =====');
                             
-                            // Disable all inputs on costed items (items with cost data from operations)
-                            var costedCount = 0;
-                            $('#editTemplateFieldsContent .item-row[data-costed="true"]').each(function() {
-                                costedCount++;
-                                $(this).find('input:not([type="hidden"]), select, textarea').prop('disabled', true);
-                                $(this).find('.btn-remove-item').hide();
-                                $(this).find('.btn-upload-edit-attachment').hide();
-                                $(this).find('.dim-calc-check').prop('disabled', true);
-                                $(this).find('.item-sell-type').prop('disabled', true);
-                                $(this).find('.item-include-qty').prop('disabled', true);
-                                $(this).find('.item-include-days').prop('disabled', true);
-                                $(this).css('opacity', '0.85');
-                            });
-                            
-                            // Show warning banner if any costed items exist
+                            // A note at the top when some items are costed: how to change one.
+                            var costedCount = $('#editTemplateFieldsContent .item-row[data-costed="true"]').length;
+                            $('#editCostedWarning').remove();
                             if (costedCount > 0) {
-                                var costedWarning = `
-                                    <div class="alert alert-warning mb-3" id="editCostedWarning" style="border-left: 5px solid #ff8f00; border-radius: 8px; background: linear-gradient(135deg, #fff8e1, #fff3cd);">
-                                        <div class="d-flex align-items-center">
-                                            <div class="mr-3">
-                                                <div style="width: 45px; height: 45px; background: #ff8f00; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                                    <i class="fas fa-lock text-white fa-lg"></i>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h6 class="mb-1" style="color: #e65100;"><strong><i class="fas fa-shield-alt mr-1"></i>${costedCount} Item(s) Costed by Operations</strong></h6>
-                                                <p class="mb-0 text-muted" style="font-size: 0.85rem;">
-                                                    These item details are protected because Operations already recorded a cost. Changing it would invalidate the Operations cost and downstream totals. General request information can still be updated.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                                // Insert warning at top of edit form body
-                                var editModalBody = $('#editRequestModal .modal-body');
-                                if (editModalBody.find('#editCostedWarning').length === 0) {
-                                    editModalBody.prepend(costedWarning);
-                                }
-                                
-                                // Also hide "Add Item" buttons in instances that have costed items
-                                $('#editTemplateFieldsContent .item-row[data-costed="true"]').each(function() {
-                                    var instId = $(this).data('instance-id');
-                                    if (instId) {
-                                        $(`#items_${instId}`).closest('.template-instance').find('.btn-add-item, .add-item-btn').hide();
-                                    }
-                                });
+                                $('#editRequestModal .modal-body').prepend(
+                                    '<div class="alert alert-warning mb-3" id="editCostedWarning" style="border-left:5px solid #ff8f00;">' +
+                                      '<i class="fas fa-lock mr-2"></i><strong>' + costedCount + ' item(s) already costed.</strong> ' +
+                                      'They keep the details their cost was worked out from. To change one, open it and press ' +
+                                      '<b>Change and re-cost</b>; it goes back to Operations. Every other item, and the request ' +
+                                      'itself, can be edited as usual.' +
+                                    '</div>');
                             }
+                            $('#editTemplateFieldsContent [id^="items_"]').each(function () {
+                                var id = this.id.replace(/^items_/, '');
+                                if (id) { updateItemCountBadge(id); }
+                            });
                             
                             // === END OF MOVED ITEM LOADING CODE ===
                             
@@ -12860,7 +12689,7 @@ window.chartPieDemo = function() {
                                 ? '<span class="badge badge-info ml-2" title="Costed and waiting for a price"><i class="fas fa-tag mr-1"></i>Needs Pricing</span>'
                                 : '<span class="badge badge-secondary ml-2" title="No cost yet, so it cannot be priced"><i class="fas fa-hourglass-half mr-1"></i>Awaiting Cost</span>'));
                     itemsHtml += `
-                        <div class="price-item-accordion mb-2${needsPricing ? ' price-item-accordion--needs-pricing' : ''}${isNegotiation ? ' price-item-accordion--negotiation' : ''}" data-item-accordion-id="${item.id}">
+                        <div class="price-item-accordion mb-2${needsPricing ? ' price-item-accordion--needs-pricing' : ''}${isNegotiation ? ' price-item-accordion--negotiation' : ''}" data-item-accordion-id="${item.id}" data-held="${heldByOperation ? 1 : 0}">
                             <div class="price-item-summary${negotiationNeedsAttention ? '' : ' collapsed'}" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="${negotiationNeedsAttention ? 'true' : 'false'}" aria-controls="${collapseId}">
                                 <div class="psum-left">
                                     <i class="fas fa-chevron-right psum-chevron"></i>
@@ -13098,6 +12927,12 @@ window.chartPieDemo = function() {
         var accordionCount = $('#priceItemsContainer .price-item-accordion').length;
         if (accordionCount > 0) {
             $('#priceItemsCount').text(accordionCount);
+            // What is left to do, before anybody scrolls: to price, and still with Operation.
+            var toPrice = $('#priceItemsContainer .price-item-accordion--needs-pricing').length;
+            var held = $('#priceItemsContainer .price-item-accordion[data-held="1"]').length;
+            $('#priceItemsBreakdown').html(' &middot; <b>' + toPrice + '</b> to price' +
+                (held ? ' &middot; ' + held + ' still with Operation' : ''));
+            $('#priceOnlyToPrice').prop('checked', false);
             $('#priceItemsToolbar').show();
         } else {
             $('#priceItemsToolbar').hide();
@@ -13110,6 +12945,8 @@ window.chartPieDemo = function() {
         $('#priceItemsContainer .price-item-accordion .collapse').collapse('show');
     }).on('click.priceItemsToolbar', '#collapseAllPriceItems', function() {
         $('#priceItemsContainer .price-item-accordion .collapse').collapse('hide');
+    }).on('change.priceItemsToolbar', '#priceOnlyToPrice', function() {
+        $('#priceItemsContainer .price-item-accordion').not('.price-item-accordion--needs-pricing').toggle(!this.checked);
     });
 
     // Auto-calculate total sell when price changes (using formula: price × qty × days × dimensions)

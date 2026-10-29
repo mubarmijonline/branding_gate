@@ -4398,5 +4398,19 @@ window.BG_AR = {
 "Saved, not sent to Pricing:": "اتحفظ، بس متبعتش للتسعير:",
 "Update and Send to Pricing": "تحديث وإرسال للتسعير",
 "Still with Operation": "لسه مع العمليات",
-"Operation has not sent this item yet.": "العمليات لسه مابعتتش البند ده."
+"Operation has not sent this item yet.": "العمليات لسه مابعتتش البند ده.",
+"Not costed yet": "لسه متكلفش",
+"With Operations": "مع العمليات",
+"With the client": "مع العميل",
+"Change and re-cost": "تعديل وإعادة تكلفة",
+"Will be re-costed": "هيتعاد تكلفته",
+"Change this item and re-cost it?": "تعدّل البند ده ويرجع للتكلفة تاني؟",
+"What changed, for Operations (optional)": "إيه اللي اتغير، للعمليات (اختياري)",
+"No price yet": "لسه مفيش سعر",
+"Costed, with Operation": "متكلف، لسه مع العمليات",
+"Sent back to Operations:": "رجع للعمليات:",
+"Only items to price": "البنود اللي محتاجة تسعير بس",
+"to price": "محتاج تسعير",
+"still with Operation": "لسه مع العمليات",
+"Item changed on request": "بند اتعدل في الطلب"
 };

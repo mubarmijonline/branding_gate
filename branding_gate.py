@@ -925,10 +925,8 @@ def item_lock_reason(row):
         return 'costed'
     if row.get('approval_status') in ('approved', 'pending_negotiation'):
         return 'with the client'
-    # Operations is costing it: changing it under them would cost the wrong
-    # thing, and re-inserting it would delete their assignment and proposals.
-    if row.get('in_costing'):
-        return 'out for costing'
+    # Out for costing is still editable (Gamal, 2026-10-30): edits are made in
+    # place, so the assignment survives, and its holder is told what changed.
     return None
 
 
@@ -1033,6 +1031,234 @@ def locked_item_changes(locked_row, submitted):
         if was != now:
             changed.append(field)
     return changed
+
+
+# ---------------------------------------------------------------------------
+# Writing a request's items
+#
+# One reading of what an item from the form becomes as a row, for every route
+# that writes items: the urgent-date approval used to keep half the columns
+# and none of the template instances, so the edit form later opened empty.
+# ---------------------------------------------------------------------------
+
+ITEM_ROW_FIELDS = ('request_type', 'name', 'description', 'qty', 'unit', 'sell_type', 'rental_days',
+                   'dimension_calc', 'include_days_in_calc', 'include_qty_in_calc', 'attributes')
+
+
+def item_row(item, request_type=None):
+    """The columns a submitted item is stored as."""
+    attributes = {}
+    for axis in ('width', 'height', 'depth'):
+        value = _as_number(item.get(axis))
+        if value:
+            attributes[axis] = value
+
+    def flag(key):
+        return 0 if item.get(key, True) in (False, 0, '0', 'false') else 1
+
+    return {
+        'request_type': item.get('request_type') or request_type,
+        'name': (item.get('name') or item.get('item_name') or '').strip(),
+        'description': item.get('comment') or item.get('description') or item.get('notes') or '',
+        'qty': _as_number(item.get('quantity', item.get('qty'))) or 1,
+        'unit': item.get('unit') or 'pcs',
+        'sell_type': item.get('sell_type') or 'rent',
+        'rental_days': int(_as_number(item.get('rental_days')) or 1),
+        'dimension_calc': item.get('dimension_calc') or None,
+        'include_days_in_calc': flag('include_days_in_calc'),
+        'include_qty_in_calc': flag('include_qty_in_calc'),
+        'attributes': json.dumps(attributes) if attributes else None,
+    }
+
+
+def insert_item_row(cur, request_id, row):
+    cur.execute("INSERT INTO sales_request_items (request_id, %s) VALUES (%%s%s)"
+                % (', '.join(ITEM_ROW_FIELDS), ', %s' * len(ITEM_ROW_FIELDS)),
+                [request_id] + [row[k] for k in ITEM_ROW_FIELDS])
+    return cur.lastrowid
+
+
+def write_template_instances(cur, request_id, instances):
+    """The request's fields per request type, replaced whole."""
+    cur.execute("DELETE FROM sales_request_template_instances WHERE request_id = %s", (request_id,))
+    for order, instance in enumerate(instances or []):
+        if not instance.get('template_id'):
+            continue   # a type with no template has no fields to keep
+        cur.execute("""
+            INSERT INTO sales_request_template_instances
+                (request_id, template_id, request_type, instance_order, template_data)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (request_id, instance.get('template_id'), instance.get('request_type'), order,
+              json.dumps(instance.get('fields') or {})))
+
+
+def describe_item_changes(row, item, fields):
+    """'qty 1 -> 3; width 2 -> 2.5' for the cost-bearing fields that changed."""
+    current = item_row(row)
+    attributes = {}
+    try:
+        attributes = json.loads(row['attributes']) if row.get('attributes') else {}
+    except (TypeError, ValueError):
+        pass
+    new = item_row(item)
+    new_attributes = json.loads(new['attributes']) if new['attributes'] else {}
+
+    def show(value):
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        return '-' if value in (None, '') else str(value)
+
+    parts = []
+    for field in fields:
+        if field in ('width', 'height', 'depth'):
+            was, now = _as_number((attributes or {}).get(field)), new_attributes.get(field)
+        else:
+            was, now = current.get(field), new.get(field)
+        parts.append('%s %s -> %s' % (field.replace('_', ' '), show(was), show(now)))
+    return '; '.join(parts)
+
+
+# A costed or priced item changes only by going back to Operations: its cost
+# was worked out from the old name, quantity and size. One the client has
+# already approved goes through negotiation instead.
+RECOSTABLE = ('costed', 'priced')
+
+
+def apply_item_edits(conn, cur, request_id, incoming, fallback_type, me, actor):
+    """
+    Write an edit's items onto the request, in place.
+
+    An item is matched to its row by id (by name for a page that does not send
+    ids), so it keeps its files, costing assignment and proposals. An open item
+    is updated; a new one is inserted; one that is gone is deleted. A locked
+    item is left exactly as it is, unless the edit asks for it to be re-costed,
+    in which case the change is applied and the item goes back to Operations.
+    """
+    cur.execute("""
+        SELECT i.*, EXISTS (SELECT 1 FROM costing_assignment a
+                            WHERE a.item_id = i.id AND a.status = 'open') AS in_costing
+        FROM sales_request_items i WHERE i.request_id = %s ORDER BY i.id
+    """, (request_id,))
+    rows = cur.fetchall()
+    unmatched = {row['id']: row for row in rows}
+    out = {'locked': [], 'refused': [], 'added': [], 'recost': [], 'in_costing': [], 'count': 0}
+
+    for item in incoming:
+        new = item_row(item, fallback_type)
+        if not new['name']:
+            continue
+        out['count'] += 1
+        wanted = _as_number(item.get('id'))
+        if wanted:
+            row = unmatched.pop(int(wanted), None)
+        else:
+            row = next((r for r in unmatched.values() if (r['name'] or '').strip() == new['name']), None)
+            if row:
+                unmatched.pop(row['id'])
+        if row is None:
+            new_id = insert_item_row(cur, request_id, new)
+            out['added'].append(new['name'])
+            log_item_change(request_id, new_id, new['name'], new['request_type'], 'ITEM_ADD', actor,
+                            new_data={'name': new['name'], 'qty': new['qty'], 'unit': new['unit']},
+                            change_description='[%s] Added item \'%s\' (Qty: %s %s)' % (
+                                new['request_type'], new['name'], new['qty'], new['unit']),
+                            conn=conn, cur=cur)
+            continue
+
+        reason = item_lock_reason(row)
+        changes = locked_item_changes(row, item)
+        if reason:
+            entry = {'name': row['name'], 'reason': reason, 'changes': changes}
+            if changes and item.get('recost'):
+                if reason in RECOSTABLE and row.get('approval_status') not in ('approved', 'pending_negotiation'):
+                    out['recost'].append(request_recost(conn, cur, row, new, describe_item_changes(row, item, changes),
+                                                        (item.get('recost_note') or '').strip(), me, actor))
+                    continue
+                entry['reason'] = 'with the client'
+            out['locked'].append(entry)
+            if changes:
+                out['refused'].append(entry)
+            continue
+
+        cur.execute("UPDATE sales_request_items SET %s WHERE id = %%s"
+                    % ', '.join('%s = %%s' % k for k in ITEM_ROW_FIELDS),
+                    [new[k] for k in ITEM_ROW_FIELDS] + [row['id']])
+        described = describe_item_changes(row, item, changes) if changes else ''
+        if (row.get('description') or '') != new['description']:
+            described = '; '.join(filter(None, [described, 'description updated']))
+        if described:
+            log_item_change(request_id, row['id'], new['name'], new['request_type'], 'ITEM_UPDATE', actor,
+                            change_description='[%s] Item \'%s\': %s' % (new['request_type'], new['name'], described),
+                            conn=conn, cur=cur)
+        if row['in_costing'] and changes:
+            out['in_costing'].append((costing_desk(cur, row['id']), new['name'], described))
+
+    for row in unmatched.values():
+        reason = item_lock_reason(row)
+        if reason:
+            entry = {'name': row['name'], 'reason': reason, 'changes': ['removed']}
+            out['locked'].append(entry)
+            out['refused'].append(entry)
+            out['count'] += 1
+            continue
+        if row['in_costing']:
+            out['in_costing'].append((costing_desk(cur, row['id']), row['name'], 'removed from the request'))
+        cur.execute("DELETE FROM sales_request_items WHERE id = %s", (row['id'],))
+        log_item_change(request_id, None, row['name'], row.get('request_type'), 'ITEM_DELETE', actor,
+                        old_data={'name': row['name'], 'qty': _as_number(row.get('qty'))},
+                        change_description='[%s] Removed item \'%s\'' % (row.get('request_type'), row['name']),
+                        conn=conn, cur=cur)
+    return out
+
+
+def request_recost(conn, cur, row, new, summary, note, me, actor):
+    """Apply a change to a costed item and send it back to be costed again."""
+    cur.execute("UPDATE sales_request_items SET %s, cost_per_item = NULL, total_cost = NULL, "
+                "sell_per_item = NULL, total_sell = NULL, pricing_sent_at = NULL, pricing_sent_by = NULL, "
+                "recost_requested_at = NOW(), recost_requested_by = %%s, recost_note = %%s WHERE id = %%s"
+                % ', '.join('%s = %%s' % k for k in ITEM_ROW_FIELDS),
+                [new[k] for k in ITEM_ROW_FIELDS] + [me, (note or summary)[:1000], row['id']])
+    # Back on the desk of whoever costed it, under the leader who asked them.
+    cur.execute("UPDATE costing_assignment SET status = 'open' WHERE item_id = %s AND status = 'closed'",
+                (row['id'],))
+    _costing_log(cur, row['id'], row['request_id'], 'recost_requested', me,
+                 amount=row.get('cost_per_item'), detail=summary + (' (%s)' % note if note else ''))
+    # No money in this line: Sales reads the change log.
+    log_item_change(row['request_id'], row['id'], new['name'], new['request_type'], 'ITEM_UPDATE', actor,
+                    change_description='[%s] \'%s\' changed and sent back to Operations: %s%s' % (
+                        new['request_type'], new['name'], summary, ' (%s)' % note if note else ''),
+                    conn=conn, cur=cur)
+    return {'name': new['name'], 'changes': summary, 'note': note}
+
+
+def costing_desk(cur, item_id):
+    """Who holds this item's open costing assignment, and who gave it to them."""
+    cur.execute("SELECT assignee_id, assigned_by FROM costing_assignment WHERE item_id = %s AND status = 'open'",
+                (item_id,))
+    return sorted({uid for row in cur.fetchall() for uid in (row['assignee_id'], row['assigned_by']) if uid})
+
+
+def notify_costing_desk(changed, request_id, actor):
+    """Tell them Sales changed the item under them."""
+    for people, name, what in changed:
+        if people:
+            notify_users(people, 'Item changed on request #%06d' % request_id,
+                         '%s changed "%s" while it is being costed: %s' % (actor, name, what),
+                         link='/operation_request?request=%d' % request_id, category='important')
+
+
+def notify_recost(request_id, recost, actor):
+    if not recost:
+        return 0
+    try:
+        return send_notification_to_role(
+            'operation', 'Re-cost requested on request #%06d' % request_id,
+            '%s changed %d costed item(s) and asked for a new cost: %s' % (
+                actor, len(recost), '; '.join('%s (%s)' % (r['name'], r['changes']) for r in recost[:4])),
+            link='/operation_request?request=%d' % request_id)
+    except Exception as e:
+        print(f"Error notifying operations: {e}")
+        return 0
 
 
 def people_index(cur):
@@ -4674,7 +4900,7 @@ def no_stale_api_reads(response):
 # Sarah Gaber's level saw item cost on the request details page).
 COST_API_PREFIXES = ('/api/sales/', '/api/sales-requests', '/api/workflow/', '/api/client-approval')
 COST_KEY = re.compile(r'cost|profit|margin', re.I)
-COST_KEY_KEEP = re.compile(r'costed|has_cost|cost_status', re.I)   # counts and flags, no money
+COST_KEY_KEEP = re.compile(r'costed|has_cost|cost_status|recost_|in_costing', re.I)   # counts and flags, no money
 COST_EVENT = re.compile(r'\b(costs?|costed|costing|re-?cost\w*|cost_\w+|\w+_cost\w*|profit\w*|margin\w*)\b', re.I)
 COST_EVENT_FIELDS = ('action_type', 'field_name', 'change_description', 'change_type')
 
@@ -9923,7 +10149,7 @@ def costing_decide(proposal_id):
         old_cost = item['cost_per_item']
         cur.execute("""
             UPDATE sales_request_items
-            SET cost_per_item = %s, total_cost = %s
+            SET cost_per_item = %s, total_cost = %s, recost_requested_at = NULL
             WHERE id = %s
         """, (amount, total, proposal['item_id']))
 
@@ -12139,6 +12365,9 @@ def get_single_sales_request(request_id):
             item_dict['lock_reason'] = item_lock_reason(item)
             item_dict['is_locked'] = bool(item_dict['lock_reason'])
             item_dict['pricing_sent'] = item.get('pricing_sent_at') is not None
+            item_dict['in_costing'] = bool(item['in_costing'])
+            item_dict['recost_requested'] = item.get('recost_requested_at') is not None
+            item_dict['recost_note'] = item.get('recost_note') if item_dict['recost_requested'] else None
 
             item_dict['attachments'] = []
             for att in attachments_data:
@@ -12325,6 +12554,7 @@ def get_single_operations_request(request_id):
                    sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc,
                    submitted_for_approval_date, sell_per_item IS NOT NULL AS is_priced,
                    pricing_sent_at IS NOT NULL AS pricing_sent,
+                   recost_requested_at IS NOT NULL AS recost_requested, recost_note,
                    EXISTS (SELECT 1 FROM negotiation_requests nr
                            WHERE nr.item_id = sales_request_items.id
                              AND nr.status = 'pending_costing') AS awaiting_recost
@@ -12405,6 +12635,9 @@ def get_single_operations_request(request_id):
                 # Where it stands with the client; a label, never the price.
                 'client_status': client_status_of(item),
                 'pricing_sent': bool(item.get('pricing_sent')),
+                # Sales changed it after it was costed and asked for a new cost.
+                'recost_requested': bool(item.get('recost_requested')),
+                'recost_note': item.get('recost_note') if item.get('recost_requested') else None,
             }
             
             # Add dimensions from attributes
@@ -13898,7 +14131,8 @@ def add_operation_request_costs():
                         UPDATE sales_request_items 
                         SET cost_per_item = %s, 
                             total_cost = %s,
-                            negotiation_status = 'negotiated'
+                            negotiation_status = 'negotiated',
+                            recost_requested_at = NULL
                         WHERE id = %s AND request_id = %s
                     """, (
                         cost_per_item,
@@ -13909,7 +14143,7 @@ def add_operation_request_costs():
                 else:
                     cur.execute("""
                         UPDATE sales_request_items 
-                        SET cost_per_item = %s, total_cost = %s
+                        SET cost_per_item = %s, total_cost = %s, recost_requested_at = NULL
                         WHERE id = %s AND request_id = %s
                     """, (
                         cost_per_item,
@@ -14532,7 +14766,6 @@ def edit_sales_request(request_id):
         conn.close()
         
         # Log the update with SMART field-level change detection - ONLY log actual changes
-        # NOTE: old_items_list and old_template_fields were retrieved BEFORE deletion above
         try:
             username = (session.get('name') or session.get('username') or 'Unknown')
             changes_logged = 0
@@ -15271,6 +15504,16 @@ def approve_request(approval_id):
         if company_id == '' or company_id == 'null':
             company_id = None
         
+        # Stored the way the add route stores it. The form payload went in as is,
+        # with no instance rows, so the edit form later opened with no items
+        # (Gamal, 37125).
+        form_fields = request_data.get('template_fields') or {}
+        instances = form_fields.get('instances') or []
+        stored_data = {'request_types': request_data.get('request_types') or [],
+                       'template_fields': form_fields.get('flat_fields') or {}}
+        if instances:
+            stored_data['template_instances'] = instances
+
         # Create the actual sales request
         # (Similar logic to add_sales_request but using stored data)
         cur.execute("""
@@ -15290,7 +15533,7 @@ def approve_request(approval_id):
             request_data.get('end_date'),
             request_data.get('template_code'),
             request_type_str,
-            json.dumps(request_data.get('template_fields', {})),
+            json.dumps(stored_data),
             approval['requested_by'],  # Original requester
             approval_id
         ))
@@ -15299,28 +15542,14 @@ def approve_request(approval_id):
         # The person who asked owns it, not the admin who let it through.
         claim_sales_request(cur, sales_request_id, approval['requested_by'])
         
-        # Insert items if any
+        # Insert items if any, every column the form sent.
+        write_template_instances(cur, sales_request_id, instances)
         items_count = 0
-        if request_data.get('template_fields', {}).get('instances'):
-            for instance in request_data['template_fields']['instances']:
-                for item in instance.get('items', []):
-                    cur.execute("""
-                        INSERT INTO sales_request_items (
-                            request_id, request_type, name, description, qty, unit, attributes
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        sales_request_id,
-                        instance.get('request_type'),
-                        item.get('name'),
-                        item.get('comment', ''),
-                        float(item.get('quantity', 1)),
-                        item.get('unit', 'pcs'),
-                        json.dumps({
-                            'width': item.get('width'),
-                            'height': item.get('height'),
-                            'depth': item.get('depth')
-                        }) if any([item.get('width'), item.get('height'), item.get('depth')]) else None
-                    ))
+        for instance in instances:
+            for item in instance.get('items', []):
+                row = item_row(item, instance.get('request_type'))
+                if row['name']:
+                    insert_item_row(cur, sales_request_id, row)
                     items_count += 1
         
         # Update items count
@@ -18099,29 +18328,6 @@ def update_request_with_template(request_id):
         print(f"DEBUG: Executing update query: {update_query}")
         print(f"DEBUG: With values: {update_values}")
         
-        # CRITICAL: Get old items and template data BEFORE any deletion for proper comparison
-        cur.execute("""
-            SELECT id, name, request_type, qty, unit, attributes, cost_per_item, sell_per_item, description
-            FROM sales_request_items 
-            WHERE request_id = %s 
-            ORDER BY name, request_type
-        """, (request_id,))
-        old_items_list = cur.fetchall()
-        print(f"DEBUG UPDATE-TEMPLATE: Retrieved {len(old_items_list)} existing items BEFORE deletion for comparison")
-        
-        # Debug: Print old items details
-        if old_items_list:
-            for idx, old_item in enumerate(old_items_list):
-                old_attrs = {}
-                if old_item.get('attributes'):
-                    try:
-                        old_attrs = json.loads(old_item['attributes']) if isinstance(old_item['attributes'], str) else old_item['attributes']
-                    except:
-                        pass
-                print(f"DEBUG UPDATE-TEMPLATE:   Old Item {idx}: '{old_item['name']}' - qty={old_item.get('qty')}, width={old_attrs.get('width')}, height={old_attrs.get('height')}, depth={old_attrs.get('depth')}, unit={old_item.get('unit')}")
-        else:
-            print(f"DEBUG UPDATE-TEMPLATE: WARNING - No old items found for request {request_id}")
-        
         # Get old template fields from existing request_data BEFORE update
         old_template_fields = {}
         old_template_instances = []
@@ -18134,537 +18340,51 @@ def update_request_with_template(request_id):
             except:
                 pass
         
-        # The items' files, before the items are deleted and re-inserted below.
-        item_files = snapshot_item_files(cur, request_id)
-
         # Now execute the update query
         cur.execute(update_query, update_values)
-        
-        # Which items are past editing, and what the payload would have done to
-        # them. Everything else on the request is still editable: one costed
-        # item used to freeze the other ten and say nothing about it.
-        locked_rows = locked_items_for(cur, request_id)
-        incoming = submitted_items(data)
-        incoming_by_name = {}
-        for item in incoming:
-            key = (item.get('name') or item.get('item_name') or '').strip()
-            if key:
-                incoming_by_name.setdefault(key, item)
 
-        locked_report = []
-        for name, row in locked_rows.items():
-            entry = {'name': name, 'reason': row['lock_reason'], 'changes': []}
-            match = incoming_by_name.get(name)
-            if match is None:
-                entry['changes'] = ['removed']
-            else:
-                entry['changes'] = locked_item_changes(row, match)
-            locked_report.append(entry)
-
-        refused = [e for e in locked_report if e['changes']]
-        # Items that were not on the request before this save: Operations
-        # has to cost them, so they are told once it commits.
-        old_names = {(row.get('name') or '').strip().lower() for row in old_items_list}
-        added_names = []
-        for item in incoming:
-            name = (item.get('name') or item.get('item_name') or '').strip()
-            if name and name.lower() not in old_names and name not in added_names:
-                added_names.append(name)
+        # The items, in place: an item keeps its row (files, costing assignment,
+        # proposals) and only what is past editing is refused. Deleting and
+        # re-inserting everything used to lose all of that on every save.
+        actor = session.get('name') or session.get('username') or 'Sales'
+        edits = apply_item_edits(conn, cur, request_id, submitted_items(data),
+                                 (request_types or [None])[0], session.get('user_id'), actor)
+        if template_instances:
+            write_template_instances(cur, request_id, template_instances)
+        cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s", (edits['count'], request_id))
+        added_names = edits['added']
+        refused = edits['refused']
         request_title = data.get('title') or existing_request.get('title') or 'a sales request'
 
-        cur.execute("""
-            SELECT id, name, cost_per_item, sell_per_item, total_cost, total_sell,
-                   approval_status, negotiation_status, negotiation_reason, negotiation_count, client_feedback
-            FROM sales_request_items 
-            WHERE request_id = %s 
-            AND cost_per_item IS NOT NULL AND cost_per_item > 0
-        """, (request_id,))
-        costed_items_in_db = cur.fetchall()
-        
-        has_costed_items = len(locked_rows) > 0
-        
-        if has_costed_items:
-            # A locked item keeps its row exactly as it is. Everything else on
-            # the request is deleted and re-inserted as usual, so an edit to
-            # the items that are still open is not thrown away because one of
-            # their neighbours has been costed.
-            print(f"DEBUG UPDATE-TEMPLATE: {len(locked_rows)} locked item(s); "
-                  f"{len(refused)} would have been changed")
-
-            # Refusing outright is the wrong answer when the rest of the edit
-            # is legitimate, so the locked items are left alone and the caller
-            # is told precisely which ones and why.
-            locked_ids = [row['id'] for row in locked_rows.values()]
-            placeholders = ','.join(['%s'] * len(locked_ids))
-            cur.execute(
-                "DELETE FROM sales_request_items WHERE request_id = %%s "
-                "AND id NOT IN (%s)" % placeholders,
-                [request_id] + locked_ids)
-
-            try:
-                cur.execute("DELETE FROM sales_request_template_instances WHERE request_id = %s", (request_id,))
-                if template_instances:
-                    for idx, instance in enumerate(template_instances):
-                        cur.execute("""
-                            INSERT INTO sales_request_template_instances 
-                            (request_id, template_id, request_type, instance_order, template_data)
-                            VALUES (%s, %s, %s, %s, %s)
-                        """, (
-                            request_id,
-                            instance.get('template_id'),
-                            instance.get('request_type'),
-                            idx,
-                            json.dumps(instance.get('fields', {}))
-                        ))
-            except Exception as inst_err:
-                print(f"DEBUG UPDATE-TEMPLATE: Template instance update skipped: {inst_err}")
-
-            # Re-insert the items that are still open, skipping any name that
-            # belongs to a locked row -- that row is still there.
-            reinserted = 0
-            for item in incoming:
-                name = (item.get('name') or item.get('item_name') or '').strip()
-                if not name or name in locked_rows:
-                    continue
-                attributes = {}
-                for axis in ('width', 'height', 'depth'):
-                    if item.get(axis):
-                        try:
-                            attributes[axis] = float(item.get(axis))
-                        except (TypeError, ValueError):
-                            pass
-                try:
-                    cur.execute("""
-                        INSERT INTO sales_request_items
-                            (request_id, request_type, name, description, qty, unit,
-                             sell_type, rental_days, dimension_calc,
-                             include_days_in_calc, include_qty_in_calc, attributes)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        request_id,
-                        item.get('request_type') or existing_request.get('request_type'),
-                        name,
-                        item.get('comment') or item.get('description') or item.get('notes') or '',
-                        item.get('quantity', item.get('qty', 1)) or 1,
-                        item.get('unit') or 'pcs',
-                        item.get('sell_type') or 'rent',
-                        int(item.get('rental_days') or 1),
-                        item.get('dimension_calc') or None,
-                        1 if item.get('include_days_in_calc', True) else 0,
-                        1 if item.get('include_qty_in_calc', True) else 0,
-                        json.dumps(attributes) if attributes else None,
-                    ))
-                    reinserted += 1
-                except Exception as item_error:
-                    print(f"DEBUG UPDATE-TEMPLATE: could not re-insert '{name}': {item_error}")
-
-            items_count = len(locked_ids) + reinserted
-            cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s",
-                        (items_count, request_id))
-            carry_item_files(cur, request_id, item_files)
-
-            conn.commit()
-            cur.close()
-            conn.close()
-            notify_items_added_to_operations(request_id, request_title, session.get('name') or 'Sales', added_names)
-
-            # What the reader needs to know, in the order they need it: what was
-            # refused, then what was kept.
-            if refused:
-                headline = 'Saved, but %d item(s) could not be changed: %s.' % (
-                    len(refused),
-                    '; '.join('%s is %s' % (e['name'], e['reason']) for e in refused))
-            else:
-                headline = 'Request updated. %d item(s) are locked and were left as they are.' % len(locked_rows)
-            if added_names:
-                headline += ' Added %d new item(s); Operations has been asked to cost them.' % len(added_names)
-
-            return jsonify({
-                'success': True,
-                'message': headline,
-                'items_count': items_count,
-                'costed_items_preserved': True,
-                'locked_items': locked_report,
-                'refused_changes': refused,
-            })
-        
-        # NO costed items - safe to delete and re-insert
-        # NEW: Delete existing template instances
-        try:
-            cur.execute("DELETE FROM sales_request_template_instances WHERE request_id = %s", (request_id,))
-            print(f"DEBUG UPDATE-TEMPLATE: Deleted existing template instances for request {request_id}")
-        except Exception as inst_del_error:
-            print(f"DEBUG UPDATE-TEMPLATE: Could not delete template instances (table may not exist): {inst_del_error}")
-        
-        # Delete existing items (we'll re-insert all items from template_instances)
-        cur.execute("DELETE FROM sales_request_items WHERE request_id = %s", (request_id,))
-        print(f"DEBUG UPDATE-TEMPLATE: Deleted existing items for request {request_id}")
-        
-        # NEW: Insert template instances and their items
-        items_count = 0
-        if template_instances:
-            print(f"DEBUG UPDATE-TEMPLATE: Inserting {len(template_instances)} template instances for request {request_id}")
-            for idx, instance in enumerate(template_instances):
-                try:
-                    instance_id = instance.get('instance_id')
-                    template_id = instance.get('template_id')
-                    instance_request_type = instance.get('request_type')
-                    fields = instance.get('fields', {})
-                    instance_items = instance.get('items', [])
-                    
-                    # Insert into sales_request_template_instances table
-                    cur.execute("""
-                        INSERT INTO sales_request_template_instances 
-                        (request_id, template_id, request_type, instance_order, template_data)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (
-                        request_id,
-                        template_id,
-                        instance_request_type,
-                        idx,  # Use index as order
-                        json.dumps(fields)
-                    ))
-                    print(f"DEBUG UPDATE-TEMPLATE: ✓ Inserted instance {instance_id} (Template {template_id}, Type: {instance_request_type})")
-                    
-                    # NEW: Insert items for this instance with request_type
-                    for item in instance_items:
-                        item_name = item.get('name', '')
-                        item_qty = float(item.get('quantity', 1))
-                        item_unit = item.get('unit', 'pcs')
-                        item_desc = item.get('comment', '') or item.get('description', '')
-                        item_request_type = item.get('request_type', instance_request_type)
-                        
-                        # Get new fields: sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc
-                        item_sell_type = item.get('sell_type', 'rent')
-                        item_rental_days = int(item.get('rental_days', 1)) if item.get('rental_days') else 1
-                        item_dimension_calc = item.get('dimension_calc', None)
-                        item_include_days = 1 if item.get('include_days_in_calc', True) else 0
-                        item_include_qty = 1 if item.get('include_qty_in_calc', True) else 0
-                        
-                        # Collect dimensions in attributes JSON
-                        attributes = {}
-                        if item.get('width'):
-                            attributes['width'] = float(item.get('width'))
-                        if item.get('height'):
-                            attributes['height'] = float(item.get('height'))
-                        if item.get('depth'):
-                            attributes['depth'] = float(item.get('depth'))
-                        
-                        if item_name:
-                            try:
-                                cur.execute("""
-                                    INSERT INTO sales_request_items (request_id, request_type, name, description, qty, unit, sell_type, rental_days, dimension_calc, include_days_in_calc, include_qty_in_calc, attributes)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                """, (
-                                    request_id,
-                                    item_request_type,
-                                    item_name,
-                                    item_desc,
-                                    item_qty,
-                                    item_unit,
-                                    item_sell_type,
-                                    item_rental_days,
-                                    item_dimension_calc if item_dimension_calc else None,
-                                    item_include_days,
-                                    item_include_qty,
-                                    json.dumps(attributes) if attributes else None
-                                ))
-                                items_count += 1
-                                print(f"DEBUG UPDATE-TEMPLATE: ✓ Inserted item '{item_name}' for request type '{item_request_type}' with sell_type={item_sell_type}, rental_days={item_rental_days}, include_days={item_include_days}, dimension_calc={item_dimension_calc}")
-                                
-                                # Save item to catalog (auto-save for future use)
-                                # Unique key: name + unit + width + height + depth
-                                save_item_to_catalog_internal(
-                                    name=item_name,
-                                    unit=item_unit,
-                                    width=attributes.get('width'),
-                                    height=attributes.get('height'),
-                                    depth=attributes.get('depth'),
-                                    dimension_calc=item_dimension_calc,
-                                    description=item_desc,
-                                    conn=conn,
-                                    cur=cur
-                                )
-                            except Exception as item_error:
-                                # If request_type column doesn't exist, fall back to old structure
-                                if "Unknown column 'request_type'" in str(item_error):
-                                    cur.execute("""
-                                        INSERT INTO sales_request_items (request_id, name, description, qty, unit, sell_type, rental_days, dimension_calc, attributes)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                    """, (
-                                        request_id,
-                                        item_name,
-                                        item_desc,
-                                        item_qty,
-                                        item_unit,
-                                        item_sell_type,
-                                        item_rental_days,
-                                        item_dimension_calc if item_dimension_calc else None,
-                                        json.dumps(attributes) if attributes else None
-                                    ))
-                                    items_count += 1
-                                    print(f"DEBUG UPDATE-TEMPLATE: ✓ Inserted item '{item_name}' (without request_type column) with {len(attributes)} dimensions")
-                                else:
-                                    raise item_error
-                    
-                except Exception as inst_error:
-                    # If table doesn't exist yet, log but don't fail the request
-                    print(f"DEBUG UPDATE-TEMPLATE: Warning - Could not insert template instance: {inst_error}")
-                    print(f"DEBUG UPDATE-TEMPLATE: This is normal if sales_request_template_instances table hasn't been created yet")
-        
-        # LEGACY SUPPORT: Handle old items format if no template_instances
-        elif data.get('items'):
-            # Get list of costed items (items that cannot be modified)
-            cur.execute("""
-                SELECT id, name, cost_per_item 
-                FROM sales_request_items 
-                WHERE request_id = %s 
-                AND cost_per_item IS NOT NULL 
-                AND cost_per_item > 0
-            """, (request_id,))
-            costed_items = cur.fetchall()
-            costed_items_dict = {item['name']: item for item in costed_items}
-            
-            if costed_items:
-                print(f"DEBUG: Found {len(costed_items)} costed items that need protection:")
-                for item in costed_items:
-                    print(f"  - {item['name']} (cost: {item['cost_per_item']})")
-            
-            # Check if any costed items are missing from the update (being removed/modified)
-            new_item_names = set([item.get('name', '') for item in data['items']])
-            costed_item_names = set(costed_items_dict.keys())
-            
-            # Costed items that are missing from the update = attempt to remove them
-            missing_costed_items = costed_item_names - new_item_names
-            
-            if missing_costed_items:
-                # User is trying to remove costed items - block this
-                cur.close()
-                conn.close()
-                
-                error_message = f"Cannot remove costed item(s): {', '.join(missing_costed_items)}"
-                if len(missing_costed_items) == 1:
-                    error_message = f"Cannot remove item '{list(missing_costed_items)[0]}' - it has been costed by operations"
-                else:
-                    error_message = f"Cannot remove {len(missing_costed_items)} costed items: {', '.join(missing_costed_items)}"
-                
-                print(f"DEBUG: Blocked attempt to remove costed items: {missing_costed_items}")
-                
-                return jsonify({
-                    'success': False,
-                    'error': error_message,
-                    'costed_items': list(missing_costed_items)
-                }), 200
-            
-            # Check if user is trying to MODIFY any costed items (change quantity, description, etc.)
-            modified_costed_items = []
-            for item in data['items']:
-                item_name = item.get('name', '')
-                if item_name in costed_items_dict:
-                    # This is a costed item - check if it's being modified
-                    costed_item = costed_items_dict[item_name]
-                    
-                    # Get old item data from database
-                    cur.execute("SELECT * FROM sales_request_items WHERE id = %s", (costed_item['id'],))
-                    old_item = cur.fetchone()
-                    
-                    if old_item:
-                        # Compare attributes
-                        old_qty = float(old_item.get('qty', 0))
-                        new_qty = float(item.get('quantity', 0))
-                        
-                        old_desc = old_item.get('description', '') or ''
-                        new_desc = item.get('comment', '') or item.get('description', '') or ''
-                        
-                        old_unit = old_item.get('unit', 'pcs')
-                        new_unit = item.get('unit', 'pcs')
-                        
-                        # Parse old attributes
-                        old_attrs = json.loads(old_item.get('attributes', '{}')) if old_item.get('attributes') else {}
-                        new_attrs = {}
-                        if item.get('width'):
-                            new_attrs['width'] = float(item.get('width'))
-                        if item.get('height'):
-                            new_attrs['height'] = float(item.get('height'))
-                        if item.get('depth'):
-                            new_attrs['depth'] = float(item.get('depth'))
-                        
-                        # Check if any attribute changed
-                        if (old_qty != new_qty or 
-                            old_desc.strip() != new_desc.strip() or 
-                            old_unit != new_unit or 
-                            old_attrs != new_attrs):
-                            
-                            modified_costed_items.append(item_name)
-                            print(f"DEBUG: Detected modification attempt on costed item '{item_name}'")
-                            print(f"  - Qty: {old_qty} -> {new_qty}")
-                            print(f"  - Desc: '{old_desc}' -> '{new_desc}'")
-                            print(f"  - Unit: {old_unit} -> {new_unit}")
-                            print(f"  - Attrs: {old_attrs} -> {new_attrs}")
-            
-            if modified_costed_items:
-                # User is trying to modify costed items - block this
-                cur.close()
-                conn.close()
-                
-                error_message = f"Cannot modify costed item(s): {', '.join(modified_costed_items)}"
-                if len(modified_costed_items) == 1:
-                    error_message = f"Cannot modify item '{modified_costed_items[0]}' - it has been costed by operations and cannot be changed"
-                else:
-                    error_message = f"Cannot modify {len(modified_costed_items)} costed items: {', '.join(modified_costed_items)}"
-                
-                print(f"DEBUG: Blocked attempt to modify costed items: {modified_costed_items}")
-                
-                return jsonify({
-                    'success': False,
-                    'error': error_message,
-                    'costed_items': modified_costed_items
-                }), 200
-            
-            # If we reach here, all costed items are still in the update list
-            # Delete ONLY non-costed items (preserve costed items)
-            if costed_items:
-                costed_ids = [item['id'] for item in costed_items]
-                placeholders = ','.join(['%s'] * len(costed_ids))
-                cur.execute(f"""
-                    DELETE FROM sales_request_items 
-                    WHERE request_id = %s 
-                    AND id NOT IN ({placeholders})
-                """, [request_id] + costed_ids)
-                print(f"DEBUG: Deleted non-costed items, preserved {len(costed_items)} costed items")
-            else:
-                # No costed items, delete all
-                cur.execute("DELETE FROM sales_request_items WHERE request_id = %s", (request_id,))
-                print(f"DEBUG: No costed items - deleted all items for fresh insert")
-            
-            # Process new items from the update
-            items_count = 0
-            for item in data['items']:
-                item_name = item.get('name', '')
-                item_qty = float(item.get('quantity', 1))
-                item_desc = item.get('comment', '') or item.get('description', '')
-                item_unit = item.get('unit', 'pcs')
-                
-                # Check if this item is costed (skip inserting, it's already preserved)
-                if item_name in costed_items_dict:
-                    items_count += 1  # Count the preserved item
-                    print(f"DEBUG: Skipping insert for costed item '{item_name}' - already preserved in database")
-                    continue
-                
-                # This item is NOT costed - insert it
-                # Collect measurements in attributes JSON
-                attributes = {}
-                if item.get('width'):
-                    attributes['width'] = float(item.get('width'))
-                if item.get('height'):
-                    attributes['height'] = float(item.get('height'))
-                if item.get('depth'):
-                    attributes['depth'] = float(item.get('depth'))
-                
-                if item_name:
-                    cur.execute("""
-                        INSERT INTO sales_request_items (
-                            request_id, name, description, qty, unit, attributes
-                        ) VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (
-                        request_id,
-                        item_name,
-                        item_desc,
-                        item_qty,
-                        item_unit,
-                        json.dumps(attributes) if attributes else None
-                    ))
-                    item_id = cur.lastrowid
-                    items_count += 1
-                    print(f"DEBUG: Inserted item '{item_name}'")
-                    
-                    # Handle image uploads for this item
-                    image_files = item.get('images', [])
-                    if image_files and len(image_files) > 0:
-                            print(f"DEBUG: Processing {len(image_files)} images for item {item_id}")
-                            
-                            # Ensure uploads/items directory exists
-                            upload_dir = os.path.join(os.getcwd(), 'uploads', 'items')
-                            os.makedirs(upload_dir, exist_ok=True)
-                            
-                            for img_index, img_file in enumerate(image_files):
-                                if img_file and img_file.filename:
-                                    # Generate unique filename
-                                    timestamp = int(time.time())
-                                    safe_filename = secure_filename(img_file.filename)
-                                    unique_filename = f"req{request_id}_item{item_id}_{timestamp}_{img_index}_{safe_filename}"
-                                    file_path = os.path.join(upload_dir, unique_filename)
-                                    
-                                    # Save file to disk
-                                    img_file.save(file_path)
-                                    file_size = os.path.getsize(file_path)
-                                    
-                                    print(f"DEBUG: Saved image to {file_path} (size: {file_size} bytes)")
-                                    
-                                    # Save image record to database
-                                    cur.execute("""
-                                        INSERT INTO sales_request_item_images 
-                                        (item_id, request_id, image_path, image_name, image_size, display_order, uploaded_by)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                    """, (
-                                        item_id,
-                                        request_id,
-                                        f'uploads/items/{unique_filename}',  # Relative path for serving
-                                        img_file.filename,
-                                        file_size,
-                                        img_index,
-                                        session.get('username', 'Unknown')
-                                    ))
-                                    
-                                    print(f"DEBUG: Saved image record for item {item_id}, image {img_index}")
-                    
-                    # Handle catalog image path (when item selected from catalog has existing image)
-                    catalog_image_path = item.get('catalog_image_path', '')
-                    if catalog_image_path and catalog_image_path.strip():
-                        catalog_image_path = catalog_image_path.strip()
-                        print(f"DEBUG: Processing catalog image for item {item_id}: {catalog_image_path}")
-                        
-                        # Check if this image path exists in filesystem
-                        full_image_path = os.path.join(os.getcwd(), catalog_image_path.lstrip('/'))
-                        if os.path.exists(full_image_path):
-                            file_size = os.path.getsize(full_image_path)
-                            image_name = os.path.basename(catalog_image_path)
-                            
-                            # Insert reference to existing catalog image
-                            cur.execute("""
-                                INSERT INTO sales_request_item_images 
-                                (item_id, request_id, image_path, image_name, image_size, display_order, uploaded_by)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            """, (
-                                item_id,
-                                request_id,
-                                catalog_image_path.lstrip('/'),  # Store relative path
-                                image_name,
-                                file_size,
-                                0,  # First image from catalog
-                                session.get('username', 'Unknown')
-                            ))
-                            print(f"DEBUG: Saved catalog image reference for item {item_id}: {catalog_image_path}")
-                        else:
-                            print(f"DEBUG: Catalog image not found on disk: {full_image_path}")
-        
-        # Update items count
-        print(f"DEBUG UPDATE-TEMPLATE: Total items inserted: {items_count}")
-        if items_count > 0:
-            cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s", 
-                       (items_count, request_id))
-            print(f"DEBUG UPDATE-TEMPLATE: Updated items_count to {items_count} for request {request_id}")
-        else:
-            print(f"DEBUG UPDATE-TEMPLATE: No items to update (items_count = 0) for request {request_id}")
-        carry_item_files(cur, request_id, item_files)
-        
         conn.commit()
         cur.close()
         conn.close()
-        notify_items_added_to_operations(request_id, request_title, session.get('name') or 'Sales', added_names)
+        notify_items_added_to_operations(request_id, request_title, actor, added_names)
+        notify_recost(request_id, edits['recost'], actor)
+        notify_costing_desk(edits['in_costing'], request_id, actor)
+
+        # What the reader needs to know, in the order they need it: what was
+        # refused, what went back for costing, what was added.
+        if refused:
+            headline = 'Saved, but %d item(s) could not be changed: %s.' % (
+                len(refused), '; '.join('%s is %s' % (e['name'], e['reason']) for e in refused))
+        else:
+            headline = 'Request updated.'
+        if edits['recost']:
+            headline += ' %d item(s) sent back to Operations for re-costing.' % len(edits['recost'])
+        if added_names:
+            headline += ' Added %d new item(s); Operations has been asked to cost them.' % len(added_names)
+        response = {
+            'success': True,
+            'message': headline,
+            'items_count': edits['count'],
+            'costed_items_preserved': bool(edits['locked']),
+            'locked_items': edits['locked'],
+            'refused_changes': refused,
+            'sent_back': edits['recost'],
+        }
         
         # Log the update with SMART field-level change detection - ONLY log actual changes
-        # NOTE: old_items_list and old_template_fields were retrieved BEFORE deletion above
         try:
             username = (session.get('name') or session.get('username') or 'Unknown')
             changes_logged = 0
@@ -18694,7 +18414,7 @@ def update_request_with_template(request_id):
                 )
             
             # 2. TITLE CHANGE - Only if actually different (with trimming)
-            if data.get('title') and existing_request.get('title', '').strip() != data['title'].strip():
+            if data.get('title') and (existing_request.get('title') or '').strip() != data['title'].strip():
                 log_request_change(
                     request_id=request_id,
                     action_type='UPDATE',
@@ -18707,7 +18427,7 @@ def update_request_with_template(request_id):
                 changes_logged += 1
             
             # 3. DESCRIPTION CHANGE - Only if actually different  
-            if existing_request.get('description', '').strip() != data.get('description', '').strip():
+            if (existing_request.get('description') or '').strip() != (data.get('description') or '').strip():
                 log_request_change(
                     request_id=request_id,
                     action_type='UPDATE',
@@ -18784,210 +18504,8 @@ def update_request_with_template(request_id):
                     )
                     changes_logged += 1
             
-            # 6. ITEMS TRACKING - Smart comparison with field-level granularity
-            # NEW: Support both legacy items and template_instances structure
-            items_to_check = []
-            if template_instances:
-                # Extract items from template instances
-                for instance in template_instances:
-                    instance_items = instance.get('items', [])
-                    items_to_check.extend(instance_items)
-                print(f"DEBUG LOGGING: Using template_instances structure - found {len(items_to_check)} items across {len(template_instances)} instances")
-            elif data.get('items'):
-                # Legacy structure
-                items_to_check = data['items']
-                print(f"DEBUG LOGGING: Using legacy items structure - found {len(items_to_check)} items")
-            
-            if items_to_check:
-                # Use the old items we fetched BEFORE deleting
-                old_items = old_items_list  # Already fetched before DELETE (line 7757)
-                
-                print(f"DEBUG LOGGING: Found {len(old_items)} old items from database")
-                
-                items_data = items_to_check
-                print(f"DEBUG LOGGING: Found {len(items_data)} new items to compare")
-                
-                # Create lookup dictionaries for comparison
-                old_items_dict = {item['name']: item for item in old_items}
-                new_items_dict = {item.get('name', ''): item for item in items_data if item.get('name')}
-                
-                print(f"DEBUG LOGGING: Old items: {list(old_items_dict.keys())}")
-                print(f"DEBUG LOGGING: New items: {list(new_items_dict.keys())}")
-                
-                # Track added items
-                for item_name, item_data in new_items_dict.items():
-                    if item_name not in old_items_dict:
-                        qty = item_data.get('quantity', 1)
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name='items',
-                            old_value=None,
-                            new_value=f"{item_name} (Qty: {qty})",
-                            change_description=f"Added new item: {item_name} (Quantity: {qty})"
-                        )
-                        changes_logged += 1
-                
-                # Track removed items
-                for item_name, old_item in old_items_dict.items():
-                    if item_name not in new_items_dict:
-                        old_qty = old_item.get('qty', 0)
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name='items',
-                            old_value=f"{item_name} (Qty: {old_qty})",
-                            new_value=None,
-                            change_description=f"Removed item: {item_name} (was Quantity: {old_qty})"
-                        )
-                        changes_logged += 1
-                
-                # Track modified items - SMART field-by-field comparison
-                for item_name in set(old_items_dict.keys()) & set(new_items_dict.keys()):
-                    old_item = old_items_dict[item_name]
-                    new_item = new_items_dict[item_name]
-                    
-                    print(f"DEBUG LOGGING: Checking item '{item_name}'")
-                    print(f"DEBUG LOGGING: Old item data: {old_item}")
-                    print(f"DEBUG LOGGING: New item data: {new_item}")
-                    
-                    # Helper function to safely convert to float
-                    def get_float(value):
-                        if value is None or value == '':
-                            return 0.0
-                        try:
-                            return float(value)
-                        except (ValueError, TypeError):
-                            return 0.0
-                    
-                    # Check quantity changes - use epsilon for float comparison
-                    old_qty = get_float(old_item.get('qty', 0))
-                    new_qty = get_float(new_item.get('quantity', 0))
-                    
-                    print(f"DEBUG LOGGING: Quantity comparison - Old: {old_qty}, New: {new_qty}, Diff: {abs(old_qty - new_qty)}")
-                    
-                    if abs(old_qty - new_qty) > 0.001:  # Only log if actually different
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name='item_quantity',
-                            old_value=f"{item_name}: {old_qty}",
-                            new_value=f"{item_name}: {new_qty}",
-                            change_description=f"Item '{item_name}' quantity changed from {old_qty} to {new_qty}"
-                        )
-                        changes_logged += 1
-                    
-                    # Check sell price changes - with epsilon
-                    old_sell = get_float(old_item.get('sell_per_item', 0))
-                    new_sell = get_float(new_item.get('sell_per_item', 0))
-                    
-                    if abs(old_sell - new_sell) > 0.01:  # Only log if actually different (0.01 for money)
-                        if old_sell == 0 and new_sell > 0:
-                            log_request_change(
-                                request_id=request_id,
-                                action_type='UPDATE',
-                                action_by=username,
-                                field_name='item_sell_price',
-                                old_value=None,
-                                new_value=f"{item_name}: EGP {new_sell}",
-                                change_description=f"Added sell price for item '{item_name}': EGP {new_sell}"
-                            )
-                        else:
-                            log_request_change(
-                                request_id=request_id,
-                                action_type='UPDATE',
-                                action_by=username,
-                                field_name='item_sell_price',
-                                old_value=f"{item_name}: EGP {old_sell}",
-                                new_value=f"{item_name}: EGP {new_sell}",
-                                change_description=f"Item '{item_name}' sell price changed from EGP {old_sell} to EGP {new_sell}"
-                            )
-                        changes_logged += 1
-                    
-                    # Check description/comment changes - with trimming
-                    old_desc = (old_item.get('description', '') or '').strip()
-                    new_desc = (new_item.get('comment', '') or new_item.get('description', '') or '').strip()
-                    
-                    if old_desc != new_desc:  # Only log if actually different
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name='item_description',
-                            old_value=f"{item_name}: {old_desc[:50]}..." if len(old_desc) > 50 else f"{item_name}: {old_desc}",
-                            new_value=f"{item_name}: {new_desc[:50]}..." if len(new_desc) > 50 else f"{item_name}: {new_desc}",
-                            change_description=f"Updated description for item '{item_name}'"
-                        )
-                        changes_logged += 1
-                    
-                    # CRITICAL FIX: Check dimensions changes FIELD BY FIELD - NO DUMMY LOGS!
-                    old_attrs = json.loads(old_item.get('attributes', '{}')) if old_item.get('attributes') else {}
-                    
-                    print(f"DEBUG DIMENSIONS: Item '{item_name}' - Old attributes: {old_attrs}")
-                    
-                    # Get new dimensions
-                    new_width = get_float(new_item.get('width'))
-                    new_height = get_float(new_item.get('height'))
-                    new_depth = get_float(new_item.get('depth'))
-                    
-                    print(f"DEBUG DIMENSIONS: Item '{item_name}' - New width={new_width}, height={new_height}, depth={new_depth}")
-                    
-                    # Get old dimensions
-                    old_width = get_float(old_attrs.get('width'))
-                    old_height = get_float(old_attrs.get('height'))
-                    old_depth = get_float(old_attrs.get('depth'))
-                    
-                    print(f"DEBUG DIMENSIONS: Item '{item_name}' - Old width={old_width}, height={old_height}, depth={old_depth}")
-                    
-                    # Compare each dimension individually - ONLY LOG IF ACTUALLY CHANGED
-                    if abs(old_width - new_width) > 0.001:
-                        print(f"DEBUG DIMENSIONS: Width changed for '{item_name}': {old_width} → {new_width}")
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name=f'item_width',
-                            old_value=f"{item_name}: {old_width}",
-                            new_value=f"{item_name}: {new_width}",
-                            change_description=f"Item '{item_name}' width changed from {old_width} to {new_width}"
-                        )
-                        changes_logged += 1
-                    else:
-                        print(f"DEBUG DIMENSIONS: Width unchanged for '{item_name}': {old_width} (diff={abs(old_width - new_width)})")
-                    
-                    if abs(old_height - new_height) > 0.001:
-                        print(f"DEBUG DIMENSIONS: Height changed for '{item_name}': {old_height} → {new_height}")
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name=f'item_height',
-                            old_value=f"{item_name}: {old_height}",
-                            new_value=f"{item_name}: {new_height}",
-                            change_description=f"Item '{item_name}' height changed from {old_height} to {new_height}"
-                        )
-                        changes_logged += 1
-                    else:
-                        print(f"DEBUG DIMENSIONS: Height unchanged for '{item_name}': {old_height} (diff={abs(old_height - new_height)})")
-                    
-                    if abs(old_depth - new_depth) > 0.001:
-                        print(f"DEBUG DIMENSIONS: Depth changed for '{item_name}': {old_depth} → {new_depth}")
-                        log_request_change(
-                            request_id=request_id,
-                            action_type='UPDATE',
-                            action_by=username,
-                            field_name=f'item_depth',
-                            old_value=f"{item_name}: {old_depth}",
-                            new_value=f"{item_name}: {new_depth}",
-                            change_description=f"Item '{item_name}' depth changed from {old_depth} to {new_depth}"
-                        )
-                        changes_logged += 1
-                    else:
-                        print(f"DEBUG DIMENSIONS: Depth unchanged for '{item_name}': {old_depth} (diff={abs(old_depth - new_depth)})")
-            
+            # 6. Items are logged as they are written (apply_item_edits).
+
             # 7. TEMPLATE FIELDS - Field by field comparison (ONLY actual template fields, not metadata)
             old_request_data = json.loads(existing_request.get('request_data', '{}')) if existing_request.get('request_data') else {}
             old_template_fields_data = old_template_fields  # Use the old_template_fields we fetched earlier (line 7793)
@@ -19098,11 +18616,7 @@ def update_request_with_template(request_id):
             import traceback
             print(f"DEBUG: Logging error traceback: {traceback.format_exc()}")
         
-        # Return success response (no costed items were attempted to update)
-        return jsonify({
-            'success': True,
-            'message': 'Request updated successfully'
-        })
+        return jsonify(response)
         
     # A scope refusal is a 403, not a server error.
     except HTTPException:

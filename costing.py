@@ -49,6 +49,7 @@ ACTIONS = (
     'acceptance_reversed',
     'file_attached',
     'file_removed',
+    'recost_requested',
 )
 
 

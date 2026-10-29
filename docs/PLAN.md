@@ -1214,3 +1214,37 @@ once on entry. Test: test_send_to_pricing (string id).
    Cause: David assigned 30738's items straight to Haitham's members.
 Tests: test_send_to_pricing (part send, update and send), test_costing
 (leader sees and decides for his people).
+
+## 2026-10-30 Item edits until costed, re-costing, expandable items (Gamal)
+
+Cause of "adding an item removed all the others": requests created through the
+urgent-date approval stored `request_data` as the raw form payload
+(`{instances, flat_fields}`) and wrote no `sales_request_template_instances`
+rows, so the edit form opened with zero items (37125, 31318, 40766). The rows
+were still in the database; the form just never showed them.
+
+1. Approval path writes the request like the add route: `request_data =
+   {request_types, template_fields, template_instances}`, instance rows, and
+   items with sell_type, rental_days, dimension_calc and the include flags.
+   `request_instances_backfill.py` repairs the existing requests (idempotent).
+2. Edits are in place, keyed by the item's id (name as fallback for an old
+   page): an item keeps its row, files, costing assignment and proposals.
+   New items are inserted, removed open items deleted. Nothing is
+   deleted-and-reinserted any more.
+3. Lock rule: an item is editable until it is costed (priced and
+   client-approved also lock). "Out for costing" no longer locks; whoever
+   holds the open assignment is told what changed.
+4. Re-costing: a costed or priced item can be changed only as a re-cost
+   request (`recost: true`, optional note). The change is applied, cost and
+   price are cleared, the item leaves Pricing (`pricing_sent_at` NULL), its
+   closed costing assignment reopens, Operations is notified, and
+   `recost_requested_at/by/note` mark it until Operations costs it again.
+   Client-approved items are refused (they go through negotiation).
+   Migration: `item_recost_migration.sql`.
+5. UI: edit modal items are collapsible cards built by the same function as
+   new items (one item template, not two), with a status chip and a
+   "Change and re-cost" button on locked items. The request details drawer
+   (Sales and Pricing) shows items as compact rows that expand, with
+   Expand all / Collapse all, status chips and the activity flow trimmed to
+   the latest entries with "Show all".
+Tests: tests/test_item_edit_recost.py.
