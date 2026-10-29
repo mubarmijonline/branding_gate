@@ -1125,3 +1125,10 @@ a slide-down. He also had no way to look back at what was decided.
   decided the page now says it is in Past approvals instead of "No pending".
 - Tests: `tests/test_approvals_history.py`. Branch `wa-request/approvals-history`,
   not deployed. No migration, no seed; deploy is code + restart.
+
+## 2026-10-30 Voice note playback speed (Gamal)
+
+WhatsApp-style speed pill on chat voice notes: tap cycles 1x, 1.5x, 2x, 2.5x.
+Shows in place of the mic icon once a note is played. The chosen speed is
+remembered per browser (`bg.chat.voiceSpeed`) and applies to every note.
+Files: `static/js/bg-chat.js`, `static/css/bg-chat.css`, `static/i18n/ar.js`.

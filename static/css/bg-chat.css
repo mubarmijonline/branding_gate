@@ -227,6 +227,13 @@ body.bgc-lock { overflow: hidden; }
 .bgc-voice input[type=range] { width: 100%; accent-color: var(--bgc-green); margin: 0; height: 18px; }
 .bgc-voice-time { font-size: .68rem; color: var(--bgc-muted); }
 .bgc-voice-mic { color: var(--bgc-green); font-size: 1.1rem; flex: 0 0 auto; }
+.bgc-speed {
+  display: none; flex: 0 0 auto; min-width: 40px; height: 26px; padding: 0 8px; border: 0; border-radius: 13px;
+  background: var(--bgc-muted); color: #fff; font-size: .75rem; font-weight: 700; cursor: pointer;
+  align-items: center; justify-content: center;
+}
+.bgc-voice.is-active .bgc-speed { display: inline-flex; }
+.bgc-voice.is-active .bgc-voice-mic { display: none; }
 
 /* scroll-to-bottom */
 .bgc-jump {

@@ -4345,5 +4345,6 @@ window.BG_AR = {
 "{0} day(s)": "{0} يوم",
 "Discussion": "النقاش",
 "Open request": "فتح الطلب",
-"Details and {0} item(s)": "التفاصيل ({0} بند)"
+"Details and {0} item(s)": "التفاصيل ({0} بند)",
+"Playback speed": "سرعة التشغيل"
 };

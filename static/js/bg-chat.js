@@ -198,7 +198,8 @@
                 (progress != null ? '<i class="fas fa-spinner fa-spin"></i>' : '<i class="fas fa-play"></i>') + '</button>' +
                 '<div class="bgc-voice-track"><input type="range" min="0" max="1000" value="0" aria-label="' + esc(T('Voice note')) + '">' +
                 '<span class="bgc-voice-time">' + mmss(a.duration_ms) + '</span></div>' +
-                '<i class="fas fa-microphone bgc-voice-mic"></i></div>';
+                '<i class="fas fa-microphone bgc-voice-mic"></i>' +
+                '<button type="button" class="bgc-speed" aria-label="' + esc(T('Playback speed')) + '">' + speedLabel() + '</button></div>';
         }).join('');
     }
     window.bgChatMediaHtml = function (atts) { return mediaHtml(atts); };
@@ -206,6 +207,18 @@
     // One player for every voice note on the page: starting one stops another.
     var audio = new Audio(), $playing = null;
     audio.preload = 'metadata';
+    // WhatsApp-style speed pill, remembered in this browser for every note.
+    var SPEEDS = [1, 1.5, 2, 2.5];
+    function speed() { try { var v = Number(localStorage.getItem('bg.chat.voiceSpeed')); return SPEEDS.indexOf(v) >= 0 ? v : 1; } catch (e) { return 1; } }
+    function speedLabel() { return speed() + 'x'; }
+    function applySpeed() { audio.defaultPlaybackRate = audio.playbackRate = speed(); }
+    $(document).on('click', '.bgc-voice .bgc-speed', function (e) {
+        e.stopPropagation();
+        var next = SPEEDS[(SPEEDS.indexOf(speed()) + 1) % SPEEDS.length];
+        try { localStorage.setItem('bg.chat.voiceSpeed', String(next)); } catch (err) { /* ignore */ }
+        applySpeed();
+        $('.bgc-voice .bgc-speed').text(speedLabel());
+    });
     function voiceUi($v, playing) {
         $v.find('.bgc-play').html('<i class="fas fa-' + (playing ? 'pause' : 'play') + '"></i>');
     }
@@ -215,8 +228,8 @@
         if (!src) { return; }
         if ($playing && $playing[0] === $v[0] && !audio.paused) { audio.pause(); return; }
         if (!$playing || $playing[0] !== $v[0]) {
-            if ($playing) { voiceUi($playing, false); }
-            $playing = $v;
+            if ($playing) { voiceUi($playing, false); $playing.removeClass('is-active'); }
+            $playing = $v.addClass('is-active');
             audio.src = src;
             var pos = Number($v.find('input').val()) || 0;
             if (pos) { audio.addEventListener('loadedmetadata', function seek() {
@@ -224,6 +237,7 @@
                 if (isFinite(audio.duration)) { audio.currentTime = audio.duration * pos / 1000; }
             }); }
         }
+        applySpeed();
         audio.play().catch(function () { toast('error', T('This voice note could not be played')); });
     });
     audio.addEventListener('play', function () { if ($playing) { voiceUi($playing, true); } });
