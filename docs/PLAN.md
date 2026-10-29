@@ -1144,3 +1144,17 @@ Files: `static/js/bg-chat.js`, `static/css/bg-chat.css`, `static/i18n/ar.js`.
   counted. Now only items the client approved count (item approval_status),
   excluding cancelled and CEO-rejected requests. Q4: Mariam 17,330 -> 0,
   Sarah 114,400 -> 0 (awaiting client).
+
+## 2026-10-30 Gamal: target strip, rejected requests, profile page
+
+- Target strip on Sales Requests showed only people with reports, so team
+  leaders with no members yet (Mariam, Sarah) were missing. Now one cell for
+  everyone carrying a target at the viewer's level and the level below.
+- Rejected / approved items no longer count as "Not costed" / "No price" /
+  "to price" in the list stats, Pricing alerts and client-approval counters.
+  A request whose items were all rejected shows status "Rejected", with a
+  Rejected option in the status filter.
+- New `/profile` (any signed-in user, own row only): details, change password
+  (current password required, 8+ characters), latest activity from the logs
+  (action and request only, no amounts). Menu "Profile" / "Change password"
+  link to it. Test: `tests/test_profile.py`.

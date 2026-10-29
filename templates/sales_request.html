@@ -3542,9 +3542,13 @@ window.chartPieDemo = function() {
       }
       $.getJSON('/api/targets').done(function (r) {
         if (!r || !r.success || !r.rows || !r.rows.length) { return; }
-        // One cell per team, which is a leader plus their reports. Somebody with
-        // nobody under them is their own cell -- that is the member's own target.
-        var cells = r.rows.filter(function (row) { return row.is_leader; });
+        // One cell per person who carries a target, at the viewer's level and the
+        // level below: a team leader with nobody under them yet (Mariam, under
+        // Gamal) still has a target to show. A leader without a target falls back.
+        var cells = r.rows.filter(function (row) {
+          return row.target !== null && (row.is_leader || row.depth <= 1);
+        });
+        if (!cells.length) { cells = r.rows.filter(function (row) { return row.is_leader; }); }
         if (!cells.length) { cells = r.rows.filter(function (row) { return row.depth === 0; }); }
         var html = cells.map(function (row) {
           var pct = row.progress === null || row.progress === undefined
@@ -3671,6 +3675,7 @@ window.chartPieDemo = function() {
                         <option value="in_progress">In Progress</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
+                        <option value="rejected">Rejected</option>
                     </select>
                 </div>
                 <div class="col-6 col-lg mb-2">

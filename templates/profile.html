@@ -1,0 +1,119 @@
+{% extends "main.html" %}
+
+{% block body %}
+<style>
+  .profile-page { --hair:#e3e6f0; --ink:#2e3650; --muted:#8891a8; --accent:#3a4fa0; max-width:1100px; margin:0 auto; }
+  .profile-page h1 { font-size:1.6rem; font-weight:700; color:var(--ink); margin:0 0 1.25rem; }
+  .profile-page .pf-card { background:#fff; border:1px solid var(--hair); border-radius:8px; padding:1.25rem; margin-bottom:1.25rem; }
+  .profile-page .pf-card h2 { font-size:1.05rem; font-weight:700; color:var(--ink); margin:0 0 1rem; }
+  .profile-page .pf-head { display:flex; align-items:center; gap:1rem; margin-bottom:1rem; }
+  .profile-page .pf-avatar { width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff;
+                 display:flex; align-items:center; justify-content:center; font-size:1.4rem; font-weight:700; flex:0 0 56px; }
+  .profile-page .pf-name { font-size:1.25rem; font-weight:700; color:var(--ink); }
+  .profile-page .pf-role { color:var(--muted); font-size:.9rem; }
+  .profile-page dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.9rem 1.25rem; margin:0; }
+  .profile-page dt { font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .profile-page dd { margin:.15rem 0 0; color:var(--ink); word-break:break-word; }
+  .profile-page .pf-activity { list-style:none; margin:0; padding:0; }
+  .profile-page .pf-activity li { display:flex; gap:.75rem; padding:.6rem 0; border-top:1px solid var(--hair); }
+  .profile-page .pf-activity li:first-child { border-top:0; }
+  .profile-page .pf-activity i { color:var(--accent); width:18px; text-align:center; margin-top:.2rem; }
+  .profile-page .pf-activity .when { color:var(--muted); font-size:.8rem; }
+  .profile-page .pf-empty { color:var(--muted); }
+  .profile-page #pfPasswordForm { max-width:420px; }
+</style>
+
+<div class="container-fluid profile-page">
+  <h1>Profile</h1>
+
+  <div class="pf-card">
+    <div class="pf-head">
+      <div class="pf-avatar" id="pfAvatar"></div>
+      <div><div class="pf-name" id="pfName"></div><div class="pf-role" id="pfRole"></div></div>
+    </div>
+    <dl id="pfDetails"></dl>
+  </div>
+
+  <div class="pf-card" id="password">
+    <h2>Change password</h2>
+    <form id="pfPasswordForm" autocomplete="off">
+      <div class="form-group">
+        <label for="pfCurrent">Current password</label>
+        <input type="password" class="form-control" id="pfCurrent" autocomplete="current-password" required>
+      </div>
+      <div class="form-group">
+        <label for="pfNew">New password</label>
+        <input type="password" class="form-control" id="pfNew" autocomplete="new-password" minlength="8" required>
+        <small class="form-text text-muted">At least 8 characters</small>
+      </div>
+      <div class="form-group">
+        <label for="pfConfirm">Confirm new password</label>
+        <input type="password" class="form-control" id="pfConfirm" autocomplete="new-password" minlength="8" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="pfSave">Change password</button>
+    </form>
+  </div>
+
+  <div class="pf-card">
+    <h2>Latest activity</h2>
+    <ul class="pf-activity" id="pfActivity"><li class="pf-empty">Loading...</li></ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var t = window.bgT || function (s) { return s; };
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  var ICONS = { request: 'file-alt', costing: 'calculator', client_approval: 'user-check',
+                design: 'pencil-ruler', comment: 'comment' };
+
+  $.getJSON('/api/profile').done(function (r) {
+    if (!r || !r.success) { return; }
+    var u = r.user;
+    $('#pfAvatar').text((u.name || '?').trim().charAt(0).toUpperCase());
+    $('#pfName').text(u.name || '');
+    $('#pfRole').text([u.role_name, u.title !== u.role_name ? u.title : null].filter(Boolean).join(' · '));
+    var rows = [
+      ['Mobile', u.mobile], ['Email', u.email], ['Username', u.username],
+      ['Role', u.role_name], ['Department', u.department_name], ['Team', u.team_name],
+      ['Manager', u.manager_name ? u.manager_name + (u.manager_mobile ? ' · ' + u.manager_mobile : '') : null],
+      ['Joined', u.joined], ['Requests owned', u.requests_owned]
+    ];
+    $('#pfDetails').html(rows.map(function (row) {
+      return '<div><dt>' + esc(t(row[0])) + '</dt><dd>' +
+        (row[1] === null || row[1] === undefined || row[1] === '' ? '-' : esc(row[1])) + '</dd></div>';
+    }).join(''));
+    $('#pfActivity').html(r.activity.length ? r.activity.map(function (a) {
+      var what = esc(t(a.action)) + (a.detail ? ' <span class="text-muted">(' + esc(a.detail) + ')</span>' : '');
+      var req = a.request_id ? ' · <a href="/sales_request?request=' + Number(a.request_id) + '">' +
+        esc(t('Request')) + ' #' + Number(a.request_id) + '</a>' : '';
+      return '<li><i class="fas fa-' + (ICONS[a.kind] || 'circle') + '"></i><div><div>' + what + req +
+        '</div><div class="when">' + esc(a.at || '') + '</div></div></li>';
+    }).join('') : '<li class="pf-empty">' + esc(t('No activity yet')) + '</li>');
+  });
+
+  $('#pfPasswordForm').on('submit', function (e) {
+    e.preventDefault();
+    var current = $('#pfCurrent').val(), next = $('#pfNew').val();
+    if (next !== $('#pfConfirm').val()) {
+      Swal.fire({ icon: 'warning', title: t('The new passwords do not match') }); return;
+    }
+    $('#pfSave').prop('disabled', true);
+    $.ajax({ url: '/api/profile/password', method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ current: current, 'new': next }) })
+      .done(function () {
+        $('#pfPasswordForm')[0].reset();
+        Swal.fire({ icon: 'success', title: t('Password changed') });
+      })
+      .fail(function (xhr) {
+        Swal.fire({ icon: 'error', title: t((xhr.responseJSON && xhr.responseJSON.error) || 'Could not change the password') });
+      })
+      .always(function () { $('#pfSave').prop('disabled', false); });
+  });
+}());
+</script>
+{% endblock %}

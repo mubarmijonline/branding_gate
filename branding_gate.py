@@ -2924,6 +2924,118 @@ def home():
     # Render your page
     return render_template("home.html")
 
+
+# ---------------------------------------------------------------- my profile
+# Gamal, 2026-10-30: the Profile menu item led nowhere. One page for every
+# signed-in user: their own details, a password change, and what they did last.
+# Activity shows the action and the request, never amounts, so no cost reaches
+# an account role through it.
+
+PROFILE_MIN_PASSWORD = 8
+
+
+@app.route('/profile', methods=['GET'])
+def profile_page():
+    return render_template('profile.html')
+
+
+def _profile_activity(cur, user, limit=30):
+    """The user's latest actions across the logs, newest first."""
+    # ponytail: one small query per log, merged here; the logs use mixed
+    # collations, so a single UNION refuses to run.
+    mobile, uid = user['mobile'] or '', user['id']
+    sources = (
+        ("request", "SELECT action_type AS action, field_name AS detail, request_id, action_date AS at "
+                    "FROM sales_request_change_log WHERE action_by IN (%s, %s, %s)",
+         (user['name'] or '', mobile, str(uid))),
+        ("costing", "SELECT action, NULL AS detail, request_id, added_date AS at FROM costing_log WHERE actor_id = %s", (uid,)),
+        ("client_approval", "SELECT action_type AS action, NULL AS detail, request_id, action_date AS at "
+                            "FROM item_client_approval_log WHERE action_by = %s", (uid,)),
+        ("design", "SELECT action, NULL AS detail, request_id, at FROM design_request_log WHERE actor_id = %s", (uid,)),
+        ("comment", "SELECT 'comment_added' AS action, NULL AS detail, request_id, created_at AS at "
+                    "FROM sales_request_comments WHERE user_id = %s AND is_deleted = 0", (uid,)),
+        ("request", "SELECT 'created' AS action, NULL AS detail, id AS request_id, created_at AS at "
+                    "FROM sales_request WHERE created_by IN (%s, %s)", (mobile, str(uid))),
+    )
+    rows = []
+    for kind, sql, params in sources:
+        cur.execute(sql + " ORDER BY at DESC LIMIT %s", params + (limit * 5,))  # room for duplicates
+        rows += [dict(row, kind=kind) for row in cur.fetchall()]
+    rows.sort(key=lambda row: row['at'] or datetime.min, reverse=True)
+    seen, out = set(), []
+    for row in rows:
+        when = row['at'].strftime('%Y-%m-%d %H:%M') if row['at'] else None
+        # A save writes one change-log row per field; show it once.
+        key = (row['kind'], row['action'], row['request_id'], when)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            'kind': row['kind'],
+            'action': (row['action'] or '').replace('_', ' ').strip().capitalize(),
+            'detail': None,
+            'request_id': row['request_id'],
+            'at': when,
+        })
+        if len(out) == limit:
+            break
+    return out
+
+
+@app.route('/api/profile', methods=['GET'])
+def get_profile():
+    conn, cur = connection()
+    try:
+        cur.execute("""
+            SELECT u.id, u.name, u.mobile, u.email, u.username, u.title, u.date,
+                   r.name AS role_name, d.name AS department_name,
+                   t.team_name, m.name AS manager_name, m.mobile AS manager_mobile
+              FROM user u
+              LEFT JOIN rbac_role r ON r.id = u.rbac_role_id
+              LEFT JOIN department d ON d.id = u.department_id
+              LEFT JOIN team t ON t.team_id = u.team_id
+              LEFT JOIN user m ON m.id = u.manager_id
+             WHERE u.id = %s
+        """, (session['user_id'],))
+        user = cur.fetchone()
+        if not user:
+            return jsonify(success=False, error='User not found'), 404
+        cur.execute("SELECT COUNT(*) AS n FROM sales_request WHERE owner_user_id = %s", (user['id'],))
+        owned = cur.fetchone()['n']
+        activity = _profile_activity(cur, user)
+        details = {k: user[k] for k in ('id', 'name', 'mobile', 'email', 'username', 'title',
+                                        'role_name', 'department_name', 'team_name',
+                                        'manager_name', 'manager_mobile')}
+        details['joined'] = user['date'].strftime('%Y-%m-%d') if user['date'] else None
+        details['requests_owned'] = owned
+        return jsonify(success=True, user=details, activity=activity)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/profile/password', methods=['POST'])
+def change_own_password():
+    data = request.get_json(silent=True) or {}
+    current, new = data.get('current') or '', data.get('new') or ''
+    if len(new) < PROFILE_MIN_PASSWORD:
+        return jsonify(success=False, error='The new password must be at least %d characters' % PROFILE_MIN_PASSWORD), 400
+    if new == current:
+        return jsonify(success=False, error='The new password must differ from the current one'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT id, password FROM user WHERE id = %s", (session['user_id'],))
+        user = cur.fetchone()
+        if not user or not verify_password(user, current, conn, cur):
+            return jsonify(success=False, error='The current password is wrong'), 403
+        cur.execute("UPDATE user SET password = %s, modified_date = NOW() WHERE id = %s",
+                    (generate_password_hash(new), user['id']))
+        conn.commit()
+        return jsonify(success=True)
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/logout', methods=['GET','POST']) 
 def logout():
     session.clear()
@@ -4497,6 +4609,8 @@ PUBLIC_ENDPOINTS = {
     'add_notification',
     # This person's own phone, for push: any signed-in user, no permission.
     'register_push_token', 'unregister_push_token',
+    # My own profile and password: any signed-in user, only their own row.
+    'profile_page', 'get_profile', 'change_own_password',
     # Group chats: login only; membership of each room is checked inside.
     'chat_groups', 'chat_group_messages', 'chat_group_post', 'chat_group_read',
     # Any chat's members, message info and media: access is checked inside.
@@ -8456,7 +8570,9 @@ def pricing_summary():
         cur.execute("""
             SELECT sr.id AS request_id,
                    COUNT(CASE WHEN i.cost_per_item IS NOT NULL
-                               AND i.sell_per_item IS NULL THEN 1 END) AS to_price,
+                               AND i.sell_per_item IS NULL
+                               AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
+                               THEN 1 END) AS to_price,
                    COUNT(CASE WHEN i.approval_status = 'pending_negotiation'
                                AND i.negotiation_status = 'negotiated' THEN 1 END) AS to_reprice
             FROM sales_request sr
@@ -11091,8 +11207,10 @@ def get_sales_requests():
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
                            COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                                          AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
                                       THEN 1 END) as approval_stats_not_costed,
-                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL THEN 1 END) as approval_stats_not_priced,
+                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
+                                          AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as approval_stats_not_priced,
                            MAX(sr.pricing_handoff_at) AS pricing_handoff_at, MAX(sr.cost_changed_at) AS cost_changed_at,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
@@ -11126,8 +11244,10 @@ def get_sales_requests():
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
                            COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                                          AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
                                       THEN 1 END) as approval_stats_not_costed,
-                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL THEN 1 END) as approval_stats_not_priced,
+                           COUNT(CASE WHEN sr.pricing_handoff_at IS NOT NULL AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NULL
+                                          AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as approval_stats_not_priced,
                            MAX(sr.pricing_handoff_at) AS pricing_handoff_at, MAX(sr.cost_changed_at) AS cost_changed_at,
                            COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL 
                                           AND (i.approval_status = 'pending' OR i.approval_status IS NULL) THEN 1 END) as approval_stats_pending,
@@ -11152,6 +11272,12 @@ def get_sales_requests():
             for req in new_requests:
                 # Calculate status display
                 status_display = req.get('status', 'submitted').title()
+                # Every item turned down by the client: the request is closed as
+                # rejected, not left looking "Submitted" (Gamal, 2026-10-30).
+                open_items = sum(req.get('approval_stats_' + k) or 0 for k in
+                                 ('not_costed', 'not_priced', 'pending', 'negotiation', 'repricing', 'approved'))
+                if (req.get('approval_stats_rejected') or 0) and not open_items:
+                    status_display = 'Rejected'
                 if req.get('priority') == 'urgent':
                     status_display = f"🔴 {status_display}"
                 elif req.get('priority') == 'high':
@@ -19248,7 +19374,7 @@ def get_client_approval_items():
 
         # Apply status filter
         if status_filter == 'pending':
-            query += " AND (i.cost_per_item IS NULL OR i.sell_per_item IS NULL)"
+            query += " AND (i.cost_per_item IS NULL OR i.sell_per_item IS NULL) AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')"
         elif status_filter == 'priced':
             query += " AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL AND (i.approval_status = 'pending' OR i.approval_status IS NULL)"
         elif status_filter == 'approved':
@@ -19306,7 +19432,8 @@ def get_client_approval_statistics():
         cur.execute("""
             SELECT 
                 COUNT(CASE WHEN (cost_per_item IS NULL OR cost_per_item = 0 
-                                 OR sell_per_item IS NULL OR sell_per_item = 0) THEN 1 END) as pending_pricing,
+                                 OR sell_per_item IS NULL OR sell_per_item = 0)
+                           AND COALESCE(approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as pending_pricing,
                 COUNT(CASE WHEN cost_per_item IS NOT NULL AND cost_per_item > 0 
                            AND sell_per_item IS NOT NULL AND sell_per_item > 0
                            AND (approval_status IS NULL OR approval_status = '' 
