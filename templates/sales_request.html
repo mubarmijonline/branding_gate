@@ -12511,7 +12511,31 @@ window.chartPieDemo = function() {
             error: function(xhr, status, error) {
                 console.error('Update error:', error);
                 console.error('Response:', xhr.responseText);
-                Swal.fire('Error!', 'Error updating request: ' + error, 'error');
+                var r = xhr.responseJSON || {}, t = window.bgT || function (x) { return x; };
+                if (r.missing && r.missing.length) {
+                    // An older request saved before governorate / venue were required
+                    // (Gamal could not save: the server said why, the page said "Bad Request").
+                    var $first = null;
+                    $('#editRequestModal').find('input, select').filter(function () {
+                        return /\[(location|location_governorate|hotel_name|setup_date|delivery_location|delivery_location_governorate)\]$/.test(this.name || '') &&
+                            !String($(this).val() || '').trim();
+                    }).each(function () {
+                        var $f = $(this).addClass('is-invalid');
+                        $f.next('.select2').find('.select2-selection').css('border-color', '#dc3545');
+                        $f.one('input change', function () {
+                            $f.removeClass('is-invalid').next('.select2').find('.select2-selection').css('border-color', '');
+                        });
+                        $first = $first || $f;
+                    });
+                    var list = r.missing.map(function (m) {
+                        return '<li>' + $('<div>').text(m.split(': ').map(t).join(': ')).html() + '</li>';
+                    }).join('');
+                    Swal.fire({ icon: 'warning', title: t('Please fill in the following required fields'),
+                                html: '<ul class="text-left mb-0">' + list + '</ul>' })
+                        .then(function () { if ($first) { $first[0].scrollIntoView({ block: 'center' }); $first.trigger('focus'); } });
+                    return;
+                }
+                Swal.fire('Error!', 'Error updating request: ' + (r.error || error), 'error');
             }
         });
     });

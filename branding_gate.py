@@ -3873,9 +3873,18 @@ def _target_details(cur, period):
     }
 
 
+# Only items the client approved count toward a target. The request-level
+# approval_status defaults to 'approved', so summing whole requests on it
+# counted Mariam's fully rejected request 31318 (Gamal, 2026-10-30).
+_ACHIEVED_WHERE = """i.approval_status = 'approved'
+          AND sr.approval_status <> 'rejected'
+          AND COALESCE(sr.status, '') <> 'cancelled'
+          AND sr.owner_user_id IS NOT NULL"""
+
+
 def _target_achieved(cur, period):
     """
-    {user_id: approved sell value} for the quarter.
+    {user_id: client-approved sell value} for the quarter.
 
     Attribution is by request date, not by the date the client signed off:
     sales_added_date is null on most rows, and created_at is the only date
@@ -3883,12 +3892,12 @@ def _target_achieved(cur, period):
     """
     start, end = targets_lib.period_bounds(period)
     cur.execute("""
-        SELECT owner_user_id, COALESCE(SUM(total_sell), 0) AS total
-        FROM sales_request
-        WHERE approval_status = 'approved'
-          AND owner_user_id IS NOT NULL
-          AND DATE(created_at) BETWEEN %s AND %s
-        GROUP BY owner_user_id
+        SELECT sr.owner_user_id, COALESCE(SUM(i.total_sell), 0) AS total
+        FROM sales_request sr
+        JOIN sales_request_items i ON i.request_id = sr.id
+        WHERE """ + _ACHIEVED_WHERE + """
+          AND DATE(sr.created_at) BETWEEN %s AND %s
+        GROUP BY sr.owner_user_id
     """, (start, end))
     return {row['owner_user_id']: (row['total'] or targets_lib.ZERO)
             for row in cur.fetchall()}
@@ -3897,13 +3906,13 @@ def _target_achieved(cur, period):
 def _target_achieved_by_quarter(cur, year):
     """{'2026-Q1': {user_id: total}, ...} in one pass over the year."""
     cur.execute("""
-        SELECT owner_user_id, QUARTER(created_at) AS q,
-               COALESCE(SUM(total_sell), 0) AS total
-        FROM sales_request
-        WHERE approval_status = 'approved'
-          AND owner_user_id IS NOT NULL
-          AND YEAR(created_at) = %s
-        GROUP BY owner_user_id, QUARTER(created_at)
+        SELECT sr.owner_user_id, QUARTER(sr.created_at) AS q,
+               COALESCE(SUM(i.total_sell), 0) AS total
+        FROM sales_request sr
+        JOIN sales_request_items i ON i.request_id = sr.id
+        WHERE """ + _ACHIEVED_WHERE + """
+          AND YEAR(sr.created_at) = %s
+        GROUP BY sr.owner_user_id, QUARTER(sr.created_at)
     """, (year,))
     out = {'%d-Q%d' % (year, q): {} for q in (1, 2, 3, 4)}
     for row in cur.fetchall():
@@ -13712,7 +13721,7 @@ def edit_sales_request(request_id):
             }), 400
         
         start_date = data.get('start_date')
-        end_date = data.get('end_date')
+        end_date = data.get('end_date') or None   # '' is not a date to MySQL
         
         if not start_date:
             return jsonify({
@@ -17585,7 +17594,8 @@ def update_request_with_template(request_id):
         
         if data.get('end_date') is not None:
             update_fields.append("end_date = %s")
-            update_values.append(data['end_date'])
+            # A cleared end date arrives as '' and MySQL refuses it (Gamal could not save).
+            update_values.append(data['end_date'] or None)
         
         # Merge template fields with existing request_data
         # This allows adding new event types without losing existing template data

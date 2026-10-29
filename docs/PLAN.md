@@ -1132,3 +1132,15 @@ WhatsApp-style speed pill on chat voice notes: tap cycles 1x, 1.5x, 2x, 2.5x.
 Shows in place of the mic icon once a note is played. The chosen speed is
 remembered per browser (`bg.chat.voiceSpeed`) and applies to every note.
 Files: `static/js/bg-chat.js`, `static/css/bg-chat.css`, `static/i18n/ar.js`.
+
+## 2026-10-30 Gamal: request edit blocked; target counted rejected sales
+
+- Edit: a blank end date was sent as '' and MySQL refused it (36 failed saves
+  in two days). Both edit routes now store NULL. Older requests missing the
+  now-required governorate / venue got a 400 the page showed as "Bad Request";
+  the edit form now lists the missing fields and outlines them in red.
+- Targets: achieved summed whole requests on request-level approval_status,
+  which defaults to 'approved', so client-rejected and unpriced requests
+  counted. Now only items the client approved count (item approval_status),
+  excluding cancelled and CEO-rejected requests. Q4: Mariam 17,330 -> 0,
+  Sarah 114,400 -> 0 (awaiting client).
