@@ -95,6 +95,10 @@
               <label for="drClient">Client Name <span class="text-danger">*</span></label>
               <select class="form-control" id="drClient"><option value="">Pick the client</option></select>
             </div>
+            <div class="form-group col-md-4">
+              <label for="drSalesRequest">Job code (Sales Request)</label>
+              <select class="form-control" id="drSalesRequest"><option value="">No sales request</option></select>
+            </div>
             <div class="form-group col-6 col-md-2">
               <label for="drEventDate">Event Date</label>
               <input type="date" class="form-control" id="drEventDate">
@@ -187,6 +191,14 @@
   .dr-box h6 { font-weight: 700; color: #26306b; margin-bottom: .6rem; }
   .dr-log { list-style: none; padding: 0; margin: 0; font-size: .82rem; }
   .dr-log li { padding: .3rem 0; border-bottom: 1px solid #f1f3f7; }
+  .dr-picked { list-style: none; padding: 0; margin: .35rem 0 0; display: flex; flex-wrap: wrap; gap: .35rem; }
+  .dr-picked li { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid #e3e6f0; border-radius: 8px;
+                  padding: .2rem .5rem; font-size: .8rem; max-width: 100%; }
+  .dr-picked li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+  .dr-work { background: #f8f9fc; border-radius: 8px; padding: .6rem .75rem; margin: .4rem 0 .8rem; }
+  .dr-work h6 { font-size: .85rem; font-weight: 700; color: #26306b; margin: 0 0 .4rem; }
+  .dr-round { font-size: .75rem; color: #6b7280; margin-top: .4rem; }
+  .dr-sr { font-size: .75rem; background: #eef1fa; color: #26306b; border-radius: 6px; padding: .05rem .4rem; }
   .dr-note { background: #fff6e5; border-radius: 8px; padding: .5rem .75rem; font-size: .85rem; margin-bottom: .75rem; }
   @media (max-width: 767.98px) {
     .dr-toolbar .ml-auto { margin-left: 0 !important; width: 100%; }
@@ -204,6 +216,9 @@
     submitted: 'Waiting for a designer', assigned: 'With the designer', in_review: 'Waiting for approval',
     changes: 'Changes requested', approved: 'Approved', sent_to_operation: 'Sent to Operation', cancelled: 'Cancelled'
   };
+  var ITEM_STATUS = { open: 'With the designer', in_review: 'Waiting for approval', changes: 'Changes requested',
+                      approved: 'Approved', sent: 'Sent to Operation' };
+  var ITEM_CLASS = { open: 'assigned', in_review: 'in_review', changes: 'changes', approved: 'approved', sent: 'sent_to_operation' };
   var LOG = {
     submitted: 'Request submitted', assigned: 'Assigned to', uploaded: 'Uploaded', removed: 'Removed',
     submitted_for_approval: 'Submitted for approval', approved: 'Approved', changes_requested: 'Asked for changes',
@@ -240,7 +255,8 @@
           '<td><div class="dr-title">' + esc(q.first_title || '') + more + '</div><div class="dr-cats">' +
             q.categories.map(function (c) { return '<span class="dr-cat">' + esc(T(category(c).label || c)) + '</span>'; }).join('') +
           '</div></td>' +
-          '<td>' + esc(q.client_name) + (q.company_name ? '<div class="small text-muted">' + esc(q.company_name) + '</div>' : '') + '</td>' +
+          '<td>' + esc(q.client_name) + (q.company_name ? '<div class="small text-muted">' + esc(q.company_name) + '</div>' : '') +
+            (q.sales_request_id ? '<div><span class="dr-sr">SR #' + q.sales_request_id + '</span></div>' : '') + '</td>' +
           '<td>' + q.discipline.toUpperCase() + '</td>' +
           '<td>' + status(q.status) + '</td>' +
           '<td>' + date(q.deadline) + '</td>' +
@@ -307,15 +323,37 @@
         field('Deadline', '<input type="date" class="form-control" data-f="deadline" value="' + esc($('#drDeadline').val()) + '">', 'col-md-4') +
         extra +
         field('Attachment', '<input type="file" class="form-control-file" data-files multiple ' +
-          'accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.ai,.psd,.eps,.zip">', 'col-md-12') +
+          'accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.ai,.psd,.eps,.zip">' +
+          '<small class="form-text text-muted">' + T('Pick again to add files from another folder') + '</small>' +
+          '<ul class="dr-picked"></ul>', 'col-md-12') +
         field('Description', '<textarea class="form-control" data-f="description" rows="2"></textarea>', 'col-md-12') +
       '</div></div>');
+    $item.data('picked', []);
     $('#drItems').append($item);
     $('#drNoItems').hide();
     $item.find('[data-f=title]').trigger('focus');
     void n;
   }
   $('#drAddItem').on('click', function () { addItem(tab); });
+  // Each pick adds to the item's list (Gamal: files sit in different folders).
+  function picked($list, files) {
+    $list.html(files.map(function (f, n) {
+      return '<li><i class="fas fa-paperclip"></i><span>' + esc(f.name) + '</span>' +
+        '<button type="button" class="btn btn-sm btn-link text-danger p-0 dr-unpick" data-n="' + n + '" title="' + T('Remove') + '"><i class="fas fa-times"></i></button></li>';
+    }).join(''));
+  }
+  $(document).on('change', '[data-files], .dr-work-files', function () {
+    var $holder = $(this).closest('.dr-item, .dr-work'), list = $holder.data('picked') || [];
+    for (var i = 0; i < this.files.length; i++) list.push(this.files[i]);
+    $holder.data('picked', list);
+    picked($holder.find('.dr-picked').first(), list);
+    this.value = '';
+  });
+  $(document).on('click', '.dr-unpick', function () {
+    var $holder = $(this).closest('.dr-item, .dr-work'), list = $holder.data('picked') || [];
+    list.splice(Number($(this).data('n')), 1);
+    picked($holder.find('.dr-picked').first(), list);
+  });
   $(document).on('click', '.dr-remove-item', function () {
     $(this).closest('.dr-item').remove();
     $('#drNoItems').toggle(!$('#drItems .dr-item').length);
@@ -328,7 +366,15 @@
       return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
     }).join('')).val(list.some(function (c) { return String(c.id) === keep; }) ? keep : '').trigger('change.select2');
   }
+  function salesRequests() {
+    var client = $('#drClient').val(), keep = $('#drSalesRequest').val();
+    var list = (OPT.sales_requests || []).filter(function (r) { return !client || String(r.client_id) === client; });
+    $('#drSalesRequest').html('<option value="">' + T('No sales request') + '</option>' + list.map(function (r) {
+      return '<option value="' + r.id + '">#' + r.id + ' — ' + esc(r.title || '') + '</option>';
+    }).join('')).val(list.some(function (r) { return String(r.id) === keep; }) ? keep : '').trigger('change.select2');
+  }
   $('#drCompany').on('change', clients);
+  $('#drClient').on('change', salesRequests);
   $('#drClient').on('change', function () {
     var c = OPT.clients.filter(function (x) { return String(x.id) === $(this).val(); }, this)[0];
     if (c && c.company_id && !$('#drCompany').val()) { $('#drCompany').val(String(c.company_id)).trigger('change.select2'); }
@@ -343,11 +389,12 @@
       return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
     }).join(''));
     clients();
+    salesRequests();
     $('#drNewModal').modal('show');
   });
   $('#drNewModal').on('shown.bs.modal', function () {
     if ($.fn.select2) {
-      $('#drCompany, #drClient').each(function () {
+      $('#drCompany, #drClient, #drSalesRequest').each(function () {
         if (!$(this).data('select2')) { $(this).select2({ dropdownParent: $('#drNewModal'), width: '100%' }); }
       });
     }
@@ -357,7 +404,7 @@
     var data = {
       discipline: $('#drDiscipline').val(), company_id: $('#drCompany').val() || null,
       client_id: $('#drClient').val(), event_date: $('#drEventDate').val() || null,
-      deadline: $('#drDeadline').val() || null, items: []
+      deadline: $('#drDeadline').val() || null, sales_request_id: $('#drSalesRequest').val() || null, items: []
     };
     var form = new FormData(), problem = null;
     if (!data.client_id) problem = 'Pick the client';
@@ -366,8 +413,7 @@
       $(this).find('[data-f]').each(function () { item[$(this).data('f')] = $(this).val(); });
       if (!String(item.title || '').trim()) problem = problem || 'Every item needs a request title';
       data.items.push(item);
-      var input = $(this).find('[data-files]')[0];
-      for (var i = 0; i < input.files.length; i++) { form.append('files_' + n, input.files[i]); }
+      ($(this).data('picked') || []).forEach(function (f) { form.append('files_' + n, f); });
     });
     if (!data.items.length) problem = problem || 'Add at least one item';
     if (problem) { Swal.fire('', T(problem), 'warning'); return; }
@@ -407,34 +453,62 @@
       kv('Requested by', esc(q.created_by_name) + '<div class="small text-muted">' + esc(q.created_at) + '</div>') +
       kv('Designer', q.designer_name ? esc(q.designer_name) + (q.assigned_by_name ? '<div class="small text-muted">' + T('by') + ' ' + esc(q.assigned_by_name) + '</div>' : '') : '') +
       '</div>';
-    if (q.decision_note) {
-      html += '<div class="dr-note"><i class="fas fa-comment-dots mr-1"></i><b>' + esc(q.decided_by_name || '') + ':</b> ' + esc(q.decision_note) + '</div>';
+    if (q.sales_request) {
+      html += '<div class="dr-kv mb-2"><b>' + T('Job code (Sales Request)') + '</b><a href="/sales_request?request=' + Number(q.sales_request.id) +
+        '">#' + Number(q.sales_request.id) + ' — ' + esc(q.sales_request.title || '') + '</a></div>';
     }
     html += '<div class="dr-section-title">' + T('Items') + ' (' + q.items.length + ')</div>';
     q.items.forEach(function (i) {
       var size = [i.size_h, i.size_w, i.size_l].filter(function (v) { return v != null; }).map(num).join(' × ');
-      html += '<div class="dr-item"><div class="dr-item-head"><span class="dr-cat">' + esc(T(i.category_label)) + '</span><b>' + esc(i.title) + '</b></div>' +
+      html += '<div class="dr-item"><div class="dr-item-head"><span class="dr-cat">' + esc(T(i.category_label)) + '</span><b>' + esc(i.title) + '</b>' +
+        ' <span class="dr-status ' + (ITEM_CLASS[i.status] || '') + '" style="margin-left:auto">' + esc(T(ITEM_STATUS[i.status] || i.status)) + '</span></div>' +
         '<div class="dr-grid">' + kv('Deadline', date(i.deadline)) +
         (size ? kv('Size (cm)', size) : '') +
         (i.quantity != null ? kv('Quantity', num(i.quantity) + ' ' + esc(T(UNIT_LABELS[i.unit] || i.unit || ''))) : '') +
         (i.printing_type ? kv('Type of Printing', esc(i.printing_type)) : '') +
         (i.duration ? kv('Duration', esc(i.duration)) : '') + '</div>' +
         (i.description ? '<p class="mb-2" style="white-space:pre-wrap">' + esc(i.description) + '</p>' : '') +
-        (i.files.length ? '<div class="dr-kv"><b>' + T('Attachment') + '</b></div>' + files(i.files) : '') +
-        '</div>';
+        (i.files.length ? '<div class="dr-kv"><b>' + T('Attachment') + '</b></div>' + files(i.files) : '');
+      if (i.decision_note && i.status === 'changes') {
+        html += '<div class="dr-note"><i class="fas fa-comment-dots mr-1"></i>' + esc(i.decision_note) + '</div>';
+      }
+      // The work on this item: the final round, what is being worked on, earlier rounds.
+      html += '<div class="dr-work" data-item="' + i.id + '"><h6><i class="fas fa-paint-brush mr-1"></i>' +
+        T(q.ops_only ? 'Final design' : 'The work') + '</h6>';
+      if (i.final.length || q.ops_only) {
+        html += (q.ops_only ? '' : '<div class="dr-round">' + T('Handed in (round {0})').replace('{0}', i.submissions) + '</div>') + files(i.final);
+      }
+      if (i.drafts.length || i.can.upload) {
+        html += '<div class="dr-round">' + T('Not handed in yet') + '</div>' + files(i.drafts, i.can.upload);
+      }
+      if (i.can.upload) {
+        html += '<div class="form-row align-items-end">' +
+          '<div class="form-group col-md-5 mb-2"><label class="small font-weight-bold">' + T('Files (PDF, JPG...)') + '</label>' +
+          '<input type="file" class="form-control-file dr-work-files" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.ai,.psd,.eps,.zip">' +
+          '<ul class="dr-picked"></ul></div>' +
+          '<div class="form-group col-md-4 mb-2"><label class="small font-weight-bold">' + T('or a link') + '</label>' +
+          '<input type="url" class="form-control dr-work-link" placeholder="https://"></div>' +
+          '<div class="form-group col-md-3 mb-2"><button type="button" class="btn btn-outline-primary btn-block dr-upload"><i class="fas fa-upload mr-1"></i>' + T('Upload') + '</button></div>' +
+          '</div>';
+      }
+      if (i.can.submit) {
+        html += '<button type="button" class="btn btn-primary btn-sm dr-item-submit"><i class="fas fa-paper-plane mr-1"></i>' + T('Submit this item for approval') + '</button>';
+      }
+      if (i.can.decide) {
+        html += '<textarea class="form-control my-2 dr-item-note" rows="2" placeholder="' + T('Note (needed when asking for changes)') + '"></textarea>' +
+          '<button type="button" class="btn btn-success btn-sm mr-2 dr-item-approve"><i class="fas fa-check mr-1"></i>' + T('Approve') + '</button>' +
+          '<button type="button" class="btn btn-outline-danger btn-sm dr-item-changes"><i class="fas fa-undo mr-1"></i>' + T('Ask for changes') + '</button>';
+      }
+      if (i.history.length) {
+        html += '<details class="mt-2"><summary class="small text-muted">' + T('Earlier rounds') + ' (' + i.history.length + ')</summary>' +
+          i.history.map(function (h) { return '<div class="dr-round">' + T('Round {0}').replace('{0}', h.round) + '</div>' + files(h.files); }).join('') +
+          '</details>';
+      }
+      html += '</div></div>';
     });
-
-    html += '<div class="dr-box"><h6><i class="fas fa-paint-brush mr-1"></i>' + T('The work') + '</h6>' + files(q.deliverables, can.upload);
-    if (can.upload) {
-      html += '<div class="form-row align-items-end">' +
-        '<div class="form-group col-md-5"><label class="small font-weight-bold">' + T('Files (PDF, JPG...)') + '</label>' +
-        '<input type="file" class="form-control-file" id="drWorkFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.ai,.psd,.eps,.zip"></div>' +
-        '<div class="form-group col-md-5"><label class="small font-weight-bold">' + T('or a link') + '</label>' +
-        '<input type="url" class="form-control" id="drWorkLink" placeholder="https://"></div>' +
-        '<div class="form-group col-md-2"><button type="button" class="btn btn-outline-primary btn-block" id="drUpload"><i class="fas fa-upload mr-1"></i>' + T('Upload') + '</button></div>' +
-        '</div>';
+    if (q.deliverables.length) {
+      html += '<div class="dr-box"><h6><i class="fas fa-paint-brush mr-1"></i>' + T('The work') + '</h6>' + files(q.deliverables) + '</div>';
     }
-    html += '</div>';
 
     if (can.assign) {
       var designers = OPT.designers.filter(function (d) { return d.discipline === q.discipline; });
@@ -445,23 +519,18 @@
           return '<option value="' + d.id + '"' + (d.id === q.designer_id ? ' selected' : '') + '>' + esc(d.name) + '</option>';
         }).join('') + '</select><button type="button" class="btn btn-primary" id="drAssign">' + T('Assign') + '</button></div></div>';
     }
-    if (can.decide) {
-      html += '<div class="dr-box"><h6><i class="fas fa-check-double mr-1"></i>' + T('Design Manager approval') + '</h6>' +
-        '<textarea class="form-control mb-2" id="drDecisionNote" rows="2" placeholder="' + T('Note (needed when asking for changes)') + '"></textarea>' +
-        '<button type="button" class="btn btn-success mr-2" id="drApprove"><i class="fas fa-check mr-1"></i>' + T('Approve') + '</button>' +
-        '<button type="button" class="btn btn-outline-danger" id="drChanges"><i class="fas fa-undo mr-1"></i>' + T('Ask for changes') + '</button></div>';
-    }
 
-    html += '<div class="dr-section-title">' + T('History') + '</div><ul class="dr-log">' + q.log.map(function (l) {
-      return '<li><b>' + esc(T(LOG[l.action] || l.action)) + '</b>' + (l.note ? ' ' + esc(l.note) : '') +
-        ' <span class="text-muted">— ' + esc(l.actor_name) + ', ' + esc(l.at) + '</span></li>';
-    }).join('') + '</ul>';
+    if (q.log.length) {
+      html += '<div class="dr-section-title">' + T('History') + '</div><ul class="dr-log">' + q.log.map(function (l) {
+        return '<li><b>' + esc(T(LOG[l.action] || l.action)) + '</b>' + (l.note ? ' ' + esc(l.note) : '') +
+          ' <span class="text-muted">— ' + esc(l.actor_name) + ', ' + esc(l.at) + '</span></li>';
+      }).join('') + '</ul>';
+    }
     $('#drDetailBody').html(html);
 
     var foot = '';
     if (can.cancel) foot += '<button type="button" class="btn btn-outline-danger mr-auto" id="drCancelReq">' + T('Cancel request') + '</button>';
-    if (can.upload) foot += '<button type="button" class="btn btn-primary" id="drSubmitWork"' + (q.deliverables.length ? '' : ' disabled') + '><i class="fas fa-paper-plane mr-1"></i>' + T('Submit for approval') + '</button>';
-    if (can.send) foot += '<button type="button" class="btn btn-success" id="drSend"><i class="fas fa-truck mr-1"></i>' + T('Send to Operation') + '</button>';
+    if (can.send) foot += '<button type="button" class="btn btn-success" id="drSend"><i class="fas fa-truck mr-1"></i>' + T('Send approved items to Operation') + '</button>';
     $('#drDetailFoot').html(foot + '<button type="button" class="btn btn-secondary" data-dismiss="modal">' + T('Close') + '</button>');
   }
 
@@ -483,11 +552,13 @@
     if (!id) { Swal.fire('', T('Pick a designer'), 'warning'); return; }
     step('assign', { designer_id: Number(id) });
   });
-  $(document).on('click', '#drUpload', function () {
-    var form = new FormData(), input = $('#drWorkFiles')[0], link = $('#drWorkLink').val().trim();
-    for (var i = 0; i < input.files.length; i++) form.append('files[]', input.files[i]);
+  $(document).on('click', '.dr-upload', function () {
+    var $w = $(this).closest('.dr-work'), list = $w.data('picked') || [], link = $w.find('.dr-work-link').val().trim();
+    if (!list.length && !link) { Swal.fire('', T('Pick a file or paste a link'), 'warning'); return; }
+    var form = new FormData();
+    form.append('item_id', $w.data('item'));
+    list.forEach(function (f) { form.append('files[]', f); });
     if (link) form.append('link', link);
-    if (!input.files.length && !link) { Swal.fire('', T('Pick a file or paste a link'), 'warning'); return; }
     var $b = $(this).prop('disabled', true);
     $.ajax({ url: '/api/design-requests/' + current.id + '/files', method: 'POST', data: form, processData: false, contentType: false })
       .done(function (r) {
@@ -502,15 +573,18 @@
     $.ajax({ url: '/api/design-requests/' + current.id + '/files/' + id, method: 'DELETE' })
       .done(function () { openRequest(current.id); }).fail(function (xhr) { fail(xhr); });
   });
-  $(document).on('click', '#drSubmitWork', function () { step('submit'); });
-  $(document).on('click', '#drApprove', function () { step('decide', { decision: 'approve', note: $('#drDecisionNote').val() }); });
-  $(document).on('click', '#drChanges', function () {
-    var note = $('#drDecisionNote').val().trim();
+  function itemStep($el, path, body) { return step('items/' + $el.closest('.dr-work').data('item') + '/' + path, body); }
+  $(document).on('click', '.dr-item-submit', function () { itemStep($(this), 'submit'); });
+  $(document).on('click', '.dr-item-approve', function () {
+    itemStep($(this), 'decide', { decision: 'approve', note: $(this).closest('.dr-work').find('.dr-item-note').val() });
+  });
+  $(document).on('click', '.dr-item-changes', function () {
+    var note = $(this).closest('.dr-work').find('.dr-item-note').val().trim();
     if (!note) { Swal.fire('', T('Say what needs changing'), 'warning'); return; }
-    step('decide', { decision: 'changes', note: note });
+    itemStep($(this), 'decide', { decision: 'changes', note: note });
   });
   $(document).on('click', '#drSend', function () {
-    Swal.fire({ title: T('Send to Operation?'), icon: 'question', showCancelButton: true,
+    Swal.fire({ title: T('Send the approved items to Operation?'), icon: 'question', showCancelButton: true,
                 confirmButtonText: T('Send'), cancelButtonText: T('Cancel') })
       .then(function (a) { if (a.isConfirmed) step('send'); });
   });

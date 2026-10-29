@@ -4374,5 +4374,16 @@ window.BG_AR = {
 "Item update": "تعديل بند",
 "Attachment add": "إضافة مرفق",
 "Costing update": "تحديث التكلفة",
-"Costing complete": "اكتمال التكلفة"
+"Costing complete": "اكتمال التكلفة",
+"Job code (Sales Request)": "كود الشغلانة (طلب المبيعات)",
+"No sales request": "بدون طلب مبيعات",
+"Pick again to add files from another folder": "اختار تاني عشان تضيف ملفات من فولدر تاني",
+"Final design": "التصميم النهائي",
+"Handed in (round {0})": "اتسلّم (مرة {0})",
+"Not handed in yet": "لسه ما اتسلّمش",
+"Submit this item for approval": "ابعت البند ده للموافقة",
+"Earlier rounds": "المرات اللي فاتت",
+"Round {0}": "مرة {0}",
+"Send approved items to Operation": "ابعت البنود الموافق عليها للعمليات",
+"Send the approved items to Operation?": "تبعت البنود الموافق عليها للعمليات؟"
 };

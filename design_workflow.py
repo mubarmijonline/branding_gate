@@ -3,9 +3,10 @@ Design requests: the rules, with no Flask and no MySQL (Gamal, 2026-10-28).
 
 Sales or Account Management asks Design for work. One request carries a header
 (company, client, event date, deadline, 2D or 3D) and any number of items, each
-of one category with that category's fields. Design assigns a designer, the
-designer uploads the work and submits it, the Design Manager approves or sends
-it back, and the requester sends the approved work to Operation.
+of one category with that category's fields. Design assigns a designer; the
+designer uploads and submits each item's work, the Design Manager approves or
+returns each item, and the requester sends the approved items to Operation,
+which gets only each item's final files.
 
 Spec: docs/PRD.md, "Design Requests". Gamal's map defines the categories and
 their fields; CATEGORIES below is that map.
@@ -28,15 +29,28 @@ STATES = (SUBMITTED, ASSIGNED, IN_REVIEW, CHANGES, APPROVED, SENT, CANCELLED)
 # request that is already with a designer where it is: reassigning work that
 # came back for changes must not lose the note.
 TRANSITIONS = {
-    'assign':  ((SUBMITTED, ASSIGNED, CHANGES), None),
-    'submit':  ((ASSIGNED, CHANGES), IN_REVIEW),
-    'approve': ((IN_REVIEW,), APPROVED),
-    'changes': ((IN_REVIEW,), CHANGES),
-    'send':    ((APPROVED,), SENT),
+    'assign':  ((SUBMITTED, ASSIGNED, IN_REVIEW, CHANGES), None),
     'cancel':  ((SUBMITTED, ASSIGNED), CANCELLED),
 }
-# The designer uploads while the work is with them.
-UPLOAD_STATES = (ASSIGNED, CHANGES)
+
+# Each item goes through the work on its own (Gamal, 2026-10-30): the designer
+# submits an item when it is done, the Design Manager approves or returns that
+# item, and the requester sends the approved items to Operation.
+ITEM_OPEN = 'open'
+ITEM_IN_REVIEW = 'in_review'
+ITEM_CHANGES = 'changes'
+ITEM_APPROVED = 'approved'
+ITEM_SENT = 'sent'
+ITEM_TRANSITIONS = {
+    'submit':  ((ITEM_OPEN, ITEM_CHANGES), ITEM_IN_REVIEW),
+    'approve': ((ITEM_IN_REVIEW,), ITEM_APPROVED),
+    'changes': ((ITEM_IN_REVIEW,), ITEM_CHANGES),
+    'send':    ((ITEM_APPROVED,), ITEM_SENT),
+}
+# The designer uploads to an item while it is with them.
+ITEM_UPLOAD_STATES = (ITEM_OPEN, ITEM_CHANGES)
+# Requests that still take work at all.
+WORK_STATES = (ASSIGNED, IN_REVIEW, CHANGES, APPROVED)
 
 
 class WorkflowError(ValueError):
@@ -53,6 +67,38 @@ def transition(status, action):
     if action == 'assign':
         return ASSIGNED if status == SUBMITTED else status
     return target
+
+
+def item_transition(status, action):
+    """The state an item moves to, or WorkflowError."""
+    if action not in ITEM_TRANSITIONS:
+        raise WorkflowError('Unknown action')
+    sources, target = ITEM_TRANSITIONS[action]
+    if status not in sources:
+        raise WorkflowError('This item is %s; that cannot be done now.' % status.replace('_', ' '))
+    return target
+
+
+def request_status(current, has_designer, item_statuses):
+    """
+    The request's state, read off its items. A cancelled request stays
+    cancelled; without a designer it waits for one. Waiting on the Design
+    Manager outranks changes to make, which outrank work still open.
+    """
+    if current == CANCELLED:
+        return CANCELLED
+    if not has_designer:
+        return SUBMITTED
+    states = set(item_statuses)
+    if states and states <= {ITEM_SENT}:
+        return SENT
+    if states and states <= {ITEM_APPROVED, ITEM_SENT}:
+        return APPROVED
+    if ITEM_IN_REVIEW in states:
+        return IN_REVIEW
+    if ITEM_CHANGES in states:
+        return CHANGES
+    return ASSIGNED
 
 
 # Every category keeps title, deadline, description and attachments; these are
@@ -153,10 +199,16 @@ def clean_header(raw):
         company_id = int(company_id) if company_id not in (None, '') else None
     except (TypeError, ValueError):
         raise WorkflowError('Unknown company')
+    sales_request_id = raw.get('sales_request_id')
+    try:
+        sales_request_id = int(sales_request_id) if sales_request_id not in (None, '') else None
+    except (TypeError, ValueError):
+        raise WorkflowError('Unknown sales request')
     return {
         'discipline': discipline,
         'client_id': client_id,
         'company_id': company_id,
+        'sales_request_id': sales_request_id,
         'event_date': parse_date(raw.get('event_date')),
         'deadline': parse_date(raw.get('deadline')),
     }
@@ -165,7 +217,12 @@ def clean_header(raw):
 if __name__ == '__main__':
     assert transition(SUBMITTED, 'assign') == ASSIGNED
     assert transition(CHANGES, 'assign') == CHANGES
-    assert transition(IN_REVIEW, 'changes') == CHANGES
+    assert item_transition(ITEM_IN_REVIEW, 'changes') == ITEM_CHANGES
+    assert request_status(ASSIGNED, True, ['approved', 'open']) == ASSIGNED
+    assert request_status(ASSIGNED, True, ['approved', 'in_review', 'changes']) == IN_REVIEW
+    assert request_status(ASSIGNED, True, ['approved', 'sent']) == APPROVED
+    assert request_status(APPROVED, True, ['sent', 'sent']) == SENT
+    assert request_status(SUBMITTED, False, ['open']) == SUBMITTED
     item = clean_item({'category': 'video', 'title': 'Teaser', 'size_h': '1080',
                        'quantity': '5', 'duration': '30 s'})
     assert item['size_h'] == 1080 and item['quantity'] is None and item['duration'] == '30 s'

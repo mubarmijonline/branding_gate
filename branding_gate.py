@@ -10314,9 +10314,29 @@ def design_request_visible(dr):
     """May the caller see this design request (a row with created_by, designer_id, status)?"""
     if dr['designer_id'] and dr['designer_id'] == session.get('user_id'):
         return True
-    if dr['status'] == design_workflow.SENT and has('design_request.operate'):
+    if dr.get('sent_at') and has('design_request.operate'):
         return True
     return _scope_covers('design_request.view', dr['created_by'])
+
+
+def _design_ops_only(dr):
+    """
+    Operation and nothing else: such a viewer gets the sent items and their
+    final files, not the drafts, the earlier rounds or the history (Gamal).
+    """
+    return has('design_request.operate') and not (
+        dr['designer_id'] == session.get('user_id')
+        or has('design_request.approve') or has('design_request.assign')
+        or _scope_covers('design_request.view', dr['created_by']))
+
+
+def _design_refresh_status(cur, dr):
+    """Store the request's state as its items now make it; returns it."""
+    cur.execute("SELECT status FROM design_request_item WHERE request_id = %s", (dr['id'],))
+    status = design_workflow.request_status(dr['status'], bool(dr['designer_id']),
+                                            [r['status'] for r in cur.fetchall()])
+    cur.execute("UPDATE design_request SET status = %s WHERE id = %s", (status, dr['id']))
+    return status
 
 
 def _design_requester_side(dr):
@@ -10403,6 +10423,13 @@ def design_request_options():
             cur.execute("SELECT id, client_name, parent_company_id FROM client ORDER BY client_name")
             out['clients'] = [{'id': r['id'], 'name': r['client_name'], 'company_id': r['parent_company_id']}
                               for r in cur.fetchall()]
+            out['sales_requests'] = []
+            if has('sales_request.view'):
+                scope_sql, scope_params = scope_clause('sales_request.view', 'sr.owner_user_id')
+                cur.execute("SELECT sr.id, sr.title, sr.client_id FROM sales_request sr WHERE 1=1"
+                            + scope_sql + " ORDER BY sr.id DESC LIMIT 1000", scope_params)
+                out['sales_requests'] = [{'id': r['id'], 'title': r['title'], 'client_id': r['client_id']}
+                                         for r in cur.fetchall()]
         if has('design_request.assign'):
             cur.execute("""SELECT u.id, u.name, d.code AS dept FROM user u
                            JOIN department d ON d.id = u.department_id
@@ -10431,7 +10458,7 @@ def design_request_list():
             parts.append('dr.created_by IN (%s)' % ','.join(['%s'] * len(ids)))
             params += list(ids)
     if has('design_request.operate'):
-        parts.append("dr.status = 'sent_to_operation'")
+        parts.append("dr.sent_at IS NOT NULL")
     where = '(' + ' OR '.join(parts) + ')'
     discipline = request.args.get('discipline')
     if discipline in design_workflow.DISCIPLINES:
@@ -10448,7 +10475,7 @@ def design_request_list():
     try:
         cur.execute("""
             SELECT dr.id, dr.discipline, dr.status, dr.event_date, dr.deadline, dr.created_at,
-                   dr.created_by, dr.designer_id, c.client_name, co.company_name,
+                   dr.created_by, dr.designer_id, dr.sales_request_id, c.client_name, co.company_name,
                    cu.name AS created_by_name, du.name AS designer_name,
                    (SELECT COUNT(*) FROM design_request_item i WHERE i.request_id = dr.id) AS item_count,
                    (SELECT GROUP_CONCAT(DISTINCT i.category) FROM design_request_item i
@@ -10509,11 +10536,16 @@ def design_request_create():
             header['company_id'] = client_row['parent_company_id']
         elif not cur.execute("SELECT 1 FROM company WHERE id = %s", (header['company_id'],)):
             return jsonify(success=False, error='Unknown company'), 400
-        cur.execute("""INSERT INTO design_request (discipline, company_id, client_id, event_date, deadline,
-                                                   created_by)
-                       VALUES (%s, %s, %s, %s, %s, %s)""",
+        if header['sales_request_id'] is not None:
+            cur.execute("SELECT owner_user_id FROM sales_request WHERE id = %s", (header['sales_request_id'],))
+            sr = cur.fetchone()
+            if not sr or not has('sales_request.view') or not _scope_covers('sales_request.view', sr['owner_user_id']):
+                return jsonify(success=False, error='Unknown sales request'), 400
+        cur.execute("""INSERT INTO design_request (discipline, company_id, client_id, sales_request_id,
+                                                   event_date, deadline, created_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                     (header['discipline'], header['company_id'], header['client_id'],
-                     header['event_date'], header['deadline'], me))
+                     header['sales_request_id'], header['event_date'], header['deadline'], me))
         request_id = cur.lastrowid
         refused = []
         for n, item in enumerate(items):
@@ -10589,10 +10621,20 @@ def design_request_detail(request_id):
             return float(v) if v is not None else None
 
         status = dr['status']
+        ops_only = _design_ops_only(dr)
         is_designer = dr['designer_id'] == me and has('design_request.deliver')
         requester = _design_requester_side(dr)
+        approver = has('design_request.approve')
+        stamp = lambda v: v.strftime('%d %b %Y %H:%M') if v else None
+        open_request = status in design_workflow.WORK_STATES
         out_items = []
         for i in items:
+            if ops_only and i['status'] != design_workflow.ITEM_SENT:
+                continue
+            work = [f for f in files if f['item_id'] == i['id'] and f['kind'] == 'deliverable']
+            final = [file_out(f) for f in work if i['submissions'] and f['submission'] == i['submissions']]
+            rounds = sorted({f['submission'] for f in work if f['submission'] and f['submission'] < i['submissions']},
+                            reverse=True)
             out_items.append({
                 'id': i['id'], 'category': i['category'],
                 'category_label': design_workflow.CATEGORIES[i['category']][0],
@@ -10601,30 +10643,52 @@ def design_request_detail(request_id):
                 'size_h': num(i['size_h']), 'size_w': num(i['size_w']), 'size_l': num(i['size_l']),
                 'quantity': num(i['quantity']), 'unit': i['unit'], 'printing_type': i['printing_type'],
                 'duration': i['duration'],
-                'files': [file_out(f) for f in files if f['item_id'] == i['id'] and f['kind'] == 'brief'],
+                'status': i['status'], 'submissions': i['submissions'],
+                'submitted_at': stamp(i['submitted_at']), 'decided_at': stamp(i['decided_at']),
+                'decision_note': None if ops_only else i['decision_note'],
+                'sent_at': stamp(i['sent_at']),
+                'files': [] if ops_only else
+                         [file_out(f) for f in files if f['item_id'] == i['id'] and f['kind'] == 'brief'],
+                # The last round handed in; for Operation, the approved one and nothing else.
+                'final': final,
+                'drafts': [] if ops_only else [file_out(f) for f in work if f['submission'] is None],
+                'history': [] if ops_only else
+                           [{'round': n, 'files': [file_out(f) for f in work if f['submission'] == n]}
+                            for n in rounds],
+                'can': {
+                    'upload': is_designer and open_request and i['status'] in design_workflow.ITEM_UPLOAD_STATES,
+                    'submit': is_designer and open_request and i['status'] in design_workflow.ITEM_UPLOAD_STATES
+                              and any(f['submission'] is None for f in work),
+                    'decide': approver and open_request and i['status'] == design_workflow.ITEM_IN_REVIEW,
+                },
             })
-        stamp = lambda v: v.strftime('%d %b %Y %H:%M') if v else None
+        # Work uploaded before items had their own (one request, 2026-10-28).
+        legacy = [file_out(f) for f in files if f['item_id'] is None and f['kind'] == 'deliverable']
+        sales_request = None
+        if dr['sales_request_id']:
+            cur.execute("SELECT id, title FROM sales_request WHERE id = %s", (dr['sales_request_id'],))
+            sales_request = cur.fetchone()
         return jsonify(success=True, request={
             'id': dr['id'], 'discipline': dr['discipline'], 'status': status,
             'client_name': dr['client_name'], 'company_name': dr['company_name'],
+            'sales_request': sales_request,
             'event_date': dr['event_date'].isoformat() if dr['event_date'] else None,
             'deadline': dr['deadline'].isoformat() if dr['deadline'] else None,
             'created_by_name': dr['created_by_name'], 'created_at': stamp(dr['created_at']),
             'designer_id': dr['designer_id'], 'designer_name': dr['designer_name'],
             'assigned_by_name': dr['assigned_by_name'], 'assigned_at': stamp(dr['assigned_at']),
-            'decided_by_name': dr['decided_by_name'], 'decided_at': stamp(dr['decided_at']),
-            'decision_note': dr['decision_note'], 'sent_by_name': dr['sent_by_name'],
-            'sent_at': stamp(dr['sent_at']),
+            'sent_by_name': dr['sent_by_name'], 'sent_at': stamp(dr['sent_at']),
             'items': out_items,
-            'brief_files': [file_out(f) for f in files if f['item_id'] is None and f['kind'] == 'brief'],
-            'deliverables': [file_out(f) for f in files if f['kind'] == 'deliverable'],
-            'log': log,
+            'brief_files': [] if ops_only else
+                           [file_out(f) for f in files if f['item_id'] is None and f['kind'] == 'brief'],
+            'deliverables': legacy if (not ops_only or dr['sent_at']) else [],
+            'log': [] if ops_only else log,
+            'ops_only': ops_only,
         }, can={
             'assign': has('design_request.assign') and status in design_workflow.TRANSITIONS['assign'][0],
-            'upload': is_designer and status in design_workflow.UPLOAD_STATES,
-            'decide': has('design_request.approve') and status == design_workflow.IN_REVIEW,
-            'send': requester and status == design_workflow.APPROVED,
-            'cancel': requester and status in design_workflow.TRANSITIONS['cancel'][0],
+            'send': requester and any(i['status'] == design_workflow.ITEM_APPROVED for i in items),
+            'cancel': requester and status in design_workflow.TRANSITIONS['cancel'][0]
+                      and all(i['submissions'] == 0 for i in items),
         })
     finally:
         cur.close()
@@ -10694,10 +10758,14 @@ def design_request_assign(request_id):
 @app.route('/api/design-requests/<int:request_id>/files', methods=['POST'])
 @perm('design_request.deliver')
 def design_request_upload(request_id):
-    """The designer's work: files (files[]) and/or a link."""
+    """The designer's work on one item (item_id): files (files[]) and/or a link."""
     link = (request.form.get('link') or '').strip()
     if link and not re.match(r'^https?://\S+$', link):
         return jsonify(success=False, error='A link starts with http:// or https://'), 400
+    try:
+        item_id = int(request.form.get('item_id'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error='Pick the item this work is for'), 400
     conn, cur = connection()
     try:
         dr, refusal = _design_load(cur, request_id)
@@ -10705,18 +10773,22 @@ def design_request_upload(request_id):
             return refusal
         if dr['designer_id'] != session.get('user_id'):
             return jsonify(success=False, error='Only the assigned designer uploads the work.'), 403
-        if dr['status'] not in design_workflow.UPLOAD_STATES:
-            return jsonify(success=False, error='The work cannot be changed now.'), 400
-        saved, refused = _design_save_files(cur, request_id, None, 'deliverable',
+        item, refusal = _design_item(cur, dr, item_id)
+        if refusal:
+            return refusal
+        if dr['status'] not in design_workflow.WORK_STATES or item['status'] not in design_workflow.ITEM_UPLOAD_STATES:
+            return jsonify(success=False, error='The work on this item cannot be changed now.'), 400
+        saved, refused = _design_save_files(cur, request_id, item_id, 'deliverable',
                                             request.files.getlist('files[]'))
         if link:
-            cur.execute("""INSERT INTO design_request_file (request_id, kind, link_url, uploaded_by)
-                           VALUES (%s, 'deliverable', %s, %s)""", (request_id, link[:1000], session.get('user_id')))
+            cur.execute("""INSERT INTO design_request_file (request_id, item_id, kind, link_url, uploaded_by)
+                           VALUES (%s, %s, 'deliverable', %s, %s)""",
+                        (request_id, item_id, link[:1000], session.get('user_id')))
             saved.append(link)
         if not saved:
             return jsonify(success=False, refused=refused,
                            error='Nothing was saved: PDF, images, Office or design files up to 20 MB, or a link.'), 400
-        _design_log(cur, request_id, 'uploaded', ', '.join(saved)[:1000])
+        _design_log(cur, request_id, 'uploaded', ('%s: %s' % (item['title'], ', '.join(saved)))[:1000])
         conn.commit()
         return jsonify(success=True, saved=saved, refused=refused)
     finally:
@@ -10727,16 +10799,16 @@ def design_request_upload(request_id):
 @app.route('/api/design-requests/<int:request_id>/files/<int:file_id>', methods=['DELETE'])
 @perm('design_request.deliver')
 def design_request_file_delete(request_id, file_id):
-    """Take back a deliverable before it is submitted."""
+    """Take back a draft deliverable; work already handed in stays as history."""
     conn, cur = connection()
     try:
         dr, refusal = _design_load(cur, request_id)
         if refusal:
             return refusal
-        if dr['designer_id'] != session.get('user_id') or dr['status'] not in design_workflow.UPLOAD_STATES:
+        if dr['designer_id'] != session.get('user_id') or dr['status'] not in design_workflow.WORK_STATES:
             return jsonify(success=False, error='The work cannot be changed now.'), 403
         cur.execute("""SELECT * FROM design_request_file WHERE id = %s AND request_id = %s
-                       AND kind = 'deliverable' AND uploaded_by = %s""",
+                       AND kind = 'deliverable' AND submission IS NULL AND uploaded_by = %s""",
                     (file_id, request_id, session.get('user_id')))
         f = cur.fetchone()
         if not f:
@@ -10755,33 +10827,82 @@ def design_request_file_delete(request_id, file_id):
         conn.close()
 
 
-@app.route('/api/design-requests/<int:request_id>/submit', methods=['POST'])
+def _design_item(cur, dr, item_id):
+    """One item of the request, or an error the route returns."""
+    cur.execute("SELECT * FROM design_request_item WHERE id = %s AND request_id = %s", (item_id, dr['id']))
+    item = cur.fetchone()
+    if not item:
+        return None, (jsonify(success=False, error='No such item'), 404)
+    return item, None
+
+
+def _design_item_step(request_id, item_id, action, check, apply, notify=None):
+    """
+    _design_step for one item: load, check who may, move the item, write the
+    log, store the request's state as its items now make it, tell the next person.
+    """
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        error = check(dr)
+        if error:
+            return jsonify(success=False, error=error), 403
+        item, refusal = _design_item(cur, dr, item_id)
+        if refusal:
+            return refusal
+        if dr['status'] not in design_workflow.WORK_STATES:
+            return jsonify(success=False, error='This request is %s.' % dr['status'].replace('_', ' ')), 400
+        try:
+            item_status = design_workflow.item_transition(item['status'], action)
+        except design_workflow.WorkflowError as e:
+            return jsonify(success=False, error=str(e)), 400
+        result = apply(cur, dr, item)
+        if isinstance(result, tuple):
+            return result
+        cur.execute("UPDATE design_request_item SET status = %s WHERE id = %s", (item_status, item_id))
+        status = _design_refresh_status(cur, dr)
+        conn.commit()
+        if notify:
+            notify(cur, dr, item)
+        return jsonify(success=True, status=status, item_status=item_status)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/design-requests/<int:request_id>/items/<int:item_id>/submit', methods=['POST'])
 @perm('design_request.deliver')
-def design_request_submit(request_id):
-    """The designer hands the work to the Design Manager."""
+def design_request_submit(request_id, item_id):
+    """The designer hands one item's work to the Design Manager."""
     def check(dr):
         return None if dr['designer_id'] == session.get('user_id') else 'Only the assigned designer submits the work.'
 
-    def apply(cur, dr, status):
-        cur.execute("SELECT COUNT(*) AS n FROM design_request_file WHERE request_id = %s AND kind = 'deliverable'",
-                    (request_id,))
-        if not cur.fetchone()['n']:
-            return jsonify(success=False, error='Upload the work (a file or a link) first.'), 400
+    def apply(cur, dr, item):
+        # The drafts become this round; a returned item needs new work.
+        n = cur.execute("""UPDATE design_request_file SET submission = %s
+                           WHERE item_id = %s AND kind = 'deliverable' AND submission IS NULL""",
+                        (item['submissions'] + 1, item['id']))
+        if not n:
+            return jsonify(success=False, error='Upload the work (a file or a link) for this item first.'), 400
+        cur.execute("""UPDATE design_request_item SET submissions = submissions + 1, submitted_at = NOW()
+                       WHERE id = %s""", (item['id'],))
         cur.execute("UPDATE design_request SET submitted_at = NOW() WHERE id = %s", (request_id,))
-        _design_log(cur, request_id, 'submitted_for_approval')
+        _design_log(cur, request_id, 'submitted_for_approval', item['title'])
 
-    def notify(cur, dr):
+    def notify(cur, dr, item):
         _design_notify(users_holding('design_request.approve'), request_id,
                        'Design request #%d waits for your approval' % request_id,
-                       '%s submitted the work on design request #%d.' % (session.get('name'), request_id))
+                       '%s submitted "%s" on design request #%d.' % (session.get('name'), item['title'], request_id))
 
-    return _design_step(request_id, 'submit', check, apply, notify)
+    return _design_item_step(request_id, item_id, 'submit', check, apply, notify)
 
 
-@app.route('/api/design-requests/<int:request_id>/decide', methods=['POST'])
+@app.route('/api/design-requests/<int:request_id>/items/<int:item_id>/decide', methods=['POST'])
 @perm('design_request.approve')
-def design_request_decide(request_id):
-    """The Design Manager approves the work or sends it back with a note."""
+def design_request_decide(request_id, item_id):
+    """The Design Manager approves one item's work or sends it back with a note."""
     data = request.get_json(silent=True) or {}
     decision = data.get('decision')
     note = (data.get('note') or '').strip()
@@ -10790,43 +10911,59 @@ def design_request_decide(request_id):
     if decision == 'changes' and not note:
         return jsonify(success=False, error='Say what needs changing'), 400
 
-    def apply(cur, dr, status):
-        cur.execute("""UPDATE design_request SET decided_by = %s, decided_at = NOW(), decision_note = %s
-                       WHERE id = %s""", (session.get('user_id'), note[:1000] or None, request_id))
-        _design_log(cur, request_id, 'approved' if decision == 'approve' else 'changes_requested', note)
+    def apply(cur, dr, item):
+        cur.execute("""UPDATE design_request_item SET decided_by = %s, decided_at = NOW(), decision_note = %s
+                       WHERE id = %s""", (session.get('user_id'), note[:1000] or None, item['id']))
+        cur.execute("UPDATE design_request SET decided_by = %s, decided_at = NOW() WHERE id = %s",
+                    (session.get('user_id'), request_id))
+        _design_log(cur, request_id, 'approved' if decision == 'approve' else 'changes_requested',
+                    item['title'] + (': ' + note if note else ''))
 
-    def notify(cur, dr):
+    def notify(cur, dr, item):
         if decision == 'approve':
-            _design_notify([dr['created_by']], request_id, 'Design request #%d is approved' % request_id,
-                           'Design approved the work. Open it to send it to Operation.')
-            notify_users([dr['designer_id']], 'Design request #%d approved' % request_id,
+            _design_notify([dr['created_by']], request_id, 'Design approved "%s"' % item['title'],
+                           'Design request #%d: open it to send the approved work to Operation.' % request_id)
+            notify_users([dr['designer_id']], 'Design request #%d: "%s" approved' % (request_id, item['title']),
                          '%s approved your work.' % session.get('name'),
                          link='/design-requests?open=%d' % request_id, category='announcement')
         else:
-            _design_notify([dr['designer_id']], request_id, 'Changes on design request #%d' % request_id,
+            _design_notify([dr['designer_id']], request_id, 'Changes on "%s"' % item['title'],
                            '%s: %s' % (session.get('name'), note[:200]))
 
-    return _design_step(request_id, decision, lambda dr: None, apply, notify)
+    return _design_item_step(request_id, item_id, decision, lambda dr: None, apply, notify)
 
 
 @app.route('/api/design-requests/<int:request_id>/send', methods=['POST'])
 @perm('design_request.create')
 def design_request_send(request_id):
-    """The requester sends the approved work on to Operation."""
-    def check(dr):
-        return None if _design_requester_side(dr) else 'Only the requester sends it to Operation.'
-
-    def apply(cur, dr, status):
-        cur.execute("UPDATE design_request SET sent_by = %s, sent_at = NOW() WHERE id = %s",
-                    (session.get('user_id'), request_id))
-        _design_log(cur, request_id, 'sent_to_operation')
-
-    def notify(cur, dr):
+    """The requester sends every approved item on to Operation."""
+    conn, cur = connection()
+    try:
+        dr, refusal = _design_load(cur, request_id)
+        if refusal:
+            return refusal
+        if not _design_requester_side(dr):
+            return jsonify(success=False, error='Only the requester sends it to Operation.'), 403
+        cur.execute("SELECT id, title FROM design_request_item WHERE request_id = %s AND status = %s",
+                    (request_id, design_workflow.ITEM_APPROVED))
+        items = cur.fetchall()
+        if dr['status'] not in design_workflow.WORK_STATES or not items:
+            return jsonify(success=False, error='Nothing approved to send yet.'), 400
+        me = session.get('user_id')
+        cur.execute("""UPDATE design_request_item SET status = %s, sent_by = %s, sent_at = NOW()
+                       WHERE request_id = %s AND status = %s""",
+                    (design_workflow.ITEM_SENT, me, request_id, design_workflow.ITEM_APPROVED))
+        cur.execute("UPDATE design_request SET sent_by = %s, sent_at = NOW() WHERE id = %s", (me, request_id))
+        _design_log(cur, request_id, 'sent_to_operation', ', '.join(i['title'] for i in items)[:1000])
+        status = _design_refresh_status(cur, dr)
+        conn.commit()
         _design_notify(users_holding('design_request.operate'), request_id,
                        'Design request #%d sent to Operation' % request_id,
-                       '%s sent the approved design to Operation.' % session.get('name'))
-
-    return _design_step(request_id, 'send', check, apply, notify)
+                       '%s sent %d approved design item(s) to Operation.' % (session.get('name'), len(items)))
+        return jsonify(success=True, status=status, sent=len(items))
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route('/api/design-requests/<int:request_id>/cancel', methods=['POST'])
@@ -10837,6 +10974,10 @@ def design_request_cancel(request_id):
         return None if _design_requester_side(dr) else 'Only the requester cancels it.'
 
     def apply(cur, dr, status):
+        cur.execute("SELECT 1 FROM design_request_item WHERE request_id = %s AND submissions > 0 LIMIT 1",
+                    (request_id,))
+        if cur.fetchone():
+            return jsonify(success=False, error='Work was already handed in; it cannot be cancelled now.'), 400
         _design_log(cur, request_id, 'cancelled')
 
     def notify(cur, dr):
@@ -16945,9 +17086,20 @@ def upload_access_allowed(cur, parts):
     if folder == 'sales_requests':
         return _request_file_allowed(cur, owner_id)
     if folder == 'design' and owner_id is not None:
-        cur.execute("SELECT created_by, designer_id, status FROM design_request WHERE id = %s", (owner_id,))
+        cur.execute("SELECT created_by, designer_id, status, sent_at FROM design_request WHERE id = %s", (owner_id,))
         row = cur.fetchone()
-        return bool(row) and design_request_visible(row)
+        if not row or not design_request_visible(row):
+            return False
+        if not _design_ops_only(row):
+            return True
+        # Operation: the final round of a sent item (or work from before items had their own).
+        cur.execute("""SELECT 1 FROM design_request_file f
+                       LEFT JOIN design_request_item i ON i.id = f.item_id
+                       WHERE f.request_id = %s AND f.file_url = %s AND f.kind = 'deliverable'
+                         AND (f.item_id IS NULL
+                              OR (i.status = 'sent' AND f.submission = i.submissions))""",
+                    (owner_id, '/uploads/' + '/'.join(parts)))
+        return bool(cur.fetchone())
     return False
 
 

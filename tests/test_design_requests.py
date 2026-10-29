@@ -54,7 +54,7 @@ class DesignRequestTest(_CostingHarness):
         cur.close()
         return user_id
 
-    def _create(self, actor=None, items=None, files=None):
+    def _create(self, actor=None, items=None, files=None, extra=None):
         data = {'discipline': '2d', 'client_id': self.client_id, 'deadline': '2026-11-20',
                 'event_date': '2026-11-25',
                 'items': items or [
@@ -64,6 +64,7 @@ class DesignRequestTest(_CostingHarness):
                     {'category': 'video', 'title': 'Teaser', 'size_h': '1080', 'size_w': '1920',
                      'duration': '30 s', 'quantity': '9'},
                 ]}
+        data.update(extra or {})
         form = {'data': json.dumps(data)}
         form.update(files or {})
         return self._client_for(actor or self.requester).post('/api/design-requests', data=form,
@@ -99,36 +100,85 @@ class DesignRequestTest(_CostingHarness):
         self.assertEqual(self._post(self.design_head, rid, 'assign', {'designer_id': self.designer}).get_json()['status'],
                          'assigned')
 
-        # Only the assigned designer uploads, and not with nothing uploaded.
-        work = lambda who: self._client_for(who).post(
-            '/api/design-requests/%d/files' % rid, content_type='multipart/form-data',
-            data={'files[]': (io.BytesIO(b'jpg'), 'design.jpg'), 'link': 'https://drive.example.com/x'})
-        self.assertEqual(self._post(self.designer, rid, 'submit').status_code, 400)
-        self.assertEqual(work(self.designer_b).status_code, 403)
-        self.assertEqual(work(self.designer).get_json()['saved'], ['design.jpg', 'https://drive.example.com/x'])
-        self.assertEqual(self._post(self.designer_b, rid, 'submit').status_code, 403)
-        self.assertEqual(self._post(self.designer, rid, 'submit').get_json()['status'], 'in_review')
+        d = self._detail(self.designer, rid).get_json()['request']
+        backdrop, teaser = [i['id'] for i in d['items']]
 
-        # The Design Manager decides; a design head is not the manager.
-        self.assertEqual(self._post(self.design_head, rid, 'decide', {'decision': 'approve'}).status_code, 403)
-        self.assertEqual(self._post(self.manager, rid, 'decide', {'decision': 'changes'}).status_code, 400)
-        self.assertEqual(self._post(self.manager, rid, 'decide', {'decision': 'changes', 'note': 'Bigger logo'})
-                         .get_json()['status'], 'changes')
-        self.assertEqual(self._post(self.designer, rid, 'submit').get_json()['status'], 'in_review')
+        # Only the assigned designer uploads, to one item, and submits only with work.
+        def work(who, item, name='design.jpg', link=None):
+            data = {'item_id': str(item), 'files[]': (io.BytesIO(b'jpg-' + name.encode()), name)}
+            if link:
+                data['link'] = link
+            return self._client_for(who).post('/api/design-requests/%d/files' % rid,
+                                              content_type='multipart/form-data', data=data)
+        item = lambda who, i, step, body=None: self._post(who, rid, 'items/%d/%s' % (i, step), body)
+        self.assertEqual(item(self.designer, backdrop, 'submit').status_code, 400)
+        self.assertEqual(work(self.designer_b, backdrop).status_code, 403)
+        self.assertEqual(work(self.designer, backdrop, 'v1.jpg', 'https://drive.example.com/x').get_json()['saved'],
+                         ['v1.jpg', 'https://drive.example.com/x'])
+        self.assertEqual(item(self.designer_b, backdrop, 'submit').status_code, 403)
+        r = item(self.designer, backdrop, 'submit').get_json()
+        self.assertEqual((r['item_status'], r['status']), ('in_review', 'in_review'))
+        # The other item is still being worked on; it does not hold this one up.
+        self.assertEqual(work(self.designer, teaser, 'teaser.jpg').status_code, 200)
+
+        # The Design Manager decides per item; a design head is not the manager.
+        self.assertEqual(item(self.design_head, backdrop, 'decide', {'decision': 'approve'}).status_code, 403)
+        self.assertEqual(item(self.manager, backdrop, 'decide', {'decision': 'changes'}).status_code, 400)
+        self.assertEqual(item(self.manager, backdrop, 'decide', {'decision': 'changes', 'note': 'Bigger logo'})
+                         .get_json()['item_status'], 'changes')
+        # A returned item needs new work before it goes back.
+        self.assertEqual(item(self.designer, backdrop, 'submit').status_code, 400)
+        self.assertEqual(work(self.designer, backdrop, 'v2.jpg').status_code, 200)
+        self.assertEqual(item(self.designer, backdrop, 'submit').get_json()['item_status'], 'in_review')
         self.assertEqual(self._post(self.requester, rid, 'send').status_code, 400)
-        self.assertEqual(self._post(self.manager, rid, 'decide', {'decision': 'approve'}).get_json()['status'],
-                         'approved')
+        r = item(self.manager, backdrop, 'decide', {'decision': 'approve'}).get_json()
+        self.assertEqual((r['item_status'], r['status']), ('approved', 'assigned'))
 
-        # Operations sees nothing until it is sent; then it does.
+        # Operations sees nothing until something is sent; then only that item's final round.
         self.assertEqual(self._detail(self.member, rid).status_code, 403)
         self.assertEqual(self._post(self.other_requester, rid, 'send').status_code, 403)
+        self.assertEqual(self._post(self.requester, rid, 'send').get_json()['sent'], 1)
+        ops = self._detail(self.member, rid).get_json()['request']
+        self.assertEqual([i['title'] for i in ops['items']], ['Backdrop'])
+        self.assertEqual([f['name'] for f in ops['items'][0]['final']], ['v2.jpg'])
+        self.assertEqual((ops['items'][0]['history'], ops['items'][0]['drafts'], ops['log']), ([], [], []))
+        self.assertIn(rid, [q['id'] for q in self._client_for(self.member).get('/api/design-requests').get_json()['requests']])
+
+        # The requester still sees every round.
+        full = self._detail(self.requester, rid).get_json()['request']['items'][0]
+        self.assertEqual([[f['name'] for f in h['files']] for h in full['history']],
+                         [['v1.jpg', 'https://drive.example.com/x']])
+        urls = {f['name']: f['url'] for f in full['history'][0]['files'] + full['final']}
+        get = lambda who, url: self._client_for(who).get(url)
+        self.assertEqual(get(self.member, urls['v2.jpg']).status_code, 200)
+        self.assertEqual(get(self.member, urls['v1.jpg']).status_code, 403)
+        self.assertEqual(get(self.requester, urls['v1.jpg']).status_code, 200)
+
+        # Handed-in work stays; only drafts can be taken back.
+        old = full['history'][0]['files'][0]['id']
+        self.assertEqual(self._client_for(self.designer).delete('/api/design-requests/%d/files/%d' % (rid, old)).status_code, 404)
+
+        # The teaser finishes later and goes the same way; the request is done when both are sent.
+        item(self.designer, teaser, 'submit')
+        item(self.manager, teaser, 'decide', {'decision': 'approve'})
         self.assertEqual(self._post(self.requester, rid, 'send').get_json()['status'], 'sent_to_operation')
-        self.assertEqual(self._detail(self.member, rid).status_code, 200)
-        ops = self._client_for(self.member).get('/api/design-requests').get_json()['requests']
-        self.assertIn(rid, [q['id'] for q in ops])
         actions = [l['action'] for l in self._detail(self.requester, rid).get_json()['request']['log']]
-        self.assertEqual(actions, ['submitted', 'assigned', 'uploaded', 'submitted_for_approval',
-                                   'changes_requested', 'submitted_for_approval', 'approved', 'sent_to_operation'])
+        self.assertEqual(actions, ['submitted', 'assigned', 'uploaded', 'submitted_for_approval', 'uploaded',
+                                   'changes_requested', 'uploaded', 'submitted_for_approval', 'approved',
+                                   'sent_to_operation', 'submitted_for_approval', 'approved', 'sent_to_operation'])
+
+    def test_several_brief_files_and_a_job_code(self):
+        cur = self._cursor()
+        cur.execute("UPDATE sales_request SET owner_user_id = %s WHERE id = %s", (self.requester, self.request_id))
+        cur.close()
+        r = self._create(files={'files_0': [(io.BytesIO(b'a'), 'a.pdf'), (io.BytesIO(b'b'), 'b.png')]},
+                         extra={'sales_request_id': self.request_id})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        d = self._detail(self.requester, r.get_json()['id']).get_json()['request']
+        self.assertEqual([f['name'] for f in d['items'][0]['files']], ['a.pdf', 'b.png'])
+        self.assertEqual(d['sales_request']['id'], self.request_id)
+        # A sales request the requester cannot see is refused.
+        self.assertEqual(self._create(actor=self.other_requester, extra={'sales_request_id': self.request_id}).status_code, 400)
 
     def test_scope(self):
         rid = self._create().get_json()['id']
@@ -145,6 +195,13 @@ class DesignRequestTest(_CostingHarness):
 
     def test_cancel_only_before_work_is_submitted(self):
         rid = self._create().get_json()['id']
+        self._post(self.design_head, rid, 'assign', {'designer_id': self.designer})
+        first = self._detail(self.designer, rid).get_json()['request']['items'][0]['id']
+        self._client_for(self.designer).post('/api/design-requests/%d/files' % rid, content_type='multipart/form-data',
+                                             data={'item_id': str(first), 'files[]': (io.BytesIO(b'x'), 'x.jpg')})
+        self._post(self.designer, rid, 'items/%d/submit' % first)
+        self.assertEqual(self._post(self.requester, rid, 'cancel').status_code, 400)
+        rid = self._create().get_json()['id']
         self.assertEqual(self._post(self.designer, rid, 'cancel').status_code, 403)
         self.assertEqual(self._post(self.requester, rid, 'cancel').get_json()['status'], 'cancelled')
         self.assertEqual(self._post(self.design_head, rid, 'assign', {'designer_id': self.designer}).status_code, 400)
@@ -160,6 +217,9 @@ class DesignRequestTest(_CostingHarness):
         self.assertEqual(design_workflow.transition('changes', 'assign'), 'changes')
         with self.assertRaises(design_workflow.WorkflowError):
             design_workflow.transition('approved', 'cancel')
+        with self.assertRaises(design_workflow.WorkflowError):
+            design_workflow.item_transition('open', 'approve')
+        self.assertEqual(design_workflow.request_status('assigned', True, ['sent', 'in_review']), 'in_review')
         item = design_workflow.clean_item({'category': 'social_media', 'title': 'Post', 'size_h': '5'})
         self.assertIsNone(item['size_h'])
 

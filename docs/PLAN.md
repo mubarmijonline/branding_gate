@@ -1158,3 +1158,24 @@ Files: `static/js/bg-chat.js`, `static/css/bg-chat.css`, `static/i18n/ar.js`.
   (current password required, 8+ characters), latest activity from the logs
   (action and request only, no amounts). Menu "Profile" / "Change password"
   link to it. Test: `tests/test_profile.py`.
+
+## 2026-10-30 Design requests, round 2 (Gamal)
+
+1. Brief attachments: pick files more than once (different folders); the
+   form keeps a list per item with remove buttons, sent as `files_<n>`.
+2. Work per item: each deliverable belongs to an item. Items carry their own
+   state (open -> in_review -> changes/approved -> sent). The designer uploads
+   and submits one item at a time; the Design Manager approves or returns one
+   item at a time; the requester sends the approved items to Operation.
+   The request's status is derived from its items (design_workflow.
+   request_status) and stored, so the list and filters stay as they are.
+3. Job code: the request header takes an optional Sales Request (the job's
+   number, which expenses and costing already use). Options list the sales
+   requests the requester may see, narrowed to the picked client.
+4. Operation sees only the final approved files: each submit stamps the
+   item's draft files with a submission number; the final set is the last
+   submission of a sent item. An Operation-only viewer gets sent items with
+   their final files, no drafts, no earlier rounds, no history; the uploads
+   route refuses them any other design file.
+Migration: design_request_items_flow_migration.sql (item state columns,
+file.submission, design_request.sales_request_id, backfill of request 117).
