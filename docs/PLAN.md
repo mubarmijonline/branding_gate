@@ -1248,3 +1248,17 @@ were still in the database; the form just never showed them.
    Expand all / Collapse all, status chips and the activity flow trimmed to
    the latest entries with "Show all".
 Tests: tests/test_item_edit_recost.py.
+
+## 2026-10-30 Add / Edit request form, phone and desktop
+
+One scoped layer (`.sr-form` on both modals, end of the first style block in
+sales_request.html) instead of more per-element fixes: white section cards
+with a title accent, request types as a compact chip grid (2 columns on a
+phone, descriptions hidden), the edit form's "Template Fields" title no
+longer borrows the coloured template header class (it rendered as an
+unreadable grey bar), template groups as one card with a coloured edge,
+item card header as a grid on a phone (toggle, number, stage, actions; name,
+quantity and size underneath), width/height/depth on one line, date inputs
+held to the screen width on iOS. The edit form's disabled "Request
+Template" select is hidden (still posted); company and client take half
+the row each in both forms.

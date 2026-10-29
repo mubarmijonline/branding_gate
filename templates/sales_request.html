@@ -3476,9 +3476,112 @@
     .modal .item-row.item-card.is-recost { border-left-color:#d97706; }
     .modal .item-row.item-card.is-new { border-left-color:#1cc88a; }
     .btn-recost-item { white-space:nowrap; }
-    @media (max-width: 576px) {
-        .modal .item-row.item-card > .item-header { flex-wrap:wrap; }
-        .modal .item-row.item-card .item-summary { flex-basis:100%; order:5; }
+
+    /* ===== Add / Edit request form: one look, phone first (2026-10-30) =====
+       The form had grown three generations of styles: a 13-row list of
+       request types on a phone, a grey bar with unreadable text, borders
+       nested four deep, date boxes wider than the screen on iPhone. One
+       scoped layer, so the rest of the page is untouched. */
+    .sr-form .modal-content { background:#f4f6fb; border:0; }
+    .sr-form .modal-header { background:#fff; border-bottom:1px solid #e3e6f0; }
+    .sr-form .modal-title { font-weight:700; color:#1f2d3d; }
+    .sr-form .modal-footer { background:#fff; border-top:1px solid #e3e6f0; }
+    .sr-form .modal-body { padding:16px 18px; }
+    .sr-form form > .card { border:1px solid #e3e6f0; border-radius:12px; overflow:hidden;
+        box-shadow:0 1px 3px rgba(15,23,42,.05); background:#fff; }
+    .sr-form form > .card > .card-header { background:#fff !important; color:#1f2d3d !important;
+        border-bottom:1px solid #eef0f5; padding:12px 16px; }
+    .sr-form form > .card > .card-header h6 { font-weight:700; font-size:15px; display:flex; align-items:center; }
+    .sr-form form > .card > .card-header h6::before { content:''; width:4px; height:16px; border-radius:2px;
+        background:#4e73df; margin-right:10px; flex-shrink:0; }
+    .sr-form form > .card > .card-body { padding:16px; }
+    .sr-form label, .sr-form .form-label { font-weight:600; color:#3a3f51; font-size:13px; margin-bottom:4px; }
+    .sr-form .form-control { border-radius:8px; border-color:#d6dae3; min-height:42px; }
+    .sr-form .form-control:focus { border-color:#4e73df; box-shadow:0 0 0 3px rgba(78,115,223,.15); }
+    .sr-form textarea.form-control { min-height:0; }
+    /* iOS draws a date box at its own width and it ran off the screen. */
+    .sr-form input[type="date"] { -webkit-appearance:none; appearance:none; display:block; width:100%;
+        min-width:0; max-width:100%; text-align:left; background:#fff; }
+    .sr-form input[type="date"]::-webkit-date-and-time-value { text-align:left; }
+
+    /* Request types: compact chips in a grid instead of tall cards. */
+    .sr-form .request-types-container { display:grid; grid-template-columns:repeat(auto-fill, minmax(175px, 1fr));
+        gap:8px; padding:10px; margin:6px 0; border:1px solid #e3e6f0; border-radius:10px; background:#f8f9fc; }
+    .sr-form .request-types-container > .row,
+    .sr-form .request-types-container > .row > [class*="col-"] { display:contents; }
+    .sr-form .request-types-container .custom-control { margin:0 !important; padding:0; min-height:0; }
+    .sr-form .request-types-container .custom-control-label::before,
+    .sr-form .request-types-container .custom-control-label::after { display:none; }
+    .sr-form .request-type-label { display:flex; flex-wrap:wrap; align-items:center; gap:0 6px; height:100%;
+        padding:9px 30px 9px 12px; border:1px solid #d6dae3; border-radius:10px; background:#fff;
+        box-shadow:none; transform:none !important; font-size:13px; font-weight:600; color:#2c3e50; position:relative; }
+    .sr-form .request-type-label i { margin-right:2px !important; color:#4e73df; width:16px; text-align:center; }
+    .sr-form .request-type-label small { flex-basis:100%; font-size:11px; font-weight:400; margin-left:24px; line-height:1.3; }
+    .sr-form .request-type-label:hover { background:#f2f5ff; border-color:#9fb2f0; box-shadow:none; }
+    .sr-form .request-type-checkbox:checked ~ .request-type-label { background:#eef2ff; color:#253b93;
+        border-color:#4e73df; box-shadow:0 0 0 1px #4e73df inset; }
+    .sr-form .request-type-checkbox:checked ~ .request-type-label .fa,
+    .sr-form .request-type-checkbox:checked ~ .request-type-label i { color:#4e73df; }
+    .sr-form .request-type-checkbox:checked ~ .request-type-label .text-muted { color:#5a6fb8 !important; }
+    .sr-form .request-type-checkbox:checked ~ .request-type-label::after { display:block; content:'\f00c';
+        font-family:'Font Awesome 5 Free'; font-weight:900; position:absolute; top:9px; right:10px; left:auto;
+        width:auto; height:auto; background:none !important; color:#4e73df; font-size:12px; }
+
+    /* Section titles above the template fields. */
+    .sr-form .template-fields-header-container h5, .sr-form .sr-section-title h6 { font-size:15px; font-weight:700;
+        color:#1f2d3d !important; margin:6px 0 2px; }
+    .sr-form .template-fields-header-container small, .sr-form .sr-section-title p { font-size:12px; font-weight:400;
+        color:#858796 !important; margin:0 0 10px; }
+    .sr-form .template-fields-header-container .fas, .sr-form .sr-section-title .fas { color:#4e73df; }
+
+    /* One request type's fields and items: a card with a coloured edge, not a
+       box inside a box inside a box. */
+    .sr-form .template-fields-group { border-width:1px !important; border-left-width:5px !important;
+        border-radius:12px !important; box-shadow:0 1px 3px rgba(15,23,42,.06) !important; margin-bottom:16px !important; }
+    .sr-form .template-fields-header { padding:12px 16px !important; font-size:1rem !important; }
+    .sr-form .template-fields-header small { color:#fff !important; opacity:.85 !important; }
+    .sr-form .template-fields-content { padding:16px !important; background:#fff !important; }
+    .sr-form .items-section { margin-top:12px !important; }
+    .sr-form .items-section-header-sticky { background:#fff !important; border:1px solid #e3e6f0 !important;
+        border-radius:10px !important; padding:8px 12px !important; margin-bottom:8px !important; gap:8px; top:-1px !important; }
+    .sr-form .items-section-header-sticky h5 { font-size:15px; display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+    .sr-form .items-container { padding:0 !important; background:transparent !important; }
+    .sr-form .items-section-footer { background:transparent !important; }
+
+    /* Item fields: what belongs together sits together. */
+    .sr-form .item-card .dimension-checkboxes { display:flex; flex-wrap:wrap; gap:8px; }
+    .sr-form .request-type-label { flex-wrap:nowrap; }
+    .sr-form .request-type-label small { display:none !important; }
+    .sr-form .item-card .dimension-checkbox { margin:0 !important; }
+
+    @media (max-width: 768px) {
+        .sr-form .modal-body { padding:10px; }
+        .sr-form .modal-header { position:sticky; top:0; z-index:30; }
+        .sr-form form > .card > .card-body { padding:12px; }
+        .sr-form .request-types-container { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; padding:6px; }
+        .sr-form .request-type-label { padding:8px 26px 8px 10px; font-size:12.5px; }
+        .sr-form .request-type-label small { display:none !important; }
+        .sr-form .template-fields-content { padding:12px !important; }
+        .sr-form .template-fields-group { border-left-width:4px !important; }
+        .sr-form .items-section-header-sticky h5 { font-size:14px; }
+        .sr-form .items-section-header-sticky .badge-info { display:none; }
+        .sr-form .items-section-header-sticky .add-item-per-type-btn { white-space:nowrap; padding:6px 10px; }
+        /* Size and the numbers next to it on one line, not three. */
+        .sr-form .item-card .item-fields .row { margin-left:-4px; margin-right:-4px; }
+        .sr-form .item-card .item-fields .row > [class*="col-"] { padding-left:4px; padding-right:4px; }
+        .sr-form .item-card .item-fields .row > .col-md-4 { flex:0 0 33.333%; max-width:33.333%; padding-left:4px; padding-right:4px; }
+        .sr-form .item-card .item-fields .row > .col-md-3 { flex:0 0 50%; max-width:50%; }
+        .sr-form .item-card .item-fields .form-control { text-align:left; }
+        /* Item card header: [>] #n  stage  [actions] / name, qty, size */
+        .modal .item-row.item-card > .item-header { display:grid !important; gap:4px 8px;
+            grid-template-columns:auto auto 1fr auto; grid-template-areas:'tog num state act' 'sum sum sum sum'; }
+        .modal .item-row.item-card .btn-toggle-item { grid-area:tog; }
+        .modal .item-row.item-card .item-number { grid-area:num; }
+        .modal .item-row.item-card .item-state { grid-area:state; justify-self:end; }
+        .modal .item-row.item-card .item-actions { grid-area:act; width:auto !important; justify-content:flex-end; }
+        .modal .item-row.item-card .item-summary { grid-area:sum; flex-basis:auto; order:0; white-space:nowrap; }
+        .sr-form .modal-footer { flex-wrap:wrap; }
+        #addRequestModal.sr-form .modal-footer > :first-child:not(.btn) { flex-basis:100%; text-align:center; }
     }
 </style>
 <script>
@@ -3796,7 +3899,7 @@ window.chartPieDemo = function() {
     </div>
 
     <!-- Add Request Modal -->
-    <div class="modal fade" id="addRequestModal" tabindex="-1" role="dialog" aria-labelledby="addRequestModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+    <div class="modal fade sr-form" id="addRequestModal" tabindex="-1" role="dialog" aria-labelledby="addRequestModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
         <div class="modal-dialog modal-xl" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -3957,7 +4060,7 @@ window.chartPieDemo = function() {
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-md-3">
+                                    <div class="col-md-6">
                                         <div class="form-group sales-party-field">
                                             <label for="companySelect">Company (Optional)</label>
                                             <select class="form-control sales-party-select" id="companySelect" name="company_id">
@@ -3967,7 +4070,7 @@ window.chartPieDemo = function() {
                                             <small class="form-text text-muted">Leave empty to use client's parent company</small>
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-6">
                                         <div class="form-group sales-party-field">
                                             <label for="clientSelect">Client <span class="text-danger">*</span></label>
                                             <select class="form-control sales-party-select" id="clientSelect" name="client_id" required>
@@ -4081,7 +4184,7 @@ window.chartPieDemo = function() {
     </div>
 
     <!-- Edit Request Modal -->
-    <div class="modal fade" id="editRequestModal" tabindex="-1" role="dialog" aria-labelledby="editRequestModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+    <div class="modal fade sr-form" id="editRequestModal" tabindex="-1" role="dialog" aria-labelledby="editRequestModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
         <div class="modal-dialog modal-xl" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -4101,7 +4204,7 @@ window.chartPieDemo = function() {
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <div class="form-group sales-party-field">
                                             <label for="editCompanySelect">Company (Optional)</label>
                                             <select class="form-control sales-party-select" id="editCompanySelect" name="company_id">
@@ -4111,7 +4214,7 @@ window.chartPieDemo = function() {
                                             <small class="form-text text-muted">Leave empty to use client's parent company</small>
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <div class="form-group sales-party-field">
                                             <label for="editClientSelect">Client <span class="text-danger">*</span></label>
                                             <select class="form-control sales-party-select" id="editClientSelect" name="client_id" required>
@@ -4120,7 +4223,7 @@ window.chartPieDemo = function() {
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-4 d-none">
                                         <div class="form-group">
                                             <label for="editTemplateSelect">Request Template</label>
                                             <select class="form-control" id="editTemplateSelect" name="template_id" disabled>
@@ -4305,12 +4408,9 @@ window.chartPieDemo = function() {
 
                                 <!-- Template Fields Section -->
                                 <div id="editTemplateFieldsContainer" class="mt-4" style="display: none;">
-                                    <div class="template-fields-header">
-                                        <h6 class="text-primary">
-                                            <i class="fas fa-clipboard-list mr-2"></i>
-                                            Template Fields
-                                        </h6>
-                                        <p class="text-muted small mb-3">Complete the template-specific fields below based on your selected request types.</p>
+                                    <div class="sr-section-title">
+                                        <h6><i class="fas fa-clipboard-list mr-2"></i>Template Fields</h6>
+                                        <p>Complete the template-specific fields below based on your selected request types.</p>
                                     </div>
                                     <div id="editTemplateFieldsContent">
                                         <!-- Template fields will be loaded here dynamically -->
