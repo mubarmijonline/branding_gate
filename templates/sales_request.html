@@ -3852,24 +3852,6 @@ window.chartPieDemo = function() {
 
             <div class="table-responsive sales-request-table-wrap">
                 <table id="requests-table" data-mobile="scroll" class="display table table-bordered sales-request-data-table {% if 'sales_item.cost' in _p %}sales-request-table-admin{% else %}sales-request-table-standard{% endif %}">
-                    <colgroup>
-                        <col class="srq-col-id">
-                        <col class="srq-col-title">
-                        <col class="srq-col-created">
-                        <col class="srq-col-types">
-                        <col class="srq-col-client">
-                        <col class="srq-col-company">
-                        <col class="srq-col-priority">
-                        <col class="srq-col-status">
-                        <col class="srq-col-date">
-                        <col class="srq-col-date">
-                        <col class="srq-col-items">
-                        {% if 'sales_item.cost' in _p %}<col class="srq-col-costed">{% endif %}
-                        {% if 'sales_item.cost' in _p %}<col class="srq-col-money">{% endif %}
-                        <col class="srq-col-money">
-                        <col class="srq-col-approval">
-                        <col class="srq-col-actions">
-                    </colgroup>
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -5064,7 +5046,6 @@ window.chartPieDemo = function() {
         },
         {
             "data": "client_approval_stage",
-            "width": "210px",
             "className": "approval-status-cell",
             "render": function(data, type, row) {
                 // Get approval statistics from row data
@@ -15301,35 +15282,33 @@ function loadItemPriceHistory(itemId) {
     touch-action: pan-y;
   }
 
-  .sales-request-table-wrap #requests-table.sales-request-table-admin {
-    width: 2360px !important;
-    min-width: 2360px !important;
-  }
-
-  .sales-request-table-wrap #requests-table.sales-request-table-standard {
-    width: 2050px !important;
-    min-width: 2050px !important;
-  }
-
   .sales-request-table-wrap #requests-table {
     table-layout: fixed !important;
     margin-bottom: 0 !important;
   }
 
-  #requests-table col.srq-col-id { width: 70px; }
-  #requests-table col.srq-col-title { width: 230px; }
-  #requests-table col.srq-col-types { width: 160px; }
-  #requests-table col.srq-col-client { width: 150px; }
-  #requests-table col.srq-col-company { width: 150px; }
-  #requests-table col.srq-col-priority { width: 110px; }
-  #requests-table col.srq-col-status { width: 130px; }
-  #requests-table col.srq-col-date { width: 120px; }
-  #requests-table col.srq-col-items { width: 90px; }
-  #requests-table col.srq-col-costed { width: 160px; }
-  #requests-table col.srq-col-money { width: 150px; }
-  #requests-table col.srq-col-approval { width: 210px; }
-  #requests-table col.srq-col-created { width: 160px; }
-  #requests-table col.srq-col-actions { width: 200px; }
+  /* Widths come from each column's own header (DataTables "width"), so they
+     follow the column when it is moved, hidden or reordered. A fixed
+     <colgroup> did not: Client Approval sat in Priority's 110px slot.
+     Client Approval is the column people scan for (Gamal), so it grows with
+     the screen, and the table grows with it. */
+  @media (min-width: 769px) {
+    .sales-request-table-wrap #requests-table th.approval-status-cell,
+    .sales-request-table-wrap #requests-table td.approval-status-cell {
+      width: clamp(240px, 16vw, 340px) !important;
+    }
+    .sales-request-table-wrap #requests-table.sales-request-table-admin {
+      width: calc(2150px + clamp(240px, 16vw, 340px)) !important;
+    }
+    .sales-request-table-wrap #requests-table.sales-request-table-standard {
+      width: calc(1840px + clamp(240px, 16vw, 340px)) !important;
+    }
+    /* Stage and progress each on one line, breakdown chips side by side. */
+    #requests-table td.approval-status-cell .request-stage-badge,
+    #requests-table td.approval-status-cell .request-stage-progress {
+      white-space: nowrap;
+    }
+  }
 
   .sales-request-table-wrap #requests-table th,
   .sales-request-table-wrap #requests-table td {

@@ -1262,3 +1262,15 @@ quantity and size underneath), width/height/depth on one line, date inputs
 held to the screen width on iOS. The edit form's disabled "Request
 Template" select is hidden (still posted); company and client take half
 the row each in both forms.
+
+## 2026-11-01 Client Approval column width (Ahmed)
+
+The request list sized its columns with a static `<colgroup>` in header order.
+Client Approval is moved next to Company at run time (and users can reorder or
+hide columns), so the `<col>` widths no longer matched: Client Approval sat in
+Priority's 110px slot and its badges wrapped or were cut. The `<colgroup>` is
+gone; each column's width comes from its own header (DataTables `width`), which
+moves with the column. On desktop Client Approval is `clamp(240px, 16vw,
+340px)` and the table width adds the same amount, so the column grows with the
+screen; its stage badge and costed/priced line stay on one line. Phones keep
+the card view.
