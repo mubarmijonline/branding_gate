@@ -60,6 +60,7 @@
   .srd-item-id { flex: 1; min-width: 0; }
   .srd-item-title { font-weight: 700; color: #2c3e50; font-size: 15px; }
   .srd-item-sub   { color: #858796; font-size: 12px; margin-top: 3px; }
+  .srd-not-in-total { display: inline-block; color: #8a5300; background: #fff3cd; border-radius: 4px; padding: 0 5px; font-size: 11px; font-weight: 600; }
   .srd-item-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
                     margin-top: 8px; }
   .srd-item-chips .k { color: #858796; font-size: 10px; font-weight: 700;
@@ -592,13 +593,21 @@
       if (it.sell_type) subBits.push(esc(it.sell_type));
       if (dims.length) subBits.push(dims.join(' · '));
       if (it.dimension_calc) subBits.push('calc: ' + esc(it.dimension_calc));
+      // Unticked "Include in Calc" under quantity or days: the total is the
+      // unit price without it, which reads as a wrong sum unless it says so.
+      var qtyOut = it.include_qty_in_calc === false || it.include_qty_in_calc === 0;
+      var daysOut = (it.include_days_in_calc === false || it.include_days_in_calc === 0) &&
+                    (it.sell_type === 'rent' || it.rental_days > 1);
+      var notInTotal = '<span class="srd-not-in-total">' + esc((window.bgT || String)('not in total')) + '</span>';
+      if (qtyOut) subBits.push('<span class="srd-not-in-total">' + esc((window.bgT || String)('Quantity not counted in the total')) + '</span>');
+      if (daysOut) subBits.push('<span class="srd-not-in-total">' + esc((window.bgT || String)('Days not counted in the total')) + '</span>');
 
       // The numbers, each in its own tile. A price nobody has set yet says so
       // rather than showing a bare dash in the middle of the row.
       var facts = [];
-      facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || ''), '']);
+      facts.push(['Quantity', esc(it.qty || it.quantity || 0) + ' ' + esc(it.unit || '') + (qtyOut ? ' ' + notInTotal : ''), '']);
       if (it.sell_type === 'rent' || it.rental_days)
-        facts.push(['Rental Days', esc(it.rental_days || 1), '']);
+        facts.push(['Rental Days', esc(it.rental_days || 1) + (daysOut ? ' ' + notInTotal : ''), '']);
       if (CAN_SEE_COST) facts.push(['Unit Cost', money(it.cost_per_item), 'money']);
       facts.push(['Unit Sell', money(it.sell_per_item), 'money money-sell']);
       if (CAN_SEE_COST) facts.push(['Total Cost', money(it.total_cost), 'money']);

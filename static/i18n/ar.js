@@ -4412,5 +4412,8 @@ window.BG_AR = {
 "Only items to price": "البنود اللي محتاجة تسعير بس",
 "to price": "محتاج تسعير",
 "still with Operation": "لسه مع العمليات",
-"Item changed on request": "بند اتعدل في الطلب"
+"Item changed on request": "بند اتعدل في الطلب",
+  "not in total": "مش داخل في الإجمالي",
+  "Quantity not counted in the total": "الكمية مش محسوبة في الإجمالي",
+  "Days not counted in the total": "الأيام مش محسوبة في الإجمالي"
 };

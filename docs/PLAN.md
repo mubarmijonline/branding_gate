@@ -1274,3 +1274,15 @@ moves with the column. On desktop Client Approval is `clamp(240px, 16vw,
 340px)` and the table width adds the same amount, so the column grows with the
 screen; its stage badge and costed/priced line stay on one line. Phones keep
 the card view.
+
+## 2026-11-01 Quantity left out of an item's total (Gamal, 44073)
+
+Gamal: "flag matkb + stand" shows 100 pcs at EGP 220 but a total of EGP 220.
+Not a calculation fault: the item was saved by Sales on 2026-10-29 with
+"Include in Calc" under quantity unticked (`include_qty_in_calc = 0`; it is
+ticked by default and the other 13 items have it on), so total = unit price x
+days. The details drawer never showed that flag, so the sum looked wrong. It
+now says "Quantity not counted in the total" under the item name and "not in
+total" in the Quantity tile (same for rental days). The item's numbers are
+left as they are: whether 150 / 220 is per piece or for all 100 is Sales'
+call; per piece means a re-cost with the box ticked.
