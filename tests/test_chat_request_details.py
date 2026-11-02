@@ -64,7 +64,8 @@ class ChatRequestDetailsTest(_ChatHarness):
                                  ('Hall Name', 'Saria hall'), ('Location Governorate', 'Cairo')):
                 self.assertEqual(pairs.get(label), value, label)
             self.assertEqual(money_in(body), [])
-            text = json.dumps(body)
+            # Without the owner: a generated test mobile can contain 999.
+            text = json.dumps(dict(body, owner=None, request_id=None))
             item = body['items'][0]
             self.assertEqual((item['qty'], item['unit'], item['rent'], item['rental_days'], item['size'],
                               item['comment']), (4.0, 'pcs', True, 4, 'W 9 x H 5', 'Wood finish'))

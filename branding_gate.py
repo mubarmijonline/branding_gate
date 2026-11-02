@@ -4259,6 +4259,42 @@ def _target_achieved_by_quarter(cur, year):
     return out
 
 
+def _target_months(cur, period):
+    """
+    {user_id: [m1, m2, m3]} for the quarter's targets: the split set in the
+    dialog, or an even one when none was set.
+    """
+    cur.execute("SELECT user_id, amount, month_amounts FROM sales_target WHERE period = %s", (period,))
+    out = {}
+    for row in cur.fetchall():
+        stored = row['month_amounts']
+        if isinstance(stored, (str, bytes)):
+            stored = json.loads(stored)
+        try:
+            out[row['user_id']] = targets_lib.split_months(row['amount'], stored)
+        except ValueError:     # the quarter was changed under an old split
+            out[row['user_id']] = targets_lib.split_months(row['amount'])
+    return out
+
+
+def _target_achieved_by_month(cur, period):
+    """{user_id: {'2026-10': total, ...}} own approved sell value per month."""
+    start, end = targets_lib.period_bounds(period)
+    cur.execute("""
+        SELECT sr.owner_user_id, DATE_FORMAT(sr.created_at, '%%Y-%%m') AS month,
+               COALESCE(SUM(i.total_sell), 0) AS total
+        FROM sales_request sr
+        JOIN sales_request_items i ON i.request_id = sr.id
+        WHERE """ + _ACHIEVED_WHERE + """
+          AND DATE(sr.created_at) BETWEEN %s AND %s
+        GROUP BY sr.owner_user_id, month
+    """, (start, end))
+    out = {}
+    for row in cur.fetchall():
+        out.setdefault(row['owner_user_id'], {})[row['month']] = row['total'] or targets_lib.ZERO
+    return out
+
+
 def _target_amounts_for(cur, periods):
     """{period: {user_id: amount}} for several quarters at once."""
     placeholders = ','.join(['%s'] * len(periods))
@@ -4305,10 +4341,14 @@ def get_targets():
         amounts = _target_amounts(cur, period)
         details = _target_details(cur, period)
         achieved = _target_achieved(cur, period)
+        month_targets = _target_months(cur, period)
+        month_achieved = _target_achieved_by_month(cur, period)
         cur.close()
         conn.close()
 
         rows = targets_lib.build_tree(people, amounts, achieved, visible_ids=visible)
+        teams = targets_lib.team_ids(people, visible)
+        month_names = targets_lib.period_months(period)
         by_id = {p['id']: p for p in people}
         out = []
         for row in rows:
@@ -4340,6 +4380,16 @@ def get_targets():
                 'set_on': detail.get('set_on'),
                 'can_assign': bool(assignable),
                 'can_name_team': bool(can_name_teams and row['is_leader']),
+                # The quarter month by month: the split target (when there is
+                # one) beside what the person and their team reached.
+                'months': [{
+                    'month': m,
+                    'target': (_money_out(month_targets[row['id']][n])
+                               if row['id'] in month_targets else None),
+                    'achieved': float(sum(month_achieved.get(uid, {}).get(m, 0)
+                                          for uid in teams.get(row['id'], {row['id']}))),
+                } for n, m in enumerate(month_names)],
+                'months_set': row['id'] in month_targets,
             })
         return jsonify(
             success=True,
@@ -4352,6 +4402,59 @@ def get_targets():
         raise
     except Exception as e:
         print("DEBUG: targets fetch failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/targets/achieved', methods=['GET'])
+@perm('target.view')
+def get_target_achieved_detail():
+    """
+    What makes up one row's Achieved number (Gamal, 2026-11-02): the requests
+    whose client-approved items count, for that person and the team under
+    them, with the same rules and the same people as the number itself.
+    """
+    try:
+        period = _target_period(request.args.get('period'))
+        user_id = int(request.args.get('user_id'))
+    except (targets_lib.InvalidPeriod, TypeError, ValueError):
+        return jsonify(success=False, error='Pick a person and a quarter'), 400
+    visible = visible_user_ids('target.view')
+    if visible is not None and user_id not in visible:
+        return jsonify(success=False, error='Not yours to see'), 403
+    try:
+        conn, cur = connection()
+        people = _target_people(cur)
+        team = sorted(targets_lib.team_ids(people, visible).get(user_id, {user_id}))
+        start, end = targets_lib.period_bounds(period)
+        cur.execute("""
+            SELECT sr.id, sr.title, c.client_name, u.name AS owner_name,
+                   DATE_FORMAT(sr.created_at, '%%Y-%%m') AS month,
+                   DATE_FORMAT(sr.created_at, '%%d %%b %%Y') AS created,
+                   COUNT(i.id) AS items, COALESCE(SUM(i.total_sell), 0) AS total
+            FROM sales_request sr
+            JOIN sales_request_items i ON i.request_id = sr.id
+            LEFT JOIN client c ON c.id = sr.client_id
+            LEFT JOIN user u ON u.id = sr.owner_user_id
+            WHERE """ + _ACHIEVED_WHERE + """
+              AND DATE(sr.created_at) BETWEEN %s AND %s
+              AND sr.owner_user_id IN (""" + ','.join(['%s'] * len(team)) + """)
+            GROUP BY sr.id, sr.title, c.client_name, u.name, sr.created_at
+            ORDER BY sr.created_at
+        """, [start, end] + team)
+        requests_ = [dict(r, total=float(r['total'])) for r in cur.fetchall()]
+        months = _target_months(cur, period).get(user_id)
+        cur.close()
+        conn.close()
+        names = targets_lib.period_months(period)
+        return jsonify(success=True, period=period, user_id=user_id, requests=requests_,
+                       months=[{'month': m,
+                                'target': _money_out(months[n]) if months else None,
+                                'achieved': sum(r['total'] for r in requests_ if r['month'] == m)}
+                               for n, m in enumerate(names)])
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: target achieved detail failed: %s" % e)
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -4526,6 +4629,13 @@ def assign_target():
 
     note = (data.get('note') or '').strip()[:255] or None
     me = session.get('user_id')
+    # Optional split across the quarter's months; no split is an even one.
+    months = data.get('months')
+    try:
+        month_amounts = (None if months in (None, '', [])
+                         else [str(m) for m in targets_lib.split_months(amount, months)])
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
 
     try:
         # Readable scope first, then the narrower rule: their manager sets it.
@@ -4582,13 +4692,15 @@ def assign_target():
             return jsonify(success=False, error=error), 400
 
         cur.execute("""
-            INSERT INTO sales_target (user_id, period, amount, assigned_by, note)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO sales_target (user_id, period, amount, month_amounts, assigned_by, note)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 amount = VALUES(amount),
+                month_amounts = VALUES(month_amounts),
                 assigned_by = VALUES(assigned_by),
                 note = VALUES(note)
-        """, (user_id, period, amount, me, note))
+        """, (user_id, period, amount,
+              json.dumps(month_amounts) if month_amounts else None, me, note))
         conn.commit()
         cur.close()
         conn.close()
@@ -15469,6 +15581,34 @@ def notify_new_request_to_operations(request_id, title, by):
         return 0
 
 
+def notify_urgent_to_costing_leaders(request_id, title, by):
+    """
+    An urgent request, once approved, also goes to the Operations team
+    leaders (David, 2026-11-02). "New request" reaches the Head only; a leader
+    can already assign any item to their own people, so telling them lets the
+    work start without waiting for the Head to hand it down.
+    """
+    try:
+        roles = [code for code, grants in rbac.SEED_MATRIX.items()
+                 if grants.get('costing.assign') == 'team']
+        if not roles:
+            return 0
+        conn, cur = connection()
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                    "WHERE u.is_active = 1 AND r.code IN (%s)" % ','.join(['%s'] * len(roles)), roles)
+        leaders = [row['id'] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return notify_users(
+            leaders, f"Urgent Sales Request #{request_id:06d}",
+            f'"{title}" was approved by {by} with an urgent date. '
+            f'You can assign its items to your team for costing now.',
+            link=f'/operation_request?request={request_id}')
+    except Exception as e:
+        print(f"Error notifying costing leaders: {e}")
+        return 0
+
+
 @app.route('/api/approvals/<int:approval_id>/approve', methods=['POST'])
 @perm('sales_request.approve')
 def approve_request(approval_id):
@@ -15603,6 +15743,7 @@ def approve_request(approval_id):
         # The request now exists: Operations is told exactly as for any new
         # request, or it sits in costing with nobody aware of it.
         notify_new_request_to_operations(sales_request_id, request_data.get('title'), approver)
+        notify_urgent_to_costing_leaders(sales_request_id, request_data.get('title'), approver)
         
         cur.close()
         conn.close()

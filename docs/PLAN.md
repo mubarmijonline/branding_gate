@@ -1314,3 +1314,24 @@ Add form only; `collectTemplateFieldsForSubmission(modal)` collects one form's
 sections (Edit had the mirror leak) and finds item lists inside that form;
 create and both update routes keep each request type once. 46577's type
 repaired to "Production".
+
+## 2026-11-02 Targets: month split and Achieved drill-down (Gamal)
+
+- `sales_target.month_amounts` JSON (target_months_migration.sql, applied):
+  NULL = even split. `targets.split_months` validates three amounts adding up
+  to the quarter; `period_months`, `team_ids` (same visible subtree as
+  build_tree). Assign takes optional `months`; an amount sent without months
+  resets to even.
+- `/api/targets` rows carry `months` [{month, target, achieved}] (team).
+- `/api/targets/achieved?period&user_id`: requests behind a row's Achieved,
+  scoped by target.view. Page: Achieved is a link to a popup; month line under
+  Target; three month boxes in the Set target dialog.
+- Test: tests/test_targets_months.py.
+
+## 2026-11-02 Urgent approval also tells Operations team leaders (David)
+
+`notify_urgent_to_costing_leaders`: roles holding `costing.assign` at team
+scope (Haitham) get "Urgent Sales Request #..." on admin approval. A leader
+could already assign any item to their direct reports and sees unassigned
+requests; only the notification was missing. Test in
+tests/test_urgent_approval_notifies.py.

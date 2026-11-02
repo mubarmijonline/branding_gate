@@ -140,6 +140,26 @@
   .targets-page .tgt-left { font-weight:600; }
   .targets-page .tgt-left.over { color:var(--bad); }
   .targets-page .tgt-left.spare { color:var(--warn); }
+  .targets-page .tgt-months { font-size:.72rem; color:var(--muted); white-space:normal; line-height:1.35; margin-top:.15rem; }
+  .tgt-detail .tgt-pct { display:block; font-size:.75rem; color:#8891a8; }
+  .tgt-detail .tgt-sub { display:none; font-size:.75rem; color:#8891a8; }
+  @media (max-width: 576px) {
+    .tgt-detail th.wide, .tgt-detail td.wide { display:none; }
+    .tgt-detail .tgt-sub { display:block; }
+    .tgt-detail .tgt-mcell b { font-size:.9rem; }
+  }
+  .targets-page a.tgt-ach-open { color:inherit; text-decoration:underline dotted; cursor:pointer; }
+  .targets-page a.tgt-ach-open:hover { color:var(--accent, #3a4fa0); }
+  .tgt-detail table { width:100%; font-size:.85rem; text-align:left; border-collapse:collapse; }
+  .tgt-detail th { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:#8891a8; padding:.35rem .4rem; border-bottom:1px solid #e3e6f0; }
+  .tgt-detail td { padding:.4rem; border-bottom:1px solid #f0f2f7; vertical-align:top; }
+  .tgt-detail td.num, .tgt-detail th.num { text-align:right; white-space:nowrap; }
+  .tgt-detail .tgt-mgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin-bottom:1rem; }
+  .tgt-detail .tgt-mcell { border:1px solid #e3e6f0; border-radius:6px; padding:.5rem .6rem; text-align:left; }
+  .tgt-detail .tgt-mcell b { display:block; font-size:1rem; }
+  .tgt-mrow { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; margin:.2rem 0 .3rem; }
+  .tgt-mrow input { width:100%; padding:.45rem; border:1px solid #e3e6f0; border-radius:5px; min-width:0; }
+  .tgt-mrow label { font-size:.72rem; color:#8891a8; margin:0; }
 </style>
 
 <div class="container-fluid targets-page">
@@ -239,6 +259,22 @@
       var caret = Math.max(0, this.value.length - caretFromEnd);
       try { this.setSelectionRange(caret, caret); } catch (e) { /* not focusable */ }
     });
+  }
+
+  function monthName(m) {
+    var p = String(m).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, 1).toLocaleString([], { month: 'short' });
+  }
+  function monthsOf(period) {
+    var p = String(period).split('-Q'), first = (Number(p[1]) - 1) * 3 + 1;
+    return [0, 1, 2].map(function (i) { return p[0] + '-' + ('0' + (first + i)).slice(-2); });
+  }
+  // Under a target: how it is spread over the quarter, when it has been split.
+  function monthsLine(row) {
+    if (!row.months || row.target === null || row.target === undefined) { return ''; }
+    return '<div class="tgt-months">' + row.months.map(function (m) {
+      return esc(monthName(m.month)) + ' ' + money(m.target);
+    }).join(' · ') + '</div>';
   }
 
   function load(period, view) {
@@ -479,10 +515,11 @@
       }
       var $tr = $('<tr>').attr('data-id', row.id).html(
         personCell(row) +
-        '<td class="num">' + money(row.target) + '</td>' +
+        '<td class="num">' + money(row.target) + monthsLine(row) + '</td>' +
         '<td class="num">' + (row.is_leader ? money(row.assigned) : '<span class="tgt-muted">-</span>') + '</td>' +
         '<td class="num">' + leftFor(row) + '</td>' +
-        '<td class="num">' + money(row.team_achieved) +
+        '<td class="num"><a href="#" class="tgt-ach-open" data-id="' + row.id + '" title="See what counts">' +
+          money(row.team_achieved) + '</a>' +
           (row.is_leader && row.own_achieved !== row.team_achieved
             ? '<div class="tgt-pct">own ' + money(row.own_achieved) + '</div>' : '') + '</td>' +
         '<td>' + barFor(row) + '</td>' +
@@ -535,14 +572,55 @@
             (available === null ? '' :
              money(available) + ' of ' + esc(manager.name) + '’s target is available.') +
           '</p>' +
+          '<label style="font-weight:600;font-size:.75rem;margin-top:.8rem;display:block;' +
+            'letter-spacing:.06em;text-transform:uppercase;color:#8891a8;">By month ' +
+            '<span style="text-transform:none;font-weight:400;">(adds up to the amount)</span></label>' +
+          '<div class="tgt-mrow" id="tgtMonths"></div>' +
+          '<p id="tgtMonthHint" style="font-size:.8rem;color:#8891a8;margin:0;"></p>' +
         '</div>',
       showCancelButton: true,
       confirmButtonText: 'Save',
       didOpen: function () {
         attachGrouping(document.getElementById('tgtAPick'));
+        // Three month boxes for the picked quarter. They start as the saved
+        // split, or an even one, and follow the amount until one is typed in.
+        var touched = row.months_set && row.months && row.months.some(function (m, i, all) {
+          return Math.abs((m.target || 0) - (all[0].target || 0)) > 0.01;
+        });
+        function num(v) { return Number(String(v || '').replace(/,/g, '')) || 0; }
+        function drawMonths(period, values) {
+          $('#tgtMonths').html(monthsOf(period).map(function (m, i) {
+            return '<div><label for="tgtM' + i + '">' + esc(monthName(m)) + '</label>' +
+                   '<input id="tgtM' + i + '" class="tgt-m" inputmode="decimal" value="' +
+                   esc(values ? groupDigits(String(values[i])) : '') + '"></div>';
+          }).join(''));
+          $('#tgtMonths .tgt-m').each(function () { attachGrouping(this); });
+          checkMonths();
+        }
+        function even() {
+          var total = num($('#tgtAPick').val());
+          var third = Math.round(total / 3 * 100) / 100;
+          return [third, third, Math.round((total - 2 * third) * 100) / 100];
+        }
+        function checkMonths() {
+          var total = num($('#tgtAPick').val());
+          var sum = 0;
+          $('#tgtMonths .tgt-m').each(function () { sum += num(this.value); });
+          var off = Math.round((total - sum) * 100) / 100;
+          $('#tgtMonthHint').css('color', off ? '#c0392b' : '#8891a8')
+            .text(off ? (off > 0 ? money(off) + ' still to place across the months'
+                                 : money(-off) + ' more than the amount') : '');
+        }
+        drawMonths(PERIOD, touched ? row.months.map(function (m) { return m.target; }) : even());
+        $('#tgtAPick').on('input', function () {
+          if (!touched) { drawMonths($('#tgtQPick').val(), even()); } else { checkMonths(); }
+        });
+        $('#tgtMonths').on('input', '.tgt-m', function () { touched = true; checkMonths(); });
         // The amount shown belongs to the quarter on screen. Pick another and it
         // is no longer that person's number, so clear it rather than carry it over.
         document.getElementById('tgtQPick').addEventListener('change', function () {
+          touched = false;
+          drawMonths(this.value, this.value === PERIOD && row.target !== null ? even() : null);
           if (this.value !== PERIOD) {
             document.getElementById('tgtAPick').value = '';
             document.getElementById('tgtHint').textContent =
@@ -554,14 +632,19 @@
       preConfirm: function () {
         var amount = document.getElementById('tgtAPick').value.trim();
         if (!amount) { Swal.showValidationMessage('Enter an amount'); return false; }
-        return { period: document.getElementById('tgtQPick').value, amount: amount };
+        var months = $('#tgtMonths .tgt-m').map(function () { return this.value.replace(/,/g, '').trim(); }).get();
+        var sum = months.reduce(function (a, v) { return a + (Number(v) || 0); }, 0);
+        if (Math.abs(sum - Number(amount.replace(/,/g, ''))) > 0.005) {
+          Swal.showValidationMessage('The three months must add up to the amount'); return false;
+        }
+        return { period: document.getElementById('tgtQPick').value, amount: amount, months: months };
       }
     }).then(function (res) {
       if (!res.value) { return; }
       var period = res.value.period;
       $.ajax({
         url: '/api/targets/assign', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ user_id: id, period: period, amount: res.value.amount })
+        data: JSON.stringify({ user_id: id, period: period, amount: res.value.amount, months: res.value.months })
       }).done(function (r) {
         if (!r.success) { Swal.fire('Could not save', r.error || '', 'error'); return; }
         // Land on the quarter that was just set, so the result is on screen.
@@ -572,6 +655,43 @@
       }).fail(function (xhr) {
         Swal.fire('Could not save', (xhr.responseJSON || {}).error || 'Request failed', 'error');
       });
+    });
+  });
+
+  // ---- what makes up an Achieved number -----------------------------------
+  $(document).on('click', '.tgt-ach-open', function (e) {
+    e.preventDefault();
+    var id = Number($(this).data('id'));
+    var row = ROWS.filter(function (r) { return r.id === id; })[0] || {};
+    $.getJSON('/api/targets/achieved', { period: PERIOD, user_id: id }).done(function (r) {
+      var months = '<div class="tgt-mgrid">' + r.months.map(function (m) {
+        var pct = m.target ? Math.round(m.achieved / m.target * 100) + '%' : '';
+        return '<div class="tgt-mcell"><span class="tgt-pct">' + esc(monthName(m.month)) + '</span>' +
+               '<b>' + money(m.achieved) + '</b>' +
+               '<span class="tgt-pct">' + (m.target !== null ? 'of ' + money(m.target) + ' · ' + pct : 'no target') +
+               '</span></div>';
+      }).join('') + '</div>';
+      var list = r.requests.length ? '<table><thead><tr><th>Request</th><th class="wide">Client</th><th class="wide">Sales</th>' +
+          '<th class="wide">Date</th><th class="num wide">Items</th><th class="num">Approved</th></tr></thead><tbody>' +
+          r.requests.map(function (q) {
+            return '<tr><td><a href="/sales_request?request=' + Number(q.id) + '" target="_blank">#' + Number(q.id) +
+                   '</a> ' + esc(q.title || '') +
+                   '<span class="tgt-sub">' + esc([q.client_name, q.owner_name, q.created].filter(Boolean).join(' · ')) +
+                   ' · ' + Number(q.items) + ' items</span></td><td class="wide">' + esc(q.client_name || '') + '</td><td class="wide">' +
+                   esc(q.owner_name || '') + '</td><td class="wide">' + esc(q.created) + '</td><td class="num wide">' +
+                   Number(q.items) + '</td><td class="num">' + money(q.total) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<p class="tgt-muted">Nothing approved by the client yet this quarter.</p>';
+      Swal.fire({
+        title: esc(row.name || '') + ' · ' + esc(PERIOD.replace('-Q', ' Q')),
+        html: '<div class="tgt-detail">' + months +
+              '<p class="tgt-pct" style="text-align:left;">Client-approved items only, by request date' +
+              (row.is_leader ? ', for ' + esc(row.name) + ' and the team under them' : '') + '.</p>' +
+              list + '</div>',
+        width: 900, showCloseButton: true, confirmButtonText: 'Close'
+      });
+    }).fail(function (xhr) {
+      Swal.fire('Could not load', (xhr.responseJSON || {}).error || 'Request failed', 'error');
     });
   });
 

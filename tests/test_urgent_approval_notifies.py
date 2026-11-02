@@ -25,12 +25,14 @@ class UrgentApprovalNotifiesTest(unittest.TestCase):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
                                    db="branding_gate", charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
-        self.original = (branding_gate.connection, branding_gate.send_notification_to_role, branding_gate.notify_user)
+        self.original = (branding_gate.connection, branding_gate.send_notification_to_role, branding_gate.notify_user,
+                         branding_gate.notify_users)
         self.addCleanup(self._undo)
         branding_gate.connection = lambda: (_RollbackConnection(self.raw), self.raw.cursor(MySQLdb.cursors.DictCursor))
         self.sent = []
         branding_gate.send_notification_to_role = lambda role, title, content, link=None: self.sent.append((role, title, link)) or 1
         branding_gate.notify_user = lambda uid, title, content, link=None, **_: self.sent.append((uid, title, link)) or 1
+        branding_gate.notify_users = lambda ids, title, content, link=None, **_: self.sent.append((tuple(ids), title, link)) or 1
         branding_gate.app.config['TESTING'] = True
         cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
         cur.execute("SELECT id, mobile FROM user WHERE id = 107397")
@@ -50,7 +52,8 @@ class UrgentApprovalNotifiesTest(unittest.TestCase):
                       'roles': [role], 'perms': perms, 'role_code': role})
 
     def _undo(self):
-        branding_gate.connection, branding_gate.send_notification_to_role, branding_gate.notify_user = self.original
+        (branding_gate.connection, branding_gate.send_notification_to_role, branding_gate.notify_user,
+         branding_gate.notify_users) = self.original
         self.raw.rollback()
         self.raw.close()
 
@@ -60,6 +63,17 @@ class UrgentApprovalNotifiesTest(unittest.TestCase):
         new_id = r.get_json()['sales_request_id']
         self.assertIn(('operation', 'New Sales Request #%06d' % new_id, '/operation_request?request=%d' % new_id), self.sent)
         self.assertIn((self.requester['id'], 'Request Approved', '/sales_request?request=%d' % new_id), self.sent)
+
+    def test_operations_team_leaders_are_told_too(self):
+        # David: an urgent request should reach the team leaders as well, so
+        # one of them can assign it to their people straight away.
+        cur = self.raw.cursor(MySQLdb.cursors.DictCursor)
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                    "WHERE r.code = 'operations_team_leader' AND u.is_active = 1")
+        leaders = tuple(row['id'] for row in cur.fetchall())
+        self.assertTrue(leaders)
+        new_id = self.web.post('/api/approvals/%d/approve' % self.approval, json={}).get_json()['sales_request_id']
+        self.assertIn((leaders, 'Urgent Sales Request #%06d' % new_id, '/operation_request?request=%d' % new_id), self.sent)
 
 
 if __name__ == '__main__':

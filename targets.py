@@ -110,8 +110,63 @@ def validate_assignment(amount, parent_amount, siblings_total, child_committed=Z
     return None
 
 
+def period_months(period):
+    """'2026-Q4' -> ['2026-10', '2026-11', '2026-12']."""
+    year, quarter = parse_period(period)
+    first, last = _QUARTER_MONTHS[quarter]
+    return ['%d-%02d' % (year, m) for m in range(first, last + 1)]
+
+
+def split_months(amount, months=None):
+    """
+    A quarter's target across its three months (Gamal, 2026-11-02): uneven if
+    wanted, but always the quarter's total. `months` None means an even split,
+    the odd piastres on the last month. Raises ValueError when three given
+    amounts do not add up to the quarter.
+    """
+    if months is None:
+        third = (amount / 3).quantize(Decimal('0.01'))
+        return [third, third, amount - 2 * third]
+    if not isinstance(months, (list, tuple)) or len(months) != 3:
+        raise ValueError('Give an amount for each of the three months')
+    parts = [to_amount(m) for m in months]
+    if sum(parts) != amount:
+        raise ValueError('The three months add up to %s, the quarter is %s'
+                         % (_money(sum(parts)), _money(amount)))
+    return parts
+
+
 def _money(amount):
     return '{:,.2f}'.format(amount or ZERO)
+
+
+def team_ids(users, visible_ids=None):
+    """
+    {user_id: {that person and everyone under them}}, over the same visible
+    set build_tree uses, so a list of what counts toward a row's achieved
+    number covers exactly the people that number covers.
+    """
+    if visible_ids is not None:
+        allowed = set(visible_ids)
+        users = [u for u in users if u['id'] in allowed]
+    ids = {u['id'] for u in users}
+    kids = {}
+    for user in users:
+        if user.get('manager_id') in ids:
+            kids.setdefault(user['manager_id'], []).append(user['id'])
+    out = {}
+
+    def collect(uid, seen):
+        if uid in seen:            # a reporting loop never hangs the page
+            return seen
+        seen.add(uid)
+        for kid in kids.get(uid, []):
+            collect(kid, seen)
+        return seen
+
+    for uid in ids:
+        out[uid] = collect(uid, set())
+    return out
 
 
 def build_tree(users, targets, achieved, visible_ids=None):
@@ -193,6 +248,15 @@ def demo():
     # A manager cannot be cut below what they already handed down.
     assert validate_assignment(small, million, ZERO, child_committed=big) is not None
 
+    assert period_months('2026-Q4') == ['2026-10', '2026-11', '2026-12']
+    assert split_months(Decimal('100')) == [Decimal('33.33'), Decimal('33.33'), Decimal('33.34')]
+    assert split_months(million, ['200,000', 300000, '500000']) == [small, Decimal('300000'), Decimal('500000')]
+    try:
+        split_months(million, [1, 2, 3])
+        raise AssertionError('months not adding up accepted')
+    except ValueError:
+        pass
+
     assert to_amount('1,000,000') == Decimal('1000000.00')
     try:
         to_amount('-5')
@@ -214,6 +278,8 @@ def demo():
     head = rows[1]
     assert head['assigned'] == small and head['unassigned'] == million - small
     assert head['team_achieved'] == Decimal('15000')
+
+    assert team_ids(users)[2] == {2, 3, 4} and team_ids(users, [3, 4])[3] == {3, 4}
 
     # A team leader sees a tree rooted at themselves, not at the CEO.
     leader_view = build_tree(users, targets, achieved, visible_ids=[3, 4])

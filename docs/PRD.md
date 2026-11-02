@@ -172,3 +172,18 @@ client. The filters include "Created by", listing everyone behind the requests
 the other filters leave. Approving, rejecting or negotiating an item keeps the
 reader where they were: same scroll position, same page and search in that
 request's item table, so the next item can be decided straight away.
+
+## Targets by month, and what makes up Achieved
+
+A quarter's target can be spread over its three months unevenly (more in one
+month, less in another); the three months always add up to the quarter's
+amount, and an amount with no split is spread evenly. Each row shows its month
+split under the target. Clicking a row's Achieved number lists the requests
+that make it up: client-approved items only, by request date, for that person
+and the team under them, with each month's achieved beside its month target.
+
+## Urgent requests reach the Operations team leaders
+
+When an admin approves a request with an urgent date, the Operations Head is
+told as for any new request, and every Operations team leader is told too, so
+a leader can assign its items to their own people for costing straight away.
