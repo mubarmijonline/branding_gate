@@ -164,3 +164,11 @@ Done when: adding an item to a request whose items are all costed keeps every
 item; a costed item changed through "Change and re-cost" returns to
 Operations without its old cost and price, and leaves the mark when costed
 again.
+
+## Client Approval page: who created the request, and staying in place
+
+Each request on the Client Approval page shows who created it, next to the
+client. The filters include "Created by", listing everyone behind the requests
+the other filters leave. Approving, rejecting or negotiating an item keeps the
+reader where they were: same scroll position, same page and search in that
+request's item table, so the next item can be decided straight away.

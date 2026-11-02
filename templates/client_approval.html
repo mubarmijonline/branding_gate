@@ -883,7 +883,15 @@
                     </select>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Created by</label>
+                    <select class="form-control" id="createdByFilter">
+                        <option value="">Everyone</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-2">
                 <div class="form-group">
                     <label><i class="fas fa-calendar"></i> Date Range</label>
                     <select class="form-control" id="dateFilter">
@@ -894,7 +902,7 @@
                     </select>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="form-group">
                     <label>&nbsp;</label>
                     <button class="btn btn-primary btn-block" id="applyFilters">
@@ -1055,7 +1063,7 @@ $(document).ready(function() {
         loadItems();
     });
     
-    $('#statusFilter, #clientFilter, #dateFilter').change(function() {
+    $('#statusFilter, #clientFilter, #createdByFilter, #dateFilter').change(function() {
         loadItems();
     });
     
@@ -1301,14 +1309,16 @@ $(document).ready(function() {
     function loadItems() {
         const status = $('#statusFilter').val();
         const client = $('#clientFilter').val();
+        const createdBy = $('#createdByFilter').val();
         const dateRange = $('#dateFilter').val();
         
         $.ajax({
             url: '/api/client-approval/items',
             method: 'GET',
-            data: { status, client, date_range: dateRange },
+            data: { status, client, created_by: createdBy, date_range: dateRange },
             success: function(response) {
                 if (response.success) {
+                    fillCreators(response.creators || [], createdBy);
                     renderItems(response.items);
                     updateStatistics();
                 } else {
@@ -1321,19 +1331,44 @@ $(document).ready(function() {
         });
     }
     
+    // The Created by list, rebuilt from who is behind the rows the other
+    // filters left, keeping the current choice.
+    function fillCreators(creators, current) {
+        const select = $('#createdByFilter');
+        const currentName = select.find('option:selected').text();
+        select.find('option:not(:first)').remove();
+        creators.forEach(c => select.append($('<option>').val(c.id).text(c.name)));
+        if (current && !creators.some(c => String(c.id) === String(current))) {
+            select.append($('<option>').val(current).text(currentName));
+        }
+        select.val(current || '');
+    }
+
+    function esc(v) {
+        return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     function renderItems(items) {
         const container = $('#itemsContainer');
-        
-        // Destroy all existing DataTables before clearing
+
+        // Approving, rejecting or negotiating reloads the list. Keep the
+        // reader where they were (Gamal, for Sarah): same scroll, same page
+        // and search in each request's table, so the next item is right there.
+        const scrollY = window.scrollY;
+        const place = {};
         container.find('table.dataTable').each(function() {
             if ($.fn.DataTable.isDataTable(this)) {
-                $(this).DataTable().destroy();
+                const dt = $(this).DataTable();
+                place[this.id] = { page: dt.page(), search: dt.search(), length: dt.page.len() };
+                dt.destroy();
             }
         });
-        
+        container.css('min-height', container.height());
+
         container.empty();
         
         if (items.length === 0) {
+            container.css('min-height', '');
             $('#emptyState').show();
             return;
         }
@@ -1347,6 +1382,7 @@ $(document).ready(function() {
                 groupedItems[item.request_id] = {
                     request_id: item.request_id,
                     client_name: item.client_name,
+                    created_by_name: item.created_by_name,
                     sales_added_date: item.sales_added_date,
                     items: []
                 };
@@ -1421,6 +1457,7 @@ $(document).ready(function() {
                                 <i class="fas fa-chevron-${open ? 'down' : 'right'} ca-chevron fa-flip-rtl" style="color: #6b7280 !important; margin-inline-end: 8px; width: 14px;"></i><i class="fas fa-file-alt" style="color: #3b82f6 !important; margin-right: 8px;"></i>Request #${group.request_id}
                             </h5>
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-building" style="margin-right: 6px;"></i>${group.client_name || 'N/A'}</span>
+                            ${group.created_by_name ? `<span style="color: #6b7280; font-size: 0.9rem;" title="Created by"><i class="fas fa-user" style="margin-right: 6px;"></i>${esc(group.created_by_name)}</span>` : ''}
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-calendar" style="margin-right: 6px;"></i>${new Date(group.sales_added_date).toLocaleDateString()}</span>
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-cubes" style="margin-right: 6px;"></i>${totalItems} Item${totalItems > 1 ? 's' : ''}</span>
                         </div>
@@ -1490,7 +1527,7 @@ $(document).ready(function() {
             
             // Initialize DataTable for this request table
             setTimeout(() => {
-                $(`#${tableId}`).DataTable({
+                const dt = $(`#${tableId}`).DataTable({
                     "paging": true,
                     "searching": true,
                     "ordering": false, // Disable ordering - use backend order (DESC by ID)
@@ -1515,8 +1552,18 @@ $(document).ready(function() {
                         }
                     }
                 });
+                const was = place[tableId];
+                if (was) {
+                    dt.page.len(was.length).search(was.search);
+                    dt.draw();
+                    dt.page(Math.min(was.page, Math.max(dt.page.info().pages - 1, 0))).draw(false);
+                }
             }, 100);
         });
+        setTimeout(() => {
+            window.scrollTo(0, scrollY);
+            container.css('min-height', '');
+        }, 150);
     }
     
     $(document).on('click', '#caExpandAll, #caCollapseAll', function () {

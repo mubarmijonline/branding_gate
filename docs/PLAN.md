@@ -1286,3 +1286,16 @@ now says "Quantity not counted in the total" under the item name and "not in
 total" in the Quantity tile (same for rental days). The item's numbers are
 left as they are: whether 150 / 220 is per piece or for all 100 is Sales'
 call; per piece means a re-cost with the box ticked.
+
+## 2026-11-02 Client Approval: Created by, and staying in place after a decision
+
+- `/api/client-approval/items` returns `created_by_name`, `created_by_mobile`,
+  `created_by_user_id` per item (from `sr.created_by` through `people_index` /
+  `person_of`, since it holds a mobile, username or id), `creators` for the
+  dropdown, and filters on `created_by` (a user id) after resolving.
+- Page: "Created by" select in the filter row, creator in each request header.
+- Gamal (for Sarah): approving bounced her. Each decision reloads the list,
+  which emptied the container (page jumped to the top) and rebuilt every
+  request table on page 1. `renderItems` now records scroll and each table's
+  page, length and search, pins the container height while rebuilding, and
+  restores them. Test: tests/test_client_approval_created_by.py.

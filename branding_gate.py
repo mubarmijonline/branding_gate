@@ -19180,6 +19180,7 @@ def get_client_approval_items():
                 sr.client_id,
                 c.client_name,
                 COALESCE(sr.sales_added_date, sr.created_at) AS sales_added_date,
+                sr.created_by AS sales_added_by,
                 u.name as submitted_by_name
             FROM sales_request_items i
             INNER JOIN sales_request sr ON i.request_id = sr.id
@@ -19222,13 +19223,33 @@ def get_client_approval_items():
         
         cur.execute(query, params)
         items = hide_item_cost(cur.fetchall())
-        
+
+        # Who raised the request (Ahmed, 2026-11-02). sr.created_by holds a
+        # mobile, username or id depending on the route, so it is resolved in
+        # Python and the filter runs on the resolved user, not in SQL.
+        people = people_index(cur)
+        creators = {}
+        for item in items:
+            person = person_of(people, item.pop('sales_added_by', None))
+            item['created_by_name'] = person['name']
+            item['created_by_mobile'] = person['mobile']
+            item['created_by_user_id'] = person['user_id']
+            if person['user_id']:
+                creators[person['user_id']] = person['name']
+        created_by = request.args.get('created_by', '')
+        if created_by:
+            items = [i for i in items if str(i['created_by_user_id']) == created_by]
+
         cur.close()
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'items': items,
+            # Everyone behind the rows the other filters left, for the
+            # Created by list.
+            'creators': sorted(({'id': k, 'name': v} for k, v in creators.items()),
+                               key=lambda c: (c['name'] or '').lower()),
             'can_see_cost': has('sales_item.cost'),
         })
         
