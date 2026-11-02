@@ -1299,3 +1299,18 @@ call; per piece means a re-cost with the box ticked.
   request table on page 1. `renderItems` now records scroll and each table's
   page, length and search, pins the container height while rebuilding, and
   restores them. Test: tests/test_client_approval_created_by.py.
+
+## 2026-11-02 Add form sent the Edit form's request types (Sarah, WDD)
+
+Sarah got "Please fill in: Production: Delivery Location, Production:
+Governorate" on a new Event request with every field filled. The Add and Edit
+forms both live on the page and keep their ticks after closing. The Add
+submit read `.request-type-checkbox:checked` page-wide, so it sent Event (Add)
+plus Production (left ticked in Edit from request 30739), with only the Event
+section; the server rightly asked for Production's place fields. Ticking
+Production in Add as well then saved 46577 as "Production,Production".
+Fix: the Add submit, its required-field check and the title builder read the
+Add form only; `collectTemplateFieldsForSubmission(modal)` collects one form's
+sections (Edit had the mirror leak) and finds item lists inside that form;
+create and both update routes keep each request type once. 46577's type
+repaired to "Production".

@@ -12930,6 +12930,8 @@ def add_sales_request():
         # If request_types is a string (from form), convert to list
         if isinstance(request_types, str):
             request_types = [rt.strip() for rt in request_types.split(',')]
+        # Once each: a type ticked in two forms came through twice (46577).
+        request_types = list(dict.fromkeys(request_types))
         
         # Join request types for storage
         request_type = ','.join(request_types) if request_types else data.get('request_type', 'General')
@@ -14414,6 +14416,7 @@ def edit_sales_request(request_id):
         request_types = data.get('request_types', [])
         if isinstance(request_types, str):
             request_types = [rt.strip() for rt in request_types.split(',')]
+        request_types = list(dict.fromkeys(request_types))
         request_type_str = ','.join(request_types) if request_types else existing_request.get('request_type', 'General')
 
         # The same place fields as on create; an old request missing them is
@@ -18197,6 +18200,7 @@ def update_request_with_template(request_id):
         request_types = data.get('request_types', [])
         if isinstance(request_types, str):
             request_types = [rt.strip() for rt in request_types.split(',')]
+        request_types = list(dict.fromkeys(request_types))
         request_type_str = ','.join(request_types) if request_types else existing_request.get('request_type', 'General')
 
         # The same place fields as on create; an old request missing them is

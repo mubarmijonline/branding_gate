@@ -9039,7 +9039,7 @@ window.chartPieDemo = function() {
         const clientName = $(clientSelector + ' option:selected').data('client-name');
         
         // Handle multiple request types (primary source)
-        const selectedRequestTypes = $('.request-type-checkbox:checked').map(function() {
+        const selectedRequestTypes = $((isEditMode ? '#editRequestModal' : '#addRequestModal') + ' .request-type-checkbox:checked').map(function() {
             // Get text and normalize whitespace (replace multiple spaces with single space)
             return $(this).next('label').text().trim().replace(/\s+/g, ' ');
         }).get();
@@ -9156,8 +9156,10 @@ window.chartPieDemo = function() {
             template_request_mapping: {} // Track which templates serve which request types
         };
         
-        // Collect selected request types
-        $('.request-type-checkbox:checked').each(function() {
+        // Collect selected request types: the Add form's own. Page-wide this
+        // also picked up whatever the Edit form last had ticked, and the
+        // server then asked for that type's place fields (Sarah, 2026-11-02).
+        $('#addRequestModal .request-type-checkbox:checked').each(function() {
             data.request_types.push($(this).val());
         });
         
@@ -9179,7 +9181,7 @@ window.chartPieDemo = function() {
         });
         
         // Collect all template-specific field values
-        $('.template-field').each(function() {
+        $('#addRequestModal .template-field').each(function() {
             const fieldName = $(this).attr('name');
             let fieldValue = $(this).val();
             
@@ -9234,14 +9236,18 @@ window.chartPieDemo = function() {
     // Helper function to collect template fields in the format expected by the backend
     // IMPORTANT: Make this globally available
     // NEW: Updated to handle template instances (multiple instances of same template for different request types)
-    window.collectTemplateFieldsForSubmission = function() {
+    // `modal` is the form being saved. The Add and Edit forms are both on the
+    // page and both keep their sections after closing, so collecting
+    // page-wide sent one form's sections with the other (Sarah, 2026-11-02).
+    window.collectTemplateFieldsForSubmission = function(modal) {
         console.log('===== COLLECTING TEMPLATE INSTANCES =====');
+        const $form = $(modal || ($('#editRequestModal').hasClass('show') ? '#editRequestModal' : '#addRequestModal'));
         
         // NEW STRUCTURE: Collect instances grouped by request type
         const templateInstances = [];
         
         // Find all template instance containers
-        $('.template-instance').each(function() {
+        $form.find('.template-instance').each(function() {
             const $instance = $(this);
             const instanceId = $instance.data('instance-id');
             const templateId = $instance.data('template-id');
@@ -9276,7 +9282,7 @@ window.chartPieDemo = function() {
             
             // Collect items for this instance
             const instanceItems = [];
-            const itemsContainer = $(`#items_${instanceId}`);
+            const itemsContainer = $form.find(`[id="items_${instanceId}"]`);
             console.log(`Looking for items in container: #items_${instanceId}, found: ${itemsContainer.length}`);
             
             if (itemsContainer.length > 0) {
@@ -11360,7 +11366,7 @@ window.chartPieDemo = function() {
         
         // Validate required template fields
         const templateFieldErrors = [];
-        $('.template-field[required]').each(function() {
+        $('#addRequestModal .template-field[required]').each(function() {
             const fieldValue = $(this).val();
             const fieldName = $(this).attr('name') || $(this).attr('id') || '';
             
@@ -11445,7 +11451,7 @@ window.chartPieDemo = function() {
 
         // Prepare confirmation dialog content
         const selectedRequestTypes = templateFields.request_types.map(type => 
-            $(`.request-type-checkbox[value="${type}"]`).next('label').text().trim()
+            $(`#addRequestModal .request-type-checkbox[value="${type}"]`).next('label').text().trim()
         ).join(', ');
         
         // Build template summary with request type mapping
@@ -11538,7 +11544,7 @@ window.chartPieDemo = function() {
                     start_date: startDate,
                     end_date: $('#endDate').val() || '',
                     notes: $('#description').val() || '',
-                    template_fields: collectTemplateFieldsForSubmission() // Items are now included per instance
+                    template_fields: collectTemplateFieldsForSubmission('#addRequestModal') // Items are now included per instance
                     // REMOVED: items: items (old global items array - deprecated)
                 };
 
@@ -12280,7 +12286,7 @@ window.chartPieDemo = function() {
         console.log('Legacy edit items collection SKIPPED - items are now per request type in instances');
 
         // Collect template data for update using the same logic as create
-        const templateData = collectTemplateFieldsForSubmission();
+        const templateData = collectTemplateFieldsForSubmission('#editRequestModal');
         const selectedRequestTypes = getSelectedRequestTypes();
         const selectedTemplateId = $('#editTemplateSelect').val();
         
