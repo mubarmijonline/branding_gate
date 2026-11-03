@@ -29747,6 +29747,51 @@ def supplier_statement(cur, supplier_id, start=None, end=None):
             'credit': sum(r['credit'] for r in shown), 'closing': balance}
 
 
+def supplier_purchases_by_request(cur, supplier_id=None, sales_request_id=None):
+    """
+    What each request owes each supplier: the client-approved item costs on that
+    SR (purchased), the supplier payments booked against that SR (paid), and the
+    rest (remaining). Payments made without an SR stay on the supplier's account.
+    """
+    pairs = {}
+    for e in supplier_ledger_entries(cur, supplier_id):
+        if not e['sales_request_id'] or e['kind'] == 'opening':
+            continue
+        if sales_request_id and e['sales_request_id'] != sales_request_id:
+            continue
+        row = pairs.setdefault((e['sales_request_id'], e['supplier_id']), {
+            'sales_request_id': e['sales_request_id'], 'supplier_id': e['supplier_id'],
+            'purchased': 0.0, 'paid': 0.0, 'items': [], 'last_day': None})
+        row['purchased'] += e['credit']
+        row['paid'] += e['debit']
+        if e['kind'] == 'purchase':
+            row['items'].append({'name': e['description'], 'cost': e['credit']})
+        if e['day'] and (not row['last_day'] or e['day'] > row['last_day']):
+            row['last_day'] = e['day']
+    rows = [r for r in pairs.values() if r['supplier_id']]
+    if not rows:
+        return []
+    cur.execute("SELECT id, supplier_name, company_name FROM supplier WHERE id IN (%s)"
+                % ','.join(str(int(r['supplier_id'])) for r in rows))
+    suppliers = {r['id']: r for r in cur.fetchall()}
+    cur.execute("""SELECT sr.id, sr.title, c.client_name FROM sales_request sr LEFT JOIN client c ON c.id = sr.client_id
+                   WHERE sr.id IN (%s)""" % ','.join(str(int(r['sales_request_id'])) for r in rows))
+    requests = {r['id']: r for r in cur.fetchall()}
+    for r in rows:
+        sup, sr = suppliers.get(r['supplier_id']) or {}, requests.get(r['sales_request_id']) or {}
+        r['supplier_name'] = sup.get('company_name') or sup.get('supplier_name') or 'Supplier %s' % r['supplier_id']
+        r['title'], r['client_name'] = sr.get('title'), sr.get('client_name')
+        suffix = ' - ' + (r['title'] or '').strip()
+        for it in r['items']:   # the ledger line carries the SR title too; the row shows it once
+            name = it['name'].rstrip()
+            if r['title'] and name.endswith(suffix):
+                it['name'] = name[:-len(suffix)]
+        r['remaining'] = round(r['purchased'] - r['paid'], 2)
+        r['last_day'] = r['last_day'].isoformat() if r['last_day'] else None
+    rows.sort(key=lambda r: (r['remaining'] <= 0.005, -r['sales_request_id'], r['supplier_name'].lower()))
+    return rows
+
+
 def supplier_balances(cur, start=None, end=None):
     """Every supplier's opening, purchases (credit), payments (debit) and what we owe, for a period."""
     cur.execute("SELECT id, supplier_name, company_name, supplier_type, status, primary_phone FROM supplier")
@@ -29854,6 +29899,19 @@ def finance_supplier_statement(supplier_id):
                    can_pay=has('finance_txn.approve'), **data)
 
 
+@app.route('/api/finance/supplier-purchases', methods=['GET'])
+@perm('finance_report.view')
+def finance_supplier_purchases():
+    """Purchases by request: what each SR owes each supplier, for paying it from the request."""
+    conn, cur = connection()
+    try:
+        rows = supplier_purchases_by_request(cur, request.args.get('supplier_id', type=int))
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, rows=rows, can_pay=has('finance_txn.approve'))
+
+
 @app.route('/api/finance/supplier-accounts/<int:supplier_id>/payment', methods=['POST'])
 @perm('finance_txn.approve')
 def finance_supplier_payment(supplier_id):
@@ -29883,6 +29941,12 @@ def finance_supplier_payment(supplier_id):
             cur.execute("SELECT id FROM sales_request WHERE id = %s", (sr_id,))
             if not cur.fetchone():
                 return jsonify(success=False, error='SR-%s not found' % sr_id), 400
+            # Paid against a request: no more than that request still owes them.
+            owed = supplier_purchases_by_request(cur, supplier_id, int(sr_id))
+            remaining = owed[0]['remaining'] if owed else 0.0
+            if float(amount) > remaining + 0.004:
+                return jsonify(success=False, error='SR-%s owes this supplier %s; pay at most that, or record it '
+                                                    'without an SR' % (sr_id, f'{max(remaining, 0):,.2f}')), 400
         cur.execute("SELECT id FROM finance_categories WHERE category_code = %s", (SUPPLIER_PAYMENT_CATEGORY_CODE,))
         cat = cur.fetchone()
         name = supplier['company_name'] or supplier['supplier_name']

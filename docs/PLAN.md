@@ -1371,3 +1371,30 @@ opens with a collapsible "General Details" panel: title, client, company, reques
 dates, duration, created by, description, then each template instance's fields (place,
 governorate, hall, hotel, setup/event dates, map link). Same `/api/sales/requests/<id>`
 payload the modal already loads; no money in it.
+
+# Paying supplier purchases by request, 2026-11-03
+
+**Ask (George, Ahmed):** a purchase from a supplier on a request (David costs an
+SR item with a supplier, the client approves it) is paid by Finance from a
+payment method chosen on that request, and posts to that method's code as the
+tree already does: a cash method on its row under 1101 الخزينة, a bank method on
+its row under 1102 البنك, against 2101 الموردين (Dr 2101 / Cr 1101|1102).
+
+**Built on what exists:** the purchase is already owed on the supplier's ledger
+(`supplier_ledger_entries`, client-approved item cost); the payment is the
+existing Supplier Payment (`/api/finance/supplier-accounts/<id>/payment`, which
+already takes `sales_request_id`) and `chart_journal` already posts it
+Dr 2101 / Cr the method's account.
+
+**New:** `supplier_purchases_by_request` groups the ledger by (SR, supplier):
+purchased, paid on that SR, remaining. `GET /api/finance/supplier-purchases`
+(`finance_report.view`, optional `supplier_id`). Finance > Suppliers lists
+"Purchases by request" (unpaid first), and each supplier statement lists its own;
+Pay (`finance_txn.approve`) asks the payment method (shown with its code), amount
+(defaults to the remaining), date and reference. A payment against an SR may not
+exceed what is still owed to that supplier on it. No money reaches Sales: the
+pages are Finance's.
+
+**Still open with George:** whether a purchase should post Dr cost (5101) or
+stock (1105) / Cr 2101 when the client approves (today it is owed on the supplier
+ledger but not in the journal), purchase VAT (1106), advances (1108).

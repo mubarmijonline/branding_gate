@@ -197,3 +197,23 @@ a leader can assign its items to their own people for costing straight away.
 
 Sales requests are numbered in one sequence, starting at 502, in the order
 they are created. The numbers do not skip.
+
+## Paying supplier purchases by request
+
+- Finance > Suppliers lists Purchases by request: for each sales request and
+  supplier, what was bought (the client-approved items costed with that
+  supplier), what was paid against that request, and what remains. Unpaid
+  first; "Unpaid only" can be cleared to see paid ones. Each supplier's
+  statement shows its own.
+- Someone who can approve Finance transactions pays from the request: chooses
+  the payment method, the amount (defaults to what remains), date and
+  reference. A cash method posts on its row under 1101 الخزينة, a bank method on
+  its row under 1102 البنك, against 2101 الموردين.
+- A payment against a request cannot be more than that request still owes the
+  supplier. A payment without a request stays a payment on the supplier's
+  account.
+- Only Finance sees these pages; no cost reaches Sales.
+
+Done when: George pays part of an SR's purchase from a bank and the rest from
+cash; the request's remaining drops to zero, the bank's and the cash box's
+ledgers show the payments, and paying more is refused.

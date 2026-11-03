@@ -116,6 +116,14 @@
     {% endif %}
   </div>
 
+  {# What each request owes each supplier, paid from a method chosen on it. #}
+  <div class="sp-card" id="spPurchasesCard" style="display:none">
+    <h3 class="sp-section-title d-flex justify-content-between align-items-center flex-wrap" style="gap:8px">
+      <span><i class="fas fa-file-invoice-dollar mr-1"></i> Purchases by request</span>
+      <label class="mb-0 sp-sub" style="cursor:pointer"><input type="checkbox" id="spUnpaidOnly" checked class="mr-1">Unpaid only</label>
+    </h3>
+    <div class="sp-scroll" id="spPurchases"></div>
+  </div>
   <div class="sp-card"><div class="sp-scroll" id="spBody"><div class="sp-empty">Loading...</div></div></div>
   <div id="spStock"></div>
 </div>
@@ -212,6 +220,70 @@
     });
   }
 
+  // A cash method posts on its row under 1101, a bank one under 1102.
+  function methodOptions(list) {
+    return '<option value="">Choose payment method...</option>' +
+      (list || []).filter(function (m) { return m.is_active; }).map(function (m) {
+        return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? '1102 Bank: ' : '1101 Cash: ') + m.method_name) +
+          ' (' + money(m.current_balance) + ')</option>';
+      }).join('');
+  }
+
+  var purchases = [], canPay = false, T = window.bgT || String;
+  function renderPurchases() {
+    var shown = purchases.filter(function (r) { return !$('#spUnpaidOnly').is(':checked') || r.remaining > 0.005; });
+    $('#spPurchasesCard').toggle(purchases.length > 0);
+    if (!shown.length) { $('#spPurchases').html('<div class="sp-empty">' + esc(T('Every request is paid.')) + '</div>'); return; }
+    $('#spPurchases').html('<table class="sp-table"><thead><tr><th>Job code</th><th>Request</th>' + (SUPPLIER_ID ? '' : '<th>Supplier</th>') +
+      '<th>Items</th><th class="r">Purchased</th><th class="r">Paid</th><th class="r">Remaining</th><th></th></tr></thead><tbody>' +
+      shown.map(function (r, i) {
+        return '<tr><td><a href="/sales_request_details/' + r.sales_request_id + '">SR-' + r.sales_request_id + '</a></td>' +
+          '<td><div class="sp-name" data-no-i18n>' + esc(r.title || '-') + '</div><div class="sp-sub" data-no-i18n>' + esc(r.client_name || '') + '</div></td>' +
+          (SUPPLIER_ID ? '' : '<td data-no-i18n><a href="/finance/suppliers/' + r.supplier_id + '">' + esc(r.supplier_name) + '</a></td>') +
+          '<td class="sp-sub" data-no-i18n>' + r.items.map(function (it) { return esc(it.name); }).join('<br>') + '</td>' +
+          '<td class="r">' + amt(r.purchased) + '</td><td class="r">' + amt(r.paid) + '</td><td class="r">' + owed(r.remaining) + '</td>' +
+          '<td class="r">' + (canPay && r.remaining > 0.005
+            ? '<button class="sp-btn sp-btn-primary sp-pay-sr" data-i="' + purchases.indexOf(r) + '"><i class="fas fa-money-bill-wave"></i> ' + esc(T('Pay')) + '</button>' : '') +
+          '</td></tr>';
+      }).join('') + '</tbody></table>');
+  }
+  function loadPurchases() {
+    $.getJSON('/api/finance/supplier-purchases' + (SUPPLIER_ID ? '?supplier_id=' + SUPPLIER_ID : '')).done(function (res) {
+      purchases = res.rows || []; canPay = !!res.can_pay; renderPurchases();
+    });
+  }
+  $('#spUnpaidOnly').on('change', renderPurchases);
+  $(document).on('click', '.sp-pay-sr', function () {
+    var r = purchases[$(this).data('i')];
+    $.getJSON('/api/finance/payment-methods').done(function (pm) {
+      Swal.fire({
+        title: esc(T('Pay supplier for')) + ' <bdi>SR-' + r.sales_request_id + '</bdi>',
+        html: '<div class="text-left sp-form open" style="border:0;padding:0;background:none">' +
+          '<div class="sp-sub mb-2"><strong data-no-i18n>' + esc(r.supplier_name) + '</strong><br>' + esc(T('Remaining on this request:')) + ' <strong>' + money(r.remaining) + '</strong>. ' +
+          esc(T("Posts Dr 2101 Suppliers / Cr the payment method's account.")) + '</div>' +
+          '<label>' + esc(T('Paid from')) + ' <span class="text-danger">*</span></label><select class="sp-input form-control mb-2" id="spSrMethod">' + methodOptions(pm.payment_methods) + '</select>' +
+          '<label>' + esc(T('Amount')) + ' <span class="text-danger">*</span></label><input type="number" class="sp-input form-control mb-2" id="spSrAmount" min="0" step="0.01" max="' + r.remaining + '" value="' + r.remaining.toFixed(2) + '">' +
+          '<label>' + esc(T('Date')) + '</label><input type="date" class="sp-input form-control mb-2" id="spSrDate">' +
+          '<label>' + esc(T('Reference (cheque / transfer no.)')) + '</label><input class="sp-input form-control" id="spSrRef" maxlength="100"></div>',
+        showCancelButton: true, confirmButtonText: T('Save payment'), cancelButtonText: T('Cancel'), focusConfirm: false,
+        preConfirm: function () {
+          var amount = Number($('#spSrAmount').val());
+          if (!$('#spSrMethod').val()) return Swal.showValidationMessage(T('Choose the payment method'));
+          if (!(amount > 0) || amount > r.remaining + 0.004) return Swal.showValidationMessage('Amount between 0 and ' + money(r.remaining));
+          return $.ajax({ url: '/api/finance/supplier-accounts/' + r.supplier_id + '/payment', method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ payment_method_id: $('#spSrMethod').val(), amount: amount, date: $('#spSrDate').val() || null,
+                                   sales_request_id: r.sales_request_id, reference: $('#spSrRef').val(),
+                                   notes: 'Purchases on SR-' + r.sales_request_id }) })
+            .catch(function (x) { Swal.showValidationMessage((x.responseJSON && x.responseJSON.error) || 'Please try again'); });
+        }
+      }).then(function (res) {
+        if (!res.isConfirmed) return;
+        Swal.fire(T('Payment recorded'), '', 'success');
+        loadPurchases(); load();
+      });
+    });
+  });
+
   var load = SUPPLIER_ID ? loadStatement : loadList;
   $('#spApply').on('click', load);
   $('#spSearch').on('input', renderList);
@@ -221,19 +293,13 @@
     $('.sp-form').not('#' + id).removeClass('open');
     $('#' + id).toggleClass('open');
     if (id === 'spPayForm' && $('#spPayForm').hasClass('open')) {   // fresh balances each time
-      $.getJSON('/api/finance/payment-methods').done(function (pm) {
-        $('#spPayMethod').html('<option value="">Choose payment method...</option>' +
-          (pm.payment_methods || []).filter(function (m) { return m.is_active; }).map(function (m) {
-            return '<option value="' + m.id + '">' + esc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) +
-              ' (' + money(m.current_balance) + ')</option>';
-          }).join(''));
-      });
+      $.getJSON('/api/finance/payment-methods').done(function (pm) { $('#spPayMethod').html(methodOptions(pm.payment_methods)); });
     }
   });
 
   function post(url, body, done) {
     $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body) })
-      .done(function () { $('.sp-form').removeClass('open'); Swal.fire(done, '', 'success'); loadStatement(); })
+      .done(function () { $('.sp-form').removeClass('open'); Swal.fire(done, '', 'success'); loadStatement(); loadPurchases(); })
       .fail(function (x) { Swal.fire('Not saved', (x.responseJSON && x.responseJSON.error) || 'Please try again', 'error'); });
   }
   $('#spPaySave').on('click', function () {
@@ -251,6 +317,7 @@
     }, 'Opening balance saved');
   });
   load();
+  loadPurchases();
 })();
 </script>
 {% endblock %}
