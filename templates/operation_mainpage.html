@@ -88,6 +88,8 @@
         </div>
     </div>
 
+    {% if money_direct %}{% include '_money_requests.html' %}{% endif %}
+
     {% if 'costing.view' in _p %}
     <!-- What costing is waiting on this person. Hidden when there is nothing,
          so it never becomes a row of zeroes people stop reading. -->

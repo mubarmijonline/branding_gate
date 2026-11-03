@@ -5219,8 +5219,15 @@ def operation_mainpage():
     """Display operations section landing page with dashboard and sub-page links"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    
-    return render_template("operation_mainpage.html")
+    # My Money Requests: only for those whose request goes straight to Finance
+    # (no one above them but the CEO, or the admin).
+    conn, cur = connection()
+    try:
+        money_direct = session.get('role_code') == 'admin' or not _approval_chain(cur, session['user_id'])
+    finally:
+        cur.close()
+        conn.close()
+    return render_template("operation_mainpage.html", money_direct=money_direct)
 
 @app.route('/approved-items', methods=['GET'])
 @perm('approved_item.view')

@@ -1412,3 +1412,9 @@ opens with "My Money Requests": Request balance (custody, the existing modal),
 Submit expense reimbursement (`/expense-tracking`, `expense_tracking.create`),
 Spend from my balance (`/my-expenses`, `expense.create`), My requests (the
 existing modal), and the balance mirrored from the navbar.
+
+**Moved to the Operations home (2026-11-03, Ahmed):** the section is now
+`_money_requests.html`, included by `operation_mainpage.html` only when the
+viewer's request goes straight to Finance (`money_direct`: admin, or an empty
+`_approval_chain`, i.e. a head under the CEO). Removed from `home.html`; the
+navbar balance menu still has the same actions for everyone.

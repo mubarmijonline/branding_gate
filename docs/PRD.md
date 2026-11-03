@@ -220,7 +220,8 @@ ledgers show the payments, and paying more is refused.
 - Whoever asks for money (Expense Tracking) does not choose where it comes
   from. Finance chooses the payment method when approving, and cannot approve
   without one.
-- The home page opens with My Money Requests: request balance (custody),
-  submit an expense reimbursement, spend from my balance, and my requests with
-  their status, plus the person's balance. Each shows only to those allowed to
-  use it.
+- The Operations home page opens with My Money Requests (request balance,
+  submit an expense reimbursement, spend from my balance, my requests, and the
+  person's balance) for those whose requests go straight to Finance: the head
+  and the admin. Each tile shows only to those allowed to use it. Others still
+  find the same actions in the balance menu.
