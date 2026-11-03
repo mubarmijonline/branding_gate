@@ -190,6 +190,18 @@
     .home-hero h1 { font-size: 1.4rem; }
     .portal-card { min-height: auto; }
   }
+  .money-requests { background: #fff; border: 1px solid #e3e6f0; border-radius: 14px; padding: 16px 18px; margin-bottom: 1.5rem;
+                    box-shadow: 0 2px 10px rgba(15,23,42,.05); }
+  .money-requests .mr-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .money-requests h2 { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin: 0; }
+  .money-requests .mr-balance { background: #e0f2fe; color: #0369a1; border-radius: 20px; padding: 4px 12px; font-size: 13px; }
+  .money-requests .mr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .money-requests .mr-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid #e3e6f0; border-radius: 12px;
+                             color: #1e293b; text-decoration: none; transition: border-color .15s, box-shadow .15s; min-height: 44px; }
+  .money-requests .mr-tile:hover { border-color: #4e73df; box-shadow: 0 4px 14px rgba(78,115,223,.15); text-decoration: none; }
+  .money-requests .mr-tile i { font-size: 20px; color: #4e73df; }
+  .money-requests .mr-tile span { font-size: 12px; color: #64748b; }
+  @media (max-width: 576px) { .money-requests .mr-grid { grid-template-columns: 1fr 1fr; } }
 </style>
 
 <div class="container-fluid" style="padding: 0 2rem;">
@@ -207,6 +219,34 @@
     </div>
   </div>
 
+  {# Gamal / David, 2026-11-03: asking Finance for money lived only in the
+     balance menu. The same actions, in one place on the home page. #}
+  {% set _hp = session.get('perms', {}) %}
+  <div class="money-requests">
+    <div class="mr-head">
+      <h2><i class="fas fa-hand-holding-usd mr-2"></i>My Money Requests</h2>
+      <span class="mr-balance"><i class="fas fa-wallet mr-1"></i>My balance: <strong id="homeMyBalance">EGP 0.00</strong></span>
+    </div>
+    <div class="mr-grid">
+      <a href="#" class="mr-tile" onclick="openGlobalRequestBalanceModal(); return false;">
+        <i class="fas fa-hand-holding-usd"></i><strong>Request balance (custody)</strong>
+        <span>Ask Finance for money in advance for a job.</span></a>
+      {% if 'expense_tracking.create' in _hp %}
+      <a href="/expense-tracking" class="mr-tile">
+        <i class="fas fa-file-invoice"></i><strong>Submit expense reimbursement</strong>
+        <span>You paid for a job: send the items, Finance approves and pays.</span></a>
+      {% endif %}
+      {% if 'expense.create' in _hp %}
+      <a href="/my-expenses" class="mr-tile">
+        <i class="fas fa-receipt"></i><strong>Spend from my balance</strong>
+        <span>Record what you spent from the custody you hold.</span></a>
+      {% endif %}
+      <a href="#" class="mr-tile" onclick="openGlobalMyRequestsModal(); return false;">
+        <i class="fas fa-tasks"></i><strong>My requests</strong>
+        <span>See which of your requests are pending, approved or rejected.</span></a>
+    </div>
+  </div>
+
   <!-- Portals Grid -->
   <div class="portals-grid" id="role-portals-container">
     <!-- Rendered by JS -->
@@ -214,6 +254,15 @@
 </div>
 
 <!-- Inject user_id as a JS variable for use in AJAX -->
+<script>
+// Mirror the navbar balance (main.html fills #navbarMyBalance).
+(function () {
+  var src = document.getElementById('navbarMyBalance'), dst = document.getElementById('homeMyBalance');
+  if (!src || !dst) return;
+  var copy = function () { dst.textContent = src.textContent; };
+  copy(); new MutationObserver(copy).observe(src, { childList: true, characterData: true, subtree: true });
+})();
+</script>
 <script>
 window.sessionUserId = "{{ session['user_id'] }}";
 </script>

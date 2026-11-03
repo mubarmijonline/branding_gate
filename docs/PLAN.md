@@ -1405,3 +1405,10 @@ the Finance Approval modal ("Paid from", required, shown with 1101 / 1102), the
 route refuses an approval without one and stores Finance's choice on the
 tracking. Supplier payments by request were already Finance-only
 (`finance_txn.approve`).
+
+**Money requests on the home page (2026-11-03, Ahmed for David):** the ways to
+ask Finance for money lived only in the navbar balance menu. `home.html` now
+opens with "My Money Requests": Request balance (custody, the existing modal),
+Submit expense reimbursement (`/expense-tracking`, `expense_tracking.create`),
+Spend from my balance (`/my-expenses`, `expense.create`), My requests (the
+existing modal), and the balance mirrored from the navbar.
