@@ -217,3 +217,6 @@ they are created. The numbers do not skip.
 Done when: George pays part of an SR's purchase from a bank and the rest from
 cash; the request's remaining drops to zero, the bank's and the cash box's
 ledgers show the payments, and paying more is refused.
+- Whoever asks for money (Expense Tracking) does not choose where it comes
+  from. Finance chooses the payment method when approving, and cannot approve
+  without one.

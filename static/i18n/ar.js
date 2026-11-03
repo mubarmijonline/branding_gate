@@ -4415,6 +4415,7 @@ window.BG_AR = {
 "Item changed on request": "بند اتعدل في الطلب",
   "not in total": "مش داخل في الإجمالي",
   "General Details": "التفاصيل العامة",
+  "Finance chooses the payment method the money is paid from.": "المالية هي اللي بتختار وسيلة الدفع اللي الفلوس هتطلع منها.",
   "Purchases by request": "المشتريات حسب الطلب",
   "Unpaid only": "غير المدفوع فقط",
   "Every request is paid.": "كل الطلبات مدفوعة.",

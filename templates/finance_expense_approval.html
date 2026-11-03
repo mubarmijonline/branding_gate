@@ -176,6 +176,12 @@
                     </table>
                 </div>
                 
+                {# Finance chooses where the money comes from: a cash method posts on
+                   its row under 1101, a bank one under 1102. #}
+                <div class="form-group mt-3">
+                    <label>Paid from <span class="text-danger">*</span></label>
+                    <select class="form-control" id="financePaymentMethod"></select>
+                </div>
                 <div class="form-group mt-3">
                     <label>Finance Notes (Optional)</label>
                     <textarea class="form-control" id="financeNotes" rows="2" placeholder="Add notes..."></textarea>
@@ -340,7 +346,6 @@ function openFinanceApprovalModal(trackingId) {
                         <p><strong>Tracking Code:</strong> ${t.tracking_code}</p>
                         <p><strong>Submitted By:</strong> ${t.user_name}</p>
                         <p><strong>Date:</strong> ${t.tracking_date || '-'}</p>
-                        <p><strong>Payment Method:</strong> ${t.payment_method_name || '-'}</p>
                     </div>
                     <div class="col-md-6">
                         <div class="alert alert-success mb-2">
@@ -359,6 +364,13 @@ function openFinanceApprovalModal(trackingId) {
             
             $('#modalTotalAmount').text(parseFloat(t.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2}) + ' EGP');
             $('#financeNotes').val('');
+            $('#financePaymentMethod').html('<option value="">Choose payment method...</option>').removeClass('is-invalid');
+            $.getJSON('/api/finance/payment-methods', function (pm) {
+                $('#financePaymentMethod').append((pm.payment_methods || []).filter(function (m) { return m.is_active; }).map(function (m) {
+                    return $('<option>').val(m.id).text((m.method_type === 'bank' ? '1102 Bank: ' : '1101 Cash: ') + m.method_name +
+                        ' (EGP ' + Number(m.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + ')');
+                }));
+            });
             
             $('#financeApprovalModal').modal('show');
         }
@@ -455,6 +467,13 @@ function approveWithCategories() {
         return;
     }
     
+    const paymentMethodId = $('#financePaymentMethod').val();
+    if (!paymentMethodId) {
+        $('#financePaymentMethod').addClass('is-invalid').trigger('focus');
+        Swal.fire({icon: 'error', title: (window.bgT || String)('Choose the payment method'), text: (window.bgT || String)('Finance chooses the payment method the money is paid from.')});
+        return;
+    }
+    $('#financePaymentMethod').removeClass('is-invalid');
     const notes = $('#financeNotes').val();
     
     Swal.fire({
@@ -478,7 +497,8 @@ function approveWithCategories() {
                 contentType: 'application/json',
                 data: JSON.stringify({
                     notes: notes,
-                    items: itemsCategories
+                    items: itemsCategories,
+                    payment_method_id: parseInt(paymentMethodId)
                 }),
                 success: function(response) {
                     if (response.success) {

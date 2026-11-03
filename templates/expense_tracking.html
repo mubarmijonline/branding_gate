@@ -150,15 +150,7 @@
                                 <input type="date" class="form-control" id="trackingDate" required>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Payment Method | طريقة الدفع <span class="text-danger">*</span></label>
-                                <select class="form-control" id="trackingPaymentMethod" required>
-                                    <option value="">Select Payment Method</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-8">
                             <div class="form-group">
                                 <label>Description | الوصف</label>
                                 <input type="text" class="form-control" id="trackingDescription" placeholder="Brief description...">
@@ -235,21 +227,8 @@ $(document).ready(function() {
     // Set default date to today
     document.getElementById('trackingDate').valueAsDate = new Date();
     
-    loadPaymentMethods();
     loadMyTrackings();
 });
-
-function loadPaymentMethods() {
-    $.get('/api/finance/payment-methods', function(response) {
-        if (response.success) {
-            let options = '<option value="">Select Payment Method</option>';
-            response.payment_methods.forEach(pm => {
-                options += `<option value="${pm.id}">${pm.method_name}</option>`;
-            });
-            $('#trackingPaymentMethod').html(options);
-        }
-    });
-}
 
 function loadMyTrackings() {
     const status = $('#statusFilter').val();
@@ -432,17 +411,11 @@ function updateTotalAmount() {
 
 function submitExpenseTracking() {
     const trackingDate = $('#trackingDate').val();
-    const paymentMethodId = $('#trackingPaymentMethod').val();
     const description = $('#trackingDescription').val();
     const notes = $('#trackingNotes').val();
     
     if (!trackingDate) {
         Swal.fire({icon: 'error', title: 'Error', text: 'Please select a date'});
-        return;
-    }
-    
-    if (!paymentMethodId) {
-        Swal.fire({icon: 'error', title: 'Error', text: 'Please select a payment method'});
         return;
     }
     
@@ -500,7 +473,6 @@ function submitExpenseTracking() {
                 contentType: 'application/json',
                 data: JSON.stringify({
                     tracking_date: trackingDate,
-                    payment_method_id: paymentMethodId,
                     description: description,
                     notes: notes,
                     items: items

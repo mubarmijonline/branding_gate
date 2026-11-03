@@ -33785,7 +33785,13 @@ def finance_approve_expense_tracking(tracking_id):
         user_name = session.get('name', session.get('username', 'System'))
         user_id = session.get('user_id')
         total_amount = float(tracking['total_amount'])
-        payment_method_id = tracking['payment_method_id']
+        # Finance chooses where the money comes from, not the requester.
+        if not data.get('payment_method_id'):
+            return jsonify({'success': False, 'error': 'Choose the payment method the money is paid from'}), 400
+        payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
+        if pm_error:
+            return jsonify({'success': False, 'error': pm_error}), 400
+        cur.execute("UPDATE expense_tracking SET payment_method_id = %s WHERE id = %s", (payment_method_id, tracking_id))
         
         # Get current payment method balance
         cur.execute("SELECT current_balance FROM payment_methods WHERE id = %s", (payment_method_id,))

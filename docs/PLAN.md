@@ -1398,3 +1398,10 @@ pages are Finance's.
 **Still open with George:** whether a purchase should post Dr cost (5101) or
 stock (1105) / Cr 2101 when the client approves (today it is owed on the supplier
 ledger but not in the journal), purchase VAT (1106), advances (1108).
+
+**Finance chooses the method, not the requester (2026-11-03, Ahmed):** the
+Expense Tracking form no longer asks for a payment method. Finance picks it in
+the Finance Approval modal ("Paid from", required, shown with 1101 / 1102), the
+route refuses an approval without one and stores Finance's choice on the
+tracking. Supplier payments by request were already Finance-only
+(`finance_txn.approve`).
