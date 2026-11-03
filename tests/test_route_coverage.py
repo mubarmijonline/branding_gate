@@ -6,6 +6,7 @@ imports the app and walks the URL map; it never touches MySQL and runs in
 under a second, so there is no excuse not to run it.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

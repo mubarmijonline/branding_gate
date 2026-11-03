@@ -4,6 +4,7 @@ picked; that '' went into an INT column and MySQL refused the whole request
 (1366). Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from datetime import date, timedelta
 

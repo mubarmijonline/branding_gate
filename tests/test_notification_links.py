@@ -11,6 +11,7 @@ This reads every path the tray can return and every literal link the server
 attaches, and asks the app whether it serves each one.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import os
 import re
 import unittest

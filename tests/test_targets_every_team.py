@@ -12,6 +12,7 @@ The screen itself was never Sales-only: what you see follows your scope and
 what you set follows the reporting line. Only the grants and the way in were.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import os
 import unittest
 
@@ -55,7 +56,7 @@ class GamalTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)

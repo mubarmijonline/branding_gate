@@ -1,3 +1,4 @@
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -28,7 +29,7 @@ class NegotiationRouteTest(unittest.TestCase):
             host="localhost",
             user="ps",
             passwd="Aa@123456",
-            db="branding_gate",
+            db=testdb.DB,
             port=3306,
             charset="utf8mb4",
             use_unicode=True,

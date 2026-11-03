@@ -9,6 +9,7 @@ edit form opens with its items (it opened empty, and adding one looked like
 replacing all of them). Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import unittest
 

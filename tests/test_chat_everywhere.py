@@ -4,6 +4,7 @@ request chat whatever their department, and cannot be left out (Beshoy,
 2026-10-29). Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

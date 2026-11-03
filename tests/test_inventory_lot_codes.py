@@ -7,6 +7,7 @@ movement may carry a code; taking out of a code or out of general cannot
 overdraw it. Retired items leave the Credit Inventory list. Rollback-based.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -25,7 +26,7 @@ class LotCodesTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self._notify = branding_gate.notify_users

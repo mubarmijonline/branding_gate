@@ -1,3 +1,4 @@
+import testdb  # noqa: F401  first: the test database, not the live one
 from pathlib import Path
 import subprocess
 import unittest

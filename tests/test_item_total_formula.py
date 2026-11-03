@@ -4,6 +4,7 @@ when its Calc box is ticked. Days count for a Sell item too (a screen sold for
 a 4-day event), not only for Rent.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

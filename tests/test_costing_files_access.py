@@ -5,6 +5,7 @@ Manager who may see the request used to get the file. Rolled back like
 test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import os
 import shutil
 import tempfile

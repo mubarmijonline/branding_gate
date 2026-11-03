@@ -5,6 +5,7 @@ the role grants that seed_rbac.py regenerates from rbac.py.
 Same rolled-back connection as test_costing.py: nothing survives.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

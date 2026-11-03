@@ -4,6 +4,7 @@ current password, and the latest activity without money. Rolled back like
 test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 from werkzeug.security import generate_password_hash, check_password_hash

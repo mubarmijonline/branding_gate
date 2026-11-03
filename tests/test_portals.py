@@ -5,6 +5,7 @@ Read-only: these probe the seeded organisation rather than creating people, so
 nothing is written and nothing needs rolling back.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -25,7 +26,7 @@ PORTALS = [
 def _a_user_holding(role_code):
     """Any seeded account with this role, or None when nobody has it."""
     conn = MySQLdb.connect(
-        host="localhost", user="ps", passwd="Aa@123456", db="branding_gate",
+        host="localhost", user="ps", passwd="Aa@123456", db=testdb.DB,
         port=3306, charset="utf8mb4", use_unicode=True,
         cursorclass=MySQLdb.cursors.DictCursor,
     )

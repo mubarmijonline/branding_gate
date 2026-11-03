@@ -6,6 +6,7 @@ record's received / sold / remaining untouched, so the Credit Inventory page
 showed 800 received and 800 remaining after 300 had gone out. Rollback-based.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -24,7 +25,7 @@ class CreditInventorySyncTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)

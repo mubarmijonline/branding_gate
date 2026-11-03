@@ -6,6 +6,7 @@ approval_stats.not_priced in /api/sales/requests, so this pins that number to
 what the items table actually holds. Read-only.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -16,7 +17,7 @@ import branding_gate
 
 def _connect():
     return MySQLdb.connect(
-        host="localhost", user="ps", passwd="Aa@123456", db="branding_gate",
+        host="localhost", user="ps", passwd="Aa@123456", db=testdb.DB,
         port=3306, charset="utf8mb4", use_unicode=True,
         cursorclass=MySQLdb.cursors.DictCursor,
     )

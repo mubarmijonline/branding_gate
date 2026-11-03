@@ -7,6 +7,7 @@ returns it. The arithmetic must reproduce Finance's sample, invoice 2452:
 157,600 + VAT 22,064 - 1% profits tax 1,576 = 178,088. Rollback-based.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from decimal import Decimal
 
@@ -45,7 +46,7 @@ class InvoiceFlowTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self._notify = branding_gate.notify_users

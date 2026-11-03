@@ -1,5 +1,6 @@
 """Important (something waits on the reader) versus Announcement."""
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

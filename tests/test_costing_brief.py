@@ -4,6 +4,7 @@ it sells for: the brief drops money-named fields, and the request API sends
 no selling price at all (David, 2026-10-29).
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import unittest
 from datetime import date

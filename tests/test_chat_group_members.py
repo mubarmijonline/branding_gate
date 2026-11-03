@@ -4,6 +4,7 @@ rule, and can take out only the ones who were added. Rolled back like
 test_costing.py; notify_users is off under unittest.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

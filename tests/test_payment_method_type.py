@@ -6,6 +6,7 @@ is Cash or Bank, and a Bank method must carry its bank name and account number.
 Rollback-based, like the other route tests here.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -47,7 +48,7 @@ class PaymentMethodRoutesTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)

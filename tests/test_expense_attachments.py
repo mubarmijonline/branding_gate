@@ -6,6 +6,7 @@ uploads/ tree and read through a checked route; shown on the Sales Request
 the money was spent on. Rollback-based, with files written to a temp folder.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import io
 import os
 import shutil
@@ -29,7 +30,7 @@ class ExpenseAttachmentsTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.original_dir = branding_gate.EXPENSE_FILES_DIR

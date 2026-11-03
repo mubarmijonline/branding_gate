@@ -76,7 +76,8 @@ def connection():
         host="localhost",
         user="ps",
         passwd="Aa@123456",
-        db='branding_gate',
+        # The tests point this at their own copy (tests/testdb.py).
+        db=os.environ.get('BG_DB', 'branding_gate'),
         port=3306,
         charset='utf8mb4',
         use_unicode=True,

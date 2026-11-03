@@ -4,6 +4,7 @@ The targets tree leaves out switched-off accounts with nothing to show
 but keeps an inactive person who had a target. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

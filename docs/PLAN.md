@@ -1335,3 +1335,16 @@ scope (Haitham) get "Urgent Sales Request #..." on admin approval. A leader
 could already assign any item to their direct reports and sees unassigned
 requests; only the notification was missing. Test in
 tests/test_urgent_approval_notifies.py.
+
+## 2026-11-03 Tests run on their own database
+
+The suite ran on live MySQL and rolled back. No data stayed, but MySQL never
+returns an AUTO_INCREMENT value, so each run burned a few hundred ids: 15
+requests numbered 23645 to 46577. Now `tests/run.sh` drops and re-creates
+`branding_gate_test` from a dump of live, then runs the suite with
+`BG_DB` / `BG_MONGO_DB` pointing at it. `tests/testdb.py` is the first import
+of every test module that touches MySQL or the app, defaults both to the copy
+and refuses `BG_DB=branding_gate`. The app reads `BG_DB` (default
+`branding_gate`, so the service is unchanged).
+
+Run: `tests/run.sh` (or `tests/run.sh "test_targets*.py"`).

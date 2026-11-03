@@ -17,6 +17,7 @@ inactive, "tell Pricing" reached one person.
 The window's own logic is run here in node, on the states it has to tell apart.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import os
 import re
@@ -169,7 +170,7 @@ class PricingDeskHearsAboutItTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)
@@ -230,7 +231,7 @@ class ARefusalSaysWhoAndWhyTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)
@@ -315,7 +316,7 @@ class FinishingANegotiatedItemTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)

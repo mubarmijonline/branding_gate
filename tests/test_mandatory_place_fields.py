@@ -4,6 +4,7 @@ Governorate, venue / hotel and setup date (or TBD) are required on a request
 create and on edit, by the server. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import unittest
 from datetime import date, timedelta

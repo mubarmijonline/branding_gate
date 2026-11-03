@@ -5,6 +5,7 @@ costed item is untouched, and an item out for costing keeps its assignment.
 Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

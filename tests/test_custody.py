@@ -5,6 +5,7 @@ Rollback-based, like tests/test_costing.py: every test builds its own people and
 rows inside a transaction that is rolled back, so nothing survives the run.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -42,7 +43,7 @@ class CustodyFlowTest(unittest.TestCase):
 
     def setUp(self):
         self.raw_connection = MySQLdb.connect(
-            host="localhost", user="ps", passwd="Aa@123456", db="branding_gate",
+            host="localhost", user="ps", passwd="Aa@123456", db=testdb.DB,
             port=3306, charset="utf8mb4", use_unicode=True,
         )
         self.raw_connection.autocommit(False)

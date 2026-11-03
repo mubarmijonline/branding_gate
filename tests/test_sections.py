@@ -6,6 +6,7 @@ and Operations cards for menus the navbar hid, an Assistant an Admin card, a
 Sales Head an Admin menu they only earned by holding client.edit.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import os
 import re
 import unittest

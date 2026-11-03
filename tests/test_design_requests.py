@@ -5,6 +5,7 @@ the requester sends it to Operation. Each step refused to the wrong person.
 Rolled back like test_costing.py; notify_users is off under unittest.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import io
 import json
 import shutil

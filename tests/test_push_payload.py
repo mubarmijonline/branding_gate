@@ -5,6 +5,7 @@ and its fcm_options.link rejects the relative links callers pass -- every
 send raised and only the log knew.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from unittest import mock
 

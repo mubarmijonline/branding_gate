@@ -4,6 +4,7 @@ included: an urgent sales request waits on them. Other fan-outs still leave
 the CEO out.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

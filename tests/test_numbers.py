@@ -10,6 +10,7 @@ it gets 1 -- so the stripping is pinned here.
 Requires `node` on PATH; skipped if absent.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import os
 import shutil
@@ -269,7 +270,7 @@ class ConnectionsAreClosedTest(unittest.TestCase):
 
         def threads():
             conn = MySQLdb.connect(host='localhost', user='ps', passwd='Aa@123456',
-                                   db='branding_gate', charset='utf8mb4')
+                                   db=testdb.DB, charset='utf8mb4')
             cur = conn.cursor()
             cur.execute("SHOW STATUS LIKE 'Threads_connected'")
             count = int(cur.fetchone()[1])

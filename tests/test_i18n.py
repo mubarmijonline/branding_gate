@@ -8,6 +8,7 @@ markup each language gets, the dictionary's shape, and the translator's
 matching rules, run in node the way the browser runs them.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import os
 import re
@@ -133,7 +134,7 @@ class ProtectedDataTest(unittest.TestCase):
             def close(self): pass
 
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.addCleanup(self._undo)

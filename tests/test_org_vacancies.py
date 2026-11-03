@@ -4,6 +4,7 @@ manager (the nearest person above it); filling the seat moves everything
 under it to the new person. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

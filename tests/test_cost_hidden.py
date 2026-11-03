@@ -5,6 +5,7 @@ for whoever may not see cost (Gamal, 2026-10-29). Operations, Pricing, Finance
 and the admin still get it. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import unittest
 

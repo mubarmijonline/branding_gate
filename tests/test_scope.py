@@ -9,6 +9,7 @@ Unlike the negotiation tests, these call handlers through the decorator,
 because the decorator and the scope predicate are what is under test.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import MySQLdb
@@ -38,7 +39,7 @@ class ScopeTest(unittest.TestCase):
 
     def setUp(self):
         self.raw_connection = MySQLdb.connect(
-            host="localhost", user="ps", passwd="Aa@123456", db="branding_gate",
+            host="localhost", user="ps", passwd="Aa@123456", db=testdb.DB,
             port=3306, charset="utf8mb4", use_unicode=True,
         )
         self.raw_connection.autocommit(False)

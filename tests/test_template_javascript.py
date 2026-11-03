@@ -9,6 +9,7 @@ so it needs its own test.
 Requires `node` on PATH; skipped if absent.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import io
 import json
 import os

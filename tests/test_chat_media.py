@@ -5,6 +5,7 @@ Management, who-assigned-whom on the operations board, the storage page).
 Rolled back like test_costing.py; uploads go to a temporary folder.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import io
 import os
 import shutil

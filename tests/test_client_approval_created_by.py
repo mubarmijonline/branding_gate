@@ -4,6 +4,7 @@ Client Approval page: who created each request, and a filter on it
 on most; the page gets the person behind it. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 from test_costing import _CostingHarness

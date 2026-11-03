@@ -5,6 +5,7 @@ Pricing sees it -- and launching it submits the form normally and deletes it.
 Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from datetime import date, timedelta
 

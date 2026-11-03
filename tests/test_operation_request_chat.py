@@ -6,6 +6,7 @@ post, and the request is in their drawer; a member who is not assigned gets
 test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

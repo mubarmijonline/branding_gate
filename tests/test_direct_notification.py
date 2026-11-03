@@ -4,6 +4,7 @@ Admins and heads send a notification to anyone from the notifications panel
 is an announcement. Rolled back like test_costing.py; notify_users is caught.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

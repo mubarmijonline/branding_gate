@@ -11,6 +11,7 @@ API carries each item's client status for a badge.
 Rollback-based, on the costing harness.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from unittest import mock
 

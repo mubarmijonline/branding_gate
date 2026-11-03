@@ -5,6 +5,7 @@ and company the JSON only holds ids for, filters by outcome and searches title,
 client and requester. Approvers only. Rolled back like test_costing.py.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import json
 import unittest
 

@@ -6,6 +6,7 @@ who is not senior to their report, or a reporting cycle, would both break team
 scope resolution at query time.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 import branding_gate

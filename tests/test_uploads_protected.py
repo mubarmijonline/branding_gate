@@ -6,6 +6,7 @@ nginx served uploads/ to anyone with a link. Every file now comes through
 record the file belongs to. Rollback-based, with files in a temp folder.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import os
 import shutil
 import tempfile
@@ -27,7 +28,7 @@ class UploadsProtectedTest(unittest.TestCase):
 
     def setUp(self):
         self.raw = MySQLdb.connect(host="localhost", user="ps", passwd="Aa@123456",
-                                   db="branding_gate", charset="utf8mb4", use_unicode=True)
+                                   db=testdb.DB, charset="utf8mb4", use_unicode=True)
         self.raw.autocommit(False)
         self.original = branding_gate.connection
         self.original_dir = branding_gate.UPLOADS_DIR

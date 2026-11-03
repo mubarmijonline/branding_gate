@@ -1,3 +1,4 @@
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 
 from flask import render_template

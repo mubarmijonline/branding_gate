@@ -6,6 +6,7 @@ autocommit off, branding_gate.connection monkeypatched to hand out a wrapper
 whose commit() is a no-op, and a rollback in tearDown. Nothing survives.
 """
 
+import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
 from datetime import date
 from decimal import Decimal
@@ -125,7 +126,7 @@ class TargetCascadeTest(unittest.TestCase):
 
     def setUp(self):
         self.raw_connection = MySQLdb.connect(
-            host="localhost", user="ps", passwd="Aa@123456", db="branding_gate",
+            host="localhost", user="ps", passwd="Aa@123456", db=testdb.DB,
             port=3306, charset="utf8mb4", use_unicode=True,
         )
         self.raw_connection.autocommit(False)
