@@ -187,3 +187,8 @@ and the team under them, with each month's achieved beside its month target.
 When an admin approves a request with an urgent date, the Operations Head is
 told as for any new request, and every Operations team leader is told too, so
 a leader can assign its items to their own people for costing straight away.
+
+## Request numbers
+
+Sales requests are numbered in one sequence, starting at 502, in the order
+they are created. The numbers do not skip.

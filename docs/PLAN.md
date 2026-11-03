@@ -1348,3 +1348,18 @@ and refuses `BG_DB=branding_gate`. The app reads `BG_DB` (default
 `branding_gate`, so the service is unchanged).
 
 Run: `tests/run.sh` (or `tests/run.sh "test_targets*.py"`).
+
+## 2026-11-03 Request numbers from 502
+
+Ahmed chose to renumber the existing requests too. `renumber_requests.py`
+(one-off, idempotent) moved the 15 requests to 502-516 in creation order in
+one transaction: every foreign key to sales_request, the four request columns
+without one (costing_log, sales_request_approvals, design_request,
+user_expense_tracking), the chat threads `sr:<id>`, and in Mongo the
+notifications' links and "#0NNNNN" numbers (725 rewritten). AUTO_INCREMENT is
+517. Rehearsed on branding_gate_test first (reference counts identical, full
+suite green), then run on live after a backup in
+~/backups/branding_gate/2026-11-03-pre-renumber.*. Old numbers in links people
+saved elsewhere (e.g. ?request=44073) no longer open anything.
+Map: 23645>502 25442>503 30738>504 30739>505 31318>506 37125>507 40766>508
+44073>509 45863>510 45864>511 46217>512 46575>513 46576>514 46577>515 47309>516.
