@@ -1363,3 +1363,11 @@ suite green), then run on live after a backup in
 saved elsewhere (e.g. ?request=44073) no longer open anything.
 Map: 23645>502 25442>503 30738>504 30739>505 31318>506 37125>507 40766>508
 44073>509 45863>510 45864>511 46217>512 46575>513 46576>514 46577>515 47309>516.
+
+## 2026-11-03: General details in the pricing modal
+
+The Set Selling Prices modal (`templates/sales_request.html`, `renderPriceRequestDetails`)
+opens with a collapsible "General Details" panel: title, client, company, request types,
+dates, duration, created by, description, then each template instance's fields (place,
+governorate, hall, hotel, setup/event dates, map link). Same `/api/sales/requests/<id>`
+payload the modal already loads; no money in it.

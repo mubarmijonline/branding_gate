@@ -130,6 +130,11 @@ Asked for by David Osama (Operations Head), 28-29 Oct 2026.
   not have yet is not a change.
 - An Operations Team Leader sees and decides the costing of their own team's
   members, including items the Head handed to a member directly.
+- The Pricing window opens with the request's General Details (title, client,
+  company, request types, dates, duration, created by, description) and each
+  template's fields (place, governorate, hall, hotel, setup and event dates,
+  map link), the same values the request details page shows. The panel folds
+  away.
 
 Done when: a request with 10 items can have 3 sent and priced while 7 are
 costed; the Team Leader of a member the Head assigned to sees the request

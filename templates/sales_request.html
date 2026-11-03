@@ -2256,6 +2256,16 @@
         border-color: #117a8b;
     }
     
+    .price-sr-details { border: 1px solid #cfe0fb; border-left: 4px solid #4e73df; border-radius: 6px;
+                        background: #f5f9ff; padding: 8px 12px; margin-bottom: 12px; }
+    .price-sr-details summary { cursor: pointer; font-weight: 700; color: #2c3e50; font-size: 14px; }
+    .price-sr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                     gap: 8px 14px; margin-top: 8px; font-size: 13px; }
+    .price-sr-grid .k { color: #4e73df; font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: .4px; }
+    .price-sr-grid .v { color: #2c3e50; font-weight: 500; word-break: break-word; }
+    .price-sr-grid .full { grid-column: 1 / -1; }
+    .price-sr-tpl { border-top: 1px solid #dfe7f5; margin-top: 10px; padding-top: 8px; }
+    .price-sr-tpl-name { font-weight: 600; color: #36b9cc; font-size: 13px; }
     .set-price-btn {
         background-color: #28a745;
         border-color: #28a745;
@@ -4690,6 +4700,9 @@ window.chartPieDemo = function() {
                         <i class="fas fa-info-circle mr-2"></i>
                         Set the selling price for each item. Only items with cost prices can have selling prices set.
                     </div>
+                    {# The request and its template fields (place, dates, hall) as on the
+                       details page, so pricing does not need a second window. #}
+                    <details class="price-sr-details" id="priceRequestDetails" open style="display:none;"></details>
                     <div class="price-items-toolbar" id="priceItemsToolbar" style="display:none;">
                         <div class="info-text">
                             <i class="fas fa-list-ul mr-1"></i><span id="priceItemsCount">0</span> item(s)<span id="priceItemsBreakdown"></span> &middot; click any row to expand
@@ -12467,6 +12480,7 @@ window.chartPieDemo = function() {
         console.log('Setting prices for request:', requestId);
         
         $('#priceRequestId').text(requestId);
+        $('#priceRequestDetails').hide().empty();
         $('#setPriceModal').modal('show');
         
         // Load request items with pricing
@@ -12494,8 +12508,45 @@ window.chartPieDemo = function() {
     }
 
     // Function to display items for pricing
+    // General details of the request and each template's fields, the same
+    // values the details drawer shows.
+    function renderPriceRequestDetails(request) {
+        var T = window.bgT || String;
+        var esc = function(v) { return $('<div>').text(v == null ? '' : String(v)).html(); };
+        var label = function(k) {
+            return String(k).replace(/[_\-]+/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        };
+        var cell = function(k, v) {
+            if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return '';
+            if (Array.isArray(v)) v = v.join(', ');
+            else if (typeof v === 'object') v = JSON.stringify(v);
+            var s = String(v);
+            var val = /^https?:\/\//i.test(s)
+                ? '<a href="' + esc(s) + '" target="_blank" rel="noopener">' + esc(T('Open link')) + '</a>'
+                : esc(s);
+            return '<div' + (s.length > 80 ? ' class="full"' : '') + '><div class="k">' + esc(T(k)) + '</div><div class="v">' + val + '</div></div>';
+        };
+        var general = [
+            ['Title', request.title], ['Client', request.client_name], ['Company', request.company_name],
+            ['Request Type(s)', (request.request_types || []).join(', ') || request.request_type],
+            ['Start Date', request.start_date], ['End Date', request.end_date], ['Duration', request.duration],
+            ['Created By', request.sales_added_by_name], ['Description', request.description]
+        ].map(function(p) { return cell(p[0], p[1]); }).join('');
+        var templates = (request.template_instances || []).map(function(t) {
+            var fields = t.fields || {};
+            var body = Object.keys(fields).map(function(k) { return cell(label(k), fields[k]); }).join('');
+            return body ? '<div class="price-sr-tpl"><div class="price-sr-tpl-name"><i class="fas fa-file-alt mr-1"></i>' +
+                esc(t.request_type || T('Template')) + '</div><div class="price-sr-grid">' + body + '</div></div>' : '';
+        }).join('');
+        $('#priceRequestDetails').html(
+            '<summary><i class="fas fa-layer-group mr-1"></i>' + esc(T('General Details')) + '</summary>' +
+            '<div class="price-sr-grid price-sr-general">' + general + '</div>' + templates
+        ).show();
+    }
+
     function displayItemsForPricing(request) {
         console.log('displayItemsForPricing called with request:', request);
+        renderPriceRequestDetails(request);
         var items = request.items || [];
         var itemsHtml = '';
         var hasCostedItems = false;

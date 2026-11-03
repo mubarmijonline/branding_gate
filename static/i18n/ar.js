@@ -4414,6 +4414,8 @@ window.BG_AR = {
 "still with Operation": "لسه مع العمليات",
 "Item changed on request": "بند اتعدل في الطلب",
   "not in total": "مش داخل في الإجمالي",
+  "General Details": "التفاصيل العامة",
+  "Delivery Location Governorate": "محافظة مكان التسليم",
   "Quantity not counted in the total": "الكمية مش محسوبة في الإجمالي",
   "Days not counted in the total": "الأيام مش محسوبة في الإجمالي"
 };
