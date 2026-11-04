@@ -54,6 +54,8 @@ def _badge_for(item):
     script = ('var item = %s;\n'
               'var sellPerItem = Number(item.sell_per_item || 0);\n'
               'var costPerItem = Number(item.cost_per_item || 0);\n'
+              'var hasSell = item.sell_per_item !== null && item.sell_per_item !== undefined;\n'
+              'var hasCost = item.cost_per_item !== null && item.cost_per_item !== undefined;\n'
               'var heldByOperation = item.pricing_sent === false;\n' % json.dumps(item)
               + _badge_logic() +
               "\nconsole.log(JSON.stringify({badge: statusBadge.replace(/<[^>]+>/g, '').trim(),"
@@ -109,6 +111,15 @@ class PricingWindowSaysWhoseMoveItIsTest(unittest.TestCase):
         self.assertFalse(verdict['isNegotiation'])
         self.assertEqual(verdict['badge'], 'Priced')
 
+    def test_a_free_item_is_priced_at_zero(self):
+        # David, 2026-11-04: 0 is a price, empty is not.
+        free = _badge_for({'id': 619, 'cost_per_item': 0, 'sell_per_item': 0,
+                           'approval_status': 'pending', 'negotiation_status': 'none'})
+        self.assertEqual(free['badge'], 'Priced')
+        open_ = _badge_for({'id': 620, 'cost_per_item': 0, 'sell_per_item': None,
+                            'approval_status': 'pending', 'negotiation_status': 'none'})
+        self.assertEqual(open_['badge'], 'Needs Pricing')
+
     def test_an_item_awaiting_a_decision_opens_itself(self):
         with open(os.path.join(ROOT, 'templates', 'sales_request.html'), encoding='utf-8') as handle:
             page = handle.read()
@@ -157,7 +168,7 @@ class EachItemSavesItselfTest(unittest.TestCase):
         save = self.page[self.page.index('function savePriceForItem($input)'):]
         save = save[:save.index('window.flushPriceEdits')]
         self.assertIn("$input.data('original-price', sellPerItem);", save)
-        self.assertIn('Math.abs(sellPerItem - originalPrice) <= 0.001', save)
+        self.assertIn('Math.abs(sellPerItem - parseFloat(original)) <= 0.001', save)
 
 
 class _RollbackConnection:

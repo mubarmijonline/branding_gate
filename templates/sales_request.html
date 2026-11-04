@@ -12613,6 +12613,8 @@ window.chartPieDemo = function() {
                 item.dimension_multiplier = dimensionMultiplier;
                 
                 var sellPerItem = item.sell_per_item ? parseFloat(item.sell_per_item) : 0;
+                // 0 is a price too: free items (David, 2026-11-04).
+                var hasSell = item.sell_per_item !== null && item.sell_per_item !== undefined && item.sell_per_item !== '';
                 var rentalDays = item.rental_days || 1;
                 var isSell = item.sell_type === 'sell';
                 var includeDays = item.include_days_in_calc !== false;
@@ -12790,9 +12792,9 @@ window.chartPieDemo = function() {
                     var collapseId = 'priceItem_' + item.id;
                     var itemNameEsc = (item.name || item.item_name || 'Unnamed Item');
                     var costSummary = (hasCost || costPerItem > 0) ? 'EGP ' + fmtNum(costPerItem) : '—';
-                    var sellSummary = sellPerItem > 0 ? 'EGP ' + fmtNum(sellPerItem) : '—';
+                    var sellSummary = hasSell ? 'EGP ' + fmtNum(sellPerItem) : '—';
                     var totalCostSummary = (hasCost || totalCost > 0) ? 'EGP ' + fmtNum(totalCost) : '—';
-                    var totalSellSummary = totalSell > 0 ? 'EGP ' + fmtNum(totalSell) : '—';
+                    var totalSellSummary = hasSell ? 'EGP ' + fmtNum(totalSell) : '—';
                     // Profit metrics for summary badges (Markup % = Profit/Cost, Net % = Profit/Revenue)
                     var sumNet       = totalSell - totalCost;
                     var sumMarkupPct = totalCost > 0 ? (sumNet / totalCost * 100) : 0;
@@ -12803,7 +12805,7 @@ window.chartPieDemo = function() {
                     // no cost, which pricing cannot touch yet, and one costing
                     // has handed over and is waiting on a price. Only the second
                     // is work for whoever opened this modal, so say which.
-                    var needsPricing = !heldByOperation && !isNegotiation && sellPerItem <= 0 && (hasCost || costPerItem > 0);
+                    var needsPricing = !heldByOperation && !isNegotiation && !hasSell && (hasCost || costPerItem > 0);
                     // Whose move it is, on the row itself. "NEGOTIATION" covered
                     // three different states, including ones where pricing has
                     // nothing to do yet, so the list read the same whether the
@@ -12816,14 +12818,14 @@ window.chartPieDemo = function() {
                     // The negotiation goes beside "Priced", not instead of it:
                     // an item can be priced and still be under negotiation, and
                     // replacing the badge lost the price's own state.
-                    var pricedBadge = sellPerItem > 0
+                    var pricedBadge = hasSell
                         ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
                         : '';
                     var statusBadge = heldByOperation
                         ? '<span class="badge badge-secondary ml-2" title="Operation has not sent this item yet"><i class="fas fa-hourglass-half mr-1"></i>Still with Operation</span>'
                         : isNegotiation
                         ? pricedBadge + negotiationBadge
-                        : (sellPerItem > 0
+                        : (hasSell
                             ? '<span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>'
                             : (needsPricing
                                 ? '<span class="badge badge-info ml-2" title="Costed and waiting for a price"><i class="fas fa-tag mr-1"></i>Needs Pricing</span>'
@@ -12924,7 +12926,7 @@ window.chartPieDemo = function() {
                                         </div>
                                         <div style="background: linear-gradient(135deg, #064e3b, #065f46); padding: 10px 14px; color: white; border-right: 1px solid rgba(255,255,255,0.1);">
                                             <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6;"><i class="fas fa-dollar-sign mr-1"></i>Sell / Item</div>
-                                            <div style="font-size: 1.05rem; font-weight: 700; color: #34d399;" id="unitSellDisplay_${item.id}">${sellPerItem > 0 ? 'EGP ' + fmtNum(sellPerItem) : 'EGP ?'}</div>
+                                            <div style="font-size: 1.05rem; font-weight: 700; color: #34d399;" id="unitSellDisplay_${item.id}">${hasSell ? 'EGP ' + fmtNum(sellPerItem) : 'EGP ?'}</div>
                                         </div>
                                         <div style="background: linear-gradient(135deg, #064e3b, #065f46); padding: 10px 14px; color: white;">
                                             <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6;"><i class="fas fa-calculator mr-1"></i>Total Sell</div>
@@ -12935,7 +12937,7 @@ window.chartPieDemo = function() {
                                     <div style="background: #f0fdf4; padding: 7px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0;">
                                         <span style="font-size: 0.7rem; font-weight: 600; color: #065f46; white-space: nowrap;"><i class="fas fa-calculator mr-1"></i>Formula:</span>
                                         <span style="font-size: 0.75rem; color: #374151;">Unit${includeQty ? ' × Qty' : ''}${includeDays ? ' × Days' : ''}${dimensionMultiplier > 1 ? ' × Dim' : ''}</span>
-                                        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 600; color: #059669;" id="formulaDetailSell_${item.id}">${sellPerItem > 0 ? fmtNum(sellPerItem) + (includeQty ? ' × ' + quantity.toLocaleString() : '') + (includeDays ? ' × ' + rentalDays.toLocaleString() : '') + (dimensionMultiplier > 1 ? ' × ' + fmtNum(dimensionMultiplier) : '') + ' = EGP ' + fmtNum(totalSell) : 'Enter price to calculate'}</span>
+                                        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 600; color: #059669;" id="formulaDetailSell_${item.id}">${hasSell ? fmtNum(sellPerItem) + (includeQty ? ' × ' + quantity.toLocaleString() : '') + (includeDays ? ' × ' + rentalDays.toLocaleString() : '') + (dimensionMultiplier > 1 ? ' × ' + fmtNum(dimensionMultiplier) : '') + ' = EGP ' + fmtNum(totalSell) : 'Enter price to calculate'}</span>
                                     </div>
                                     <!-- Price Input Row -->
                                     <div style="background: #f8fafc; padding: 10px 14px;">
@@ -12960,8 +12962,8 @@ window.chartPieDemo = function() {
                                                            data-include-qty="${includeQty}"
                                                            data-cost-per-item="${costPerItem}"
                                                            data-total-cost="${totalCost}"
-                                                           data-original-price="${sellPerItem || 0}"
-                                                           value="${sellPerItem || ''}"
+                                                           data-original-price="${hasSell ? sellPerItem : ''}"
+                                                           value="${hasSell ? sellPerItem : ''}"
                                                            ${item.pricing_sent === false ? 'disabled' : ''}
                                                            placeholder="${item.pricing_sent === false ? 'Still with Operation' : 'Enter price...'}">
                                                 </div>
@@ -13133,6 +13135,7 @@ window.chartPieDemo = function() {
 
     $(document).on('input', '.item-sell-price-input', function() {
         var sellPerItem = parseFloat($(this).val()) || 0;
+        var sellEntered = String($(this).val() || '').trim() !== '';
         var quantity = parseFloat($(this).data('quantity')) || 0;
         var rentalDays = parseFloat($(this).data('rental-days')) || 1;
         var dimensionMultiplier = parseFloat($(this).data('dimension-multiplier')) || 1;
@@ -13157,11 +13160,11 @@ window.chartPieDemo = function() {
         var itemGrossMargin = totalSell > 0 ? (itemGrossProfit / totalSell * 100) : 0;
         
         // Update the unit sell price display in the cost-vs-selling banner
-        $('#unitSellDisplay_' + itemId).html(sellPerItem > 0 ? 'EGP ' + fmtNum(sellPerItem) : 'EGP ?');
+        $('#unitSellDisplay_' + itemId).html(sellEntered ? 'EGP ' + fmtNum(sellPerItem) : 'EGP ?');
         
         // Update the formula detail text (compact)
         var formulaText = '';
-        if (sellPerItem > 0) {
+        if (sellEntered) {
             formulaText = fmtNum(sellPerItem);
             if (includeQty) {
                 formulaText += ' × ' + quantity.toLocaleString();
@@ -13186,8 +13189,8 @@ window.chartPieDemo = function() {
         $(`.item-total-sell-display-input[data-item-id="${itemId}"]`).text(fmtNum(totalSell));
 
         // Update collapsible accordion summary values
-        $(`[data-sell-per-item-summary="${itemId}"]`).text(sellPerItem > 0 ? 'EGP ' + fmtNum(sellPerItem) : '—');
-        $(`[data-total-sell-summary="${itemId}"]`).text(totalSell > 0 ? 'EGP ' + fmtNum(totalSell) : '—');
+        $(`[data-sell-per-item-summary="${itemId}"]`).text(sellEntered ? 'EGP ' + fmtNum(sellPerItem) : '—');
+        $(`[data-total-sell-summary="${itemId}"]`).text(sellEntered ? 'EGP ' + fmtNum(totalSell) : '—');
         // Update Markup % / Net % badges in summary
         (function() {
             var sNet       = totalSell - totalCost;
@@ -13203,7 +13206,7 @@ window.chartPieDemo = function() {
         // An item still with Operation keeps the badge that says so.
         if ($summaryName.length && !$(`.item-sell-price-input[data-item-id="${itemId}"]`).prop('disabled')) {
             $summaryName.find('.badge').remove();
-            if (sellPerItem > 0) {
+            if (sellEntered) {
                 $summaryName.append(' <span class="badge badge-success ml-2"><i class="fas fa-check mr-1"></i>Priced</span>');
             } else {
                 $summaryName.append(' <span class="badge badge-warning ml-2"><i class="fas fa-clock mr-1"></i>Pending</span>');
@@ -13344,9 +13347,12 @@ window.chartPieDemo = function() {
     function savePriceForItem($input) {
         var requestId = $('#priceRequestId').text();
         var itemId = $input.data('item-id');
-        var sellPerItem = parseFloat($input.val());
-        var originalPrice = parseFloat($input.data('original-price')) || 0;
-        if (!(sellPerItem > 0) || Math.abs(sellPerItem - originalPrice) <= 0.001) {
+        var raw = String($input.val() || '').trim();
+        var sellPerItem = parseFloat(raw);
+        var original = $input.data('original-price');
+        // Empty is "not priced"; 0 is a price (free items).
+        if (raw === '' || !(sellPerItem >= 0) ||
+            (original !== '' && original !== undefined && Math.abs(sellPerItem - parseFloat(original)) <= 0.001)) {
             return $.Deferred().resolve().promise();
         }
         var $state = priceSaveState($input);
@@ -13512,14 +13518,18 @@ window.chartPieDemo = function() {
         var priced = 0;
 
         $('.item-sell-price-input').each(function() {
-            if ((parseFloat($(this).data('original-price')) || 0) > 0) { priced++; }
+            var original = $(this).data('original-price');
+            if (original !== '' && original !== undefined) { priced++; }
         });
         $('.item-sell-price-input').each(function() {
             var itemId = $(this).data('item-id');
-            var sellPerItem = parseFloat($(this).val()) || 0;
-            var originalPrice = parseFloat($(this).data('original-price')) || 0;
+            var raw = String($(this).val() || '').trim();
+            var sellPerItem = parseFloat(raw);
+            var original = $(this).data('original-price');
+            var unchanged = original !== '' && original !== undefined &&
+                            Math.abs(sellPerItem - parseFloat(original)) <= 0.001;
             
-            if (sellPerItem > 0 && Math.abs(sellPerItem - originalPrice) > 0.001) {
+            if (raw !== '' && sellPerItem >= 0 && !unchanged) {
                 items.push({
                     item_id: itemId,
                     sell_per_item: sellPerItem

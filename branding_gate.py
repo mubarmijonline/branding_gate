@@ -920,7 +920,8 @@ def item_lock_reason(row):
     Read in the order the work happens, so the reason names the furthest the
     item has got rather than the first test that matched.
     """
-    if row.get('sell_per_item') not in (None, '') and float(row.get('sell_per_item') or 0) > 0:
+    # 0 is a price too: free items (David, 2026-11-04).
+    if row.get('sell_per_item') not in (None, ''):
         return 'priced'
     # A cost of 0 is a cost (David, 2026-11-04): some items genuinely cost nothing.
     if row.get('cost_per_item') not in (None, ''):
@@ -12390,9 +12391,9 @@ def get_single_sales_request(request_id):
                 'include_days_in_calc': bool(item.get('include_days_in_calc', 1)),
                 'include_qty_in_calc': bool(item.get('include_qty_in_calc', 1)),
                 'cost_per_item': float(item['cost_per_item']) if item.get('cost_per_item') is not None else None,
-                'sell_per_item': float(item.get('sell_per_item', 0)) if item.get('sell_per_item') else None,
+                'sell_per_item': float(item['sell_per_item']) if item.get('sell_per_item') is not None else None,
                 'total_cost': float(item['total_cost']) if item.get('total_cost') is not None else None,
-                'total_sell': float(item.get('total_sell', 0)) if item.get('total_sell') else None,
+                'total_sell': float(item['total_sell']) if item.get('total_sell') is not None else None,
                 'approval_status': item.get('approval_status'),
                 'negotiation_status': item.get('negotiation_status'),
                 'negotiation_reason': item.get('negotiation_reason'),
@@ -16091,6 +16092,16 @@ def set_item_prices(request_id):
         for item in items:
             item_id = item.get('item_id')
             sell_per_item = item.get('sell_per_item')
+            # 0 is allowed (free items); below 0 is not a price.
+            if sell_per_item is not None:
+                try:
+                    sell_per_item = float(sell_per_item)
+                except (TypeError, ValueError):
+                    sell_per_item = -1
+                if sell_per_item < 0:
+                    cur.close()
+                    conn.close()
+                    return jsonify({'success': False, 'error': 'A selling price cannot be negative'}), 400
             
             if item_id and sell_per_item is not None:
                 # Get current values and item properties for RECALCULATING total_sell with formula
@@ -16395,7 +16406,7 @@ def generate_proposal_pdf(request_id):
             FROM sales_request_items
             WHERE request_id = %s 
             AND cost_per_item IS NOT NULL
-            AND sell_per_item IS NOT NULL AND sell_per_item > 0
+            AND sell_per_item IS NOT NULL
             AND (approval_status IS NULL OR approval_status <> 'rejected')
             ORDER BY id
         """, (request_id,))
@@ -19427,10 +19438,10 @@ def get_client_approval_statistics():
         cur.execute("""
             SELECT 
                 COUNT(CASE WHEN (cost_per_item IS NULL
-                                 OR sell_per_item IS NULL OR sell_per_item = 0)
+                                 OR sell_per_item IS NULL)
                            AND COALESCE(approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as pending_pricing,
                 COUNT(CASE WHEN cost_per_item IS NOT NULL
-                           AND sell_per_item IS NOT NULL AND sell_per_item > 0
+                           AND sell_per_item IS NOT NULL
                            AND (approval_status IS NULL OR approval_status = '' 
                                 OR approval_status = 'pending') THEN 1 END) as ready_to_submit,
                 COUNT(CASE WHEN approval_status = 'approved' THEN 1 END) as approved,
@@ -19543,7 +19554,7 @@ def submit_item_for_approval(item_id):
             }), 404
         
         # Check if pricing is set
-        if item['cost_per_item'] is None or not item['sell_per_item']:
+        if item['cost_per_item'] is None or item['sell_per_item'] is None:
             cur.close()
             conn.close()
             return jsonify({
@@ -20754,8 +20765,8 @@ def get_request_approval_stage(request_id):
         
         # Calculate statistics
         total_items = len(items)
-        not_priced = sum(1 for item in items if item['cost_per_item'] is None or not item['sell_per_item'])
-        pending = sum(1 for item in items if (item['cost_per_item'] is not None and item['sell_per_item']) and (not item['approval_status'] or item['approval_status'] == 'pending'))
+        not_priced = sum(1 for item in items if item['cost_per_item'] is None or item['sell_per_item'] is None)
+        pending = sum(1 for item in items if (item['cost_per_item'] is not None and item['sell_per_item'] is not None) and (not item['approval_status'] or item['approval_status'] == 'pending'))
         approved = sum(1 for item in items if item['approval_status'] == 'approved')
         rejected = sum(1 for item in items if item['approval_status'] == 'rejected')
         negotiation = sum(1 for item in items if item['approval_status'] == 'pending_negotiation')
@@ -24951,8 +24962,7 @@ def get_approved_items_from_sales():
             LEFT JOIN inventory_items ii ON sri.inventory_item_id = ii.id
             WHERE sri.approval_status = 'approved'
               AND sri.cost_per_item IS NOT NULL
-              AND sri.sell_per_item IS NOT NULL 
-              AND sri.sell_per_item > 0
+              AND sri.sell_per_item IS NOT NULL
               AND sri.client_approval_date IS NOT NULL
             ORDER BY sri.client_approval_date DESC
         """)

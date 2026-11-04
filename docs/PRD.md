@@ -121,6 +121,9 @@ Asked for by David Osama (Operations Head), 28-29 Oct 2026.
   reason shown.
 - A cost of 0 is a valid cost: the item counts as costed, keeps its 0 and
   can be sent to Pricing like any other. Only an empty cost means not costed.
+- A selling price of 0 is valid too (free items): the item counts as priced,
+  goes to the client and shows on the quotation at EGP 0. A negative price is
+  refused; only an empty price means not priced.
 - Part of a request can go early: pick costed items in the cost window and
   "Send N to Pricing". Those items are with Pricing; the rest stay with
   Operation and are sent later ("Send the rest to Pricing").

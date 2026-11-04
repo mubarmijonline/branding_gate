@@ -1430,3 +1430,13 @@ screens. So a 0 item stayed Pending, its cost box came back empty, and Pricing
 showed "Awaiting Cost". Now costed means `cost_per_item IS NOT NULL`, and the
 request APIs send 0 as 0 instead of null. Selling price still has to be above
 0. Test: `tests/test_zero_cost.py`.
+
+### Selling price of 0 too (David, 2026-11-04)
+
+Free items: a selling price of 0 is a price. Priced now means
+`sell_per_item IS NOT NULL` (item lock, Pricing stats, submit to client,
+quotation PDF, approved-items list), and the API sends 0 instead of null. In
+the Pricing window an empty box is "not priced" and 0 is saved like any price
+(the baseline `data-original-price` is empty, not 0, for an unpriced item, so
+a typed 0 is no longer mistaken for "unchanged"). Set-prices refuses a
+negative price. Free items appear on the quotation at EGP 0.

@@ -1,5 +1,5 @@
 """
-A cost of 0 is a cost (David, 2026-11-04).
+A cost or a selling price of 0 is a real one (David, 2026-11-04): free items.
 
 Some items genuinely cost nothing. Saving 0 used to go through, but every
 "is it costed?" check read 0 as no cost, so the item stayed Pending, the cost
@@ -48,6 +48,26 @@ class ZeroCostTest(_CostingHarness):
 
         self.assertEqual(branding_gate.item_lock_reason({'cost_per_item': 0, 'sell_per_item': None}), 'costed')
         self.assertIsNone(branding_gate.item_lock_reason({'cost_per_item': None, 'sell_per_item': None}))
+
+    def test_a_free_item_sells_at_zero(self):
+        cur = self._cursor()
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                    "WHERE r.code = 'admin' AND u.is_active = 1 LIMIT 1")
+        admin = self._client_for(cur.fetchone()['id'])
+        cur.execute("UPDATE sales_request_items SET cost_per_item = 0, total_cost = 0, pricing_sent_at = NOW() "
+                    "WHERE id = %s", (self.item_id,))
+        cur.execute("UPDATE sales_request SET pricing_handoff_at = NOW() WHERE id = %s", (self.request_id,))
+        url = '/api/sales/requests/%d/set-prices' % self.request_id
+        r = admin.post(url, json={'items': [{'item_id': self.item_id, 'sell_per_item': -5}]})
+        self.assertEqual(r.status_code, 400, r.get_json())
+        r = admin.post(url, json={'items': [{'item_id': self.item_id, 'sell_per_item': 0}]})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        cur.execute("SELECT sell_per_item FROM sales_request_items WHERE id = %s", (self.item_id,))
+        self.assertEqual(float(cur.fetchone()['sell_per_item']), 0.0)
+        cur.close()
+        item = admin.get('/api/sales/requests/%d' % self.request_id).get_json()['request']['items'][0]
+        self.assertEqual((item['cost_per_item'], item['sell_per_item']), (0.0, 0.0))
+        self.assertEqual(branding_gate.item_lock_reason({'cost_per_item': 0, 'sell_per_item': 0}), 'priced')
 
     def test_a_proposal_of_zero_is_accepted(self):
         self._assign(self.head, [self.leader])
