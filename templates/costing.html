@@ -480,7 +480,7 @@
         '<span class="text-muted" style="font-size:.78rem;">' +
           esc(it.request_title || '') + ' · request #' + it.request_id +
           (it.qty ? ' · qty ' + money(it.qty) : '') +
-          (it.cost_per_item ? ' · costed ' + money(it.cost_per_item) : ' · not costed') +
+          (it.cost_per_item != null ? ' · costed ' + money(it.cost_per_item) : ' · not costed') +
           (it.open_assignments ? ' · ' + it.open_assignments + ' already out' : '') +
         '</span></span></label>';
     }).join('');

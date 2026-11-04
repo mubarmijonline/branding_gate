@@ -1418,3 +1418,15 @@ existing modal), and the balance mirrored from the navbar.
 viewer's request goes straight to Finance (`money_direct`: admin, or an empty
 `_approval_chain`, i.e. a head under the CEO). Removed from `home.html`; the
 navbar balance menu still has the same actions for everyone.
+
+## A cost of 0 is a cost (David, 2026-11-04)
+
+Some items genuinely cost nothing. Saving 0 already went through (the costing
+input and `to_amount` accept it), but every "is it costed?" check read 0 as no
+cost: `cost_per_item > 0` in the Operations list counts, the request status, the
+item lock, the quotation PDF, the Pricing counts and the approved-items list,
+and JS truthiness on the Operations, Pricing, Costing and Client Approval
+screens. So a 0 item stayed Pending, its cost box came back empty, and Pricing
+showed "Awaiting Cost". Now costed means `cost_per_item IS NOT NULL`, and the
+request APIs send 0 as 0 instead of null. Selling price still has to be above
+0. Test: `tests/test_zero_cost.py`.

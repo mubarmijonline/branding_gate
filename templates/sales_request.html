@@ -12569,11 +12569,13 @@ window.chartPieDemo = function() {
                 var quantity = item.quantity || item.qty || 1;
                 var costPerItem = item.cost_per_item ? parseFloat(item.cost_per_item) : 0;
                 var totalCost = item.total_cost ? parseFloat(item.total_cost) : 0;
+                // A cost of 0 is a cost (David, 2026-11-04), not a missing one.
+                var hasCost = item.cost_per_item !== null && item.cost_per_item !== undefined && item.cost_per_item !== '';
                 
                 // Auto-calculate costs if needed. Not for an item Operation has
                 // not sent: it has no cost here, and a share of the total is not one.
                 var heldByOperation = item.pricing_sent === false;
-                if (!heldByOperation && !costPerItem && !totalCost && requestHasTotalCost && totalQuantityAllItems > 0) {
+                if (!heldByOperation && !hasCost && !totalCost && requestHasTotalCost && totalQuantityAllItems > 0) {
                     var itemProportion = quantity / totalQuantityAllItems;
                     totalCost = parseFloat(request.total_cost) * itemProportion;
                     costPerItem = totalCost / quantity;
@@ -12622,7 +12624,7 @@ window.chartPieDemo = function() {
                 // Always render items so selling price can be set even without cost
                 if (true) {
                     // Track whether any item has cost (used only for the empty-state hint)
-                    if (costPerItem > 0 || totalCost > 0 || requestHasTotalCost) {
+                    if (hasCost || totalCost > 0 || requestHasTotalCost) {
                         hasCostedItems = true;
                     }
                     
@@ -12642,7 +12644,7 @@ window.chartPieDemo = function() {
                     );
                     // Whose move it is. Only these two are this desk's work.
                     var negotiationNeedsAttention = isPricingDecision || isAwaitingRecosting;
-                    var cardClass = isNegotiation ? 'negotiation-required' : (costPerItem > 0 ? 'costed' : 'pending');
+                    var cardClass = isNegotiation ? 'negotiation-required' : ((hasCost || costPerItem > 0) ? 'costed' : 'pending');
                     var headerClass = isNegotiation ? 'danger-header' : '';
                     
                     // Build enhanced image display
@@ -12787,9 +12789,9 @@ window.chartPieDemo = function() {
                     // Build the enhanced item card (wrapped in collapsible accordion)
                     var collapseId = 'priceItem_' + item.id;
                     var itemNameEsc = (item.name || item.item_name || 'Unnamed Item');
-                    var costSummary = costPerItem > 0 ? 'EGP ' + fmtNum(costPerItem) : '—';
+                    var costSummary = (hasCost || costPerItem > 0) ? 'EGP ' + fmtNum(costPerItem) : '—';
                     var sellSummary = sellPerItem > 0 ? 'EGP ' + fmtNum(sellPerItem) : '—';
-                    var totalCostSummary = totalCost > 0 ? 'EGP ' + fmtNum(totalCost) : '—';
+                    var totalCostSummary = (hasCost || totalCost > 0) ? 'EGP ' + fmtNum(totalCost) : '—';
                     var totalSellSummary = totalSell > 0 ? 'EGP ' + fmtNum(totalSell) : '—';
                     // Profit metrics for summary badges (Markup % = Profit/Cost, Net % = Profit/Revenue)
                     var sumNet       = totalSell - totalCost;
@@ -12801,7 +12803,7 @@ window.chartPieDemo = function() {
                     // no cost, which pricing cannot touch yet, and one costing
                     // has handed over and is waiting on a price. Only the second
                     // is work for whoever opened this modal, so say which.
-                    var needsPricing = !heldByOperation && !isNegotiation && sellPerItem <= 0 && costPerItem > 0;
+                    var needsPricing = !heldByOperation && !isNegotiation && sellPerItem <= 0 && (hasCost || costPerItem > 0);
                     // Whose move it is, on the row itself. "NEGOTIATION" covered
                     // three different states, including ones where pricing has
                     // nothing to do yet, so the list read the same whether the
@@ -12914,7 +12916,7 @@ window.chartPieDemo = function() {
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">
                                         <div style="background: linear-gradient(135deg, #1e293b, #334155); padding: 10px 14px; color: white; border-right: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1);">
                                             <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6;"><i class="fas fa-tag mr-1"></i>Cost / Item</div>
-                                            <div style="font-size: 1.05rem; font-weight: 700; color: #fbbf24;">${costPerItem > 0 ? 'EGP ' + costPerItem.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—'}</div>
+                                            <div style="font-size: 1.05rem; font-weight: 700; color: #fbbf24;">${(hasCost || costPerItem > 0) ? 'EGP ' + costPerItem.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—'}</div>
                                         </div>
                                         <div style="background: linear-gradient(135deg, #1e293b, #334155); padding: 10px 14px; color: white; border-bottom: 1px solid rgba(255,255,255,0.1);">
                                             <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6;"><i class="fas fa-coins mr-1"></i>Total Cost</div>

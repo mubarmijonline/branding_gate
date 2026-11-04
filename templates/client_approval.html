@@ -1590,7 +1590,7 @@ $(document).ready(function() {
 
     function renderTableRows(items) {
         return items.map(item => {
-            const hasCost = CAN_SEE_COST ? (item.cost_per_item && parseFloat(item.cost_per_item) > 0) : !!item.has_cost;
+            const hasCost = CAN_SEE_COST ? (item.cost_per_item !== null && item.cost_per_item !== undefined && item.cost_per_item !== '') : !!item.has_cost;
             const hasSelling = item.sell_per_item && parseFloat(item.sell_per_item) > 0;
             const hasPricing = hasCost && hasSelling;
             const showProfit = hasPricing && CAN_SEE_COST;

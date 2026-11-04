@@ -922,7 +922,8 @@ def item_lock_reason(row):
     """
     if row.get('sell_per_item') not in (None, '') and float(row.get('sell_per_item') or 0) > 0:
         return 'priced'
-    if row.get('cost_per_item') not in (None, '') and float(row.get('cost_per_item') or 0) > 0:
+    # A cost of 0 is a cost (David, 2026-11-04): some items genuinely cost nothing.
+    if row.get('cost_per_item') not in (None, ''):
         return 'costed'
     if row.get('approval_status') in ('approved', 'pending_negotiation'):
         return 'with the client'
@@ -9567,7 +9568,7 @@ def costing_items():
         sql += """
             ORDER BY (SELECT COUNT(*) FROM negotiation_requests nr
                       WHERE nr.item_id = i.id AND nr.status = 'pending_costing') DESC,
-                     (i.cost_per_item IS NOT NULL AND i.cost_per_item > 0),
+                     (i.cost_per_item IS NOT NULL),
                      i.id DESC
             LIMIT 60
         """
@@ -9727,8 +9728,7 @@ def costing_assign_request():
         wanted = [row for row in all_items
                   if include_costed
                   or row['awaiting_recost']
-                  or row['cost_per_item'] is None
-                  or float(row['cost_per_item']) == 0]
+                  or row['cost_per_item'] is None]
         skipped = len(all_items) - len(wanted)
         if not wanted:
             cur.close()
@@ -11705,7 +11705,7 @@ def get_sales_requests():
                            sr.budget_total, sr.currency, sr.items_count, sr.total_cost, 
                            sr.total_sell, sr.client_approval_stage, sr.created_by, sr.created_at, sr.modified_at,
                            c.client_name, comp.company_name,
-                           COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
+                           COUNT(CASE WHEN i.cost_per_item IS NOT NULL
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
                            COUNT(CASE WHEN i.id IS NOT NULL AND i.sell_per_item IS NULL
                                           AND (i.cost_per_item IS NULL OR i.pricing_sent_at IS NULL)
@@ -11744,7 +11744,7 @@ def get_sales_requests():
                            sr.total_sell, sr.client_approval_stage, sr.created_by, sr.created_at, sr.modified_at,
                            c.client_name, c.parent_company_id,
                            comp.company_name,
-                           COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
+                           COUNT(CASE WHEN i.cost_per_item IS NOT NULL
                                           AND (i.approval_status != 'pending_negotiation' OR i.approval_status IS NULL) THEN 1 END) as costed_items_count,
                            COUNT(CASE WHEN i.id IS NOT NULL AND i.sell_per_item IS NULL
                                           AND (i.cost_per_item IS NULL OR i.pricing_sent_at IS NULL)
@@ -12027,7 +12027,7 @@ def get_operations_requests():
                        COUNT(i.id) as visible_item_count,
                        SUM(i.total_cost) as visible_total_cost,
                        SUM(i.qty) as total_quantity,
-                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
+                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL
                                   AND NOT (i.approval_status = 'pending_negotiation' 
                                            AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation'))
                              THEN 1 END) as costed_items_count,
@@ -12040,7 +12040,7 @@ def get_operations_requests():
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
                              THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN i.id IS NOT NULL
-                                       AND (i.cost_per_item IS NULL OR i.cost_per_item = 0)
+                                       AND i.cost_per_item IS NULL
                                   THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
@@ -12067,7 +12067,7 @@ def get_operations_requests():
                        COUNT(i.id) as visible_item_count,
                        SUM(i.total_cost) as visible_total_cost,
                        SUM(i.qty) as total_quantity,
-                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 
+                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL
                                   AND NOT (i.approval_status = 'pending_negotiation' 
                                            AND (i.negotiation_status IS NULL OR i.negotiation_status = 'none' OR i.negotiation_status = 'pending_negotiation'))
                              THEN 1 END) as costed_items_count,
@@ -12080,7 +12080,7 @@ def get_operations_requests():
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
                              THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN i.id IS NOT NULL
-                                       AND (i.cost_per_item IS NULL OR i.cost_per_item = 0)
+                                       AND i.cost_per_item IS NULL
                                   THEN 1 END) as pending_items_count
                 FROM sales_request sr
                 LEFT JOIN client c ON sr.client_id = c.id
@@ -12389,9 +12389,9 @@ def get_single_sales_request(request_id):
                 'dimension_calc': item.get('dimension_calc', ''),
                 'include_days_in_calc': bool(item.get('include_days_in_calc', 1)),
                 'include_qty_in_calc': bool(item.get('include_qty_in_calc', 1)),
-                'cost_per_item': float(item.get('cost_per_item', 0)) if item.get('cost_per_item') else None,
+                'cost_per_item': float(item['cost_per_item']) if item.get('cost_per_item') is not None else None,
                 'sell_per_item': float(item.get('sell_per_item', 0)) if item.get('sell_per_item') else None,
-                'total_cost': float(item.get('total_cost', 0)) if item.get('total_cost') else None,
+                'total_cost': float(item['total_cost']) if item.get('total_cost') is not None else None,
                 'total_sell': float(item.get('total_sell', 0)) if item.get('total_sell') else None,
                 'approval_status': item.get('approval_status'),
                 'negotiation_status': item.get('negotiation_status'),
@@ -12686,7 +12686,7 @@ def get_single_operations_request(request_id):
         
         # Calculate status based on costed items
         total_items = len(items_data)
-        costed_items = len([item for item in items_data if item.get('cost_per_item') and item.get('cost_per_item') > 0])
+        costed_items = len([item for item in items_data if item.get('cost_per_item') is not None])
         
         if total_items == 0:
             status = 'No Items'
@@ -12724,8 +12724,8 @@ def get_single_operations_request(request_id):
         }
         
         for item in items_data:
-            unit_cost = float(item.get('cost_per_item', 0)) if item.get('cost_per_item') else 0
-            has_cost = unit_cost > 0
+            has_cost = item.get('cost_per_item') is not None
+            unit_cost = float(item['cost_per_item']) if has_cost else 0
             
             # Parse attributes JSON to extract measurements (dimensions)
             attributes = {}
@@ -14355,7 +14355,7 @@ def add_operation_request_costs():
         # Calculate updated status
         cur.execute("""
             SELECT COUNT(*) as total_items, 
-                   COUNT(CASE WHEN cost_per_item IS NOT NULL AND cost_per_item > 0 THEN 1 END) as costed_items
+                   COUNT(CASE WHEN cost_per_item IS NOT NULL THEN 1 END) as costed_items
             FROM sales_request_items 
             WHERE request_id = %s
         """, (data['request_id'],))
@@ -16394,7 +16394,7 @@ def generate_proposal_pdf(request_id):
             SELECT name, description, qty, unit, sell_per_item, total_sell, attributes
             FROM sales_request_items
             WHERE request_id = %s 
-            AND cost_per_item IS NOT NULL AND cost_per_item > 0
+            AND cost_per_item IS NOT NULL
             AND sell_per_item IS NOT NULL AND sell_per_item > 0
             AND (approval_status IS NULL OR approval_status <> 'rejected')
             ORDER BY id
@@ -16904,7 +16904,7 @@ def get_operations_statistics():
             FROM (
                 SELECT sr.id,
                        COUNT(i.id) as total_items,
-                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL AND i.cost_per_item > 0 THEN 1 END) as costed_items
+                       COUNT(CASE WHEN i.cost_per_item IS NOT NULL THEN 1 END) as costed_items
                 FROM sales_request sr
                 LEFT JOIN sales_request_items i ON sr.id = i.request_id
                 GROUP BY sr.id
@@ -16922,7 +16922,7 @@ def get_operations_statistics():
         total_items = cur.fetchone()['total_items']
         
         # Costed items count (items with cost)
-        cur.execute("SELECT COUNT(*) as costed_items FROM sales_request_items WHERE cost_per_item IS NOT NULL AND cost_per_item > 0")
+        cur.execute("SELECT COUNT(*) as costed_items FROM sales_request_items WHERE cost_per_item IS NOT NULL")
         costed_items = cur.fetchone()['costed_items']
         
         # Calculate costing progress percentage
@@ -19270,7 +19270,7 @@ def hide_item_cost(rows):
     if has('sales_item.cost'):
         return rows
     for row in rows:
-        row['has_cost'] = bool(row.get('cost_per_item') and float(row['cost_per_item']) > 0)
+        row['has_cost'] = row.get('cost_per_item') is not None
         for key in [k for k in row if 'cost' in k or 'profit' in k or 'margin' in k]:
             if key != 'has_cost':
                 row.pop(key)
@@ -19426,10 +19426,10 @@ def get_client_approval_statistics():
         # Get counts for different statuses
         cur.execute("""
             SELECT 
-                COUNT(CASE WHEN (cost_per_item IS NULL OR cost_per_item = 0 
+                COUNT(CASE WHEN (cost_per_item IS NULL
                                  OR sell_per_item IS NULL OR sell_per_item = 0)
                            AND COALESCE(approval_status, 'pending') NOT IN ('approved', 'rejected') THEN 1 END) as pending_pricing,
-                COUNT(CASE WHEN cost_per_item IS NOT NULL AND cost_per_item > 0 
+                COUNT(CASE WHEN cost_per_item IS NOT NULL
                            AND sell_per_item IS NOT NULL AND sell_per_item > 0
                            AND (approval_status IS NULL OR approval_status = '' 
                                 OR approval_status = 'pending') THEN 1 END) as ready_to_submit,
@@ -19543,7 +19543,7 @@ def submit_item_for_approval(item_id):
             }), 404
         
         # Check if pricing is set
-        if not item['cost_per_item'] or not item['sell_per_item']:
+        if item['cost_per_item'] is None or not item['sell_per_item']:
             cur.close()
             conn.close()
             return jsonify({
@@ -20754,8 +20754,8 @@ def get_request_approval_stage(request_id):
         
         # Calculate statistics
         total_items = len(items)
-        not_priced = sum(1 for item in items if not item['cost_per_item'] or not item['sell_per_item'])
-        pending = sum(1 for item in items if (item['cost_per_item'] and item['sell_per_item']) and (not item['approval_status'] or item['approval_status'] == 'pending'))
+        not_priced = sum(1 for item in items if item['cost_per_item'] is None or not item['sell_per_item'])
+        pending = sum(1 for item in items if (item['cost_per_item'] is not None and item['sell_per_item']) and (not item['approval_status'] or item['approval_status'] == 'pending'))
         approved = sum(1 for item in items if item['approval_status'] == 'approved')
         rejected = sum(1 for item in items if item['approval_status'] == 'rejected')
         negotiation = sum(1 for item in items if item['approval_status'] == 'pending_negotiation')
@@ -24950,8 +24950,7 @@ def get_approved_items_from_sales():
             LEFT JOIN company comp ON sr.company_id = comp.id
             LEFT JOIN inventory_items ii ON sri.inventory_item_id = ii.id
             WHERE sri.approval_status = 'approved'
-              AND sri.cost_per_item IS NOT NULL 
-              AND sri.cost_per_item > 0
+              AND sri.cost_per_item IS NOT NULL
               AND sri.sell_per_item IS NOT NULL 
               AND sri.sell_per_item > 0
               AND sri.client_approval_date IS NOT NULL

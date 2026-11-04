@@ -2499,7 +2499,7 @@ $(document).ready(function() {
                         // Determine card status
                         var isNegotiation = item.approval_status === 'pending_negotiation' && item.negotiation_status === 'pending_negotiation';
                         var isRecosted = item.approval_status === 'pending_negotiation' && item.negotiation_status === 'negotiated';
-                        var isCosted = item.unit_cost && item.unit_cost > 0;
+                        var isCosted = !!item.has_cost;  // 0 is a cost too
                         var cardClass = isNegotiation ? 'negotiation-required' : (isCosted ? 'costed' : 'pending');
                         var headerClass = isNegotiation ? 'danger-header' : (isCosted ? 'costed-header' : '');
                         
@@ -2639,7 +2639,7 @@ $(document).ready(function() {
                         // Calculate current cost if exists
                         var effectiveDays = !includeDaysInCalc ? 1 : rentalDays;
                         var effectiveQty = includeQtyInCalc ? item.total_quantity : 1;
-                        var currentTotalCost = item.unit_cost ? formatNum(item.unit_cost * effectiveQty * effectiveDays * dimensionMultiplier) : '';
+                        var currentTotalCost = item.has_cost ? formatNum(item.unit_cost * effectiveQty * effectiveDays * dimensionMultiplier) : '';
                         
                         // Build the enhanced item card (COLLAPSIBLE)
                         var collapseId = 'opCostItem_' + item.id;
@@ -2668,7 +2668,7 @@ $(document).ready(function() {
                         var daysSummary = !isSell
                             ? '<span class="op-ci-summary-chip"><i class="fas fa-calendar-day"></i> ' + rentalDays + 'd</span>'
                             : '';
-                        var costSummaryNow = item.unit_cost
+                        var costSummaryNow = item.has_cost
                             ? '<span class="op-ci-summary-chip ok"><i class="fas fa-tag"></i> EGP ' + formatNum(item.unit_cost) + '</span>'
                             : '<span class="op-ci-summary-chip warn"><i class="fas fa-exclamation-circle"></i> Not costed</span>';
 
@@ -2738,7 +2738,7 @@ $(document).ready(function() {
                                                data-is-sell="${isSell ? 'true' : 'false'}"
                                                data-include-days="${includeDaysInCalc ? 'true' : 'false'}"
                                                data-include-qty="${includeQtyInCalc ? 'true' : 'false'}"
-                                               value="${item.unit_cost ? bgGroupDigits(String(item.unit_cost)) : ''}"
+                                               value="${item.has_cost ? bgGroupDigits(String(item.unit_cost)) : ''}"
                                                placeholder="Unit cost...">
                                         <div class="input-group-append">
                                             <span class="input-group-text">= EGP <span class="item-total-cost-display ml-1" data-item-id="${item.id}">${currentTotalCost || '0.00'}</span></span>
@@ -2799,7 +2799,7 @@ $(document).ready(function() {
                                             <div class="enhanced-formula-values">
                                                 <div class="enhanced-formula-value-box">
                                                     <div class="value-label">Unit Cost</div>
-                                                    <div class="value-number" id="unitCostDisplay_${item.id}">${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) : 'EGP ?'}</div>
+                                                    <div class="value-number" id="unitCostDisplay_${item.id}">${item.has_cost ? 'EGP ' + formatNum(item.unit_cost) : 'EGP ?'}</div>
                                                 </div>
                                                 ${includeQtyInCalc ? `
                                                 <div class="enhanced-formula-value-box">
@@ -2821,7 +2821,7 @@ $(document).ready(function() {
                                                 ` : ''}
                                             </div>
                                             <div class="enhanced-formula-result" id="formulaDetail_${item.id}">
-                                                ${item.unit_cost ? 'EGP ' + formatNum(item.unit_cost) + (includeQtyInCalc ? ' × ' + item.total_quantity.toLocaleString() : '') + ((includeDaysInCalc) ? ' × ' + rentalDays : '') + (dimensionMultiplier > 1 ? ' × ' + formatNum(dimensionMultiplier) : '') + ' = EGP ' + currentTotalCost : 'Enter unit cost to calculate total'}
+                                                ${item.has_cost ? 'EGP ' + formatNum(item.unit_cost) + (includeQtyInCalc ? ' × ' + item.total_quantity.toLocaleString() : '') + ((includeDaysInCalc) ? ' × ' + rentalDays : '') + (dimensionMultiplier > 1 ? ' × ' + formatNum(dimensionMultiplier) : '') + ' = EGP ' + currentTotalCost : 'Enter unit cost to calculate total'}
                                             </div>
                                         </div>
 
@@ -2957,7 +2957,7 @@ $(document).ready(function() {
             var effectiveDays = !includeDays ? 1 : rentalDays;
             var effectiveQty = includeQty ? quantity : 1;
             
-            if (costPerUnit > 0) {
+            if (costPerUnit >= 0) {
                 // Total = Unit Cost × Qty (if included) × Days (if rent AND include_days) × Dimension Multiplier
                 totalCost += costPerUnit * effectiveQty * effectiveDays * dimensionMultiplier;
                 itemsWithCost++;
@@ -3208,11 +3208,11 @@ $(document).ready(function() {
                 var dimsHtml = dims.length
                     ? '<small class="text-muted"><i class="fas fa-ruler-combined"></i> ' + dims.join(' × ') + '</small>'
                     : '<small class="text-muted">-</small>';
-                var unitCost = (it.unit_cost && it.unit_cost > 0)
+                var unitCost = it.has_cost
                     ? 'EGP ' + formatNum(it.unit_cost) : '<span class="text-muted">Not costed</span>';
-                var totalCost = (it.unit_cost && it.unit_cost > 0)
+                var totalCost = it.has_cost
                     ? 'EGP ' + formatNum(it.unit_cost * it.total_quantity) : '<span class="text-muted">-</span>';
-                var costStatus = (it.unit_cost && it.unit_cost > 0)
+                var costStatus = it.has_cost
                     ? '<span class="badge badge-success">Costed</span>'
                     : '<span class="badge badge-warning text-dark">Pending</span>';
                 if (it.approval_status === 'pending_negotiation' && it.negotiation_status === 'pending_negotiation') {

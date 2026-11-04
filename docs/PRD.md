@@ -119,6 +119,8 @@ Asked for by David Osama (Operations Head), 28-29 Oct 2026.
   Pricing" saves and sends every item not yet sent, in one click. If some
   item still has no cost, the costs are saved and nothing is sent, with the
   reason shown.
+- A cost of 0 is a valid cost: the item counts as costed, keeps its 0 and
+  can be sent to Pricing like any other. Only an empty cost means not costed.
 - Part of a request can go early: pick costed items in the cost window and
   "Send N to Pricing". Those items are with Pricing; the rest stay with
   Operation and are sent later ("Send the rest to Pricing").
