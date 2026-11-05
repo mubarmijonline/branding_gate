@@ -200,6 +200,35 @@ class UrgentApprovalKeepsInstancesTest(_CostingHarness):
         self.assertEqual([len(i['items']) for i in body['template_instances']], [1])
         self.assertEqual(body['template_instances'][0]['fields']['delivery_location'], 'Nasr City')
 
+    def test_a_request_raised_under_a_mobile_belongs_to_that_person(self):
+        # created_by is a mobile for some accounts (Sarah, 523/524): the
+        # approved request used to go to the admin who approved it.
+        cur = self._cursor()
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                    "WHERE r.code = 'admin' AND u.is_active = 1 LIMIT 1")
+        admin = cur.fetchone()['id']
+        cur.execute("SELECT mobile FROM user WHERE id = %s", (self.head,))
+        mobile = cur.fetchone()['mobile']
+        cur.execute("INSERT INTO sales_request_approvals (request_type, request_data, requested_by, approval_reason) "
+                    "VALUES ('sales_request', %s, %s, 'Urgent date')",
+                    (json.dumps({'title': 'Urgent by mobile', 'client_id': fixtures.ensure_client(cur),
+                                 'start_date': '2026-11-06', 'request_types': ['Printing'],
+                                 'template_fields': {'instances': [], 'flat_fields': {}}}), mobile))
+        approval = cur.lastrowid
+        cur.close()
+        notify = branding_gate.notify_users
+        branding_gate.notify_users = lambda *a, **k: 0
+        try:
+            r = self._client_for(admin).post('/api/approvals/%d/approve' % approval, json={})
+        finally:
+            branding_gate.notify_users = notify
+        self.assertEqual(r.status_code, 200, r.get_json())
+        cur = self._cursor()
+        cur.execute("SELECT sr.owner_user_id FROM sales_request sr JOIN sales_request_approvals a "
+                    "ON a.sales_request_id = sr.id WHERE a.id = %s", (approval,))
+        self.assertEqual(cur.fetchone()['owner_user_id'], self.head)
+        cur.close()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1702,10 +1702,13 @@ def claim_sales_request(cur, request_id, owner_username=None):
     """
     owner_id = None
     if owner_username:
-        # username or display name: the approvals table holds whichever the
-        # creating route wrote, the same way notify_username() reads it.
-        cur.execute("SELECT id FROM user WHERE username = %s OR name = %s LIMIT 1",
-                    (owner_username, owner_username))
+        # username, display name or mobile: the approvals table holds whichever
+        # the creating route wrote (created_by is a mobile for some accounts).
+        # Missing the mobile handed Sarah's requests to the approving admin
+        # (523, 524; 2026-11-05).
+        cur.execute("""SELECT id FROM user WHERE username = %s OR name = %s OR mobile = %s
+                       ORDER BY username = %s DESC, is_active DESC LIMIT 1""",
+                    (owner_username, owner_username, owner_username, owner_username))
         row = cur.fetchone()
         owner_id = row['id'] if row else None
     if not owner_id:

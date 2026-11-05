@@ -1440,3 +1440,16 @@ the Pricing window an empty box is "not priced" and 0 is saved like any price
 (the baseline `data-original-price` is empty, not 0, for an unpriced item, so
 a typed 0 is no longer mistaken for "unchanged"). Set-prices refuses a
 negative price. Free items appear on the quotation at EGP 0.
+
+## Urgent-date requests went to the approving admin (Sarah, 2026-11-05)
+
+Requests 523 and 524 were raised by Sarah Gaber, went through the urgent-date
+approval, and did not appear in her list. `claim_sales_request` resolved the
+approval's `requested_by` by username or name only; Sarah's requests carry her
+mobile (01023272888), so nothing matched and the owner fell back to the
+session user, the admin who approved (Beshoy Ashaia). The lookup now matches
+the mobile too (username preferred, active first). Live repair: 523 and 524
+owner set to Sarah (401); a scan of every approved request found no others
+(503, 508, 509, 514 carry a number that matches no user and Sarah already owns
+them). Test: `test_item_edit_recost.py`
+(`test_a_request_raised_under_a_mobile_belongs_to_that_person`).
