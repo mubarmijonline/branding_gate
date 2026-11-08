@@ -4403,6 +4403,8 @@ window.BG_AR = {
 "With Operations": "مع العمليات",
 "With the client": "مع العميل",
 "Change and re-cost": "تعديل وإعادة تكلفة",
+"Changing this recalculates the totals. No re-cost needed.": "تغييرها بيعيد حساب الإجماليات من غير إعادة تكلفة.",
+"The Calc ticks for days and quantity can still be changed: the totals are recalculated, no re-cost needed.": "علامات الحساب للأيام والكمية لسه ممكن تتغير: الإجماليات بتتحسب تاني من غير إعادة تكلفة.",
 "Approved value": "القيمة المعتمدة",
 "Being costed or priced": "تحت التكلفة أو التسعير",
 "Could not load this report.": "مش قادرين نحمّل التقرير ده.",

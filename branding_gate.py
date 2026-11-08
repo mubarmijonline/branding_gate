@@ -912,6 +912,13 @@ def get_user_roles(user_id):
 COSTED_ITEM_FIELDS = ('name', 'qty', 'unit', 'sell_type', 'rental_days',
                       'dimension_calc', 'width', 'height', 'depth')
 
+# The Calc ticks only choose whether days and quantity multiply the unit cost
+# and price; the units themselves stay right. So changing one on a costed or
+# priced item recalculates its totals in place, with no trip back to
+# Operations. They were missing from the change check, so unticking Days on a
+# costed item was silently dropped (Gamal, 2026-11-08).
+CALC_ITEM_FIELDS = ('include_days_in_calc', 'include_qty_in_calc')
+
 
 def item_lock_reason(row):
     """
@@ -1012,6 +1019,8 @@ def locked_item_changes(locked_row, submitted):
         'width': _as_number((attributes or {}).get('width')),
         'height': _as_number((attributes or {}).get('height')),
         'depth': _as_number((attributes or {}).get('depth')),
+        'include_days_in_calc': 0 if locked_row.get('include_days_in_calc') in (0, False) else 1,
+        'include_qty_in_calc': 0 if locked_row.get('include_qty_in_calc') in (0, False) else 1,
     }
     incoming = {
         'name': (submitted.get('name') or submitted.get('item_name') or '').strip(),
@@ -1023,9 +1032,13 @@ def locked_item_changes(locked_row, submitted):
         'width': _as_number(submitted.get('width')),
         'height': _as_number(submitted.get('height')),
         'depth': _as_number(submitted.get('depth')),
+        'include_days_in_calc': (None if 'include_days_in_calc' not in submitted else
+                                 0 if submitted['include_days_in_calc'] in (False, 0, '0', 'false') else 1),
+        'include_qty_in_calc': (None if 'include_qty_in_calc' not in submitted else
+                                0 if submitted['include_qty_in_calc'] in (False, 0, '0', 'false') else 1),
     }
     changed = []
-    for field in COSTED_ITEM_FIELDS:
+    for field in COSTED_ITEM_FIELDS + CALC_ITEM_FIELDS:
         was, now = current.get(field), incoming.get(field)
         # A field the payload does not carry is not a change: some forms post a
         # subset, and silence is not an instruction to clear it.
@@ -1107,6 +1120,8 @@ def describe_item_changes(row, item, fields):
     new_attributes = json.loads(new['attributes']) if new['attributes'] else {}
 
     def show(value):
+        if field in CALC_ITEM_FIELDS:
+            return 'on' if value else 'off'
         if isinstance(value, float) and value.is_integer():
             value = int(value)
         return '-' if value in (None, '') else str(value)
@@ -1117,7 +1132,9 @@ def describe_item_changes(row, item, fields):
             was, now = _as_number((attributes or {}).get(field)), new_attributes.get(field)
         else:
             was, now = current.get(field), new.get(field)
-        parts.append('%s %s -> %s' % (field.replace('_', ' '), show(was), show(now)))
+        label = {'include_days_in_calc': 'days in calc', 'include_qty_in_calc': 'qty in calc'}.get(
+            field, field.replace('_', ' '))
+        parts.append('%s %s -> %s' % (label, show(was), show(now)))
     return '; '.join(parts)
 
 
@@ -1144,7 +1161,8 @@ def apply_item_edits(conn, cur, request_id, incoming, fallback_type, me, actor):
     """, (request_id,))
     rows = cur.fetchall()
     unmatched = {row['id']: row for row in rows}
-    out = {'locked': [], 'refused': [], 'added': [], 'recost': [], 'in_costing': [], 'count': 0}
+    out = {'locked': [], 'refused': [], 'added': [], 'recost': [], 'recalculated': [],
+           'in_costing': [], 'count': 0}
 
     for item in incoming:
         new = item_row(item, fallback_type)
@@ -1171,9 +1189,17 @@ def apply_item_edits(conn, cur, request_id, incoming, fallback_type, me, actor):
         reason = item_lock_reason(row)
         changes = locked_item_changes(row, item)
         if reason:
+            open_to_change = (reason in RECOSTABLE
+                              and row.get('approval_status') not in ('approved', 'pending_negotiation'))
+            calc = [c for c in changes if c in CALC_ITEM_FIELDS]
+            if calc and open_to_change and not item.get('recost'):
+                out['recalculated'].append(recalculate_item(conn, cur, row, new, calc, actor))
+                changes = [c for c in changes if c not in CALC_ITEM_FIELDS]
+                if not changes:
+                    continue
             entry = {'name': row['name'], 'reason': reason, 'changes': changes}
             if changes and item.get('recost'):
-                if reason in RECOSTABLE and row.get('approval_status') not in ('approved', 'pending_negotiation'):
+                if open_to_change:
                     out['recost'].append(request_recost(conn, cur, row, new, describe_item_changes(row, item, changes),
                                                         (item.get('recost_note') or '').strip(), me, actor))
                     continue
@@ -1212,6 +1238,57 @@ def apply_item_edits(conn, cur, request_id, incoming, fallback_type, me, actor):
                         change_description='[%s] Removed item \'%s\'' % (row.get('request_type'), row['name']),
                         conn=conn, cur=cur)
     return out
+
+
+def recalculate_item(conn, cur, row, new, fields, actor):
+    """Apply changed Calc ticks to a costed item and recalculate its totals."""
+    try:
+        attributes = json.loads(row['attributes']) if row.get('attributes') else {}
+    except (TypeError, ValueError):
+        attributes = {}
+    calc = dict(row, **(attributes or {}))
+    calc.update({k: new[k] for k in CALC_ITEM_FIELDS})
+    total_cost = item_total_cost(calc, row['cost_per_item']) if row.get('cost_per_item') is not None else None
+    total_sell = item_total_cost(calc, row['sell_per_item']) if row.get('sell_per_item') is not None else None
+    cur.execute("UPDATE sales_request_items SET include_days_in_calc = %s, include_qty_in_calc = %s, "
+                "total_cost = %s, total_sell = %s WHERE id = %s",
+                (new['include_days_in_calc'], new['include_qty_in_calc'], total_cost, total_sell, row['id']))
+    summary = describe_item_changes(row, new_item_payload(new), fields)
+    # No money in this line: Sales reads the change log.
+    log_item_change(row['request_id'], row['id'], row['name'], row.get('request_type'), 'ITEM_UPDATE', actor,
+                    change_description='[%s] Item \'%s\': %s; totals recalculated' % (
+                        row.get('request_type'), row['name'], summary),
+                    conn=conn, cur=cur)
+    return {'id': row['id'], 'name': row['name'], 'changes': summary,
+            'priced': row.get('sell_per_item') is not None}
+
+
+def new_item_payload(new):
+    """An item_row() back in the shape describe_item_changes() reads."""
+    return dict(new, quantity=new['qty'])
+
+
+def refresh_request_totals(cur, request_id):
+    """The request's totals are the sum of its items'."""
+    cur.execute("""UPDATE sales_request sr SET
+                       total_cost = (SELECT SUM(total_cost) FROM sales_request_items WHERE request_id = sr.id),
+                       total_sell = (SELECT SUM(total_sell) FROM sales_request_items WHERE request_id = sr.id)
+                   WHERE sr.id = %s""", (request_id,))
+
+
+def notify_recalculated(request_id, recalculated, actor):
+    """Totals moved without a new cost: Pricing and Operations are told."""
+    if not recalculated:
+        return
+    body = '%s changed how %d item(s) are calculated; the totals were recalculated: %s' % (
+        actor, len(recalculated), '; '.join('%s (%s)' % (r['name'], r['changes']) for r in recalculated[:4]))
+    try:
+        notify_users(users_holding('sales_item.price'), 'Totals recalculated on request #%06d' % request_id,
+                     body[:500], link='/pricing?request=%d' % request_id, category='important')
+        send_notification_to_role('operation', 'Totals recalculated on request #%06d' % request_id, body[:500],
+                                  link='/operation_request?request=%d' % request_id)
+    except Exception as e:
+        print(f"Error notifying recalculation: {e}")
 
 
 def request_recost(conn, cur, row, new, summary, note, me, actor):
@@ -18715,6 +18792,8 @@ def update_request_with_template(request_id):
         if template_instances:
             write_template_instances(cur, request_id, template_instances)
         cur.execute("UPDATE sales_request SET items_count = %s WHERE id = %s", (edits['count'], request_id))
+        if edits['recalculated']:
+            refresh_request_totals(cur, request_id)
         added_names = edits['added']
         refused = edits['refused']
         request_title = data.get('title') or existing_request.get('title') or 'a sales request'
@@ -18724,6 +18803,7 @@ def update_request_with_template(request_id):
         conn.close()
         notify_items_added_to_operations(request_id, request_title, actor, added_names)
         notify_recost(request_id, edits['recost'], actor)
+        notify_recalculated(request_id, edits['recalculated'], actor)
         notify_costing_desk(edits['in_costing'], request_id, actor)
 
         # What the reader needs to know, in the order they need it: what was
@@ -18735,6 +18815,8 @@ def update_request_with_template(request_id):
             headline = 'Request updated.'
         if edits['recost']:
             headline += ' %d item(s) sent back to Operations for re-costing.' % len(edits['recost'])
+        if edits['recalculated']:
+            headline += ' Totals recalculated for %d item(s).' % len(edits['recalculated'])
         if added_names:
             headline += ' Added %d new item(s); Operations has been asked to cost them.' % len(added_names)
         response = {
@@ -18745,6 +18827,7 @@ def update_request_with_template(request_id):
             'locked_items': edits['locked'],
             'refused_changes': refused,
             'sent_back': edits['recost'],
+            'recalculated': [{'id': r['id'], 'name': r['name']} for r in edits['recalculated']],
         }
         
         # Log the update with SMART field-level change detection - ONLY log actual changes

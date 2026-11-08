@@ -153,6 +153,38 @@ class ItemEditRecostTest(_CostingHarness):
                if r['request_id'] == self.request_id][0]
         self.assertEqual(row['recost_items_count'], 1)
 
+    def test_unticking_days_recalculates_without_a_recost(self):
+        # Gamal, 2026-11-08: unticking Days on a priced item did nothing, so he
+        # set the days to 1 instead.
+        self._sql("UPDATE sales_request_items SET rental_days = 4, include_days_in_calc = 1 WHERE id = %s",
+                  (self.item_id,))
+        self._cost(10, sell=15, sent=True)
+        body = self._edit([self._item('Costing test item', 4, self.item_id, rental_days=4,
+                                      include_days_in_calc=False)])
+        self.assertEqual(body['refused_changes'], [])
+        self.assertEqual(body['sent_back'], [])
+        self.assertEqual([r['id'] for r in body['recalculated']], [self.item_id])
+        row = self._sql("SELECT * FROM sales_request_items WHERE id = %s", (self.item_id,))[0]
+        self.assertEqual((row['include_days_in_calc'], float(row['cost_per_item']), float(row['sell_per_item'])),
+                         (0, 10.0, 15.0))
+        self.assertEqual((float(row['total_cost']), float(row['total_sell'])), (40.0, 60.0))   # x qty 4 only
+        self.assertIsNone(row['recost_requested_at'])
+        totals = self._sql("SELECT total_cost, total_sell FROM sales_request WHERE id = %s", (self.request_id,))[0]
+        self.assertEqual((float(totals['total_cost']), float(totals['total_sell'])), (40.0, 60.0))
+        self.assertIn(('operation', 'Totals recalculated on request #%06d' % self.request_id), self.role_notes)
+        # Ticked again: days count again.
+        self._edit([self._item('Costing test item', 4, self.item_id, rental_days=4, include_days_in_calc=True)])
+        row = self._sql("SELECT total_cost, total_sell FROM sales_request_items WHERE id = %s", (self.item_id,))[0]
+        self.assertEqual((float(row['total_cost']), float(row['total_sell'])), (160.0, 240.0))
+
+    def test_a_calc_tick_on_a_client_approved_item_is_refused(self):
+        self._sql("UPDATE sales_request_items SET approval_status = 'approved' WHERE id = %s", (self.item_id,))
+        self._cost(10, sell=15)
+        body = self._edit([self._item('Costing test item', 4, self.item_id, include_days_in_calc=False)])
+        self.assertEqual(body['refused_changes'][0]['changes'], ['include_days_in_calc'])
+        self.assertEqual(self._sql("SELECT include_days_in_calc FROM sales_request_items WHERE id = %s",
+                                   (self.item_id,))[0]['include_days_in_calc'], 1)
+
     def test_a_client_approved_item_goes_through_negotiation_instead(self):
         self._cost(10, sell=15)
         self._sql("UPDATE sales_request_items SET approval_status = 'approved' WHERE id = %s", (self.item_id,))

@@ -162,6 +162,9 @@ Asked for by Gamal Gaber (Sales), 30 Oct 2026.
   what will happen, takes the note, and nothing changes until Update Request.
   The Operations Head and team are notified with the note, and the request
   shows "Re-costing" on the Operations list.
+- The Calc ticks (count the days, count the quantity) can be changed on a
+  costed or priced item without a re-cost: the unit cost and price stay, the
+  totals are recalculated, and Pricing and Operations are told.
 - An item the client has already approved cannot be re-costed this way; it
   goes through negotiation.
 - A request created through the urgent-date approval opens in the edit form

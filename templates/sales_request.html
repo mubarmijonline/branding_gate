@@ -10101,6 +10101,16 @@ window.chartPieDemo = function() {
         // Costed or priced: changeable, by asking Operations for a new cost.
         // With the client: that goes through negotiation instead.
         if (item.lock_reason !== 'with the client' && ['approved', 'pending_negotiation'].indexOf(item.approval_status) < 0) {
+            // The Calc ticks stay open: they only change how the same unit cost
+            // and price multiply, so the totals are recalculated on save with
+            // no re-cost (Gamal, 2026-11-08).
+            $row.find('.item-include-days, .item-include-qty').prop('disabled', false)
+                .removeClass('item-field-locked')
+                .attr('title', (window.bgT || String)('Changing this recalculates the totals. No re-cost needed.'));
+            $row.find('.item-locked-note').append(
+                ' <span class="d-block mt-1"><i class="fas fa-calculator mr-1"></i>' +
+                (window.bgT || String)('The Calc ticks for days and quantity can still be changed: the totals are recalculated, no re-cost needed.') +
+                '</span>');
             $row.find('.item-actions').prepend(
                 '<button type="button" class="btn btn-sm btn-outline-warning btn-recost-item" title="Change this item and ask Operations to cost it again">' +
                   '<i class="fas fa-redo mr-1"></i>Change and re-cost</button>');

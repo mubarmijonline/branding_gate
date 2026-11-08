@@ -1497,3 +1497,20 @@ Plan:
 4. The Achieved pop-up is replaced by the report.
 5. Tests: the report's approved total equals the row's Achieved, scope is
    refused outside it, the target path; then e2e screenshots.
+
+## Unticking Days on a costed item did nothing (Gamal, 2026-11-08)
+
+`locked_item_changes` compared name, qty, unit, sale/rent, days, dimensions
+and size, but not the Calc ticks (`include_days_in_calc`,
+`include_qty_in_calc`). After "Change and re-cost", unticking Days was
+therefore no change at all: not saved, not refused, not sent back. Gamal set
+the days to 1 instead. Now the ticks are compared, and on a costed or priced
+item not yet with the client they apply directly: the same unit cost and price,
+totals recalculated by `item_total_cost`, request totals refreshed, Pricing and
+Operations told ("Totals recalculated"), no re-cost. In the edit form those two
+ticks stay clickable on such an item. On a client-approved item they are
+refused like any other change. Days count, quantity and size still go through
+re-cost. Edit modal checked end to end (title, description, dates, name, qty,
+days, both ticks, size, comment, remove, add; and the tick on a priced item).
+Tests: `test_unticking_days_recalculates_without_a_recost`,
+`test_a_calc_tick_on_a_client_approved_item_is_refused`.
