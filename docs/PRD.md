@@ -158,6 +158,10 @@ Asked for by Gamal Gaber (Sales), 30 Oct 2026.
   saving, its cost and price are cleared, it leaves Pricing, it goes back to
   whoever costed it, and Operations is told. It shows "Re-cost requested"
   everywhere until Operations costs it again.
+- "Change and re-cost" opens inside the item card, not as a pop-up: it says
+  what will happen, takes the note, and nothing changes until Update Request.
+  The Operations Head and team are notified with the note, and the request
+  shows "Re-costing" on the Operations list.
 - An item the client has already approved cannot be re-costed this way; it
   goes through negotiation.
 - A request created through the urgent-date approval opens in the edit form

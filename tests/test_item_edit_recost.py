@@ -141,6 +141,18 @@ class ItemEditRecostTest(_CostingHarness):
         self.assertIsNone(self._sql("SELECT recost_requested_at FROM sales_request_items WHERE id = %s",
                                     (self.item_id,))[0]['recost_requested_at'])
 
+    def test_operations_sees_the_recost_and_its_note(self):
+        # David's list says Re-cost, and the notice carries Sales' note.
+        bodies = []
+        branding_gate.send_notification_to_role = lambda role, title, body, *a, **k: bodies.append((role, body)) or 1
+        self._sql("UPDATE sales_request_items SET pricing_sent_at = NOW() WHERE id = %s", (self.item_id,))
+        self._cost(10, sell=15, sent=True)
+        self._edit([self._item('Costing test item', 9, self.item_id, recost=True, recost_note='client wants 9')])
+        self.assertIn('"client wants 9"', [b for r, b in bodies if r == 'operation'][0])
+        row = [r for r in self._client_for(self.head).get('/api/operations/requests').get_json()['requests']
+               if r['request_id'] == self.request_id][0]
+        self.assertEqual(row['recost_items_count'], 1)
+
     def test_a_client_approved_item_goes_through_negotiation_instead(self):
         self._cost(10, sell=15)
         self._sql("UPDATE sales_request_items SET approval_status = 'approved' WHERE id = %s", (self.item_id,))

@@ -1453,3 +1453,18 @@ owner set to Sarah (401); a scan of every approved request found no others
 (503, 508, 509, 514 carry a number that matches no user and Sarah already owns
 them). Test: `test_item_edit_recost.py`
 (`test_a_request_raised_under_a_mobile_belongs_to_that_person`).
+
+## Re-cost asks inline, and Operations sees it (2026-11-08)
+
+The "Change and re-cost" confirmation was a SweetAlert over the Edit modal;
+Bootstrap's modal focus trap took the focus back from its textarea, so the
+note could not be typed. It is now an inline panel inside the item card: what
+happens in three steps, the note (focused on open), Cancel and "Unlock and
+re-cost". Esc closes the panel only. After confirming, the panel stays as the
+item's banner and the note is still editable until Update Request. EN and AR.
+
+Operations: the notice to the Operations desk (David and his team, via
+`send_notification_to_role('operation')`) now carries Sales' note, and the
+Operations list counts a Sales re-cost (`recost_requested_at`) in
+`recost_items_count`, so the request shows "Re-costing" instead of plain
+"Not Costed". Test: `test_operations_sees_the_recost_and_its_note`.

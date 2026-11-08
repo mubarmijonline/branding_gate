@@ -3486,6 +3486,25 @@
     .modal .item-row.item-card.is-recost { border-left-color:#d97706; }
     .modal .item-row.item-card.is-new { border-left-color:#1cc88a; }
     .btn-recost-item { white-space:nowrap; }
+    .recost-panel { margin:10px 12px 12px; padding:14px 16px; border-radius:10px;
+                    background:#fffbeb; border:1px solid #fcd34d; color:#78350f; }
+    .recost-panel__head { display:flex; gap:12px; align-items:flex-start; margin-bottom:10px; }
+    .recost-panel__icon { flex:0 0 34px; height:34px; border-radius:50%; background:#fde68a;
+                          color:#b45309; display:flex; align-items:center; justify-content:center; }
+    .recost-panel__title { font-weight:700; font-size:15px; color:#78350f; }
+    .recost-panel__sub { font-size:12.5px; color:#92400e; }
+    .recost-panel__steps { margin:0 0 12px; padding-inline-start:20px; font-size:13px; line-height:1.6; }
+    .recost-panel__label { display:block; font-weight:600; font-size:13px; margin-bottom:4px; }
+    .recost-panel__label span { font-weight:400; color:#a16207; }
+    .recost-panel__note { background:#fff; border-color:#fcd34d; font-size:14px; resize:vertical; }
+    .recost-panel__note:focus { border-color:#d97706; box-shadow:0 0 0 3px rgba(217,119,6,.18); }
+    .recost-panel__actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .recost-panel.is-confirmed { background:#fff7ed; border-color:#fdba74; }
+    .recost-panel.is-confirmed .recost-panel__head { margin-bottom:8px; }
+    @media (max-width: 575.98px) {
+        .recost-panel { margin:8px 0 10px; }
+        .recost-panel__actions .btn { flex:1; }
+    }
 
     /* ===== Add / Edit request form: one look, phone first (2026-10-30) =====
        The form had grown three generations of styles: a 13-row list of
@@ -10095,33 +10114,76 @@ window.chartPieDemo = function() {
         $row.find('.item-locked-note').remove();
     }
 
+    // Re-cost asks inline, inside the item card. It used to be a SweetAlert
+    // over the Edit modal, whose focus trap took the focus back from the
+    // note, so nobody could type in it (2026-11-08).
     $(document).on('click', '.btn-recost-item', function (e) {
         e.stopPropagation();
         var $row = $(this).closest('.item-row');
-        Swal.fire({
-            icon: 'question',
-            title: 'Change this item and re-cost it?',
-            html: '<p class="text-left mb-2">The change is saved when you press <b>Update Request</b>. ' +
-                  'The item then goes back to Operations: its cost and price are cleared and Pricing ' +
-                  'prices it again after the new cost.</p>',
-            input: 'textarea',
-            inputPlaceholder: 'What changed, for Operations (optional)',
-            showCancelButton: true,
-            confirmButtonText: 'Change and re-cost',
-            cancelButtonText: 'Cancel'
-        }).then(function (r) {
-            if (!r.isConfirmed) { return; }
-            unlockItemRow($row);
-            $row.attr('data-recost', '1').data('recost-note', (r.value || '').trim())
-                .removeClass('is-locked').addClass('is-recost');
-            $row.find('.item-state').attr('class', 'item-state recost').html('<i class="fas fa-redo"></i> Will be re-costed');
-            $row.find('.btn-recost-item').remove();
-            $row.find('.item-fields').first().prepend(
-                '<div class="item-locked-note"><i class="fas fa-redo mr-1"></i>Change what you need, then press ' +
-                '<b>Update Request</b>. The item goes back to Operations for a new cost.</div>');
-            var $fields = $row.find('.item-fields').first();
-            if (!$fields.is(':visible')) { $row.find('.btn-toggle-item').trigger('click'); }
-        });
+        var $open = $row.children('.recost-panel');
+        if ($open.length) { $open.remove(); return; }   // the button toggles it
+        var T = window.bgT || String;
+        var noteId = 'recostNote_' + ($row.attr('data-item-id') || Date.now());
+        var $panel = $(
+            '<div class="recost-panel" role="group">' +
+              '<div class="recost-panel__head">' +
+                '<span class="recost-panel__icon"><i class="fas fa-redo"></i></span>' +
+                '<div><div class="recost-panel__title">' + T('Change this item and re-cost it') + '</div>' +
+                '<div class="recost-panel__sub">' + T('Nothing changes until you press Update Request.') + '</div></div>' +
+              '</div>' +
+              '<ol class="recost-panel__steps">' +
+                '<li>' + T('Edit the name, quantity or size below.') + '</li>' +
+                '<li>' + T('Press Update Request to save.') + '</li>' +
+                '<li>' + T('Operations costs it again. Its cost and price are cleared until then, and Pricing prices it again.') + '</li>' +
+              '</ol>' +
+              '<label class="recost-panel__label" for="' + noteId + '">' + T('What changed, for Operations') +
+                ' <span>(' + T('optional') + ')</span></label>' +
+              '<textarea id="' + noteId + '" class="form-control recost-panel__note" rows="3" maxlength="1000" ' +
+                'placeholder="' + T('e.g. Quantity 4 to 9, the client wants it bigger') + '"></textarea>' +
+              '<div class="recost-panel__actions">' +
+                '<button type="button" class="btn btn-light btn-sm recost-cancel">' + T('Cancel') + '</button>' +
+                '<button type="button" class="btn btn-warning btn-sm recost-confirm"><i class="fas fa-redo mr-1"></i>' +
+                  T('Unlock and re-cost') + '</button>' +
+              '</div>' +
+            '</div>');
+        $row.children('.item-header').first().after($panel);
+        $panel.find('textarea').trigger('focus');
+    });
+
+    $(document).on('click', '.recost-panel .recost-cancel', function () {
+        $(this).closest('.recost-panel').remove();
+    });
+
+    // Esc closes the panel, not the whole Edit modal behind it.
+    $(document).on('keydown', '.recost-panel', function (e) {
+        if (e.key !== 'Escape' || $(this).hasClass('is-confirmed')) { return; }
+        e.stopPropagation();
+        $(this).remove();
+    });
+
+    $(document).on('click', '.recost-panel .recost-confirm', function () {
+        var T = window.bgT || String;
+        var $panel = $(this).closest('.recost-panel');
+        var $row = $panel.closest('.item-row');
+        var $note = $panel.find('textarea');
+        unlockItemRow($row);
+        $row.attr('data-recost', '1').data('recost-note', ($note.val() || '').trim())
+            .removeClass('is-locked').addClass('is-recost');
+        $row.find('.item-state').attr('class', 'item-state recost').html('<i class="fas fa-redo"></i> ' + T('Will be re-costed'));
+        $row.find('.btn-recost-item').remove();
+        // The panel stays as the item's banner; the note can still be edited
+        // until Update Request.
+        $panel.addClass('is-confirmed');
+        $panel.find('.recost-panel__title').text(T('Will be re-costed'));
+        $panel.find('.recost-panel__sub').html(T('Change what you need below, then press Update Request.'));
+        $panel.find('.recost-panel__steps, .recost-panel__actions').remove();
+        var $fields = $row.find('.item-fields').first();
+        if (!$fields.is(':visible')) { $row.find('.btn-toggle-item').trigger('click'); }
+        $row.find('.item-name').first().trigger('focus');
+    });
+
+    $(document).on('input', '.recost-panel.is-confirmed textarea', function () {
+        $(this).closest('.item-row').data('recost-note', ($(this).val() || '').trim());
     });
 
     // The header says what the item is: name, quantity and size.

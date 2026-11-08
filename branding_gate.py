@@ -1257,7 +1257,9 @@ def notify_recost(request_id, recost, actor):
         return send_notification_to_role(
             'operation', 'Re-cost requested on request #%06d' % request_id,
             '%s changed %d costed item(s) and asked for a new cost: %s' % (
-                actor, len(recost), '; '.join('%s (%s)' % (r['name'], r['changes']) for r in recost[:4])),
+                actor, len(recost), '; '.join('%s (%s)%s' % (r['name'], r['changes'],
+                                                             ' - "%s"' % r['note'] if r.get('note') else '')
+                                              for r in recost[:4])),
             link='/operation_request?request=%d' % request_id)
     except Exception as e:
         print(f"Error notifying operations: {e}")
@@ -12039,9 +12041,13 @@ def get_operations_requests():
                        -- Counted from the negotiation itself rather than the
                        -- copy of its state on the item: those two drift, and
                        -- when they do it is the item that is stale.
+                       -- Sales asking for a new cost after a change counts
+                       -- too (recost_requested_at), so the list says Re-cost
+                       -- rather than plain Not Costed (2026-11-08).
                        COUNT(DISTINCT CASE WHEN EXISTS (
                              SELECT 1 FROM negotiation_requests nr
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
+                             OR i.recost_requested_at IS NOT NULL
                              THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN i.id IS NOT NULL
                                        AND i.cost_per_item IS NULL
@@ -12079,9 +12085,13 @@ def get_operations_requests():
                        -- Counted from the negotiation itself rather than the
                        -- copy of its state on the item: those two drift, and
                        -- when they do it is the item that is stale.
+                       -- Sales asking for a new cost after a change counts
+                       -- too (recost_requested_at), so the list says Re-cost
+                       -- rather than plain Not Costed (2026-11-08).
                        COUNT(DISTINCT CASE WHEN EXISTS (
                              SELECT 1 FROM negotiation_requests nr
                              WHERE nr.item_id = i.id AND nr.status = 'pending_costing')
+                             OR i.recost_requested_at IS NOT NULL
                              THEN i.id END) as recost_items_count,
                        COUNT(CASE WHEN i.id IS NOT NULL
                                        AND i.cost_per_item IS NULL
