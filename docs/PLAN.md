@@ -1468,3 +1468,32 @@ Operations: the notice to the Operations desk (David and his team, via
 Operations list counts a Sales re-cost (`recost_requested_at`) in
 `recost_items_count`, so the request shows "Re-costing" instead of plain
 "Not Costed". Test: `test_operations_sees_the_recost_and_its_note`.
+
+## Targets: month by month and a report per person (Gamal, 2026-11-08)
+
+Gamal: see each month, click a person to see every request behind their
+number and where their target came from, a detailed report per person, and a
+better page. The one `/targets` page serves every department (scoped by the
+reporting line), so all of them get it.
+
+Plan:
+1. Quarter table: one column per month (achieved of that month's target, %,
+   bar; current month marked). Handed down / unassigned move under the target
+   as one line, so the table stays readable. Names and Achieved open the
+   person's report.
+2. `GET /api/targets/person?user_id&period` (target.view, same scope check as
+   `/api/targets/achieved`): the person and manager; their row from the same
+   `build_tree` (so numbers cannot disagree with the table); month split with
+   team and own achieved; where the target came from (the chain of targets
+   from the top visible person down, set by, date, note, share of the
+   manager's target, only for managers the caller may see); the team under
+   them; every request of theirs or their team's in the quarter with approved,
+   waiting-on-client and rejected value and its stage (approved total equals
+   Achieved); clients by approved value; the year's four quarters.
+3. `/targets/person/<id>` page: header, KPI cards (target, achieved, own,
+   remaining and needed per remaining month, waiting on client), target path,
+   months, team, requests with status filters, clients, year. Print / Save as
+   PDF through a print stylesheet. EN and AR.
+4. The Achieved pop-up is replaced by the report.
+5. Tests: the report's approved total equals the row's Achieved, scope is
+   refused outside it, the target path; then e2e screenshots.

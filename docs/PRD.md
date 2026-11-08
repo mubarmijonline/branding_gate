@@ -191,10 +191,25 @@ request's item table, so the next item can be decided straight away.
 
 A quarter's target can be spread over its three months unevenly (more in one
 month, less in another); the three months always add up to the quarter's
-amount, and an amount with no split is spread evenly. Each row shows its month
-split under the target. Clicking a row's Achieved number lists the requests
-that make it up: client-approved items only, by request date, for that person
-and the team under them, with each month's achieved beside its month target.
+amount, and an amount with no split is spread evenly. The quarter table has a
+column per month: what the person (and the team under them) reached that
+month against that month's target, with the current month marked. What a
+leader handed down and what is still free sit under their target.
+
+Clicking a person's name or Achieved number opens their report, for any
+department (the page follows the reporting line):
+- achieved against target, what is waiting on the client, and what is still
+  to reach, with the amount needed per month left;
+- month by month;
+- where the target came from: each person above them the viewer may see,
+  their target, the share handed down, who set it, when, and the note;
+- the team under them, each linking to their own report;
+- every request of theirs (or their team's) in the quarter, with what is
+  approved (counts), waiting on the client, and rejected, its stage, and
+  filters for each; approved always adds up to Achieved;
+- clients by approved value, and the year quarter by quarter;
+- Print / Save as PDF.
+Someone sees only the reports their target scope covers.
 
 ## Urgent requests reach the Operations team leaders
 

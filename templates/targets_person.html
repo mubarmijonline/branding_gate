@@ -1,0 +1,433 @@
+{% extends "main.html" %}
+
+{% block body %}
+<style>
+  /* One person's target report (Gamal, 2026-11-08). Scoped under .tp-page:
+     sb-admin-2 owns generic names like .card and .progress. */
+  .tp-page { --hair:#e3e6f0; --ink:#1f2a44; --muted:#7b849b; --accent:#3a4fa0;
+             --accent-soft:#eef1fa; --good:#1b6e4d; --good-soft:#e4f3ec; --warn:#a16207;
+             --warn-soft:#fdf4e3; --bad:#c0392b; --bad-soft:#fbeaea; --card:#fff;
+             color:var(--ink); padding-bottom:2rem; }
+  .tp-page .tp-crumb { font-size:.85rem; color:var(--muted); margin:.25rem 0 .9rem; }
+  .tp-page .tp-crumb a { color:var(--accent); }
+  .tp-page .tp-crumb i { margin:0 .4rem; font-size:.7rem; }
+
+  .tp-page .tp-hero { display:flex; flex-wrap:wrap; gap:1rem; align-items:center;
+             justify-content:space-between; background:var(--card); border:1px solid var(--hair);
+             border-radius:12px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  .tp-page .tp-id { display:flex; align-items:center; gap:.9rem; min-width:0; }
+  .tp-page .tp-avatar { flex:0 0 52px; height:52px; border-radius:50%; background:var(--accent);
+             color:#fff; font-weight:700; font-size:1.15rem; display:flex; align-items:center;
+             justify-content:center; letter-spacing:.03em; }
+  .tp-page h1 { font-size:1.45rem; font-weight:700; margin:0; color:var(--ink); }
+  .tp-page .tp-meta { color:var(--muted); font-size:.85rem; display:flex; flex-wrap:wrap; gap:.3rem .9rem; }
+  .tp-page .tp-meta i { margin-inline-end:.3rem; }
+  .tp-page .tp-tools { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  .tp-page .tp-tools select { border:1px solid var(--hair); border-radius:6px; padding:.45rem .7rem;
+             font-size:.9rem; background:#fff; }
+  .tp-page .tp-btn { border:1px solid var(--hair); background:#fff; border-radius:6px;
+             padding:.45rem .85rem; font-size:.85rem; font-weight:600; color:var(--ink); }
+  .tp-page .tp-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+  .tp-page .tp-headline { background:var(--card); border:1px solid var(--hair); border-radius:12px;
+             padding:1rem 1.25rem; margin-bottom:1rem; }
+  .tp-page .tp-headline .big { font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .tp-page .tp-headline .of { color:var(--muted); font-size:1rem; margin-inline-start:.35rem; }
+  .tp-page .tp-headline .pct { float:right; font-size:1.5rem; font-weight:700; }
+  .tp-page .tp-bar { position:relative; height:12px; border-radius:6px; background:#eef0f5;
+             overflow:hidden; margin-top:.6rem; }
+  .tp-page .tp-bar > i { position:absolute; inset:0 auto 0 0; background:var(--accent); border-radius:6px; }
+  .tp-page .tp-bar > i.ok { background:var(--good); }
+  .tp-page .tp-bar > i.low { background:var(--bad); }
+  .tp-page .tp-bar > i.wait { background:repeating-linear-gradient(45deg,#f2c46d,#f2c46d 6px,#f7d995 6px,#f7d995 12px); }
+  .tp-page .tp-bar.sm { height:7px; margin-top:.45rem; }
+  .tp-page .tp-legend { display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; font-size:.8rem;
+             color:var(--muted); margin-top:.55rem; }
+  .tp-page .tp-legend b { color:var(--ink); }
+  .tp-page .tp-dot { display:inline-block; width:9px; height:9px; border-radius:2px;
+             margin-inline-end:.35rem; vertical-align:middle; }
+
+  .tp-page .tp-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+             gap:.75rem; margin-bottom:1rem; }
+  .tp-page .tp-kpi { background:var(--card); border:1px solid var(--hair); border-radius:10px;
+             padding:.8rem 1rem; }
+  .tp-page .tp-kpi dt { font-size:.68rem; letter-spacing:.08em; text-transform:uppercase;
+             color:var(--muted); font-weight:600; margin:0; }
+  .tp-page .tp-kpi dd { margin:.2rem 0 0; font-size:1.35rem; font-weight:700;
+             font-variant-numeric:tabular-nums; }
+  .tp-page .tp-kpi small { display:block; color:var(--muted); font-size:.76rem; margin-top:.1rem; }
+
+  .tp-page .tp-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+             gap:1rem; margin-bottom:1rem; }
+  .tp-page .tp-card { background:var(--card); border:1px solid var(--hair); border-radius:12px;
+             padding:1rem 1.15rem; margin-bottom:1rem; min-width:0; }
+  .tp-page .tp-grid .tp-card { margin-bottom:0; }
+  .tp-page .tp-card h2 { font-size:.95rem; font-weight:700; margin:0 0 .8rem; color:var(--ink);
+             display:flex; align-items:center; gap:.5rem; }
+  .tp-page .tp-card h2 i { color:var(--accent); }
+  .tp-page .tp-card h2 .hint { margin-inline-start:auto; font-weight:400; font-size:.78rem; color:var(--muted); }
+  .tp-page .tp-muted { color:var(--muted); }
+
+  .tp-page .tp-months { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.6rem; }
+  .tp-page .tp-month { border:1px solid var(--hair); border-radius:10px; padding:.7rem .8rem; }
+  .tp-page .tp-month.now { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .tp-page .tp-month .mn { font-size:.78rem; font-weight:700; color:var(--muted);
+             text-transform:uppercase; letter-spacing:.06em; display:flex; justify-content:space-between; }
+  .tp-page .tp-month .mn span { color:var(--accent); text-transform:none; letter-spacing:0; }
+  .tp-page .tp-month .ma { font-size:1.2rem; font-weight:700; margin-top:.2rem; font-variant-numeric:tabular-nums; }
+  .tp-page .tp-month .mt { font-size:.78rem; color:var(--muted); }
+
+  .tp-page .tp-path { list-style:none; margin:0; padding:0; }
+  .tp-page .tp-path li { position:relative; padding:0 0 .9rem 1.6rem; }
+  .tp-page .tp-path li::before { content:""; position:absolute; left:.38rem; top:.9rem; bottom:0;
+             border-left:2px solid var(--hair); }
+  .tp-page .tp-path li:last-child::before { display:none; }
+  .tp-page .tp-path li::after { content:""; position:absolute; left:0; top:.3rem; width:.9rem;
+             height:.9rem; border-radius:50%; background:#fff; border:2px solid var(--accent); }
+  .tp-page .tp-path li.me::after { background:var(--accent); }
+  .tp-page .tp-path .pn { font-weight:700; }
+  .tp-page .tp-path .pr { color:var(--muted); font-size:.78rem; }
+  .tp-page .tp-path .pa { font-weight:700; font-variant-numeric:tabular-nums; }
+  .tp-page .tp-path .ps { font-size:.76rem; color:var(--muted); }
+  .tp-page .tp-path .pnote { font-size:.78rem; background:var(--accent-soft); border-radius:6px;
+             padding:.3rem .5rem; margin-top:.25rem; color:var(--ink); }
+  .tp-page .tp-share { display:inline-block; font-size:.7rem; font-weight:700; color:var(--accent);
+             background:var(--accent-soft); border-radius:20px; padding:.05rem .45rem; margin-inline-start:.3rem; }
+
+  .tp-page table.tp-table { width:100%; border-collapse:collapse; font-size:.87rem; }
+  .tp-page .tp-table th { font-size:.68rem; letter-spacing:.07em; text-transform:uppercase;
+             color:var(--muted); border-bottom:2px solid var(--hair); padding:.45rem .5rem;
+             white-space:nowrap; text-align:start; }
+  .tp-page .tp-table td { padding:.55rem .5rem; border-bottom:1px solid #f0f2f7; vertical-align:middle; }
+  .tp-page .tp-table tr:hover td { background:#fafbfe; }
+  .tp-page .tp-table .num { text-align:end; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .tp-page .tp-table .zero { color:#c3c8d6; }
+  .tp-page .tp-table a { color:var(--accent); font-weight:600; }
+  .tp-page .tp-scroll { overflow-x:auto; }
+
+  .tp-page .tp-stage { display:inline-block; border-radius:20px; padding:.12rem .55rem;
+             font-size:.72rem; font-weight:700; white-space:nowrap; }
+  .tp-page .st-approved { background:var(--good-soft); color:var(--good); }
+  .tp-page .st-partially_approved { background:#e7f0fb; color:#1f5fa8; }
+  .tp-page .st-pending { background:var(--warn-soft); color:var(--warn); }
+  .tp-page .st-not_priced, .tp-page .st-not_costed { background:#f1f3f7; color:var(--muted); }
+  .tp-page .st-rejected { background:var(--bad-soft); color:var(--bad); }
+
+  .tp-page .tp-chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.7rem; }
+  .tp-page .tp-chip { border:1px solid var(--hair); background:#fff; border-radius:20px;
+             padding:.3rem .75rem; font-size:.8rem; font-weight:600; color:var(--muted); cursor:pointer; }
+  .tp-page .tp-chip b { margin-inline-start:.3rem; color:var(--ink); }
+  .tp-page .tp-chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tp-page .tp-chip.on b { color:#fff; }
+
+  .tp-page .tp-hbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.15rem .6rem;
+             margin-bottom:.6rem; font-size:.85rem; }
+  .tp-page .tp-hbar .tp-bar { grid-column:1 / -1; margin-top:0; height:7px; }
+  .tp-page .tp-empty { color:var(--muted); font-size:.85rem; padding:.6rem 0; }
+  .tp-page .tp-error { padding:2rem; text-align:center; color:var(--bad); }
+
+  @media (max-width: 991.98px) { .tp-page .tp-grid { grid-template-columns:1fr; } }
+  @media (max-width: 575.98px) {
+    .tp-page .tp-months { grid-template-columns:1fr; }
+    .tp-page .tp-headline .pct { float:none; display:block; }
+    .tp-page .tp-table .wide { display:none; }
+    .tp-page .tp-tools { width:100%; }
+    .tp-page .tp-tools select { flex:1; }
+  }
+  [dir="rtl"] .tp-page .tp-path li { padding:0 1.6rem .9rem 0; }
+  [dir="rtl"] .tp-page .tp-path li::before { left:auto; right:.38rem; }
+  [dir="rtl"] .tp-page .tp-path li::after { left:auto; right:0; }
+  [dir="rtl"] .tp-page .tp-headline .pct { float:left; }
+
+  /* Print / Save as PDF: the report only, no menus. */
+  @media print {
+    body * { visibility:hidden; }
+    .tp-page, .tp-page * { visibility:visible; }
+    .tp-page { position:absolute; inset:0 0 auto 0; width:100%; padding:0; }
+    .tp-page .no-print { display:none !important; }
+    .tp-page .tp-card, .tp-page .tp-kpi, .tp-page .tp-month { break-inside:avoid; }
+    .tp-page .tp-grid { grid-template-columns:1fr 1fr; }
+    .tp-page .tp-bar, .tp-page .tp-bar > i, .tp-page .tp-stage, .tp-page .tp-avatar {
+      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+
+<div class="container-fluid tp-page" id="tpPage" data-user="{{ user_id }}">
+  <nav class="tp-crumb no-print">
+    <a href="/targets" id="tpBack"><i class="fas fa-bullseye" style="margin:0 .3rem 0 0;"></i>Targets</a>
+    <i class="fas fa-chevron-right"></i><span id="tpCrumbName"></span>
+  </nav>
+
+  <header class="tp-hero">
+    <div class="tp-id">
+      <div class="tp-avatar" id="tpAvatar"></div>
+      <div style="min-width:0;">
+        <h1 id="tpName">&nbsp;</h1>
+        <div class="tp-meta" id="tpMeta"></div>
+      </div>
+    </div>
+    <div class="tp-tools no-print">
+      <select id="tpPeriod" aria-label="Quarter"></select>
+      <button type="button" class="tp-btn" id="tpPrint"><i class="fas fa-print mr-1"></i>Print / Save as PDF</button>
+    </div>
+  </header>
+
+  <div id="tpBody" style="display:none;">
+    <section class="tp-headline">
+      <span class="pct" id="tpPct"></span>
+      <span class="big" id="tpAch"></span><span class="of" id="tpOf"></span>
+      <div class="tp-bar" id="tpBar"></div>
+      <div class="tp-legend" id="tpLegend"></div>
+    </section>
+
+    <dl class="tp-kpis" id="tpKpis"></dl>
+
+    <div class="tp-grid">
+      <section class="tp-card">
+        <h2><i class="fas fa-calendar-alt"></i><span>Month by month</span></h2>
+        <div class="tp-months" id="tpMonths"></div>
+      </section>
+      <section class="tp-card">
+        <h2><i class="fas fa-sitemap"></i><span>Where the target comes from</span></h2>
+        <ul class="tp-path" id="tpPath"></ul>
+      </section>
+    </div>
+
+    <section class="tp-card" id="tpTeamCard" style="display:none;">
+      <h2><i class="fas fa-users"></i><span>Team</span></h2>
+      <div class="tp-scroll"><table class="tp-table" id="tpTeam"></table></div>
+    </section>
+
+    <section class="tp-card">
+      <h2><i class="fas fa-file-invoice"></i><span>Requests this quarter</span>
+        <span class="hint">Only client-approved items count toward the target.</span></h2>
+      <div class="tp-chips no-print" id="tpChips"></div>
+      <div class="tp-scroll"><table class="tp-table" id="tpRequests"></table></div>
+    </section>
+
+    <div class="tp-grid">
+      <section class="tp-card">
+        <h2><i class="fas fa-building"></i><span>Clients</span><span class="hint">Approved value</span></h2>
+        <div id="tpClients"></div>
+      </section>
+      <section class="tp-card">
+        <h2><i class="fas fa-chart-bar"></i><span>The year</span></h2>
+        <div id="tpYear"></div>
+      </section>
+    </div>
+  </div>
+  <div class="tp-error" id="tpError" style="display:none;"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var T = window.bgT || String;
+  var USER = Number($('#tpPage').data('user'));
+  var DATA = null, FILTER = 'all';
+
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function money(v) {
+    if (v === null || v === undefined) { return '-'; }
+    return Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+  function pct(a, t) { return t ? Math.round(a / t * 100) : null; }
+  function barClass(p) { return p === null ? '' : (p >= 100 ? 'ok' : (p < 40 ? 'low' : '')); }
+  function bar(p, small) {
+    var w = p === null ? 0 : Math.max(0, Math.min(100, p));
+    return '<div class="tp-bar' + (small ? ' sm' : '') + '"><i class="' + barClass(p) + '" style="width:' + w + '%"></i></div>';
+  }
+  function monthName(m, long) {
+    var p = String(m).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, 1)
+      .toLocaleString(document.documentElement.lang === 'ar' ? 'ar-EG' : 'en-US', { month: long ? 'long' : 'short' });
+  }
+  function initials(name) {
+    return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
+  }
+  function periodFromUrl() {
+    var m = /[?&]period=([^&]+)/.exec(location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function load(period) {
+    $.getJSON('/api/targets/person', { user_id: USER, period: period || undefined }).done(function (r) {
+      if (!r || !r.success) { fail(r && r.error); return; }
+      DATA = r;
+      if (history.replaceState) {
+        history.replaceState(null, '', location.pathname + '?period=' + encodeURIComponent(r.period));
+      }
+      render();
+    }).fail(function (xhr) { fail((xhr.responseJSON || {}).error); });
+  }
+  function fail(msg) {
+    $('#tpBody').hide();
+    $('#tpError').show().text(msg || T('Could not load this report.'));
+  }
+
+  function render() {
+    var d = DATA, p = d.person, t = d.target;
+    $('#tpError').hide(); $('#tpBody').show();
+    document.title = p.name + ' · ' + T('Targets');
+    $('#tpName').text(p.name); $('#tpCrumbName').text(p.name);
+    $('#tpAvatar').text(initials(p.name));
+    $('#tpBack').attr('href', '/targets?period=' + encodeURIComponent(d.period));
+    $('#tpMeta').html(
+      '<span><i class="fas fa-id-badge"></i>' + esc(p.role_name || '') + '</span>' +
+      (p.team_name ? '<span><i class="fas fa-users"></i>' + esc(p.team_name) + '</span>' : '') +
+      (p.manager_name ? '<span><i class="fas fa-user-tie"></i><span>' + esc(T('Reports to')) + '</span>&nbsp;' + esc(p.manager_name) + '</span>' : '') +
+      '<span><i class="fas fa-calendar"></i>' + esc(d.period.replace('-Q', ' Q')) + '</span>');
+
+    var $sel = $('#tpPeriod').empty();
+    d.periods.forEach(function (q) { $sel.append($('<option>').val(q).text(q.replace('-Q', ' Q'))); });
+    $sel.val(d.period);
+
+    var waiting = d.requests.reduce(function (s, r) { return s + r.waiting; }, 0);
+    var achieved = t.team_achieved || 0;
+    var hasTarget = t.target !== null;
+    var p100 = hasTarget ? pct(achieved, t.target) : null;
+
+    // Headline: achieved of target, with what is waiting on the client shown
+    // after it, so "how close could this get" reads off the same bar.
+    $('#tpAch').text(money(achieved));
+    $('#tpOf').html(hasTarget ? '<span>' + esc(T('of')) + '</span> ' + money(t.target) : esc(T('No target set for this quarter')));
+    $('#tpPct').text(p100 === null ? '' : p100 + '%').css('color', p100 === null ? '' : (p100 >= 100 ? 'var(--good)' : (p100 < 40 ? 'var(--bad)' : 'var(--ink)')));
+    if (hasTarget && t.target > 0) {
+      var a = Math.min(100, achieved / t.target * 100);
+      var w = Math.max(0, Math.min(100 - a, waiting / t.target * 100));
+      $('#tpBar').html('<i class="' + barClass(p100) + '" style="width:' + a + '%"></i>' +
+                       '<i class="wait" style="left:' + a + '%;width:' + w + '%"></i>').show();
+    } else { $('#tpBar').hide(); }
+    $('#tpLegend').html(
+      '<span><span class="tp-dot" style="background:var(--accent)"></span><span>' + esc(T('Achieved')) + '</span>&nbsp;<b>' + money(achieved) + '</b></span>' +
+      '<span><span class="tp-dot" style="background:#f2c46d"></span><span>' + esc(T('Waiting on the client')) + '</span>&nbsp;<b>' + money(waiting) + '</b></span>' +
+      (hasTarget ? '<span><span class="tp-dot" style="background:#eef0f5;border:1px solid #d6dae5"></span><span>' + esc(T('Still to reach')) + '</span>&nbsp;<b>' + money(Math.max(0, t.target - achieved)) + '</b></span>' : ''));
+
+    // What is left, and what that means per month still to come.
+    var now = d.current_month;
+    var left = d.months.filter(function (m) { return m.month >= now; }).length;
+    var remaining = hasTarget ? Math.max(0, t.target - achieved) : null;
+    var kpis = [
+      [T('Target'), money(t.target), t.set_by ? T('Set by') + ' ' + t.set_by + (t.set_on ? ' · ' + t.set_on : '') : ''],
+      [T('Achieved'), money(achieved), p100 === null ? '' : p100 + '% ' + T('of target')],
+    ];
+    if (p.is_leader) {
+      kpis.push([T('Own achieved'), money(t.own_achieved), T('Their own requests')]);
+      kpis.push([T('Handed down'), money(t.assigned), t.unassigned === null ? '' : T('Unassigned') + ' ' + money(t.unassigned)]);
+    }
+    kpis.push([T('Remaining'), money(remaining),
+               remaining && left ? money(remaining / left) + ' ' + T('a month for the months left') : (remaining === 0 ? T('Target reached') : '')]);
+    kpis.push([T('Waiting on the client'), money(waiting), T('Priced, not approved yet')]);
+    kpis.push([T('Requests'), String(d.requests.length), T('This quarter')]);
+    $('#tpKpis').html(kpis.map(function (k) {
+      return '<div class="tp-kpi"><dt>' + esc(k[0]) + '</dt><dd>' + esc(k[1]) + '</dd>' +
+             (k[2] ? '<small>' + esc(k[2]) + '</small>' : '') + '</div>';
+    }).join(''));
+
+    $('#tpMonths').html(d.months.map(function (m) {
+      var mp = m.target ? pct(m.achieved, m.target) : null;
+      return '<div class="tp-month' + (m.month === now ? ' now' : '') + '">' +
+        '<div class="mn">' + esc(monthName(m.month, true)) + (m.month === now ? '<span>' + esc(T('This month')) + '</span>' : '') + '</div>' +
+        '<div class="ma">' + money(m.achieved) + '</div>' +
+        '<div class="mt">' + (m.target === null ? esc(T('No target')) : '<span>' + esc(T('of')) + '</span> ' + money(m.target) + (mp === null ? '' : ' · ' + mp + '%')) + '</div>' +
+        (m.target === null ? '' : bar(mp, true)) +
+        (p.is_leader ? '<div class="mt" style="margin-top:.35rem;"><span>' + esc(T('Own')) + '</span> ' + money(m.own) + '</div>' : '') +
+      '</div>';
+    }).join(''));
+
+    $('#tpPath').html(d.path.map(function (s, i) {
+      var me = s.id === p.id;
+      return '<li class="' + (me ? 'me' : '') + '">' +
+        '<div class="d-flex justify-content-between" style="gap:.6rem;">' +
+          '<div><div class="pn">' + (me ? esc(s.name) : '<a href="/targets/person/' + Number(s.id) + '?period=' + encodeURIComponent(d.period) + '">' + esc(s.name) + '</a>') + '</div>' +
+          '<div class="pr">' + esc(s.role_name || '') + '</div></div>' +
+          '<div style="text-align:end;"><div class="pa">' + money(s.target) +
+            (s.share !== undefined && s.share !== null ? '<span class="tp-share">' + s.share + '%</span>' : '') + '</div>' +
+          (s.share !== undefined && s.share !== null && i > 0 ? '<div class="ps"><span>' + esc(T('of')) + '</span> ' + esc(d.path[i - 1].name) + '</div>' : '') +
+          '</div></div>' +
+        (s.set_by ? '<div class="ps"><span>' + esc(T('Set by')) + '</span> ' + esc(s.set_by) + (s.set_on ? ' · ' + esc(s.set_on) : '') + '</div>' : '') +
+        (s.note ? '<div class="pnote"><i class="fas fa-comment-alt mr-1"></i>' + esc(s.note) + '</div>' : '') +
+      '</li>';
+    }).join('') || '<li class="tp-empty">' + esc(T('No target set for this quarter')) + '</li>');
+
+    $('#tpTeamCard').toggle(d.team.length > 0);
+    if (d.team.length) {
+      $('#tpTeam').html('<thead><tr><th>' + esc(T('Person')) + '</th><th class="num">' + esc(T('Target')) + '</th><th class="num">' + esc(T('Achieved')) + '</th><th style="width:28%;">' + esc(T('Progress')) + '</th></tr></thead><tbody>' +
+        d.team.map(function (m) {
+          var mp = m.progress === null ? null : Math.round(m.progress);
+          return '<tr><td style="padding-inline-start:' + (0.5 + m.depth * 1.2) + 'rem;"><a href="/targets/person/' + Number(m.id) + '?period=' + encodeURIComponent(d.period) + '">' + esc(m.name) + '</a>' +
+                 '<div class="tp-muted" style="font-size:.76rem;">' + esc(m.role_name || '') + '</div></td>' +
+                 '<td class="num">' + money(m.target) + '</td><td class="num">' + money(m.achieved) + '</td>' +
+                 '<td>' + (mp === null ? '<span class="tp-muted">' + esc(T('No target')) + '</span>' : bar(mp, true) + '<span class="tp-muted" style="font-size:.75rem;">' + mp + '%</span>') + '</td></tr>';
+        }).join('') + '</tbody>');
+    }
+
+    renderRequests();
+
+    var maxClient = d.clients.length ? d.clients[0].approved : 0;
+    $('#tpClients').html(d.clients.length ? d.clients.slice(0, 8).map(function (c) {
+      return '<div class="tp-hbar"><span>' + esc(c.client) + '</span><b>' + money(c.approved) + '</b>' +
+             '<div class="tp-bar"><i style="width:' + (maxClient ? c.approved / maxClient * 100 : 0) + '%"></i></div></div>';
+    }).join('') : '<div class="tp-empty">' + esc(T('Nothing approved by the client yet this quarter.')) + '</div>');
+
+    $('#tpYear').html('<table class="tp-table"><thead><tr><th>' + esc(T('Quarter')) + '</th><th class="num">' + esc(T('Target')) + '</th><th class="num">' + esc(T('Achieved')) + '</th><th style="width:35%;"></th></tr></thead><tbody>' +
+      d.year.map(function (q) {
+        var qp = q.progress === null ? null : Math.round(q.progress);
+        var on = q.period === d.period;
+        return '<tr' + (on ? ' style="font-weight:700;"' : '') + '><td>' +
+               (on ? esc(q.period.replace('-Q', ' Q')) : '<a href="#" class="tp-goq" data-q="' + esc(q.period) + '">' + esc(q.period.replace('-Q', ' Q')) + '</a>') +
+               '</td><td class="num">' + money(q.target) + '</td><td class="num">' + money(q.achieved) + '</td>' +
+               '<td>' + (qp === null ? '' : bar(qp, true) + '<span class="tp-muted" style="font-size:.75rem;">' + qp + '%</span>') + '</td></tr>';
+      }).join('') + '</tbody></table>');
+  }
+
+  var STAGES = { approved: 'Approved', partially_approved: 'Partly approved', pending: 'Waiting on the client',
+                 not_priced: 'Not priced yet', not_costed: 'Not costed yet', rejected: 'Rejected' };
+  var FILTERS = [
+    ['all', 'All', function () { return true; }],
+    ['counted', 'Counted', function (r) { return r.approved > 0; }],
+    ['waiting', 'Waiting on the client', function (r) { return r.waiting > 0; }],
+    ['progress', 'Being costed or priced', function (r) { return r.stage === 'not_costed' || r.stage === 'not_priced'; }],
+    ['rejected', 'Rejected', function (r) { return r.rejected > 0 || r.stage === 'rejected'; }]
+  ];
+
+  function renderRequests() {
+    var d = DATA, team = d.person.is_leader;
+    $('#tpChips').html(FILTERS.map(function (f) {
+      var n = d.requests.filter(f[2]).length;
+      return '<button type="button" class="tp-chip' + (FILTER === f[0] ? ' on' : '') + '" data-f="' + f[0] + '"><span>' + esc(T(f[1])) + '</span><b>' + n + '</b></button>';
+    }).join(''));
+    var test = FILTERS.filter(function (f) { return f[0] === FILTER; })[0][2];
+    var rows = d.requests.filter(test);
+    function cell(v) { return v ? money(v) : '<span class="zero">-</span>'; }
+    $('#tpRequests').html(rows.length ?
+      '<thead><tr><th>' + esc(T('Request')) + '</th><th class="wide">' + esc(T('Client')) + '</th>' +
+      (team ? '<th class="wide">' + esc(T('Owner')) + '</th>' : '') +
+      '<th class="wide">' + esc(T('Date')) + '</th><th>' + esc(T('Stage')) + '</th>' +
+      '<th class="num">' + esc(T('Approved')) + '</th><th class="num wide">' + esc(T('Waiting')) + '</th><th class="num wide">' + esc(T('Rejected')) + '</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td><a href="/sales_request?request=' + Number(r.id) + '" target="_blank">#' + Number(r.id) + '</a> ' + esc(r.title || '') +
+               '<div class="tp-muted" style="font-size:.75rem;">' + Number(r.items) + ' <span>' + esc(T('items')) + '</span>' +
+               (r.unpriced ? ' · ' + Number(r.unpriced) + ' <span>' + esc(T('not priced')) + '</span>' : '') + '</div></td>' +
+               '<td class="wide">' + esc(r.client_name || '') + '</td>' +
+               (team ? '<td class="wide">' + esc(r.owner_name || '') + '</td>' : '') +
+               '<td class="wide" style="white-space:nowrap;">' + esc(r.created) + '</td>' +
+               '<td><span class="tp-stage st-' + esc(r.stage || 'not_costed') + '">' + esc(T(STAGES[r.stage] || 'Not costed yet')) + '</span></td>' +
+               '<td class="num" style="font-weight:700;">' + cell(r.approved) + '</td><td class="num wide">' + cell(r.waiting) + '</td><td class="num wide">' + cell(r.rejected) + '</td></tr>';
+      }).join('') + '</tbody>'
+      : '<tbody><tr><td class="tp-empty">' + esc(T('No requests here this quarter.')) + '</td></tr></tbody>');
+  }
+
+  $(document).on('click', '#tpChips .tp-chip', function () { FILTER = $(this).data('f'); renderRequests(); });
+  $(document).on('click', '.tp-goq', function (e) { e.preventDefault(); load($(this).data('q')); });
+  $('#tpPeriod').on('change', function () { load($(this).val()); });
+  $('#tpPrint').on('click', function () { window.print(); });
+
+  $(function () { load(periodFromUrl()); });
+}());
+</script>
+{% endblock %}

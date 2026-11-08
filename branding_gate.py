@@ -4466,6 +4466,192 @@ def get_target_achieved_detail():
         return jsonify(success=False, error=str(e)), 500
 
 
+def _request_stage(r):
+    """
+    Where a request stands, read off its items. sales_request.client_approval_stage
+    is a stored copy that drifts (#502 said "not costed" with 353,000 approved).
+    """
+    open_items = r['uncosted'] or r['unpriced'] or r['waiting']
+    if r['approved']:
+        return 'partially_approved' if (open_items or r['rejected']) else 'approved'
+    if r['uncosted']:
+        return 'not_costed'
+    if r['unpriced']:
+        return 'not_priced'
+    if r['waiting']:
+        return 'pending'
+    if r['rejected']:
+        return 'rejected'
+    return 'not_costed' if not r['items'] else 'pending'
+
+
+@app.route('/targets/person/<int:user_id>', methods=['GET'])
+@perm('target.view')
+def target_person_page(user_id):
+    """One person's target report (Gamal, 2026-11-08)."""
+    visible = visible_user_ids('target.view')
+    if visible is not None and user_id not in visible:
+        abort(403)
+    return render_template("targets_person.html", user_id=user_id)
+
+
+@app.route('/api/targets/person', methods=['GET'])
+@perm('target.view')
+def get_target_person():
+    """
+    Everything behind one person's number for one quarter (Gamal, 2026-11-08):
+    their row from the same build_tree as the table, the month split, where
+    the target came from, the team under them, every request of theirs or their
+    team's with what is approved / waiting / rejected, clients, and the year.
+    """
+    try:
+        period = _target_period(request.args.get('period'))
+        user_id = int(request.args.get('user_id'))
+    except (targets_lib.InvalidPeriod, TypeError, ValueError):
+        return jsonify(success=False, error='Pick a person and a quarter'), 400
+    visible = visible_user_ids('target.view')
+    if visible is not None and user_id not in visible:
+        return jsonify(success=False, error='Not yours to see'), 403
+    try:
+        conn, cur = connection()
+        people = _target_people(cur)
+        by_id = {p['id']: p for p in people}
+        if user_id not in by_id:
+            cur.close()
+            conn.close()
+            return jsonify(success=False, error='No such person'), 404
+        amounts = _target_amounts(cur, period)
+        details = _target_details(cur, period)
+        achieved = _target_achieved(cur, period)
+        month_targets = _target_months(cur, period)
+        month_achieved = _target_achieved_by_month(cur, period)
+        rows = targets_lib.build_tree(people, amounts, achieved, visible_ids=visible)
+        row_of = {r['id']: r for r in rows}
+        row = row_of[user_id]
+        team = targets_lib.team_ids(people, visible).get(user_id, {user_id})
+
+        cur.execute("SELECT user_id, note FROM sales_target WHERE period = %s", (period,))
+        notes = {r['user_id']: r['note'] for r in cur.fetchall()}
+
+        # The path the number came down: from the top person the caller may
+        # see to this one, each with what they held and who set it.
+        path, uid, seen = [], user_id, set()
+        while uid in row_of and uid not in seen:
+            seen.add(uid)
+            r = row_of[uid]
+            path.append({'id': uid, 'name': r['name'], 'role_name': r['role_name'],
+                         'target': _money_out(r['target']),
+                         'set_by': (details.get(uid) or {}).get('set_by'),
+                         'set_on': (details.get(uid) or {}).get('set_on'),
+                         'note': notes.get(uid)})
+            uid = by_id[uid].get('manager_id')
+        path.reverse()
+        for parent, child in zip(path, path[1:]):
+            child['share'] = (round(child['target'] / parent['target'] * 100, 1)
+                              if child['target'] is not None and parent['target'] else None)
+
+        names = targets_lib.period_months(period)
+        months = []
+        for n, m in enumerate(names):
+            months.append({
+                'month': m,
+                'target': (_money_out(month_targets[user_id][n]) if user_id in month_targets else None),
+                'achieved': float(sum(month_achieved.get(u, {}).get(m, 0) for u in team)),
+                'own': float(month_achieved.get(user_id, {}).get(m, 0)),
+            })
+
+        members = [{'id': r['id'], 'name': r['name'], 'role_name': r['role_name'],
+                    'depth': r['depth'] - row['depth'] - 1,
+                    'target': _money_out(r['target']),
+                    'achieved': _money_out(r['team_achieved']), 'progress': r['progress']}
+                   for r in rows if r['id'] in team and r['id'] != user_id]
+
+        # Every request in the quarter, not only what counts: what is waiting
+        # on the client is what the rest of the quarter depends on. "approved"
+        # is the Achieved rule exactly, so the two always add up the same.
+        start, end = targets_lib.period_bounds(period)
+        team_list = sorted(team)
+        cur.execute("""
+            SELECT sr.id, sr.title, c.client_name, u.name AS owner_name, sr.owner_user_id,
+                   DATE_FORMAT(sr.created_at, '%%Y-%%m') AS month,
+                   DATE_FORMAT(sr.created_at, '%%d %%b %%Y') AS created,
+                   COUNT(i.id) AS items,
+                   COALESCE(SUM(CASE WHEN i.approval_status = 'approved'
+                                     AND sr.approval_status <> 'rejected'
+                                     THEN i.total_sell END), 0) AS approved,
+                   COALESCE(SUM(CASE WHEN COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
+                                     AND i.sell_per_item IS NOT NULL
+                                     THEN i.total_sell END), 0) AS waiting,
+                   COALESCE(SUM(CASE WHEN i.approval_status = 'rejected'
+                                     THEN i.total_sell END), 0) AS rejected,
+                   COUNT(CASE WHEN i.id IS NOT NULL AND i.sell_per_item IS NULL
+                                   AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
+                              THEN 1 END) AS unpriced,
+                   COUNT(CASE WHEN i.id IS NOT NULL AND i.cost_per_item IS NULL
+                                   AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected')
+                              THEN 1 END) AS uncosted
+            FROM sales_request sr
+            LEFT JOIN sales_request_items i ON i.request_id = sr.id
+            LEFT JOIN client c ON c.id = sr.client_id
+            LEFT JOIN user u ON u.id = sr.owner_user_id
+            WHERE COALESCE(sr.status, '') <> 'cancelled'
+              AND DATE(sr.created_at) BETWEEN %s AND %s
+              AND sr.owner_user_id IN (""" + ','.join(['%s'] * len(team_list)) + """)
+            GROUP BY sr.id, sr.title, c.client_name, u.name, sr.owner_user_id, sr.created_at
+            ORDER BY sr.created_at DESC
+        """, [start, end] + team_list)
+        requests_ = [dict(r, approved=float(r['approved']), waiting=float(r['waiting']),
+                          rejected=float(r['rejected'])) for r in cur.fetchall()]
+        for r in requests_:
+            r['stage'] = _request_stage(r)
+
+        clients = {}
+        for r in requests_:
+            if r['approved']:
+                key = r['client_name'] or '-'
+                clients[key] = clients.get(key, 0.0) + r['approved']
+
+        # The year, quarter by quarter, from the same tree.
+        year = int(period.split('-')[0])
+        periods = ['%d-Q%d' % (year, q) for q in (1, 2, 3, 4)]
+        year_amounts = _target_amounts_for(cur, periods)
+        year_achieved = _target_achieved_by_quarter(cur, year)
+        cur.close()
+        conn.close()
+        year_rows = []
+        for p in periods:
+            r = next((x for x in targets_lib.build_tree(people, year_amounts[p], year_achieved[p],
+                                                        visible_ids=visible) if x['id'] == user_id), None)
+            year_rows.append({'period': p, 'target': _money_out(r and r['target']),
+                              'achieved': _money_out(r['team_achieved'] if r else 0),
+                              'progress': r and r['progress']})
+
+        manager = by_id.get(by_id[user_id].get('manager_id')) or {}
+        detail = details.get(user_id) or {}
+        return jsonify(
+            success=True, period=period, periods=targets_lib.period_choices(),
+            current_month=datetime.now().strftime('%Y-%m'),
+            person={'id': user_id, 'name': row['name'], 'role_name': row['role_name'],
+                    'team_name': row['team_name'], 'is_leader': row['is_leader'],
+                    'manager_name': manager.get('name')},
+            target={'target': _money_out(row['target']), 'assigned': _money_out(row['assigned']),
+                    'unassigned': _money_out(row['unassigned']),
+                    'own_achieved': _money_out(row['own_achieved']),
+                    'team_achieved': _money_out(row['team_achieved']),
+                    'progress': row['progress'], 'set_by': detail.get('set_by'),
+                    'set_on': detail.get('set_on'), 'note': notes.get(user_id),
+                    'months_set': user_id in month_targets},
+            path=path, months=months, team=members, requests=requests_,
+            clients=sorted(({'client': k, 'approved': v} for k, v in clients.items()),
+                           key=lambda c: -c['approved']),
+            year=year_rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("DEBUG: target person report failed: %s" % e)
+        return jsonify(success=False, error=str(e)), 500
+
+
 def _target_years():
     """The years the period picker covers, newest last."""
     years = sorted({int(p.split('-')[0]) for p in targets_lib.period_choices()})
