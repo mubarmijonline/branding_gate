@@ -1514,3 +1514,12 @@ re-cost. Edit modal checked end to end (title, description, dates, name, qty,
 days, both ticks, size, comment, remove, add; and the tick on a priced item).
 Tests: `test_unticking_days_recalculates_without_a_recost`,
 `test_a_calc_tick_on_a_client_approved_item_is_refused`.
+
+### Month numbers under the wrong month (Gamal, 2026-11-08)
+
+The month figures were right-aligned (`td.num`) but their headings left-aligned:
+`.targets-page table.tgt-table th` outranked `th.num`. Each month's number sat
+under the next month's name (Oct's 495,390 read as Nov). Headings and figures
+now share the end edge, each month column is ruled off, and month names follow
+the page language. Also: `test_pricing_alert` counted every costed unpriced
+item; it now uses the endpoint's rule (sent to Pricing, not already decided).

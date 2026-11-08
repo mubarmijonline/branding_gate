@@ -92,5 +92,18 @@ class TargetPersonTest(_CostingHarness):
         self.assertEqual(self.web.get('/targets/person/%d' % self.leader).status_code, 200)
 
 
+
+class MonthColumnsLineUpTest(unittest.TestCase):
+
+    def test_month_headings_sit_on_the_same_edge_as_their_numbers(self):
+        # A left-aligned heading over right-aligned figures put each month's
+        # number under the next month's name (Gamal, 2026-11-08).
+        import os
+        with open(os.path.join(os.path.dirname(__file__), '..', 'templates', 'targets.html'), encoding='utf-8') as f:
+            page = f.read()
+        self.assertIn('.targets-page table.tgt-table th.num { text-align:end; }', page)
+        self.assertIn('.targets-page table.tgt-table td.num { text-align:end; }', page)
+
+
 if __name__ == '__main__':
     unittest.main()

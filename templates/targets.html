@@ -144,7 +144,13 @@
   .targets-page a.tgt-ach-open { color:inherit; text-decoration:underline dotted; cursor:pointer; font-weight:700; }
   .targets-page a.tgt-person { color:var(--ink); }
   .targets-page a.tgt-person:hover { color:var(--accent); text-decoration:underline; }
-  .targets-page th.mcol, .targets-page td.mcol { min-width:110px; }
+  /* Numbers and their headings line up on the same edge, each month boxed by
+     a rule: a left-aligned heading over right-aligned figures put every
+     month's number under the next month's name (Gamal, 2026-11-08). */
+  .targets-page table.tgt-table th.num { text-align:end; }
+  .targets-page table.tgt-table td.num { text-align:end; }
+  .targets-page th.mcol, .targets-page td.mcol { min-width:120px; border-inline-start:1px solid var(--hair); }
+  .targets-page table.tgt-table th.mcol { background:#f7f8fb; }
   .targets-page th.mcol.now { color:var(--accent); }
   .targets-page td.mcol.now { background:#f7f8fd; }
   .targets-page td.mcol .mof { display:block; font-size:.72rem; color:var(--muted); }
@@ -256,7 +262,8 @@
 
   function monthName(m) {
     var p = String(m).split('-');
-    return new Date(Number(p[0]), Number(p[1]) - 1, 1).toLocaleString([], { month: 'short' });
+    return new Date(Number(p[0]), Number(p[1]) - 1, 1)
+      .toLocaleString(document.documentElement.lang === 'ar' ? 'ar-EG' : 'en-US', { month: 'short' });
   }
   function monthsOf(period) {
     var p = String(period).split('-Q'), first = (Number(p[1]) - 1) * 3 + 1;

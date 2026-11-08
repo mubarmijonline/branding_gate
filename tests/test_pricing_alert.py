@@ -128,7 +128,10 @@ class PricingSummaryTest(unittest.TestCase):
         cur = conn.cursor()
         cur.execute("""
             SELECT COUNT(CASE WHEN cost_per_item IS NOT NULL
-                               AND sell_per_item IS NULL THEN 1 END) AS to_price,
+                               AND pricing_sent_at IS NOT NULL
+                               AND sell_per_item IS NULL
+                               AND COALESCE(approval_status, 'pending') NOT IN ('approved', 'rejected')
+                               THEN 1 END) AS to_price,
                    COUNT(CASE WHEN approval_status = 'pending_negotiation'
                                AND negotiation_status = 'negotiated' THEN 1 END) AS to_reprice
             FROM sales_request_items
