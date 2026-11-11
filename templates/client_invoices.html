@@ -189,6 +189,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     $('#ivRows').html(rows.length ? rows.map(function (i) {
       return '<tr class="iv-row" data-id="' + i.id + '">' +
         '<td><span class="iv-num">' + (i.kind === 'refund' ? 'R-' : '#') + (i.invoice_number || '-') + '</span>' +
+          (i.tax_id ? '<div class="iv-sub" dir="ltr" title="Tax ID">' + esc(i.tax_id) + '</div>' : '') +
           (i.kind === 'refund' ? ' <span class="iv-badge returned">Refund</span><div class="iv-sub">of invoice #' + esc(i.refund_of_number) + '</div>'
                                : '<div class="iv-sub">' + i.lines_count + ' line(s)</div>') + '</td>' +
         '<td><b data-no-i18n>' + esc(i.company_name || '-') + '</b><div class="iv-sub" data-no-i18n>' + esc(i.client_name || '') + '</div></td>' +
@@ -447,6 +448,7 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       var inv = res.invoice; current = inv;
       $('#ivEditorTitle').html((inv.kind === 'refund' ? 'Refund R-' + inv.invoice_number + ' &middot; of invoice #' + inv.refund_of_number
                                 : (inv.invoice_number ? 'Invoice #' + inv.invoice_number : 'Invoice')) + ' &middot; SR-' + inv.sales_request_id +
+                               (inv.tax_id ? ' &middot; Tax ID <bdi>' + esc(inv.tax_id) + '</bdi>' : '') +
         ' <span class="iv-badge ' + inv.status + ' ml-2">' + LABEL[inv.status] + '</span>');
       $('#ivEditorBody').html(editorHtml(inv, inv, res.lines, inv.can_edit));
       recalc(); lockEditor(!inv.can_edit);
@@ -503,7 +505,9 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
     var next = current.invoice_number || 1;
     var t = $('#ivLines tr.iv-line').length ? recalc() : current;
     $('#ivEditorFoot').html('<div style="width:100%"><div class="iv-meta" style="grid-template-columns:minmax(0,220px) 1fr">' +
-      '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '"></div>' +
+      '<div><label>' + (refund ? 'Refund number (R-)' : 'Invoice number') + '</label><input type="number" id="ivNumber" class="form-control" value="' + next + '">' +
+      // The number the tax authority gave the e-invoice; it prints on the invoice and sits on the journal entry.
+      '<label class="mt-2">Tax ID <span class="text-danger">*</span></label><input type="text" id="ivTaxId" class="form-control" dir="ltr" maxlength="100" value="' + esc(current.tax_id || '') + '"></div>' +
       '<div><label>Booked in the Finance Tree</label><table class="iv-table" style="min-width:0"><thead><tr><th>Account</th><th class="iv-r">Debit</th><th class="iv-r">Credit</th></tr></thead>' +
       '<tbody id="ivBooking">' + bookingRows(t) + '</tbody></table></div></div>' +
       '<div class="iv-sub mb-2">' + (refund ? 'The refund is credited to the client. Pay the money back later with <b>Pay back to client</b>.'
@@ -541,11 +545,12 @@ table.iv-table { width: 100%; min-width: 900px; border-collapse: collapse; displ
       .fail(function (x) { btn.prop('disabled', false); Swal.fire('Not created', (x.responseJSON || {}).error || 'Try again', 'error'); });
   });
   $(document).on('click', '#ivPostConfirm', function () {
+    if (!($('#ivTaxId').val() || '').trim()) { $('#ivTaxId').addClass('is-invalid').trigger('focus'); Swal.fire('Tax ID required', 'Enter the Tax ID of this invoice to post it.', 'warning'); return; }
     var btn = $(this).prop('disabled', true);
     // Whatever Finance corrected in the window is saved first, then posted.
     save(false, true).then(function () {
       return $.ajax({ url: '/api/invoices/' + current.id + '/post', method: 'POST', contentType: 'application/json',
-                      data: JSON.stringify({ invoice_number: $('#ivNumber').val() }) });
+                      data: JSON.stringify({ invoice_number: $('#ivNumber').val(), tax_id: ($('#ivTaxId').val() || '').trim() }) });
     }).done(function (r) {
       var refund = current.kind === 'refund';
       $('#ivEditor').modal('hide');

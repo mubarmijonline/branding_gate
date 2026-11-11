@@ -4606,5 +4606,8 @@ window.BG_AR = {
   "Approve this cost?": "توافق على التكلفة دي؟",
   "Decline this cost?": "ترفض التكلفة دي؟",
   "Reason (the team leader reads this)": "السبب (التيم ليدر هيقراه)",
-  "Choose:": "اختار:"
+  "Choose:": "اختار:",
+  "Tax ID": "الرقم الضريبي",
+  "Tax ID required": "لازم الرقم الضريبي",
+  "Enter the Tax ID of this invoice to post it.": "اكتب الرقم الضريبي للفاتورة عشان تترحّل."
 };

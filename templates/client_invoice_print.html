@@ -48,6 +48,7 @@
     <div><span class="label">رقم التسجيل</span><b dir="ltr">{{ inv.company_tax_number or '—' }}</b></div>
     <div><span class="label">شهر المطالبة</span><b dir="ltr">{{ inv.billing_month }}</b></div>
     <div><span class="label">طلب المبيعات</span><b dir="ltr">SR-{{ inv.sales_request_id }}</b></div>
+    <div><span class="label">الرقم الضريبي للفاتورة (Tax ID)</span><b dir="ltr">{{ inv.tax_id or '—' }}</b></div><div></div>
     {% if inv.kind == 'refund' %}<div><span class="label">مرتجع من فاتورة</span><b>{{ inv.refund_of_number }}</b></div><div></div>{% endif %}
   </div>
 

@@ -333,6 +333,14 @@ of its clients, and each client's balance equals their statement.
   account per line); Approve and Decline work there, with the same rules as the
   approval pages.
 
+## Client invoice Tax ID
+
+- Posting a client invoice (or refund) asks Finance for its Tax ID, the number
+  the tax authority gave the e-invoice. It cannot be posted without one, and a
+  Tax ID belongs to one invoice only.
+- The Tax ID shows on the invoice list and window, on the printed invoice, on
+  the journal entry (Finance Tree ledger) and on the client's statement.
+
 ## Trial balance
 
 - Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,

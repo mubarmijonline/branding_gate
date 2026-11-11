@@ -1630,3 +1630,13 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - Not covered: sub-item (component) suppliers still save directly; they do not
   reach the books.
 
+## Client invoice Tax ID (Ahmed, 2026-11-11)
+
+- `invoice_tax_id_migration.sql`: `client_invoice.tax_id` VARCHAR(100), unique.
+- `client_invoice_post` requires `tax_id`, refuses one already used; the post
+  window asks for it. `chart_journal` invoice lines carry it in the
+  description; `ledger_entries` invoice/refund rows carry `tax_id` and name it;
+  `client_invoice_print.html`, the invoice list and the client report show it.
+- Test: `test_invoicing.py` (required, unique, journal, statement, print);
+  existing post calls send one.
+

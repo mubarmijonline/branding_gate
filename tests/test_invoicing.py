@@ -9,6 +9,7 @@ returns it. The arithmetic must reproduce Finance's sample, invoice 2452:
 
 import testdb  # noqa: F401  first: the test database, not the live one
 import unittest
+import uuid
 from decimal import Decimal
 
 import MySQLdb
@@ -113,15 +114,38 @@ class InvoiceFlowTest(unittest.TestCase):
         self.assertEqual(sorted(l['description'] for l in prefill['lines']), ['LED Screen', 'stage'])
         self.assertTrue(all(l['item_code'] == l['sales_request_item_id'] for l in prefill['lines']))
 
+    def test_the_tax_id_is_required_and_travels_with_the_invoice(self):
+        # Ahmed, 2026-11-11: the e-invoice's Tax ID is entered when posting and
+        # shows on the journal, the statement and the printed invoice.
+        author, finance = self._web(self.account), self._web(self.finance)
+        inv_id, _ = self._draft(author)
+        author.post('/api/invoices/%d/submit' % inv_id)
+        r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98411})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Tax ID', r.get_json()['error'])
+        tax_id = 'TAX-' + uuid.uuid4().hex[:10]
+        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id,
+                                      json={'invoice_number': 98411, 'tax_id': tax_id}).status_code, 200)
+        other, _ = self._draft(author)
+        author.post('/api/invoices/%d/submit' % other)
+        clash = finance.post('/api/invoices/%d/post' % other, json={'invoice_number': 98412, 'tax_id': tax_id})
+        self.assertEqual(clash.status_code, 400)                                        # one invoice per Tax ID
+        cur = self._cursor() if hasattr(self, '_cursor') else self.raw.cursor(MySQLdb.cursors.DictCursor)
+        lines = [l for l in branding_gate.chart_journal(cur) if l['source'] == ('invoice', inv_id)]
+        self.assertTrue(lines and all(tax_id in l['description'] for l in lines))
+        st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
+        self.assertIn(tax_id, [e.get('tax_id') for e in st['entries']])
+        self.assertIn(tax_id, finance.get('/invoices/%d/print' % inv_id).get_data(as_text=True))
+
     def test_draft_submit_post_and_the_statement(self):
         author, finance = self._web(self.account), self._web(self.finance)
         inv_id, _ = self._draft(author)
         got = author.get('/api/invoices/%d' % inv_id).get_json()['invoice']
         self.assertEqual((got['total'], got['status']), (178088.0, 'draft'))
-        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'payment_method_id': self.pm}).status_code, 400)   # not sent yet
+        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'payment_method_id': self.pm}).status_code, 400)   # not sent yet
         self.assertEqual(author.post('/api/invoices/%d/submit' % inv_id).status_code, 200)
-        self.assertEqual(author.post('/api/invoices/%d/post' % inv_id, json={'payment_method_id': self.pm}).status_code, 403)    # author cannot post
-        r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 2452, 'payment_method_id': self.pm, 'amount': 0})
+        self.assertEqual(author.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'payment_method_id': self.pm}).status_code, 403)    # author cannot post
+        r = finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 2452, 'payment_method_id': self.pm, 'amount': 0})
         self.assertEqual(r.status_code, 200, r.get_json())
         # Locked once posted.
         locked = author.put('/api/invoices/%d' % inv_id, json={'invoice_date': '2026-01-18', 'lines': [{'qty': 1, 'unit_price': 1}]})
@@ -129,7 +153,7 @@ class InvoiceFlowTest(unittest.TestCase):
         # The number cannot be used twice.
         second, _ = self._draft(author)
         author.post('/api/invoices/%d/submit' % second)
-        self.assertEqual(finance.post('/api/invoices/%d/post' % second, json={'invoice_number': 2452, 'payment_method_id': self.pm, 'amount': 0}).status_code, 400)
+        self.assertEqual(finance.post('/api/invoices/%d/post' % second, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 2452, 'payment_method_id': self.pm, 'amount': 0}).status_code, 400)
         # On the client's account.
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
         self.assertEqual((st['debit'], st['closing']), (178088.0, 178088.0))
@@ -188,7 +212,7 @@ class InvoiceFlowTest(unittest.TestCase):
         inv_id, _ = self._draft(author, lines=[{'sales_request_item_id': sri, 'item_code': '77777', 'qty': 1, 'unit_price': 100}])
         self.assertEqual(author.get('/api/invoices/%d' % inv_id).get_json()['lines'][0]['item_code'], sri)
         author.post('/api/invoices/%d/submit' % inv_id)
-        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98100, 'payment_method_id': self.pm, 'amount': 0}).status_code, 200)
+        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 98100, 'payment_method_id': self.pm, 'amount': 0}).status_code, 200)
 
     def test_outsiders_see_nothing(self):
         inv_id, _ = self._draft(self._web(self.account))
@@ -208,7 +232,7 @@ class InvoicePaymentTest(InvoiceFlowTest):
         author, finance = self._web(self.account), self._web(self.finance)
         inv_id, _ = self._draft(author)
         author.post('/api/invoices/%d/submit' % inv_id)
-        finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98001, 'payment_method_id': self.pm, 'amount': 0})
+        finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 98001, 'payment_method_id': self.pm, 'amount': 0})
         cur = self._cursor()
         cur.execute("SELECT id FROM payment_methods WHERE is_active = 1 ORDER BY id LIMIT 1")
         pm = cur.fetchone()['id']
@@ -231,7 +255,7 @@ class StatementLayoutTest(InvoiceFlowTest):
             'client_id': self.client_id, 'as_of': '2024-12-31', 'amount': 1000, 'note': 'balance 2025'}).status_code, 200)
         inv_id, _ = self._draft(author)
         author.post('/api/invoices/%d/submit' % inv_id)
-        finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98002, 'payment_method_id': self.pm, 'amount': 0})
+        finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 98002, 'payment_method_id': self.pm, 'amount': 0})
         cur = self._cursor()
         cur.execute("""INSERT INTO payment_methods (method_name, method_code, method_type, bank_name, account_number)
                        VALUES ('Bank T', 'BANK_T_98', 'bank', 'CIB', '1')""")
@@ -284,7 +308,7 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         author, finance = self._web(self.account), self._web(self.finance)
         inv_id, _ = self._draft(author)
         author.post('/api/invoices/%d/submit' % inv_id)
-        r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': number, 'payment_method_id': self.pm, 'amount': amount})
+        r = finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': number, 'payment_method_id': self.pm, 'amount': amount})
         self.assertEqual(r.status_code, 200, r.get_json())
         return inv_id
 
@@ -294,7 +318,7 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         author.post('/api/invoices/%d/submit' % inv_id)
         before = self._pm_balance()
         tree_before = finance.get('/api/finance/tree').get_json()
-        r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98200})   # no payment method
+        r = finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 98200})   # no payment method
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual((r.get_json()['amount'], self._pm_balance()), (0.0, before))       # no money moved
         # In the Finance Tree, as double entry: Dr 1103 178,088 + Dr 2104 1,576 = Cr 4101 157,600 + Cr 2103 22,064.
@@ -312,10 +336,10 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         author, finance = self._web(self.account), self._web(self.finance)
         inv_id, _ = self._draft(author)
         author.post('/api/invoices/%d/submit' % inv_id)
-        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={
+        self.assertEqual(finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 
             'invoice_number': 98201, 'payment_method_id': self.pm, 'amount': 999999}).status_code, 400)  # over the total
         before = self._pm_balance()
-        r = finance.post('/api/invoices/%d/post' % inv_id, json={'invoice_number': 98201, 'payment_method_id': self.pm})
+        r = finance.post('/api/invoices/%d/post' % inv_id, json={'tax_id': uuid.uuid4().hex, 'invoice_number': 98201, 'payment_method_id': self.pm})
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual(round(self._pm_balance() - before, 2), 178088.0)
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
@@ -339,7 +363,7 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         again = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': [{'refund_of_line': stage['id'], 'qty': 1}]})
         self.assertEqual(again.status_code, 400)                  # nothing left of stage to refund
         # Finance posts its own refund draft, nothing paid back (the client had not paid).
-        post = finance.post('/api/invoices/%d/post' % refund['id'], json={'payment_method_id': self.pm, 'amount': 0})
+        post = finance.post('/api/invoices/%d/post' % refund['id'], json={'tax_id': uuid.uuid4().hex, 'payment_method_id': self.pm, 'amount': 0})
         self.assertEqual(post.status_code, 200, post.get_json())
         st = finance.get('/api/finance/accounts/statement?client_id=%d' % self.client_id).get_json()
         kinds = [(e['kind'], e['debit'], e['credit']) for e in st['entries']]
@@ -355,7 +379,7 @@ class RefundAndMoneyTest(InvoiceFlowTest):
         led = next(l for l in got['refundable'] if l['description'] == 'LED Screen')
         refund = finance.post('/api/invoices/%d/refund' % inv_id, json={'lines': [{'refund_of_line': led['id'], 'qty': 1}]}).get_json()
         before = self._pm_balance()
-        r = finance.post('/api/invoices/%d/post' % refund['id'], json={'payment_method_id': self.pm})   # full amount back
+        r = finance.post('/api/invoices/%d/post' % refund['id'], json={'tax_id': uuid.uuid4().hex, 'payment_method_id': self.pm})   # full amount back
         self.assertEqual(r.status_code, 200, r.get_json())
         # LED 105,600 + 14,784 - 1,056 = 119,328 paid back out of the box.
         self.assertEqual(round(before - self._pm_balance(), 2), 119328.0)

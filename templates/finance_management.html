@@ -5168,7 +5168,8 @@ function openClientDetail(clientId) {
         if (!st.success) { $('#crStatement').html('<tr><td colspan="6" class="sr-empty">' + escHtml(st.error || '') + '</td></tr>'); return; }
         $('#crStatement').html((st.opening ? '<tr><td></td><td>' + T('Balance brought forward') + '</td><td></td><td></td><td></td><td class="num"><b>' + money(st.opening) + '</b></td></tr>' : '') +
             (st.entries.length ? st.entries.map(e =>
-                '<tr><td>' + escHtml(e.day || '') + '</td><td>' + T(e.label) + (e.description && e.kind !== 'invoice' ? ' <span class="sr-note" data-no-i18n>' + escHtml(e.description) + '</span>' : '') +
+                '<tr><td>' + escHtml(e.day || '') + '</td><td>' + T(e.label) + (e.tax_id ? ' <span class="sr-note">Tax ID <bdi>' + escHtml(e.tax_id) + '</bdi></span>' : '') +
+                (e.description && e.kind !== 'invoice' ? ' <span class="sr-note" data-no-i18n>' + escHtml(e.description) + '</span>' : '') +
                 '</td><td>' + srLink(e.sales_request_id) + '</td><td class="num">' + (e.debit ? money(e.debit) : '') + '</td><td class="num">' + (e.credit ? money(e.credit) : '') +
                 '</td><td class="num"><b>' + money(e.balance) + '</b></td></tr>').join('')
             : '<tr><td colspan="6" class="sr-empty">' + T('No entries yet') + '</td></tr>'));

@@ -28144,7 +28144,7 @@ def chart_journal(cur, start=None, end=None):
                 refund_paid = cat.get('category_code') == CLIENT_REFUNDS_CATEGORY_CODE
                 line('1103' if refund_paid else (code or '?'), debit=amount)
 
-    q = """SELECT i.id, i.kind, i.invoice_number, i.invoice_date, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
+    q = """SELECT i.id, i.kind, i.invoice_number, i.tax_id, i.invoice_date, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
                   i.sales_request_id, c.client_name, i.client_id
            FROM client_invoice i LEFT JOIN client c ON c.id = i.client_id WHERE i.status = 'posted'"""
     params = []
@@ -28157,7 +28157,8 @@ def chart_journal(cur, start=None, end=None):
     cur.execute(q, params)
     for inv in cur.fetchall():
         src = {'day': inv['invoice_date'], 'ref': invoice_label(inv), 'source': ('invoice', inv['id']), 'client': inv['client_id'],
-               'description': ' - '.join(x for x in (inv['client_name'], 'SR-%s' % inv['sales_request_id']) if x)}
+               'description': ' - '.join(x for x in (inv['client_name'], 'SR-%s' % inv['sales_request_id'],
+                                                     inv['tax_id'] and 'Tax ID %s' % inv['tax_id']) if x)}
         sub, vat = float(inv['subtotal'] or 0), float(inv['vat_total'] or 0)
         tax, total = float(inv['profit_tax_total'] or 0), float(inv['total'] or 0)
         if inv['kind'] == 'refund':
@@ -30009,7 +30010,7 @@ def client_invoices_list():
     try:
         cur.execute("""
             SELECT i.id, i.kind, i.refund_of, (SELECT o.invoice_number FROM client_invoice o WHERE o.id = i.refund_of) AS refund_of_number,
-                   i.invoice_number, i.status, i.sales_request_id, i.company_id, i.client_id,
+                   i.invoice_number, i.tax_id, i.status, i.sales_request_id, i.company_id, i.client_id,
                    i.invoice_date, i.billing_month, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
                    i.created_by, i.created_at, i.submitted_at, i.posted_at, i.return_reason,
                    co.company_name, c.client_name, sr.owner_user_id AS request_owner, u.name AS created_by_name,
@@ -30384,6 +30385,15 @@ def client_invoice_post(invoice_id):
                     (kind, number, invoice_id))
         if cur.fetchone():
             return jsonify(success=False, error='%s number %d is already used' % (kind.title(), number)), 400
+        # The Tax ID the tax authority gave this e-invoice: required to post,
+        # one invoice each (Ahmed, 2026-11-11).
+        tax_id = str(data.get('tax_id') or '').strip()[:100]
+        if not tax_id:
+            return jsonify(success=False, error='Enter the Tax ID to post'), 400
+        cur.execute("SELECT kind, invoice_number FROM client_invoice WHERE tax_id = %s AND id <> %s", (tax_id, invoice_id))
+        clash = cur.fetchone()
+        if clash:
+            return jsonify(success=False, error='Tax ID %s is already on %s' % (tax_id, invoice_label(clash))), 400
         try:
             if not data.get('payment_method_id'):
                 amount = 0.0
@@ -30393,8 +30403,8 @@ def client_invoice_post(invoice_id):
             return jsonify(success=False, error='The amount must be a number'), 400
         if amount < 0 or amount > float(inv['total']) + 0.004:
             return jsonify(success=False, error='The amount is between 0 and the total, %s' % f"{float(inv['total']):,.2f}"), 400
-        cur.execute("""UPDATE client_invoice SET status = 'posted', invoice_number = %s, posted_by = %s,
-                       posted_at = NOW() WHERE id = %s""", (number, session.get('user_id'), invoice_id))
+        cur.execute("""UPDATE client_invoice SET status = 'posted', invoice_number = %s, tax_id = %s, posted_by = %s,
+                       posted_at = NOW() WHERE id = %s""", (number, tax_id, session.get('user_id'), invoice_id))
         trans_id = None
         if amount > 0:
             label = invoice_label({'kind': kind, 'invoice_number': number})
@@ -30490,8 +30500,8 @@ def ledger_entries(cur, company_id=None, client_id=None):
     entries += [dict(r) for r in cur.fetchall()]
     cur.execute("""
         SELECT i.invoice_date AS day, 'invoice' AS kind, i.id AS ref_id, i.invoice_number, i.sales_request_id,
-               i.company_id, i.client_id, NULL AS method_type,
-               CONCAT_WS(' - ', NULLIF(sr.title, ''),
+               i.company_id, i.client_id, NULL AS method_type, i.tax_id,
+               CONCAT_WS(' - ', NULLIF(sr.title, ''), CONCAT('Tax ID ', i.tax_id),
                          (SELECT GROUP_CONCAT(l.description ORDER BY l.line_no SEPARATOR ', ')
                           FROM client_invoice_line l WHERE l.invoice_id = i.id)) AS description,
                i.total AS debit, 0 AS credit
@@ -30501,8 +30511,8 @@ def ledger_entries(cur, company_id=None, client_id=None):
     # A posted refund takes off what the client owes.
     cur.execute("""
         SELECT i.invoice_date AS day, 'refund' AS kind, i.id AS ref_id, i.invoice_number, i.sales_request_id,
-               i.company_id, i.client_id, NULL AS method_type,
-               CONCAT('Refund of invoice ', o.invoice_number, ': ',
+               i.company_id, i.client_id, NULL AS method_type, i.tax_id,
+               CONCAT('Refund of invoice ', o.invoice_number, IF(i.tax_id IS NULL, '', CONCAT(' (Tax ID ', i.tax_id, ')')), ': ',
                       (SELECT GROUP_CONCAT(l.description ORDER BY l.line_no SEPARATOR ', ')
                        FROM client_invoice_line l WHERE l.invoice_id = i.id)) AS description,
                0 AS debit, i.total AS credit
