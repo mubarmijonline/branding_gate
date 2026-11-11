@@ -1581,3 +1581,20 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - Tests: `test_trial_balance.py` (opening + movement = closing, balanced,
   October's closing = November's opening, full history = the tree).
 
+## Client accounts under 1103 (Ahmed, 2026-11-11)
+
+- `client.account_code` (`client_account_migration.sql`): 1103 + serial by id.
+  `assign_accounts(cur, table, parent)` numbers suppliers and clients alike;
+  called on client add, party request approval, and lazily on the tree.
+- Journal lines carry `client` (txn: COALESCE(ft.client_id, sr.client_id);
+  invoice: i.client_id); client balances brought forward book 1103 / 3103.
+  `chart_tree` puts 1103 lines with a known client on `cli-<id>` rows; the old
+  side list of collections under 1103 is gone.
+- Finance Tree: client rows open `openClientDetail` (rewritten): XL modal from
+  `/api/finance/accounts?client_id=` and the client statement.
+- Fix found on the way: the client statement and Client Accounts counted the
+  custody leg (111002) of an approved staff expense as a collection when it
+  named the client (tadros: 700). A collection is now income posted to 1103;
+  pending income still counts unless it is a 1110 custody leg.
+- Tests: `test_client_tree_accounts.py`.
+

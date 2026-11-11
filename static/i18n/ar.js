@@ -4548,5 +4548,16 @@ window.BG_AR = {
   "Choose the period": "اختار الفترة",
   "Balanced: debit = credit": "متوازن: المدين = الدائن",
   "Not balanced": "غير متوازن",
-  "From the same entries as the Finance Tree. Opening is every entry before the first day of the period, closing is opening plus the period's movement. Each balance shows on the side it falls; groups add up the accounts under them.": "من نفس قيود شجرة الحسابات. رصيد أول المدة هو كل القيود قبل أول يوم في الفترة، ورصيد آخر المدة هو أول المدة زائد حركة الفترة. كل رصيد بيظهر في الجانب اللي واقع فيه، والمجموعات بتجمع الحسابات اللي تحتها."
+  "From the same entries as the Finance Tree. Opening is every entry before the first day of the period, closing is opening plus the period's movement. Each balance shows on the side it falls; groups add up the accounts under them.": "من نفس قيود شجرة الحسابات. رصيد أول المدة هو كل القيود قبل أول يوم في الفترة، ورصيد آخر المدة هو أول المدة زائد حركة الفترة. كل رصيد بيظهر في الجانب اللي واقع فيه، والمجموعات بتجمع الحسابات اللي تحتها.",
+  "Approved sales": "المبيعات المعتمدة",
+  "Balance due": "الرصيد المستحق",
+  "invoice(s)": "فاتورة",
+  "collection(s)": "تحصيل",
+  "Approved, not yet collected": "معتمد ولسه متحصلش",
+  "Account balance (invoiced - collected)": "رصيد الحساب (المفوتر - المحصل)",
+  "Collections": "التحصيلات",
+  "No collections yet": "مفيش تحصيلات لسه",
+  "No requests yet": "مفيش طلبات لسه",
+  "Approved is what the client approved on the request; collected is what Finance received against it.": "المعتمد هو اللي العميل وافق عليه في الطلب، والمحصل هو اللي المالية استلمته عليه.",
+  "Each one gets its own account here when added": "كل واحد بياخد حساب خاص بيه هنا أول ما يتضاف"
 };

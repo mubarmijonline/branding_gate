@@ -756,6 +756,10 @@ body.finance-surface {
 .chart-value.neg { color: var(--finance-expense); }
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
 .chart-row.chart-supplier .chart-name { color: #92400e; }
+.chart-row.chart-client .chart-name { color: #3730a3; }
+.sr-head.cr-head { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-bottom-color: #c7d2fe; }
+.sr-head.cr-head .sr-code { background: #3730a3; }
+#clientReportModal .sr-section h6 i { color: #4f46e5; }
 .tb-toolbar .filters { flex-wrap: wrap; gap: 8px; align-items: center; }
 .tb-input { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: #fff; }
 .tb-dates label, .tb-check { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--muted); }
@@ -801,7 +805,7 @@ table.finance-table.tb-table { display: table; margin: 0; font-size: 13px; width
 .sr-section h6 { font-weight: 800; margin: 0 0 6px; color: #1e293b; } .sr-section h6 i { color: #d97706; margin-inline-end: 6px; }
 .sr-note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .sr-scroll { overflow-x: auto; max-height: 46vh; }
-.sr-table { margin: 0; } .sr-table th.num, .sr-table td.num { text-align: end; white-space: nowrap; }
+table.finance-table.sr-table { display: table; width: 100%; min-width: 640px; margin: 0; border: none; } .sr-table th.num, .sr-table td.num { text-align: end; white-space: nowrap; }
 .sr-items { margin: 0; padding: 0; list-style: none; font-size: 12px; color: #475569; }
 .sr-items li { display: flex; justify-content: space-between; gap: 12px; } .sr-items li b { font-weight: 600; white-space: nowrap; }
 .sr-bar { height: 5px; background: #fee2e2; border-radius: 3px; margin-top: 4px; overflow: hidden; }
@@ -2490,6 +2494,51 @@ table.finance-table.tb-table { display: table; margin: 0; font-size: 13px; width
                     <div class="sr-scroll"><table class="finance-table sr-table">
                         <thead><tr><th>Date</th><th>Entry</th><th>SR</th><th class="num">Paid (debit)</th><th class="num">Owed (credit)</th><th class="num">Balance</th></tr></thead>
                         <tbody id="srStatement"></tbody>
+                    </table></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- One client's account under 1103: every request, invoice and collection -->
+<div class="modal fade" id="clientReportModal" tabindex="-1">
+    <div class="modal-dialog modal-xl sr-dialog">
+        <div class="modal-content">
+            <div class="sr-head cr-head">
+                <div>
+                    <div class="sr-code" id="crCode"></div>
+                    <h4 class="sr-name" id="crName">Client</h4>
+                    <div class="sr-contact" id="crContact"></div>
+                </div>
+                <div class="sr-head-actions">
+                    <a class="btn-pill btn-pill-outline" id="crExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+                    <a class="btn-pill btn-pill-outline" id="crAccount" href="#" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> Account page</a>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body sr-body">
+                <div class="sr-kpis" id="crKpis"></div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-clipboard-list"></i> By request</h6>
+                    <div class="sr-note">Approved is what the client approved on the request; collected is what Finance received against it.</div>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>SR</th><th>Title</th><th class="num">Approved</th><th class="num">Invoiced</th><th class="num">Collected</th><th class="num">Outstanding</th></tr></thead>
+                        <tbody id="crRequests"></tbody>
+                    </table></div>
+                </div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-hand-holding-usd"></i> Collections</h6>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>Date</th><th>Reference</th><th>SR</th><th>Received by</th><th class="num">Amount</th></tr></thead>
+                        <tbody id="crPayments"></tbody>
+                    </table></div>
+                </div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-book"></i> Statement</h6>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>Date</th><th>Entry</th><th>SR</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+                        <tbody id="crStatement"></tbody>
                     </table></div>
                 </div>
             </div>
@@ -4701,10 +4750,10 @@ var CHART_CLASS_COLORS = { '1': '#2563eb', '2': '#dc2626', '3': '#7c3aed', '4': 
 // Add under / edit / delete on a chart row. Classes and the accounts the
 // system books into keep their name and code but still take accounts under them.
 function treeActions(node, depth) {
-    if (!CAN_EDIT_CATEGORIES || node.method || node.supplier) return '<span class="tree-actions"></span>';
+    if (!CAN_EDIT_CATEGORIES || node.method || node.supplier || node.client) return '<span class="tree-actions"></span>';
     if (node.suppliers_total) {
-        // Suppliers number themselves under 2101 as they are added.
-        return '<span class="tree-actions"><span class="tree-sys" title="Each supplier gets its own account here when added">SYSTEM</span></span>';
+        // Suppliers (2101) and clients (1103) number themselves as they are added.
+        return '<span class="tree-actions"><span class="tree-sys" title="Each one gets its own account here when added">SYSTEM</span></span>';
     }
     if (node.methods_total) {
         // Cash and bank hold the payment methods: + adds one of that kind.
@@ -4731,11 +4780,11 @@ function chartRows(nodes, depth, withAmounts, cls) {
         const cell = v => `<span class="chart-value">${v ? formatCurrency(v) : '-'}</span>`;
         const value = withAmounts ? cell(n.debit) + cell(n.credit) +
             `<span class="chart-value chart-bal${n.value < 0 ? ' neg' : ''}">${n.debit || n.credit ? formatCurrency(n.value) : '-'}</span>` : '';
-        let html = `<div class="chart-row depth-${Math.min(depth, 3)}${n.supplier ? ' chart-supplier' : ''}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
+        let html = `<div class="chart-row depth-${Math.min(depth, 3)}${n.supplier ? ' chart-supplier' : ''}${n.client ? ' chart-client' : ''}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
                          style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
             <span class="chart-toggle${n.children.length ? ' closed' : ''}">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
             <span class="chart-code">${escHtml(n.code)}</span>
-            <span class="chart-name">${n.supplier ? '<i class="fas fa-truck chart-method-icon"></i>' : ''}${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}${n.supplier && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}</span>
+            <span class="chart-name">${n.supplier ? '<i class="fas fa-truck chart-method-icon"></i>' : ''}${n.client ? '<i class="fas fa-user chart-method-icon"></i>' : ''}${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}${(n.supplier || n.client) && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}</span>
             ${meta}${value}${treeActions(n, depth)}
         </div>`;
         (withAmounts ? (n.entities || []) : []).forEach(function(ent) {
@@ -4799,7 +4848,9 @@ $(document).on('click', '.chart-toggle', function(e) {
 $(document).on('click', '#chartTree .chart-row:not(.chart-entity)', function(e) {
     if ($(e.target).closest('.tree-actions, .chart-toggle').length) return;
     const node = treeCats[$(this).attr('data-chart-id')];
-    if (node && node.supplier) openSupplierDetail(node.supplier); else openLedger(node);
+    if (node && node.supplier) openSupplierDetail(node.supplier);
+    else if (node && node.client) openClientDetail(node.client);
+    else openLedger(node);
 });
 function openLedger(node) {
     if (!node) return;
@@ -5064,54 +5115,66 @@ function renderSuppliersList(suppliers) {
 // ============================================
 // CLIENT/SUPPLIER DETAIL MODAL
 // ============================================
+// One client's account (11031, ...): every request with what was approved,
+// invoiced and collected, every collection, the full statement.
 function openClientDetail(clientId) {
-    $('#entityDetailHeader').css('background', 'linear-gradient(135deg, #6366f1, #8b5cf6)');
-    $('#entityDetailTitle').html('<i class="fas fa-user mr-2"></i>Loading...');
-    $('#entitySummaryCards').empty();
-    $('#entityContactInfo').empty();
-    $('#entityTransactionsBody').empty();
-    $('#entityDetailModal').modal('show');
-    
-    fetch(`/api/finance/clients/${clientId}/transactions`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                Swal.fire('Error', data.error, 'error');
-                return;
-            }
-            
-            const c = data.client;
-            $('#entityDetailTitle').html(`<i class="fas fa-user mr-2"></i>${c.name}`);
-            
-            // Summary cards
-            const balanceColor = data.balance >= 0 ? '#10b981' : '#ef4444';
-            $('#entitySummaryCards').html(`
-                <div class="col-md-4" style="padding: 20px 24px; border-right: 1px solid var(--border); background: rgba(16,185,129,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Total Income</div>
-                    <div style="font-size: 24px; font-weight: 800; color: var(--finance-income);">${formatCurrency(data.total_income)}</div>
-                </div>
-                <div class="col-md-4" style="padding: 20px 24px; border-right: 1px solid var(--border); background: rgba(239,68,68,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Total Expense</div>
-                    <div style="font-size: 24px; font-weight: 800; color: var(--finance-expense);">${formatCurrency(data.total_expense)}</div>
-                </div>
-                <div class="col-md-4" style="padding: 20px 24px; background: rgba(99,102,241,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Balance</div>
-                    <div style="font-size: 24px; font-weight: 800; color: ${balanceColor};">${formatCurrency(data.balance)}</div>
-                </div>
-            `);
-            
-            // Contact info
-            $('#entityContactInfo').html(`
-                <span style="margin-right: 20px;"><i class="fas fa-envelope mr-1" style="color: var(--muted);"></i>${c.email || '-'}</span>
-                <span><i class="fas fa-phone mr-1" style="color: var(--muted);"></i>${c.phone || '-'}</span>
-            `);
-            
-            // Transactions
-            renderEntityTransactions(data.transactions, 'client');
-        });
+    const T = window.bgT || String;
+    const money = v => formatCurrency(v || 0);
+    const srLink = id => id ? '<a href="/sales_request?request=' + id + '" target="_blank" rel="noopener"><span class="badge badge-info">SR-' + id + '</span></a>' : '-';
+    $('#crCode, #crName, #crContact, #crKpis').empty();
+    $('#crName').text(T('Loading...'));
+    $('#crRequests, #crPayments, #crStatement').html('<tr><td colspan="6" class="sr-empty">' + T('Loading...') + '</td></tr>');
+    $('#crExcel').attr('href', '/api/finance/accounts/statement?client_id=' + clientId + '&format=xlsx');
+    $('#crAccount').attr('href', '/finance/accounts/client/' + clientId);
+    $('#clientReportModal').modal('show');
+    Promise.all([
+        fetch('/api/finance/accounts?client_id=' + clientId).then(r => r.json()),
+        fetch('/api/finance/accounts/statement?client_id=' + clientId).then(r => r.json())
+    ]).then(function (res) {
+        const acc = res[0], st = res[1];
+        if (!acc.success) { $('#crName').text(acc.error || T('Could not load')); return; }
+        const c = acc.clients[0];
+        $('#crCode').text(c.account_code || '');
+        $('#crName').text(c.client_name);
+        $('#crContact').html(
+            (c.company_name ? '<span><i class="fas fa-building"></i> ' + escHtml(c.company_name) + '</span>' : '') +
+            (c.mobile_number ? '<span><i class="fas fa-phone"></i> <bdi>' + escHtml(c.mobile_number) + '</bdi></span>' : '') +
+            (c.email_address ? '<span><i class="fas fa-envelope"></i> ' + escHtml(c.email_address) + '</span>' : '') +
+            (c.owner_name ? '<span><i class="fas fa-user-tie"></i> ' + escHtml(c.owner_name) + '</span>' : ''));
+        const due = st.success ? st.closing : (c.balance_due || 0);
+        const collections = st.success ? st.entries.filter(e => e.kind === 'payment') : [];
+        $('#crKpis').html(
+            '<div class="sr-kpi owe"><span>' + T('Approved sales') + '</span><b>' + money(c.approved_sell) + '</b><small>' + acc.requests.length + ' ' + T('request(s)') + '</small></div>' +
+            '<div class="sr-kpi"><span>' + T('Invoiced') + '</span><b>' + money(c.invoiced) + '</b><small>' + ((c.invoices || 0)) + ' ' + T('invoice(s)') + '</small></div>' +
+            '<div class="sr-kpi paid"><span>' + T('Collected') + '</span><b>' + money(c.collected) + '</b><small>' + collections.length + ' ' + T('collection(s)') + '</small></div>' +
+            '<div class="sr-kpi left' + (c.outstanding <= 0.005 ? ' clear' : '') + '"><span>' + T('Outstanding') + '</span><b>' + money(c.outstanding) + '</b><small>' + T('Approved, not yet collected') + '</small></div>' +
+            '<div class="sr-kpi left' + (due <= 0.005 ? ' clear' : '') + '"><span>' + T('Balance due') + '</span><b>' + money(due) + '</b><small>' + T('Account balance (invoiced - collected)') + '</small></div>');
+        const reqs = acc.requests || [];
+        const sum = k => reqs.reduce((a, r) => a + (+r[k] || 0), 0);
+        $('#crRequests').html(reqs.length ? reqs.map(function (r) {
+            const pct = r.approved_sell > 0 ? Math.min(100, Math.round(r.collected / r.approved_sell * 100)) : 0;
+            return '<tr><td>' + srLink(r.id) + '</td><td data-no-i18n>' + escHtml(r.title || '-') + '</td>' +
+                '<td class="num">' + money(r.approved_sell) + '</td><td class="num">' + money(r.invoiced) + '</td>' +
+                '<td class="num">' + money(r.collected) + '<div class="sr-bar"><i style="width:' + pct + '%"></i></div></td>' +
+                '<td class="num"><b style="color:' + (r.outstanding > 0.005 ? '#dc2626' : '#059669') + '">' + money(r.outstanding) + '</b></td></tr>';
+        }).join('') + '<tr class="sr-tot"><td colspan="2">' + T('Total') + '</td><td class="num">' + money(sum('approved_sell')) + '</td><td class="num">' +
+            money(sum('invoiced')) + '</td><td class="num">' + money(sum('collected')) + '</td><td class="num">' + money(sum('outstanding')) + '</td></tr>'
+            : '<tr><td colspan="6" class="sr-empty">' + T('No requests yet') + '</td></tr>');
+        $('#crPayments').html(collections.length ? collections.slice().reverse().map(e =>
+            '<tr><td>' + escHtml(e.day || '') + '</td><td data-no-i18n>' + escHtml(e.description || '') + '</td><td>' + srLink(e.sales_request_id) +
+            '</td><td>' + T(e.label) + '</td><td class="num"><b>' + money(e.credit) + '</b></td></tr>').join('') +
+            '<tr class="sr-tot"><td colspan="4">' + T('Total') + '</td><td class="num">' + money(collections.reduce((a, e) => a + e.credit, 0)) + '</td></tr>'
+            : '<tr><td colspan="5" class="sr-empty">' + T('No collections yet') + '</td></tr>');
+        if (!st.success) { $('#crStatement').html('<tr><td colspan="6" class="sr-empty">' + escHtml(st.error || '') + '</td></tr>'); return; }
+        $('#crStatement').html((st.opening ? '<tr><td></td><td>' + T('Balance brought forward') + '</td><td></td><td></td><td></td><td class="num"><b>' + money(st.opening) + '</b></td></tr>' : '') +
+            (st.entries.length ? st.entries.map(e =>
+                '<tr><td>' + escHtml(e.day || '') + '</td><td>' + T(e.label) + (e.description && e.kind !== 'invoice' ? ' <span class="sr-note" data-no-i18n>' + escHtml(e.description) + '</span>' : '') +
+                '</td><td>' + srLink(e.sales_request_id) + '</td><td class="num">' + (e.debit ? money(e.debit) : '') + '</td><td class="num">' + (e.credit ? money(e.credit) : '') +
+                '</td><td class="num"><b>' + money(e.balance) + '</b></td></tr>').join('')
+            : '<tr><td colspan="6" class="sr-empty">' + T('No entries yet') + '</td></tr>'));
+    }).catch(function () { $('#crName').text(T('Could not load')); });
 }
 
-// Trial balance (ميزان المراجعة): a month, quarter, year or any dates.
 function tbRange() {
     const kind = $('#tbPeriod').val(), pad = n => String(n).padStart(2, '0');
     const last = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();   // m is 1-12

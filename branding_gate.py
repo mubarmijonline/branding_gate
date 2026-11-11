@@ -7044,6 +7044,8 @@ def _create_party_record(cur, req, payload):
     new_id = cur.lastrowid
     if kind == 'supplier':
         assign_supplier_accounts(cur)
+    elif kind == 'client':
+        assign_client_accounts(cur)
     return new_id
 
 
@@ -8538,10 +8540,10 @@ def add_client():
             session['username']
         ))
         
-        conn.commit()
-        
         # Get the newly inserted client ID
         client_id = cur.lastrowid
+        assign_client_accounts(cur)
+        conn.commit()
         
         cur.close()
         conn.close()
@@ -27497,8 +27499,8 @@ def chart_journal(cur, start=None, end=None):
       against 3103. So 2101 is what we owe, not only what we paid.
 
     Lines: {account (code), debit, credit, method (payment method id or None),
-    day, ref, description, source ('txn' / 'invoice', id), supplier (id or None;
-    on 2101 it is that supplier's own account)}.
+    day, ref, description, source ('txn' / 'invoice', id), supplier and client
+    (id or None; on 2101 / 1103 that supplier's or client's own account)}.
     """
     cur.execute("SELECT id, account_code, category_code FROM finance_categories")
     cats = {r['id']: r for r in cur.fetchall()}
@@ -27511,8 +27513,10 @@ def chart_journal(cur, start=None, end=None):
 
     q = """SELECT ft.id, ft.transaction_code, ft.transaction_date, ft.description, ft.reference_number,
                   ft.transaction_type, ft.amount, COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id) AS account_id,
-                  ft.payment_method_id, pm.method_type, pm.method_name, ft.supplier_id
+                  ft.payment_method_id, pm.method_type, pm.method_name, ft.supplier_id,
+                  COALESCE(ft.client_id, sr.client_id) AS client_id
            FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+           LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
            WHERE ft.status = 'approved'"""
     params = []
     if start:
@@ -27524,7 +27528,7 @@ def chart_journal(cur, start=None, end=None):
     cur.execute(q, params)
     for t in cur.fetchall():
         src = {'day': t['transaction_date'], 'ref': t['transaction_code'], 'source': ('txn', t['id']),
-               'supplier': t['supplier_id'],
+               'supplier': t['supplier_id'], 'client': t['client_id'],
                'description': ' - '.join(x for x in (t['reference_number'], t['description'], t['method_name']) if x)}
         amount = float(t['amount'] or 0)
         cash = '1102' if t['method_type'] == 'bank' else '1101'
@@ -27541,7 +27545,7 @@ def chart_journal(cur, start=None, end=None):
                 line('1103' if refund_paid else (code or '?'), debit=amount)
 
     q = """SELECT i.id, i.kind, i.invoice_number, i.invoice_date, i.subtotal, i.vat_total, i.profit_tax_total, i.total,
-                  i.sales_request_id, c.client_name
+                  i.sales_request_id, c.client_name, i.client_id
            FROM client_invoice i LEFT JOIN client c ON c.id = i.client_id WHERE i.status = 'posted'"""
     params = []
     if start:
@@ -27552,7 +27556,7 @@ def chart_journal(cur, start=None, end=None):
         params.append(end)
     cur.execute(q, params)
     for inv in cur.fetchall():
-        src = {'day': inv['invoice_date'], 'ref': invoice_label(inv), 'source': ('invoice', inv['id']),
+        src = {'day': inv['invoice_date'], 'ref': invoice_label(inv), 'source': ('invoice', inv['id']), 'client': inv['client_id'],
                'description': ' - '.join(x for x in (inv['client_name'], 'SR-%s' % inv['sales_request_id']) if x)}
         sub, vat = float(inv['subtotal'] or 0), float(inv['vat_total'] or 0)
         tax, total = float(inv['profit_tax_total'] or 0), float(inv['total'] or 0)
@@ -27566,6 +27570,17 @@ def chart_journal(cur, start=None, end=None):
             line(WITHHOLDING_TAX_ACCOUNT, debit=tax)
             line('4101', credit=sub)
             line('2103', credit=vat)
+
+    # A client's balance brought forward: 1103 (their account) against 3103.
+    for e in ledger_entries(cur):
+        day = e['day'].isoformat() if e['day'] else ''
+        if e['kind'] != 'opening' or (start and day < str(start)) or (end and day > str(end)):
+            continue
+        src = {'day': e['day'], 'source': ('opening', e['ref_id']), 'client': e['client_id'],
+               'ref': e['label'], 'description': e['description'] or e['label']}
+        owed = e['debit'] - e['credit']
+        line(CLIENT_ACCOUNT, debit=max(owed, 0), credit=max(-owed, 0))
+        line('3103', credit=max(owed, 0), debit=max(-owed, 0))
 
     for e in supplier_ledger_entries(cur):
         day = e['day'].isoformat() if e['day'] else ''
@@ -27595,11 +27610,17 @@ def chart_tree(cur, start=None, end=None):
     cur.execute("SELECT id, account_code, supplier_name, company_name, status FROM supplier WHERE account_code IS NOT NULL")
     suppliers = sorted(cur.fetchall(), key=lambda s: int(s['account_code']))
     known = {s['id'] for s in suppliers}
-    sums, by_method, by_supplier = {}, {}, {}
+    cur.execute("""SELECT c.id, c.account_code, c.client_name, co.company_name FROM client c
+                   LEFT JOIN company co ON co.id = c.parent_company_id WHERE c.account_code IS NOT NULL""")
+    clients = sorted(cur.fetchall(), key=lambda c: int(c['account_code']))
+    known_clients = {c['id'] for c in clients}
+    sums, by_method, by_supplier, by_client = {}, {}, {}, {}
     for l in journal:
-        # A 2101 line with its supplier sits on that supplier's own account.
+        # A 2101 / 1103 line with its supplier / client sits on their own account.
         on_supplier = l['account'] == SUPPLIER_ACCOUNT and l.get('supplier') in known
+        on_client = l['account'] == CLIENT_ACCOUNT and l.get('client') in known_clients
         acc = (by_supplier.setdefault(l['supplier'], {'debit': 0.0, 'credit': 0.0, 'count': 0}) if on_supplier
+               else by_client.setdefault(l['client'], {'debit': 0.0, 'credit': 0.0, 'count': 0}) if on_client
                else sums.setdefault(l['account'], {'debit': 0.0, 'credit': 0.0, 'count': 0}))
         acc['debit'] += l['debit']
         acc['credit'] += l['credit']
@@ -27645,6 +27666,17 @@ def chart_tree(cur, start=None, end=None):
                         'value': s_['credit'] - s_['debit'], 'children': []})
         return out
 
+    def client_rows(parent_id):
+        out = []
+        for c in clients:
+            c_ = by_client.get(c['id'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+            out.append({'id': 'cli-%d' % c['id'], 'code': c['account_code'], 'name': c['client_name'],
+                        'type': 'asset', 'parent_id': parent_id, 'is_system': True, 'client': c['id'],
+                        'is_active': True, 'description': c['company_name'] or '',
+                        'debit': c_['debit'], 'credit': c_['credit'], 'count': c_['count'],
+                        'value': c_['debit'] - c_['credit'], 'children': []})
+        return out
+
     def build(rid):
         r = rows[rid]
         code = r['account_code'] or ''
@@ -27655,6 +27687,8 @@ def chart_tree(cur, start=None, end=None):
             kids = [build(c) for c in r['children']]
             if code == SUPPLIER_ACCOUNT:
                 kids += supplier_rows(rid)
+            elif code == CLIENT_ACCOUNT:
+                kids += client_rows(rid)
             own = sums.get(code, {'debit': 0.0, 'credit': 0.0, 'count': 0})
         debit = own['debit'] + sum(k['debit'] for k in kids)
         credit = own['credit'] + sum(k['credit'] for k in kids)
@@ -27664,7 +27698,7 @@ def chart_tree(cur, start=None, end=None):
                 'description': r['description'] or '', 'debit': debit, 'credit': credit,
                 'count': own['count'] + sum(k['count'] for k in kids),
                 'value': (debit - credit) if normal_debit else (credit - debit), 'children': kids,
-                'methods_total': code in ('1101', '1102'), 'suppliers_total': code == SUPPLIER_ACCOUNT}
+                'methods_total': code in ('1101', '1102'), 'suppliers_total': code in (SUPPLIER_ACCOUNT, CLIENT_ACCOUNT)}
 
     classes = [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
     return classes
@@ -27689,29 +27723,13 @@ def get_finance_tree():
     conn, cur = connection()
     try:
         assign_supplier_accounts(cur)
+        assign_client_accounts(cur)
         conn.commit()
         classes = chart_tree(cur, start, end)
-        # Who the client collections were with (suppliers are accounts of their own under 2101).
-        dates, params = '', []
-        if start:
-            dates += " AND ft.transaction_date >= %s"
-            params.append(start)
-        if end:
-            dates += " AND ft.transaction_date <= %s"
-            params.append(end)
-        cur.execute("""SELECT c.id, c.client_name AS name, SUM(ft.amount) AS total, COUNT(*) AS n
-                       FROM finance_transactions ft LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
-                       JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
-                       WHERE ft.status = 'approved' AND ft.category_id = 1""" + dates +
-                    " GROUP BY c.id, c.client_name ORDER BY total DESC", params)
-        clients = [{'id': r['id'], 'name': r['name'], 'total': float(r['total']), 'count': r['n'], 'entity_type': 'client'}
-                   for r in cur.fetchall()]
     finally:
         cur.close()
         conn.close()
-    node = chart_find(classes, '1103')
-    if node and clients:
-        node['entities'] = clients
+    # Clients (1103) and suppliers (2101) are accounts of their own in the tree.
     debit = sum(c['debit'] for c in classes)
     credit = sum(c['credit'] for c in classes)
     return jsonify(success=True, classes=classes, debit=debit, credit=credit,
@@ -28643,7 +28661,7 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
     companies = {r['id']: dict(r) for r in cur.fetchall()}
 
     cur.execute("""
-        SELECT c.id, c.client_name, c.parent_company_id, c.mobile_number,
+        SELECT c.id, c.account_code, c.client_name, c.parent_company_id, c.mobile_number,
                c.secondary_mobile_number, c.email_address, c.job_title,
                c.preferred_contact_channel, c.additional_notes, c.added_date,
                c.owner_user_id, u.name AS owner_name, u.mobile AS owner_mobile
@@ -28693,6 +28711,7 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
                ft.sales_request_id, c.id AS client_id,
                COALESCE(sr.company_id, c.parent_company_id) AS company_id,
                fc.category_name, fc.category_code, fsc.category_name AS subcategory_name,
+               COALESCE(fsc.account_code, fc.account_code) AS account_code,
                pm.method_name AS payment_method_name, s.company_name AS supplier_name
         FROM finance_transactions ft
         LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
@@ -28762,9 +28781,13 @@ def client_accounts_data(cur, company_id=None, client_id=None, start=None, end=N
                    per_company.get(t['company_id']))
         add('transactions', 1, *targets)
         amount = _money(t['amount'])
-        if t['transaction_type'] == 'income' and t['status'] == 'approved':
+        # Collected: income posted to 1103, as the journal and the statement
+        # read it. A staff expense's custody leg (1110...) names the client too
+        # but is no money from them; a pending payment's account is not final.
+        income = t['transaction_type'] == 'income' and not (t['account_code'] or '').startswith('1110')
+        if income and t['status'] == 'approved' and t['account_code'] == CLIENT_ACCOUNT:
             add('collected', amount, *targets)
-        elif t['transaction_type'] == 'income' and t['status'] == 'pending':
+        elif income and t['status'] == 'pending':
             add('pending_in', amount, *targets)
         elif t['transaction_type'] == 'expense' and t['status'] == 'approved':
             add('paid_out', amount, *targets)
@@ -29909,7 +29932,11 @@ def ledger_entries(cur, company_id=None, client_id=None):
         LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
         JOIN client c ON c.id = COALESCE(ft.client_id, sr.client_id)
         LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
-        WHERE ft.transaction_type = 'income' AND ft.status = 'approved'""" + where_pay, params)
+        -- A collection is money posted to 1103, as in the journal. The custody
+        -- leg of an approved staff expense carries the client too (111002).
+        JOIN finance_categories acct ON acct.id = COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id)
+                                    AND acct.account_code = %s
+        WHERE ft.transaction_type = 'income' AND ft.status = 'approved'""" + where_pay, [CLIENT_ACCOUNT] + params)
     entries += [dict(r) for r in cur.fetchall()]
     order = {'opening': 0, 'invoice': 1, 'refund': 2, 'payment': 3, 'refund_paid': 4}
     entries.sort(key=lambda r: (r['day'], order[r['kind']], r['ref_id']))
@@ -30113,21 +30140,33 @@ SUPPLIER_PAYMENT_CATEGORY_CODE = 'SUPPLIER_PAYMENT'
 SUPPLIER_ACCOUNT = '2101'
 
 
-def assign_supplier_accounts(cur):
+CLIENT_ACCOUNT = '1103'
+
+
+def assign_accounts(cur, table, parent):
     """
-    Every supplier its own account under 2101: 21011, 21012, ... in the order
-    they were added (Ahmed, 2026-11-11). A code once given is kept, so a new
-    supplier only ever takes the next number. The caller commits.
+    Every row of `table` (supplier, client) its own account under `parent`:
+    parent + 1, + 2, ... in the order they were added (Ahmed, 2026-11-11), so
+    21011, 21012 / 11031, 11032. A code once given is kept; a new row only
+    ever takes the next number. The caller commits.
     """
-    cur.execute("SELECT id FROM supplier WHERE account_code IS NULL ORDER BY id")
+    cur.execute("SELECT id FROM `%s` WHERE account_code IS NULL ORDER BY id" % table)
     new = [r['id'] for r in cur.fetchall()]
     if not new:
         return
-    cur.execute("SELECT account_code FROM supplier WHERE account_code LIKE %s", (SUPPLIER_ACCOUNT + '%',))
-    last = max([int(r['account_code'][len(SUPPLIER_ACCOUNT):] or 0) for r in cur.fetchall()] or [0])
-    for n, supplier_id in enumerate(new, start=last + 1):
-        cur.execute("UPDATE supplier SET account_code = %s WHERE id = %s AND account_code IS NULL",
-                    (SUPPLIER_ACCOUNT + str(n), supplier_id))
+    cur.execute("SELECT account_code FROM `%s` WHERE account_code LIKE %%s" % table, (parent + '%',))
+    last = max([int(r['account_code'][len(parent):] or 0) for r in cur.fetchall()] or [0])
+    for n, row_id in enumerate(new, start=last + 1):
+        cur.execute("UPDATE `%s` SET account_code = %%s WHERE id = %%s AND account_code IS NULL" % table,
+                    (parent + str(n), row_id))
+
+
+def assign_supplier_accounts(cur):
+    assign_accounts(cur, 'supplier', SUPPLIER_ACCOUNT)
+
+
+def assign_client_accounts(cur):
+    assign_accounts(cur, 'client', CLIENT_ACCOUNT)
 
 
 def supplier_label(row):

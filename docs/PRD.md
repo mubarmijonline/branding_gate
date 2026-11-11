@@ -286,6 +286,23 @@ Vision in the tree shows the payment against what SR-502 owes.
   and the admin. Each tile shows only to those allowed to use it. Others still
   find the same actions in the balance menu.
 
+## Client accounts under 1103
+
+- Every client has its own account under 1103 العملاء, numbered as they are
+  added: 11031, 11032, ... A code once given never changes.
+- In the Finance Tree, 1103 lists every client account and is their sum: a
+  posted invoice is a debit on the client, a collection from them a credit, a
+  refund the reverse.
+- Opening a client shows a large report like a supplier's: approved sales,
+  invoiced, collected (number of collections), outstanding (approved, not yet
+  collected), balance due; the same by request; every collection; the full
+  statement; Excel and the account page.
+- A collection is money posted to 1103. The custody leg of an approved staff
+  expense names the client but is no money from them, and is not counted.
+
+Done when: every client row under 1103 carries its code, 1103 equals the sum
+of its clients, and each client's balance equals their statement.
+
 ## Trial balance
 
 - Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,
