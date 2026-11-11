@@ -345,6 +345,25 @@ of its clients, and each client's balance equals their statement.
 - The Tax ID shows on the invoice list and window, on the printed invoice, on
   the journal entry (Finance Tree ledger) and on the client's statement.
 
+## Finance Approvals page
+
+- One page for everything waiting on Finance. On top, a box per kind (staff
+  expenses, supplier assignments, custody requests, expense reimbursements,
+  transactions) with how many wait and their total; a box opens its list.
+  "Money is paid from" is chosen once for the page.
+- Staff expenses: one card per person (how many lines have a receipt and how
+  many do not), one row per line: code, date, description, SR and client, who
+  was paid (a supplier with its 2101 code and what the SR owes them), the
+  receipt (opens in a click), the amount (editable), the account (6212 preset
+  for Transportation; supplier lines need none). Approve or decline a line with
+  its own buttons, or tick lines and use the bar at the bottom. A line without a
+  receipt cannot be ticked or approved. Search, "only lines with a receipt" and
+  "account for every line" help with many lines. A line whose SR no longer
+  exists says so and is approved without the link.
+- Custody requests and transactions: one row each with who it is for, what
+  they hold now, who approved it before, the account and payment method;
+  Pay out / Approve and Decline in place.
+
 ## Trial balance
 
 - Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,

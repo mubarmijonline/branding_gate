@@ -140,6 +140,23 @@ class SupplierExpenseAccountsTest(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertTrue(r.get_json()['missing_documents'])
 
+    def test_a_line_naming_a_removed_request_still_approves(self):
+        # Old lines name SRs from before the renumbering (SR-2520); approving
+        # them failed on the foreign key.
+        line = self._line(amount=100)
+        cur = self._cursor()
+        cur.execute("UPDATE user_expense_tracking SET sales_request_id = 99999999 WHERE id = %s", (line,))
+        cur.execute("SELECT id FROM finance_categories WHERE account_code = '6212'")
+        transport = cur.fetchone()['id']
+        finance = self._web(self.finance)
+        listed = [e for e in finance.get('/api/finance/expense-approvals?status=pending_finance').get_json()['expenses']
+                  if e['id'] == line][0]
+        self.assertTrue(int(listed['request_missing']))
+        r = finance.post('/api/finance/expense-approvals/finance-approve-bulk', json={
+            'payment_method_id': self.pm, 'expenses': [{'id': line, 'amount': 100, 'category_id': transport}]})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertEqual(r.get_json()['approved_count'], 1)
+
     def test_a_supplier_line_posts_to_its_own_2101_account(self):
         line = self._line(supplier_id=self.supplier, supplier_name='Vision Co T', amount=1000)
         finance = self._web(self.finance)

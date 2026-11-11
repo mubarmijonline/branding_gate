@@ -1649,3 +1649,18 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
   `over_agreed`, head note); the head stage keeps it. The head's hand-off
   notification no longer names the agreed figure.
 
+## Finance Approvals page rebuilt (Ahmed, 2026-11-11)
+
+- finance_approvals.html: header with one "paid from" picker, summary boxes
+  per kind (fq-card, open their tab), tabs renamed (Staff Expenses first),
+  staff expenses as a per-person inbox with row actions, tick boxes and a
+  sticky bar (fq-*; `fa-` collided with Font Awesome icon classes), custody
+  requests and transactions as rows decided in place. Supplier Assignments and
+  Expense Reimbursements kept their logic.
+- `/api/finance/pending-approvals` adds for/holds now/manager to custody
+  requests, account/payment method/client/supplier/SR to transactions.
+- Fix found in the browser pass: My Expenses lines naming an SR that no longer
+  exists (renumbered: SR-786, SR-2520) failed to approve on the foreign key.
+  `existing_request_id()` books them without the link; the list flags them
+  (`request_missing`). Test in `test_supplier_expense_accounts.py`.
+

@@ -32886,8 +32886,18 @@ def get_all_pending_approvals():
                 ft.description,
                 ft.added_at as created_at,
                 ft.added_by as requested_by,
+                ft.reference_number, ft.sales_request_id, ft.transaction_date,
+                CONCAT_WS(' ', fc.account_code, fc.category_name) AS account,
+                pm.method_name AS payment_method,
+                COALESCE(c.client_name, src.client_name) AS client_name,
+                COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_name,
                 'transaction' as approval_type
             FROM finance_transactions ft
+            LEFT JOIN finance_categories fc ON fc.id = COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id)
+            LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+            LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
+            LEFT JOIN client c ON c.id = ft.client_id LEFT JOIN client src ON src.id = sr.client_id
+            LEFT JOIN supplier s ON s.id = ft.supplier_id
             WHERE ft.status = 'pending'
             ORDER BY ft.added_at DESC
         """)
@@ -32903,9 +32913,15 @@ def get_all_pending_approvals():
                 ubt.description,
                 ubt.created_at,
                 u.name as requested_by,
+                tu.name AS for_name, ubt.notes, ubt.manager_notes, ubt.original_amount,
+                mu.name AS manager_name, ubt.manager_approved_at,
+                COALESCE(ufb.balance, 0) AS holds_now,
                 'balance_request' as approval_type
             FROM user_balance_transfers ubt
             LEFT JOIN user u ON ubt.requested_by = u.id
+            LEFT JOIN user tu ON tu.id = ubt.to_user_id
+            LEFT JOIN user mu ON mu.id = ubt.manager_approved_by
+            LEFT JOIN user_finance_balances ufb ON ufb.user_id = ubt.to_user_id
             WHERE ubt.status = 'pending_finance'
             ORDER BY ubt.created_at DESC
         """)
@@ -33588,7 +33604,8 @@ def get_expense_approvals():
                     ufb.balance as user_current_balance,
                     approver.name as approved_by_name,
                     c.client_name as client_name,
-                    comp.company_name as company_name
+                    comp.company_name as company_name,
+                    (uet.sales_request_id IS NOT NULL AND live_sr.id IS NULL) AS request_missing
                 FROM user_expense_tracking uet
                 JOIN user u ON uet.user_id = u.id
                 LEFT JOIN supplier s ON uet.supplier_id = s.id
@@ -33596,6 +33613,7 @@ def get_expense_approvals():
                 LEFT JOIN user approver ON uet.approved_by = approver.id
                 LEFT JOIN client c ON uet.client_id = c.id
                 LEFT JOIN company comp ON uet.company_id = comp.id
+                LEFT JOIN sales_request live_sr ON live_sr.id = uet.sales_request_id
                 WHERE uet.status IN ('submitted', 'manager_approved')
                 ORDER BY uet.submitted_at DESC
             """)
@@ -33812,6 +33830,15 @@ def expense_payment_method(cur, requested_id=None):
     return (row['id'], None) if row else (None, 'Add a payment method first (Finance Management > Payment Methods)')
 
 
+def existing_request_id(cur, sales_request_id):
+    """The SR id if that request still exists, else None. Old expenses can name a
+    request that was renumbered or removed; booking them must not fail on it."""
+    if not sales_request_id:
+        return None
+    cur.execute("SELECT id FROM sales_request WHERE id = %s", (sales_request_id,))
+    return sales_request_id if cur.fetchone() else None
+
+
 def notify_finance_of_expenses(cur, expense_ids, by_name):
     """Each My Expenses line that reached Finance, as a notification Finance can decide from."""
     ids = [int(i) for i in expense_ids if i]
@@ -33903,6 +33930,7 @@ def finance_approve_user_expense(expense_id):
                                                              data.get('subcategory_id'))
         if account_error:
             return jsonify({'success': False, 'error': account_error}), 400
+        expense['sales_request_id'] = existing_request_id(cur, expense.get('sales_request_id'))
         
         # Get payment method balance
         cur.execute("SELECT current_balance FROM payment_methods WHERE id = %s", (payment_method_id,))
@@ -34041,6 +34069,7 @@ def finance_approve_expenses_bulk():
                 conn.rollback()
                 return jsonify({'success': False, 'error': account_error}), 400
             subcategory_id = None
+            expense['sales_request_id'] = existing_request_id(cur, expense.get('sales_request_id'))
             
             # ============================================
             # 1. Create INCOME transaction (Internal Transfer)

@@ -392,6 +392,87 @@
     .approval-item { flex-direction: column; align-items: flex-start; }
     .approval-item .item-amount { text-align: left; }
 }
+
+/* ===== Finance Approvals inbox (2026-11-11) ===== */
+.approval-shell { background: #f4f6fb; }
+.fq-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 26px 32px 18px; border-bottom: 1px solid var(--border); }
+.fq-head h1 { font-size: 26px; font-weight: 800; color: var(--text); margin: 0; display: flex; align-items: center; gap: 12px; }
+.fq-head p { margin: 6px 0 0; color: var(--muted); }
+.fq-head-actions { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.fq-paidfrom { margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #334155; }
+.fq-paidfrom select { min-width: 220px; height: 40px; border-radius: 10px; font-weight: 600; }
+.fq-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding: 18px 32px; }
+@media (max-width: 1100px) { .fq-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fq-card { display: flex; gap: 12px; align-items: center; text-align: start; background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; cursor: pointer; transition: var(--transition); }
+.fq-card:hover { border-color: #c7d2fe; box-shadow: 0 6px 18px rgba(79,70,229,.10); transform: translateY(-1px); }
+.fq-card > i { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #eef2ff; color: #4f46e5; font-size: 18px; flex: none; }
+.fq-card span { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
+.fq-card b { display: block; font-size: 24px; font-weight: 800; color: var(--text); line-height: 1.1; }
+.fq-card small { color: var(--muted); font-weight: 600; }
+.approval-tabs { flex-wrap: wrap; padding: 10px 32px; gap: 6px; }
+.approval-tab { padding: 10px 16px; }
+.fq-tab-gap { flex: 1; }
+.fq-tab-minor { font-weight: 500; }
+.tab-panel { padding: 22px 32px 90px; }
+.fq-tools { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+.fq-search { position: relative; flex: 1; min-width: 240px; }
+.fq-search i { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+.fq-search input { width: 100%; height: 40px; border: 1px solid var(--border); border-radius: 10px; padding-inline-start: 36px; }
+.fq-check { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; color: #334155; font-weight: 600; }
+.fq-pick { margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #334155; }
+.fq-pick select { min-width: 240px; height: 40px; border-radius: 10px; }
+.fq-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-bottom: 16px; }
+.fq-person { background: #fff; border: 1px solid var(--border); border-radius: 16px; margin-bottom: 16px; overflow: hidden; }
+.fq-person-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; background: #fafbff; border-bottom: 1px solid var(--border); }
+.fq-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.fq-person-name b { display: block; font-size: 16px; color: var(--text); } .fq-person-name span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.fq-person-chips { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+.fq-chip { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+.fq-chip.ok { background: #dcfce7; color: #166534; } .fq-chip.bad { background: #fee2e2; color: #991b1b; }
+.fq-person-actions { display: flex; gap: 8px; }
+.fq-person-actions button[disabled] { opacity: .45; cursor: not-allowed; }
+.fq-line { display: grid; grid-template-columns: 28px minmax(150px, 1.3fr) minmax(120px, 1fr) minmax(150px, 1.2fr) 110px 150px minmax(170px, 1.1fr) 84px;
+           gap: 12px; align-items: center; padding: 12px 18px; border-top: 1px solid #f1f5f9; transition: background .15s; }
+.fq-line:first-child { border-top: none; }
+.fq-line:hover { background: #fafbff; }
+.fq-line.picked { background: #eef2ff; }
+.fq-line.blocked { background: #fffafa; }
+.fq-line.blocked .fq-c-amt, .fq-line.blocked .fq-c-acc { opacity: .55; }
+@media (max-width: 1250px) { .fq-line { grid-template-columns: 28px 1fr 1fr; } .fq-line > div { grid-column: auto; } .fq-c-act { justify-content: flex-start !important; } }
+.fq-sel input { width: 18px; height: 18px; cursor: pointer; }
+.fq-code { font-weight: 800; color: var(--text); font-size: 13.5px; }
+.fq-sub { font-size: 12px; color: var(--muted); }
+.fq-desc { font-size: 13px; color: #334155; margin-top: 2px; }
+.fq-c-to b { font-size: 13.5px; color: var(--text); }
+.fq-gone { font-size: 11.5px; font-weight: 700; color: #b45309; margin-top: 2px; }
+.fq-owed { margin-top: 4px; font-size: 11.5px; color: #475569; background: #f8fafc; border-radius: 8px; padding: 4px 8px; }
+.fq-owed.warn { background: #fff7ed; color: #9a3412; } .fq-owed em { display: block; font-style: normal; font-weight: 700; }
+.fq-docs { display: flex; gap: 4px; align-items: center; border: none; background: none; padding: 0; cursor: zoom-in; }
+.fq-docs img, .fq-doc { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #dc2626; font-size: 20px; }
+.fq-more { font-size: 12px; font-weight: 700; color: #4f46e5; }
+.fq-c-amt .ue-amount { min-width: 0; }
+.fq-saved { background: #dcfce7 !important; }
+.fq-c-act { display: flex; gap: 6px; justify-content: flex-end; }
+.fq-ok, .fq-no { width: 36px; height: 36px; border-radius: 10px; border: 1px solid; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fff; }
+.fq-ok { border-color: #86efac; color: #16a34a; } .fq-ok:hover { background: #16a34a; color: #fff; }
+.fq-no { border-color: #fca5a5; color: #dc2626; } .fq-no:hover { background: #dc2626; color: #fff; }
+.fq-ok[disabled] { opacity: .35; cursor: not-allowed; background: #fff !important; color: #16a34a !important; }
+.fq-bar { position: fixed; inset-inline: 0; bottom: 0; z-index: 1040; display: none; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+          padding: 12px 32px; background: #1e1b4b; color: #fff; box-shadow: 0 -8px 24px rgba(15,23,42,.25); font-size: 15px; }
+.fq-bar.show { display: flex; }
+.fq-bar-actions { display: flex; gap: 8px; }
+.fq-bar .btn-pill-outline { color: #fff; border-color: rgba(255,255,255,.4); background: transparent; }
+.fq-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: #fff; border: 1px solid var(--border); border-inline-start: 4px solid #6366f1; border-radius: 14px; padding: 14px 18px; margin-bottom: 12px; }
+.fq-row.in { border-inline-start-color: #10b981; } .fq-row.out { border-inline-start-color: #ef4444; } .fq-row.cust { border-inline-start-color: #3b82f6; }
+.fq-row-main { flex: 1; min-width: 260px; }
+.fq-row-top { display: flex; gap: 8px; align-items: center; }
+.fq-tag { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 8px; text-transform: uppercase; }
+.fq-tag.in { background: #dcfce7; color: #166534; } .fq-tag.out { background: #fee2e2; color: #991b1b; } .fq-tag.cust { background: #dbeafe; color: #1e40af; }
+.fq-row-title { font-size: 15px; font-weight: 700; color: var(--text); margin-top: 4px; }
+.fq-row-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: #475569; margin-top: 6px; }
+.fq-row-meta i { color: #94a3b8; margin-inline-end: 3px; }
+.fq-row-amt { font-size: 22px; font-weight: 800; color: var(--text); text-align: end; } .fq-row-amt small { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+.fq-row-act { display: flex; gap: 8px; }
 </style>
 {% endblock %}
 
@@ -399,75 +480,82 @@
 <div class="approval-shell">
     <div class="approval-card">
         <!-- Header -->
-        <div class="approval-header">
-            <h1>
-                <span class="badge-dot"><i class="fas fa-check-double"></i></span>
-                Finance Approvals
-            </h1>
-            <p style="margin: 10px 0 0; color: var(--text-light);">Review and approve pending transactions and balance requests</p>
-        </div>
-        
-        <!-- Stats -->
-        <div class="stats-row">
-            <div class="stat-box warning">
-                <h3 id="totalPending">0</h3>
-                <p>Total Pending</p>
+        <div class="fq-head">
+            <div>
+                <h1><span class="badge-dot"><i class="fas fa-check-double"></i></span> Finance Approvals</h1>
+                <p>Everything waiting for Finance, in one place. Pick a box, check the receipt, approve.</p>
             </div>
-            <div class="stat-box" style="border-left: 4px solid var(--primary);">
-                <h3 id="pendingTransactions">0</h3>
-                <p>Pending Transactions</p>
-            </div>
-            <div class="stat-box" style="border-left: 4px solid var(--info);">
-                <h3 id="pendingRequests">0</h3>
-                <p>Balance Requests</p>
+            <div class="fq-head-actions">
+                <label class="fq-paidfrom"><span><i class="fas fa-wallet"></i> Money is paid from</span>
+                    <select class="form-control" id="faPaidFrom"></select></label>
+                <button class="btn-pill btn-pill-outline" type="button" onclick="loadPendingApprovals(); loadSupplierAssignments(); loadExpenseTracking();"><i class="fas fa-sync"></i> Refresh</button>
             </div>
         </div>
-        
+
+        <!-- What waits, by kind: each box opens its list -->
+        <div class="fq-cards">
+            <button type="button" class="fq-card" data-go="staff-expenses"><i class="fas fa-receipt"></i>
+                <div><span>Staff expenses</span><b id="cardExpN">0</b><small id="cardExpT">EGP 0.00</small></div></button>
+            <button type="button" class="fq-card" data-go="supplier-assignments"><i class="fas fa-truck-loading"></i>
+                <div><span>Supplier assignments</span><b id="cardSaN">0</b><small id="cardSaT">EGP 0.00</small></div></button>
+            <button type="button" class="fq-card" data-go="balance-requests"><i class="fas fa-hand-holding-usd"></i>
+                <div><span>Custody requests</span><b id="cardReqN">0</b><small id="cardReqT">EGP 0.00</small></div></button>
+            <button type="button" class="fq-card" data-go="expense-tracking"><i class="fas fa-file-invoice-dollar"></i>
+                <div><span>Expense reimbursements</span><b id="cardEtN">0</b><small id="cardEtT">EGP 0.00</small></div></button>
+            <button type="button" class="fq-card" data-go="pending-transactions"><i class="fas fa-exchange-alt"></i>
+                <div><span>Transactions</span><b id="cardTxN">0</b><small id="cardTxT">EGP 0.00</small></div></button>
+        </div>
+
         <!-- Tabs -->
         <div class="approval-tabs">
-            <button class="approval-tab active" data-tab="pending-transactions" type="button">
-                <i class="fas fa-exchange-alt"></i> Transactions <span class="badge" id="badgeTrans">0</span>
+            <button class="approval-tab active" data-tab="staff-expenses" type="button">
+                <i class="fas fa-receipt"></i> Staff Expenses <span class="badge" id="badgeExp">0</span>
             </button>
             <button class="approval-tab" data-tab="supplier-assignments" type="button">
                 <i class="fas fa-truck-loading"></i> Supplier Assignments <span class="badge" id="badgeAssign">0</span>
             </button>
             <button class="approval-tab" data-tab="balance-requests" type="button">
-                <i class="fas fa-hand-holding-usd"></i> Balance Requests <span class="badge" id="badgeReq">0</span>
-            </button>
-            <button class="approval-tab" data-tab="user-balances" type="button">
-                <i class="fas fa-users"></i> User Balances
+                <i class="fas fa-hand-holding-usd"></i> Custody Requests <span class="badge" id="badgeReq">0</span>
             </button>
             <button class="approval-tab" data-tab="expense-tracking" type="button">
-                <i class="fas fa-file-invoice-dollar"></i> Expense Tracking <span class="badge" id="badgeExpenseTracking">0</span>
+                <i class="fas fa-file-invoice-dollar"></i> Expense Reimbursements <span class="badge" id="badgeExpenseTracking">0</span>
             </button>
-            <button class="approval-tab" data-tab="transfer" type="button">
-                <i class="fas fa-paper-plane"></i> Transfer Balance
+            <button class="approval-tab" data-tab="pending-transactions" type="button">
+                <i class="fas fa-exchange-alt"></i> Transactions <span class="badge" id="badgeTrans">0</span>
             </button>
+            <span class="fq-tab-gap"></span>
+            <button class="approval-tab fq-tab-minor" data-tab="user-balances" type="button"><i class="fas fa-users"></i> Balances</button>
+            <button class="approval-tab fq-tab-minor" data-tab="transfer" type="button"><i class="fas fa-paper-plane"></i> Transfer</button>
         </div>
-        
-        <!-- Tab: Pending Transactions (includes User Expenses) -->
-        <div class="tab-panel active" id="tab-pending-transactions">
-            <!-- User Expenses Section -->
-            <div id="userExpensesSection" style="margin-bottom: 30px;">
-                <h5 style="color: var(--warning); margin-bottom: 16px;"><i class="fas fa-receipt mr-2"></i>User Expenses (Pending Finance Approval)</h5>
-                <div class="approval-list" id="userExpensesList">
-                    <div class="empty-state" style="padding: 20px;">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <h3>Loading...</h3>
-                    </div>
+
+        <!-- Tab: Staff expenses (My Expenses lines sent to Finance) -->
+        <div class="tab-panel active" id="tab-staff-expenses">
+            <div class="fq-tools">
+                <div class="fq-search"><i class="fas fa-search"></i><input type="search" id="faSearch" placeholder="Search a person, code, SR or supplier"></div>
+                <label class="fq-check"><input type="checkbox" id="faReadyOnly"> Only lines with a receipt</label>
+                <label class="fq-pick"><span>Account for every line</span><select class="form-control" id="faAccountAll"></select></label>
+            </div>
+            <div class="fq-legend">
+                <span><i class="fas fa-check-circle text-success"></i> Ready: receipt attached, account chosen</span>
+                <span><i class="fas fa-lock" style="color:#92400e"></i> Paid to a supplier: goes to their 2101 account</span>
+                <span><i class="fas fa-exclamation-circle text-danger"></i> No receipt: cannot be approved, decline or wait for it</span>
+            </div>
+            <div id="userExpensesList"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Loading...</h3></div></div>
+            <div class="fq-bar" id="faBar">
+                <div><b id="faBarN">0</b> selected &middot; <b id="faBarT">EGP 0.00</b></div>
+                <div class="fq-bar-actions">
+                    <button type="button" class="btn-pill btn-pill-outline" id="faClear">Clear</button>
+                    <button type="button" class="btn-pill btn-pill-danger" id="faRejectSel"><i class="fas fa-times"></i> Decline selected</button>
+                    <button type="button" class="btn-pill btn-pill-success" id="faApproveSel"><i class="fas fa-check"></i> Approve selected</button>
                 </div>
             </div>
-            
-            <!-- Original Transactions Section -->
-            <h5 style="color: var(--primary); margin-bottom: 16px;"><i class="fas fa-exchange-alt mr-2"></i>Transactions</h5>
-            <div class="approval-list" id="transactionsList">
-                <div class="empty-state">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <h3>Loading...</h3>
-                </div>
-            </div>
         </div>
-        
+
+        <!-- Tab: Transactions waiting for approval -->
+        <div class="tab-panel" id="tab-pending-transactions">
+            <div class="approval-list" id="transactionsList"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Loading...</h3></div></div>
+        </div>
+
         <!-- Tab: Supplier Assignments (Operations asks, Finance approves) -->
         <div class="tab-panel" id="tab-supplier-assignments">
             <div class="sa-bar">
@@ -669,6 +757,7 @@ $(document).ready(function() {
     loadUserBalances();
     loadUsersForTransfer();
     loadPaymentMethodsForTransfer();
+    loadExpenseTracking();   // its box on top shows what waits too
     
     // Tab switching
     $('.approval-tab').on('click', function() {
@@ -704,6 +793,9 @@ function loadSupplierAssignments() {
     var T = window.bgT || String, esc = function (v) { return $('<div>').text(v == null ? '' : v).html(); };
     $.getJSON('/api/finance/supplier-assignments', { status: $('#saStatus').val() || 'pending' }).done(function (d) {
         $('#badgeAssign').text((d.counts || {}).pending || 0);
+        if (($('#saStatus').val() || 'pending') === 'pending') {
+            faCard(d.requests.length, d.requests.reduce(function (a, r) { return a + (r.actual_cost || 0); }, 0), 'cardSaN', 'cardSaT');
+        }
         var box = $('#supplierAssignmentsList');
         if (!d.requests.length) {
             box.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>' + T('Nothing here') + '</h3></div>');
@@ -758,62 +850,63 @@ function decideAssignment(id, approve) {
     }).then(function (r) { if (r.isConfirmed) loadSupplierAssignments(); });
 }
 
+// ===== The inbox: what waits for Finance, by kind =====
+var faT = window.bgT || String;
+function faEsc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+function faWhen(v) { return v ? String(v).replace('T', ' ').slice(0, 16) : ''; }
+function faCard(n, total, idN, idT) { $('#' + idN).text(n); $('#' + idT).text(formatCurrency(total)); }
+$(document).on('click', '.fq-card', function () { $('.approval-tab[data-tab="' + $(this).data('go') + '"]').trigger('click'); });
+
 function loadPendingApprovals() {
     $.ajax({
         url: '/api/finance/pending-approvals',
         method: 'GET',
-        success: function(data) {
-            if (data.success) {
-                renderPendingTransactions(data.pending_transactions);
-                renderBalanceRequests(data.pending_balance_requests);
-                
-                // Update stats
-                var transCnt = data.pending_transactions.length;
-                var reqCnt = data.pending_balance_requests.length;
-                $('#pendingTransactions').text(transCnt);
-                $('#pendingRequests').text(reqCnt);
-                $('#badgeTrans').text(transCnt);
-                $('#badgeReq').text(reqCnt);
-            }
+        success: function (data) {
+            if (!data.success) return;
+            renderPendingTransactions(data.pending_transactions);
+            renderBalanceRequests(data.pending_balance_requests);
+            var sum = function (list) { return list.reduce(function (a, x) { return a + (parseFloat(x.amount) || 0); }, 0); };
+            $('#badgeTrans').text(data.pending_transactions.length);
+            $('#badgeReq').text(data.pending_balance_requests.length);
+            faCard(data.pending_transactions.length, sum(data.pending_transactions), 'cardTxN', 'cardTxT');
+            faCard(data.pending_balance_requests.length, sum(data.pending_balance_requests), 'cardReqN', 'cardReqT');
         },
-        error: function() {
+        error: function () {
             $('#transactionsList').html('<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error loading data</h3></div>');
         }
     });
-    
-    // Also load user expenses pending finance approval
     loadUserExpensesForFinance();
 }
 
+// ---- Staff expenses ----
+var faExpenses = [];
 function loadUserExpensesForFinance() {
     $.ajax({
         url: '/api/finance/expense-approvals?status=pending_finance',
         method: 'GET',
-        success: function(data) {
-            if (data.success) {
-                // The "Paid from" picker needs the payment methods first.
-                loadExpensePaymentMethods().always(function () { renderUserExpensesForFinance(data.expenses); });
-                var expenseCount = data.expenses.length;
-                // Update total pending to include expenses
-                var currentTotal = parseInt($('#totalPending').text()) || 0;
-                $('#totalPending').text(currentTotal + expenseCount);
-            }
+        success: function (data) {
+            if (!data.success) return;
+            faExpenses = data.expenses || [];
+            loadExpensePaymentMethods().always(function () {
+                fillPaidFrom();
+                renderUserExpensesForFinance(faExpenses);
+            });
+            $('#badgeExp').text(faExpenses.length);
+            faCard(faExpenses.length, faExpenses.reduce(function (a, e) { return a + parseFloat(e.amount || 0); }, 0), 'cardExpN', 'cardExpT');
         },
-        error: function() {
+        error: function () {
             $('#userExpensesList').html('<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error loading expenses</h3></div>');
         }
     });
 }
 
-// Store finance categories for user expense approval
 var financeCategories = [];
 var financeCategoriesLoaded = false;
-
 function loadFinanceCategories(callback) {
     $.ajax({
         url: '/api/finance/categories?type=expense',
         method: 'GET',
-        success: function(data) {
+        success: function (data) {
             if (data.success) {
                 financeCategories = data.categories;
                 financeCategoriesLoaded = true;
@@ -823,158 +916,17 @@ function loadFinanceCategories(callback) {
     });
 }
 
-// Categories are loaded in the main $(document).ready block above
-
-function renderUserExpensesForFinance(expenses) {
-    var container = $('#userExpensesList');
-    container.empty();
-    
-    if (expenses.length === 0) {
-        container.html('<div class="empty-state" style="padding: 20px;"><i class="fas fa-check-circle"></i><h3>No Pending User Expenses</h3></div>');
-        $('#userExpensesSection').hide();
-        return;
-    }
-    
-    $('#userExpensesSection').show();
-    
-    // Build category options HTML - show only expense categories
-    // data-parent-id is set on subcategory options so we can send both category_id and subcategory_id
-    var categoryOptions = '<option value="">-- Select Category --</option>';
-    financeCategories.forEach(function(cat) {
-        if (cat.category_type === 'expense') {
-            categoryOptions += '<option value="' + cat.id + '" data-parent-id="">' + (cat.account_code ? cat.account_code + ' ' : '') + cat.category_name + '</option>';
-            // Add subcategories - these store parent_id so we know the main category
-            if (cat.subcategories && cat.subcategories.length > 0) {
-                cat.subcategories.forEach(function(sub) {
-                    categoryOptions += '<option value="' + sub.id + '" data-parent-id="' + cat.id + '">&nbsp;&nbsp;↳ ' + (sub.account_code ? sub.account_code + ' ' : '') + sub.category_name + '</option>';
-                });
-            }
-        }
-    });
-    
-    // Group by employee
-    var grouped = {};
-    expenses.forEach(function(e) {
-        var key = e.user_id;
-        if (!grouped[key]) {
-            grouped[key] = {
-                user_id: e.user_id,
-                user_name: e.user_name,
-                expenses: []
-            };
-        }
-        grouped[key].expenses.push(e);
-    });
-    
-    Object.values(grouped).forEach(function(group) {
-        var totalAmount = group.expenses.reduce(function(sum, e) { return sum + parseFloat(e.amount); }, 0);
-        
-        var html = '<div class="approval-item" data-user-id="' + group.user_id + '" style="display: block; border-left: 4px solid var(--warning);">' +
-            '<div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-end; margin-bottom: 16px;">' +
-                '<div>' +
-                    '<h5 style="margin: 0;"><i class="fas fa-user mr-2"></i>' + group.user_name + '</h5>' +
-                    '<small class="text-muted">' + group.expenses.length + ' expense(s) - Total: <strong>' + formatCurrency(totalAmount) + '</strong></small>' +
-                '</div>' +
-                '<div class="ue-actions">' +
-                    '<label class="ue-pick"><span>Category for all</span>' +
-                        '<select class="form-control form-control-sm ue-category-all" data-user-id="' + group.user_id + '">' +
-                        categoryOptions.replace('-- Select Category --', '-- Apply to every line --') + '</select></label>' +
-                    '<label class="ue-pick"><span>Paid from</span>' +
-                        '<select class="form-control form-control-sm ue-payment-method" id="ue_pm_' + group.user_id + '">' +
-                        expensePaymentMethodOptions() + '</select></label>' +
-                    '<button class="btn-pill btn-pill-danger mr-2" onclick="rejectAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-times"></i> Reject All</button>' +
-                    '<button class="btn-pill btn-pill-success" onclick="approveAllUserExpensesForFinance(' + group.user_id + ', \'' + group.user_name + '\')"><i class="fas fa-check"></i> Approve All</button>' +
-                '</div>' +
-            '</div>' +
-            '<div class="ue-table-wrap"><table class="balances-table ue-table" style="margin: 0; width: 100%;">' +
-                '<thead><tr>' +
-                    '<th>Code</th>' +
-                    '<th>SR</th>' +
-                    '<th>Client</th>' +
-                    '<th>Company</th>' +
-                    '<th>Date</th>' +
-                    '<th>Supplier</th>' +
-                    '<th>Description</th>' +
-                    '<th>Documents</th>' +
-                    '<th style="width: 190px;">Amount</th>' +
-                    '<th style="width: 230px;">Category <span class="text-danger">*</span></th>' +
-                '</tr></thead>' +
-                '<tbody>';
-        
-        group.expenses.forEach(function(e) {
-            var T = window.bgT || String;
-            var esc = function (v) { return $('<div>').text(v == null ? '' : v).html(); };
-            var supplier = esc(e.supplier_display || e.supplier_name || '-');
-            if (e.supplier_id) {
-                supplier = '<div class="ue-sup"><b data-no-i18n>' + supplier + '</b>' +
-                    (e.supplier_account ? ' <span class="ue-acc">' + esc(e.supplier_account) + '</span>' : '') + '</div>';
-                var o = e.supplier_sr;
-                if (o) {
-                    var over = parseFloat(e.amount) > o.remaining + 0.004;
-                    supplier += '<div class="ue-owed' + (over ? ' over' : '') + '">' +
-                        '<div><span>' + T('Owed on this SR') + '</span><b>' + formatCurrency(o.purchased) + '</b></div>' +
-                        '<div><span>' + T('Paid') + '</span><b>' + formatCurrency(o.paid) + '</b></div>' +
-                        '<div><span>' + T('Remaining') + '</span><b>' + formatCurrency(o.remaining) + '</b></div>' +
-                        (o.purchased <= 0 ? '<em><i class="fas fa-exclamation-triangle"></i> ' + T('No approved items from this supplier on this SR') + '</em>'
-                            : over ? '<em><i class="fas fa-exclamation-triangle"></i> ' + T('This is more than what is left to pay') + '</em>' : '') +
-                        '</div>';
-                }
-            }
-            var docs = e.attachments && e.attachments.length
-                ? '<div class="ue-docs">' + e.attachments.slice(0, 3).map(function (a) {
-                      return a.is_image
-                          ? '<a href="' + a.url + '" target="_blank" rel="noopener" title="' + esc(a.name) + '"><img src="' + a.url + '" alt="" loading="lazy"></a>'
-                          : '<a href="' + a.url + '" target="_blank" rel="noopener" title="' + esc(a.name) + '" class="ue-doc"><i class="fas ' + (a.type === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></a>';
-                  }).join('') + ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) + '</div>'
-                : '<span class="ue-nodoc"><i class="fas fa-exclamation-circle"></i> ' + T('No document') + '</span>';
-            html += '<tr data-user-expense-id="' + e.id + '" data-has-doc="' + (e.attachments && e.attachments.length ? 1 : 0) + '" data-supplier-id="' + (e.supplier_id || '') + '" data-supplier="' + $('<div>').text(e.supplier_display || e.supplier_name || '').html() + '">' +
-                '<td><strong>' + e.tracking_code + '</strong></td>' +
-                '<td>' + (e.sales_request_id ? '<span class="badge badge-info">SR-' + e.sales_request_id + '</span>' : '-') + '</td>' +
-                '<td>' + (e.client_name || '-') + '</td>' +
-                '<td>' + (e.company_name || '-') + '</td>' +
-                '<td style="white-space:nowrap;">' + expenseDay(e.expense_date) + '</td>' +
-                '<td>' + supplier + '</td>' +
-                '<td>' + (e.description || '-') + '</td>' +
-                '<td>' + docs + '</td>' +
-                '<td>' +
-                    '<div class="input-group input-group-sm">' +
-                        '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input ue-amount" ' +
-                               'id="user_expense_amount_' + e.id + '" ' +
-                               'value="' + parseFloat(e.amount).toFixed(2) + '" ' +
-                               'step="0.01" min="0" ' +
-                               'onchange="autoSaveUserExpenseAmount(' + e.id + ')">' +
-                        '<div class="input-group-append"><span class="input-group-text">EGP</span></div>' +
-                    '</div>' +
-                '</td>' +
-                '<td>' + (e.supplier_id
-                    // Paid to a supplier: it settles what we owe them, on their own account under 2101.
-                    ? '<div class="ue-locked"><i class="fas fa-lock"></i> <bdi>2101 &rsaquo; ' + esc(e.supplier_account || '') + '</bdi>' +
-                      '<small>' + T('Supplier account, set by the system') + '</small></div>'
-                    : '<select class="form-control form-control-sm user-expense-category" id="user_expense_category_' + e.id + '">' +
-                        categoryOptions +
-                    '</select>') +
-                '</td>' +
-            '</tr>';
-        });
-        
-        html += '</tbody></table></div></div>';
-        container.append(html);
-    });
-    // A line whose supplier is also a category starts with it chosen;
-    // Transportation with 6212 انتقالات.
-    container.find('tr[data-user-expense-id]').each(function () {
-        var sel = $(this).find('.user-expense-category');
-        var supplier = String($(this).data('supplier') || '').trim().toLowerCase();
-        if (!supplier || !sel.length) return;
-        if (supplier === 'transportation') {
-            var transport = sel.find('option').filter(function () { return $(this).text().trim().indexOf('6212') === 0; }).first();
-            if (transport.length) { sel.val(transport.val()); return; }
-        }
-        sel.find('option').each(function () {
-            var label = $(this).text().replace('↳', '').split('|')[0].trim().toLowerCase();
-            if (label && label === supplier) { sel.val($(this).val()); return false; }
+// Expense accounts a line can post to; data-parent-id tells category from sub-account.
+function faAccountOptions(placeholder) {
+    var html = '<option value="">' + faEsc(placeholder) + '</option>';
+    financeCategories.forEach(function (cat) {
+        if (cat.category_type !== 'expense') return;
+        html += '<option value="' + cat.id + '" data-parent-id="">' + faEsc((cat.account_code ? cat.account_code + ' ' : '') + cat.category_name) + '</option>';
+        (cat.subcategories || []).forEach(function (sub) {
+            html += '<option value="' + sub.id + '" data-parent-id="' + cat.id + '">&nbsp;&nbsp;' + faEsc((sub.account_code ? sub.account_code + ' ' : '') + sub.category_name) + '</option>';
         });
     });
+    return html;
 }
 
 function expenseDay(value) {
@@ -990,261 +942,316 @@ function expensePaymentMethodOptions() {
     active.sort(function (a, b) { return (a.method_type === 'cash' ? 0 : 1) - (b.method_type === 'cash' ? 0 : 1) || a.id - b.id; });
     if (!active.length) return '<option value="">No payment method</option>';
     return active.map(function (m) {
-        return '<option value="' + m.id + '">' + $('<div>').text((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name).html() + '</option>';
+        return '<option value="' + m.id + '">' + faEsc((m.method_type === 'bank' ? 'Bank: ' : 'Cash: ') + m.method_name) + '</option>';
     }).join('');
 }
 function loadExpensePaymentMethods() {
+    if (expensePaymentMethods.length) return $.Deferred().resolve();
     return $.getJSON('/api/finance/payment-methods').then(function (d) {
         expensePaymentMethods = (d && (d.payment_methods || d.methods)) || [];
     }, function () { expensePaymentMethods = []; return $.Deferred().resolve(); });
 }
+function fillPaidFrom() {
+    var keep = $('#faPaidFrom').val();
+    $('#faPaidFrom').html(expensePaymentMethodOptions());
+    if (keep) $('#faPaidFrom').val(keep);
+}
 
-$(document).on('change', '.ue-category-all', function () {
-    var val = $(this).val();
-    if (!val) return;
-    var card = $(this).closest('.approval-item');
-    card.find('.user-expense-category').val(val).removeClass('ue-missing');
+// A line's state: ready, needs an account, or blocked (no receipt).
+function faLineState(e) {
+    if (!(e.attachments && e.attachments.length)) return 'blocked';
+    if (e.supplier_id) return 'ready';
+    return $('#faAcc_' + e.id).val() ? 'ready' : 'account';
+}
+
+function faLineHtml(e) {
+    var hasDoc = e.attachments && e.attachments.length;
+    var paidTo = '<b data-no-i18n>' + faEsc(e.supplier_display || e.supplier_name || '-') + '</b>';
+    var owed = '';
+    if (e.supplier_id) {
+        paidTo += (e.supplier_account ? ' <span class="ue-acc">' + faEsc(e.supplier_account) + '</span>' : '');
+        var o = e.supplier_sr;
+        if (o) {
+            var over = parseFloat(e.amount) > o.remaining + 0.004;
+            owed = '<div class="fq-owed' + (over || o.purchased <= 0 ? ' warn' : '') + '">' +
+                faT('Owed') + ' ' + formatCurrency(o.purchased) + ' · ' + faT('Paid') + ' ' + formatCurrency(o.paid) + ' · ' + faT('Left') + ' <b>' + formatCurrency(o.remaining) + '</b>' +
+                (o.purchased <= 0 ? '<em>' + faT('No approved items from this supplier on this SR') + '</em>'
+                    : over ? '<em>' + faT('This is more than what is left to pay') + '</em>' : '') + '</div>';
+        }
+    }
+    var docs = hasDoc
+        ? '<button type="button" class="fq-docs" data-docs="' + e.id + '">' + e.attachments.slice(0, 2).map(function (a) {
+              return a.is_image ? '<img src="' + a.url + '" alt="" loading="lazy">' : '<span class="fq-doc"><i class="fas ' + (/pdf/.test(a.type || '') ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></span>';
+          }).join('') + (e.attachments.length > 2 ? '<span class="fq-more">+' + (e.attachments.length - 2) + '</span>' : '') + '</button>'
+        : '<span class="ue-nodoc"><i class="fas fa-exclamation-circle"></i> ' + faT('No receipt') + '</span>';
+    var account = e.supplier_id
+        ? '<div class="ue-locked"><i class="fas fa-lock"></i> <bdi>2101 &rsaquo; ' + faEsc(e.supplier_account || '') + '</bdi><small>' + faT('Supplier account') + '</small></div>'
+        : '<select class="form-control form-control-sm fq-acc" id="faAcc_' + e.id + '" data-id="' + e.id + '">' + faAccountOptions(faT('Choose the account')) + '</select>';
+    return '<div class="fq-line' + (hasDoc ? '' : ' blocked') + '" data-id="' + e.id + '" data-search="' +
+        faEsc([e.user_name, e.tracking_code, 'SR-' + e.sales_request_id, e.supplier_display, e.supplier_name, e.client_name, e.description].join(' ').toLowerCase()) + '">' +
+        '<label class="fq-sel"><input type="checkbox" class="fq-tick" data-id="' + e.id + '"' + (hasDoc ? '' : ' disabled') + '></label>' +
+        '<div class="fq-c-what"><div class="fq-code">' + faEsc(e.tracking_code) + '</div><div class="fq-sub">' + expenseDay(e.expense_date) + '</div>' +
+            '<div class="fq-desc" data-no-i18n>' + faEsc(e.description || '-') + '</div></div>' +
+        '<div class="fq-c-sr">' + (e.sales_request_id ? '<span class="badge badge-info">SR-' + e.sales_request_id + '</span>' : '-') +
+            (+e.request_missing ? '<div class="fq-gone"><i class="fas fa-unlink"></i> ' + faT('This SR no longer exists') + '</div>' : '') +
+            '<div class="fq-sub" data-no-i18n>' + faEsc([e.client_name, e.company_name].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="fq-c-to"><div class="fq-sub">' + faT('Paid to') + '</div>' + paidTo + owed + '</div>' +
+        '<div class="fq-c-doc">' + docs + '</div>' +
+        '<div class="fq-c-amt"><div class="input-group input-group-sm"><input type="number" class="form-control text-right font-weight-bold ue-amount" id="user_expense_amount_' + e.id +
+            '" value="' + parseFloat(e.amount).toFixed(2) + '" step="0.01" min="0" onchange="autoSaveUserExpenseAmount(' + e.id + ')"><div class="input-group-append"><span class="input-group-text">EGP</span></div></div>' +
+            (e.requested_amount && parseFloat(e.requested_amount) !== parseFloat(e.amount) ? '<div class="fq-sub">' + faT('Asked') + ' ' + formatCurrency(e.requested_amount) + '</div>' : '') + '</div>' +
+        '<div class="fq-c-acc">' + account + '</div>' +
+        '<div class="fq-c-act">' +
+            '<button type="button" class="fq-ok" title="' + faT('Approve') + '" data-one="' + e.id + '"' + (hasDoc ? '' : ' disabled') + '><i class="fas fa-check"></i></button>' +
+            '<button type="button" class="fq-no" title="' + faT('Decline') + '" data-no="' + e.id + '"><i class="fas fa-times"></i></button></div>' +
+        '</div>';
+}
+
+function renderUserExpensesForFinance(expenses) {
+    var box = $('#userExpensesList');
+    $('#faAccountAll').html(faAccountOptions(faT('-- choose to apply --')));
+    if (!expenses.length) {
+        box.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>' + faT('Nothing waiting') + '</h3><p>' + faT('Every staff expense has been decided.') + '</p></div>');
+        faUpdateBar();
+        return;
+    }
+    var groups = {};
+    expenses.forEach(function (e) { (groups[e.user_id] = groups[e.user_id] || { id: e.user_id, name: e.user_name, lines: [] }).lines.push(e); });
+    box.html(Object.values(groups).map(function (g) {
+        var total = g.lines.reduce(function (a, e) { return a + parseFloat(e.amount || 0); }, 0);
+        var ready = g.lines.filter(function (e) { return e.attachments && e.attachments.length; }).length;
+        var initials = (g.name || '?').split(' ').map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+        return '<div class="fq-person" data-user="' + g.id + '">' +
+            '<div class="fq-person-head">' +
+                '<div class="fq-avatar">' + faEsc(initials) + '</div>' +
+                '<div class="fq-person-name"><b data-no-i18n>' + faEsc(g.name) + '</b><span>' + g.lines.length + ' ' + faT('line(s)') + ' · ' + formatCurrency(total) + '</span></div>' +
+                '<div class="fq-person-chips"><span class="fq-chip ok"><i class="fas fa-paperclip"></i> ' + ready + ' ' + faT('with receipt') + '</span>' +
+                    (g.lines.length - ready ? '<span class="fq-chip bad"><i class="fas fa-exclamation-circle"></i> ' + (g.lines.length - ready) + ' ' + faT('without') + '</span>' : '') + '</div>' +
+                '<div class="fq-person-actions">' +
+                    '<button type="button" class="btn-pill btn-pill-outline" data-pick-person="' + g.id + '"><i class="far fa-check-square"></i> ' + faT('Select ready') + '</button>' +
+                    '<button type="button" class="btn-pill btn-pill-success" data-approve-person="' + g.id + '"' + (ready ? '' : ' disabled') + '><i class="fas fa-check"></i> ' + faT('Approve') + ' ' + ready + '</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="fq-lines">' + g.lines.map(faLineHtml).join('') + '</div>' +
+        '</div>';
+    }).join(''));
+    // Transportation starts on 6212 انتقالات.
+    expenses.forEach(function (e) {
+        if (e.supplier_id || (e.supplier_name || '').trim().toLowerCase() !== 'transportation') return;
+        var opt = $('#faAcc_' + e.id + ' option').filter(function () { return $(this).text().trim().indexOf('6212') === 0; }).first();
+        if (opt.length) $('#faAcc_' + e.id).val(opt.val());
+    });
+    faFilter();
+    faUpdateBar();
+}
+
+function faFilter() {
+    var q = ($('#faSearch').val() || '').trim().toLowerCase(), readyOnly = $('#faReadyOnly').is(':checked');
+    $('.fq-line').each(function () {
+        var show = (!q || String($(this).data('search')).indexOf(q) >= 0) && (!readyOnly || !$(this).hasClass('blocked'));
+        $(this).toggle(show);
+    });
+    $('.fq-person').each(function () { $(this).toggle($(this).find('.fq-line:visible').length > 0); });
+}
+$(document).on('input', '#faSearch', faFilter);
+$(document).on('change', '#faReadyOnly', faFilter);
+$(document).on('change', '#faAccountAll', function () {
+    var v = $(this).val();
+    if (!v) return;
+    $('.fq-acc').each(function () { if ($(this).closest('.fq-line').is(':visible')) $(this).val(v).removeClass('ue-missing'); });
+    $(this).val('');
 });
-$(document).on('change', '.user-expense-category', function () { $(this).removeClass('ue-missing'); });
+$(document).on('change', '.fq-acc', function () { $(this).removeClass('ue-missing'); });
+$(document).on('click', '.fq-docs', function () {
+    var e = faExpenses.find(function (x) { return String(x.id) === String($(this).data('docs')); }, this);
+    if (e && window.bgShowExpenseFiles) window.bgShowExpenseFiles(e.attachments, e.tracking_code);
+});
 
-// Auto-save user expense amount for finance
+function faSelectedIds() { return $('.fq-tick:checked').map(function () { return +$(this).data('id'); }).get(); }
+function faUpdateBar() {
+    var ids = faSelectedIds();
+    var total = ids.reduce(function (a, id) { return a + (parseFloat($('#user_expense_amount_' + id).val()) || 0); }, 0);
+    $('#faBarN').text(ids.length);
+    $('#faBarT').text(formatCurrency(total));
+    $('#faBar').toggleClass('show', ids.length > 0);
+    $('.fq-line').each(function () { $(this).toggleClass('picked', $(this).find('.fq-tick').is(':checked')); });
+}
+$(document).on('change', '.fq-tick', faUpdateBar);
+$(document).on('click', '#faClear', function () { $('.fq-tick').prop('checked', false); faUpdateBar(); });
+$(document).on('click', '[data-pick-person]', function () {
+    $('.fq-person[data-user="' + $(this).data('pick-person') + '"] .fq-tick:not(:disabled)').prop('checked', true);
+    faUpdateBar();
+});
+
+// The body Approve sends: each line with its amount and account (none for a supplier line).
+function faPayload(ids) {
+    var lines = [], missing = [];
+    ids.forEach(function (id) {
+        var e = faExpenses.find(function (x) { return x.id === id; });
+        if (!e) return;
+        var line = { id: id, amount: parseFloat($('#user_expense_amount_' + id).val()) || 0 };
+        if (!e.supplier_id) {
+            var sel = $('#faAcc_' + id), opt = sel.find('option:selected');
+            if (!sel.val()) { sel.addClass('ue-missing'); missing.push(e.tracking_code); return; }
+            if (opt.data('parent-id')) { line.category_id = +opt.data('parent-id'); line.subcategory_id = +sel.val(); }
+            else { line.category_id = +sel.val(); line.subcategory_id = null; }
+        }
+        lines.push(line);
+    });
+    return { lines: lines, missing: missing };
+}
+
+function faApprove(ids) {
+    if (!ids.length) return;
+    var p = faPayload(ids);
+    if (p.missing.length) {
+        var first = $('.ue-missing').first();
+        if (first.length) first[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        Swal.fire(faT('Choose the account'), faT('These lines need their account:') + ' ' + p.missing.join(', '), 'warning');
+        return;
+    }
+    var pm = $('#faPaidFrom').val();
+    if (!pm) { Swal.fire(faT('Payment method required'), faT('Add a payment method first (Finance Management > Payment Methods).'), 'warning'); return; }
+    var total = p.lines.reduce(function (a, l) { return a + l.amount; }, 0);
+    Swal.fire({
+        title: faT('Approve') + ' ' + p.lines.length + ' ' + faT('line(s)') + '?',
+        html: '<p style="font-size:22px;font-weight:800;margin:0">' + formatCurrency(total) + '</p>' +
+              '<p class="text-muted mb-0">' + faT('Paid from') + ': <b>' + faEsc($('#faPaidFrom option:selected').text()) + '</b></p>' +
+              '<p class="small text-muted mt-2 mb-0">' + faT("Each line settles the person's custody against its account; supplier lines go to the supplier's 2101 account.") + '</p>',
+        icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', confirmButtonText: faT('Approve'),
+        showLoaderOnConfirm: true,
+        preConfirm: function () {
+            return $.ajax({ url: '/api/finance/expense-approvals/finance-approve-bulk', method: 'POST', contentType: 'application/json',
+                            data: JSON.stringify({ expenses: p.lines, payment_method_id: parseInt(pm, 10) }) })
+                .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Server error'); });
+        }
+    }).then(function (r) {
+        if (!r.isConfirmed || !r.value) return;
+        Swal.fire({ toast: true, position: 'top', timer: 2500, showConfirmButton: false, icon: 'success',
+                    title: r.value.approved_count + ' ' + faT('approved') });
+        loadPendingApprovals();
+    });
+}
+function faReject(ids) {
+    if (!ids.length) return;
+    Swal.fire({
+        title: faT('Decline') + ' ' + ids.length + ' ' + faT('line(s)') + '?',
+        input: 'textarea', inputLabel: faT('Reason (the person reads this)'),
+        inputValidator: function (v) { return v && v.trim() ? undefined : faT('A reason is required'); },
+        showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: faT('Decline'), showLoaderOnConfirm: true,
+        preConfirm: function (reason) {
+            return $.ajax({ url: '/api/finance/expense-approvals/reject-bulk', method: 'POST', contentType: 'application/json',
+                            data: JSON.stringify({ expense_ids: ids, reason: reason.trim() }) })
+                .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Server error'); });
+        }
+    }).then(function (r) { if (r.isConfirmed) loadPendingApprovals(); });
+}
+$(document).on('click', '[data-one]', function () { faApprove([+$(this).data('one')]); });
+$(document).on('click', '[data-no]', function () { faReject([+$(this).data('no')]); });
+$(document).on('click', '#faApproveSel', function () { faApprove(faSelectedIds()); });
+$(document).on('click', '#faRejectSel', function () { faReject(faSelectedIds()); });
+$(document).on('click', '[data-approve-person]', function () {
+    faApprove($('.fq-person[data-user="' + $(this).data('approve-person') + '"] .fq-tick:not(:disabled)').map(function () { return +$(this).data('id'); }).get());
+});
+
 function autoSaveUserExpenseAmount(expenseId) {
     var input = $('#user_expense_amount_' + expenseId);
-    var newAmount = parseFloat(input.val()) || 0;
-    
     input.prop('disabled', true);
-    
     $.ajax({
-        url: '/api/finance/expense-approvals/' + expenseId + '/update-amount',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ amount: newAmount }),
-        success: function(response) {
-            if (response.success) {
-                input.css('background-color', '#d4edda');
-                setTimeout(function() { input.css('background-color', ''); }, 1000);
-            } else {
-                Swal.fire('Error', response.error, 'error');
-            }
+        url: '/api/finance/expense-approvals/' + expenseId + '/update-amount', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ amount: parseFloat(input.val()) || 0 }),
+        success: function (r) {
+            if (r.success) { input.addClass('fq-saved'); setTimeout(function () { input.removeClass('fq-saved'); }, 1000); faUpdateBar(); }
+            else Swal.fire('Error', r.error, 'error');
         },
-        error: function(xhr) {
-            Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
-        },
-        complete: function() {
-            input.prop('disabled', false);
-        }
+        error: function (xhr) { Swal.fire('Error', (xhr.responseJSON || {}).error || 'Server error', 'error'); },
+        complete: function () { input.prop('disabled', false); }
     });
 }
 
-// Approve all user expenses for a user (finance approval)
-function approveAllUserExpensesForFinance(userId, userName) {
-    var expenses = [];
-    var missing = [];
-    var noDoc = [];
-    
-    // Find the card for this specific user
-    var userCard = $('.approval-item[data-user-id="' + userId + '"]');
-    
-    userCard.find('tr[data-user-expense-id]').each(function() {
-        var row = $(this);
-        var expId = row.data('user-expense-id');
-        var amount = parseFloat($('#user_expense_amount_' + expId).val()) || 0;
-        if (!+row.data('has-doc')) { noDoc.push(row.find('td:first').text()); return; }
-        if (row.data('supplier-id')) { expenses.push({ id: expId, amount: amount }); return; }
-        var catSelect = $('#user_expense_category_' + expId);
-        var selectedOption = catSelect.find('option:selected');
-        var selectedVal = catSelect.val();
-        if (!selectedVal) {
-            catSelect.addClass('ue-missing');
-            missing.push(row.find('td:first').text());
-            return; // keep going, so every missing line is marked
-        }
-        var parentId = selectedOption.data('parent-id');
-        var expenseData = { id: expId, amount: amount };
-        if (parentId) {
-            // Subcategory selected: parent goes to category_id, selected goes to subcategory_id
-            expenseData.category_id = parseInt(parentId);
-            expenseData.subcategory_id = parseInt(selectedVal);
-        } else {
-            // Main category selected (no subcategory)
-            expenseData.category_id = parseInt(selectedVal);
-            expenseData.subcategory_id = null;
-        }
-        expenses.push(expenseData);
-    });
-    
-    if (noDoc.length) {
-        Swal.fire((window.bgT || String)('Document required'), (window.bgT || String)('No document is attached to:') + ' ' + noDoc.join(', ') + '. ' +
-                  (window.bgT || String)('Reject it, or ask for the receipt to be attached first.'), 'warning');
-        return;
-    }
-    if (missing.length) {
-        var first = userCard.find('.ue-missing').first();
-        if (first.length) first[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        Swal.fire('Category required', 'Select a category for every expense before approving. Missing: ' + missing.join(', ') +
-                  '. Tip: use "Category for all" to set them in one go.', 'warning');
-        return;
-    }
-    if (expenses.length === 0) return;
-    var paymentMethodId = $('#ue_pm_' + userId).val();
-    if (!paymentMethodId) {
-        Swal.fire('Payment method required', 'Add a payment method first (Finance Management > Payment Methods).', 'warning');
-        return;
-    }
-    
-    var totalAmount = expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
-    
-    Swal.fire({
-        title: 'Finance Approve All for ' + userName + '?',
-        html: '<p>This will approve <strong>' + expenses.length + '</strong> expense(s)</p>' +
-              '<p>Total: <strong>' + formatCurrency(totalAmount) + '</strong></p>' +
-              '<p class="text-info"><small><i class="fas fa-info-circle mr-1"></i>Each expense settles the custody (111002) against its account. Lines paid to a supplier go to that supplier\'s account under 2101.</small></p>',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#10b981',
-        confirmButtonText: 'Yes, Approve All'
-    }).then(function(result) {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: '/api/finance/expense-approvals/finance-approve-bulk',
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ expenses: expenses, payment_method_id: parseInt(paymentMethodId) }),
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Approved!', response.approved_count + ' expense(s) approved as income transactions', 'success');
-                        loadPendingApprovals();
-                    } else {
-                        Swal.fire('Error', response.error, 'error');
-                    }
-                },
-                error: function(xhr) {
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
-                }
-            });
-        }
-    });
+// ---- Transactions and custody requests: one row each, decided in place ----
+function faRow(o) {
+    return '<div class="fq-row ' + (o.cls || '') + '">' +
+        '<div class="fq-row-main"><div class="fq-row-top"><span class="fq-code">' + faEsc(o.code) + '</span>' + (o.tag || '') + '</div>' +
+            '<div class="fq-row-title" data-no-i18n>' + faEsc(o.title || '-') + '</div>' +
+            '<div class="fq-row-meta">' + o.meta.filter(Boolean).map(function (m) { return '<span>' + m + '</span>'; }).join('') + '</div></div>' +
+        '<div class="fq-row-amt">' + formatCurrency(o.amount) + (o.amountNote ? '<small>' + o.amountNote + '</small>' : '') + '</div>' +
+        '<div class="fq-row-act">' + o.actions + '</div></div>';
 }
-
-// Reject all user expenses for a user
-function rejectAllUserExpensesForFinance(userId, userName) {
-    var expenseIds = [];
-    
-    $('tr[data-user-expense-id]').each(function() {
-        var row = $(this);
-        var expId = row.data('user-expense-id');
-        var userCard = row.closest('.approval-item');
-        if (userCard.find('h5').text().includes(userName)) {
-            expenseIds.push(expId);
-        }
-    });
-    
-    if (expenseIds.length === 0) return;
-    
-    Swal.fire({
-        title: 'Reject All for ' + userName + '?',
-        input: 'textarea',
-        inputLabel: 'Rejection Reason (Required)',
-        inputPlaceholder: 'Enter reason...',
-        inputValidator: function(value) {
-            if (!value) return 'Please provide a reason';
-        },
-        showCancelButton: true,
-        confirmButtonColor: '#ef4444',
-        confirmButtonText: 'Reject All'
-    }).then(function(result) {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: '/api/finance/expense-approvals/reject-bulk',
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ expense_ids: expenseIds, reason: result.value }),
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Rejected', response.rejected_count + ' expense(s) rejected', 'success');
-                        loadPendingApprovals();
-                    } else {
-                        Swal.fire('Error', response.error, 'error');
-                    }
-                },
-                error: function(xhr) {
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Server error', 'error');
-                }
-            });
-        }
-    });
-}
-
 function renderPendingTransactions(transactions) {
-    var container = $('#transactionsList');
-    container.empty();
-    
-    if (transactions.length === 0) {
-        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Pending Transactions</h3><p>All transactions have been processed</p></div>');
+    var box = $('#transactionsList');
+    if (!transactions.length) {
+        box.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>' + faT('Nothing waiting') + '</h3><p>' + faT('Every transaction has been decided.') + '</p></div>');
         return;
     }
-    
-    transactions.forEach(function(t) {
-        var typeClass = t.type === 'income' ? 'income' : 'expense';
-        var html = '<div class="approval-item transaction">' +
-            '<div class="item-info">' +
-                '<span class="item-code">' + t.code + '</span>' +
-                '<span class="item-type ' + typeClass + '">' + t.type.toUpperCase() + '</span>' +
-                '<div class="item-desc">' + (t.description || 'No description') + '</div>' +
-                '<div class="item-meta">Requested by: ' + (t.requested_by || 'N/A') + ' • ' + (t.created_at || '') + '</div>' +
-            '</div>' +
-            '<div class="item-amount">' + formatCurrency(t.amount) + '</div>' +
-            '<div class="item-actions">' +
-                '<button class="btn-pill btn-pill-success btn-approve-trans" data-id="' + t.id + '"><i class="fas fa-check"></i> Approve</button>' +
-                '<button class="btn-pill btn-pill-danger btn-reject-trans" data-id="' + t.id + '"><i class="fas fa-times"></i> Reject</button>' +
-            '</div>' +
-        '</div>';
-        container.append(html);
-    });
-    
-    // Bind events
-    $('.btn-approve-trans').on('click', function() {
-        openApprovalModal($(this).data('id'), 'transaction', 'approve');
-    });
-    $('.btn-reject-trans').on('click', function() {
-        openApprovalModal($(this).data('id'), 'transaction', 'reject');
-    });
+    box.html(transactions.map(function (t) {
+        var income = t.type === 'income';
+        return faRow({
+            cls: income ? 'in' : 'out', code: t.code,
+            tag: '<span class="fq-tag ' + (income ? 'in' : 'out') + '">' + (income ? faT('Money in') : faT('Money out')) + '</span>',
+            title: t.description || t.reference_number, amount: t.amount,
+            meta: [t.account && '<i class="fas fa-sitemap"></i> <bdi>' + faEsc(t.account) + '</bdi>',
+                   t.payment_method && '<i class="fas fa-wallet"></i> ' + faEsc(t.payment_method),
+                   t.client_name && '<i class="fas fa-user"></i> ' + faEsc(t.client_name),
+                   t.supplier_name && '<i class="fas fa-truck"></i> ' + faEsc(t.supplier_name),
+                   t.sales_request_id && '<span class="badge badge-info">SR-' + t.sales_request_id + '</span>',
+                   '<i class="fas fa-user-edit"></i> ' + faEsc(t.requested_by || '-') + ' · ' + faEsc(faWhen(t.created_at))],
+            actions: '<button class="btn-pill btn-pill-danger" data-tx-no="' + t.id + '"><i class="fas fa-times"></i> ' + faT('Decline') + '</button>' +
+                     '<button class="btn-pill btn-pill-success" data-tx-ok="' + t.id + '"><i class="fas fa-check"></i> ' + faT('Approve') + '</button>'
+        });
+    }).join(''));
 }
-
 function renderBalanceRequests(requests) {
-    var container = $('#balanceRequestsList');
-    container.empty();
-    
-    if (requests.length === 0) {
-        container.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>No Pending Requests</h3><p>All balance requests have been processed</p></div>');
+    var box = $('#balanceRequestsList');
+    if (!requests.length) {
+        box.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>' + faT('Nothing waiting') + '</h3><p>' + faT('Every custody request has been decided.') + '</p></div>');
         return;
     }
-    
-    requests.forEach(function(r) {
-        var html = '<div class="approval-item balance-request">' +
-            '<div class="item-info">' +
-                '<span class="item-code">' + r.code + '</span>' +
-                '<span class="item-type user_request">BALANCE REQUEST</span>' +
-                '<div class="item-desc">' + (r.description || 'No description') + '</div>' +
-                '<div class="item-meta">Requested by: ' + (r.requested_by || 'N/A') + ' • ' + (r.created_at || '') + '</div>' +
-            '</div>' +
-            '<div class="item-amount">' + formatCurrency(r.amount) + '</div>' +
-            '<div class="item-actions">' +
-                '<button class="btn-pill btn-pill-success btn-approve-req" data-id="' + r.id + '"><i class="fas fa-check"></i> Approve</button>' +
-                '<button class="btn-pill btn-pill-danger btn-reject-req" data-id="' + r.id + '"><i class="fas fa-times"></i> Reject</button>' +
-            '</div>' +
-        '</div>';
-        container.append(html);
-    });
-    
-    // Bind events
-    $('.btn-approve-req').on('click', function() {
-        openApprovalModal($(this).data('id'), 'balance_request', 'approve');
-    });
-    $('.btn-reject-req').on('click', function() {
-        openApprovalModal($(this).data('id'), 'balance_request', 'reject');
-    });
+    box.html(requests.map(function (r) {
+        return faRow({
+            cls: 'cust', code: r.code, tag: '<span class="fq-tag cust">' + faT('Custody') + '</span>',
+            title: r.description, amount: r.amount,
+            amountNote: r.original_amount && parseFloat(r.original_amount) !== parseFloat(r.amount) ? faT('Asked') + ' ' + formatCurrency(r.original_amount) : '',
+            meta: ['<i class="fas fa-user"></i> ' + faT('For') + ' <b data-no-i18n>' + faEsc(r.for_name || r.requested_by || '-') + '</b>',
+                   '<i class="fas fa-wallet"></i> ' + faT('Holds now') + ' ' + formatCurrency(r.holds_now),
+                   r.manager_name && '<i class="fas fa-user-check"></i> ' + faT('Approved by') + ' ' + faEsc(r.manager_name),
+                   r.manager_notes && '<i class="fas fa-comment"></i> <span data-no-i18n>' + faEsc(r.manager_notes) + '</span>',
+                   '<i class="fas fa-clock"></i> ' + faEsc(faWhen(r.created_at))],
+            actions: '<button class="btn-pill btn-pill-danger" data-req-no="' + r.id + '"><i class="fas fa-times"></i> ' + faT('Decline') + '</button>' +
+                     '<button class="btn-pill btn-pill-success" data-req-ok="' + r.id + '"><i class="fas fa-check"></i> ' + faT('Pay out') + '</button>'
+        });
+    }).join(''));
 }
+function faDecide(url, body, title, html, color) {
+    return Swal.fire({ title: title, html: html, showCancelButton: true, confirmButtonColor: color, confirmButtonText: title,
+                       showLoaderOnConfirm: true, preConfirm: function () {
+                           return $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body()) })
+                               .then(function (r) { return r && r.success === false ? $.Deferred().reject({ responseJSON: r }) : r; })
+                               .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Server error'); });
+                       } }).then(function (r) { if (r.isConfirmed) loadPendingApprovals(); });
+}
+var FA_NOTE = '<textarea id="faNote" class="form-control" rows="2" placeholder="' + faT('Notes (optional)') + '"></textarea>';
+var FA_WHY = '<textarea id="faWhy" class="form-control" rows="2" placeholder="' + faT('Reason (required)') + '"></textarea>';
+function faWhy() { var v = ($('#faWhy').val() || '').trim(); if (!v) { Swal.showValidationMessage(faT('A reason is required')); } return v; }
+$(document).on('click', '[data-tx-ok]', function () {
+    var id = $(this).data('tx-ok');
+    faDecide('/api/finance/transactions/' + id + '/approve', function () { return { notes: $('#faNote').val() || '' }; }, faT('Approve'), FA_NOTE, '#10b981');
+});
+$(document).on('click', '[data-tx-no]', function () {
+    var id = $(this).data('tx-no');
+    faDecide('/api/finance/transactions/' + id + '/reject', function () { return { reason: faWhy() }; }, faT('Decline'), FA_WHY, '#ef4444');
+});
+$(document).on('click', '[data-req-ok]', function () {
+    var id = $(this).data('req-ok');
+    faDecide('/api/finance/balance-requests/' + id + '/approve', function () { return { payment_method_id: $('#faReqPm').val(), notes: $('#faNote').val() || '' }; },
+             faT('Pay out'), '<label class="d-block text-start small font-weight-bold">' + faT('Paid from') + '</label><select id="faReqPm" class="form-control mb-2">' +
+             expensePaymentMethodOptions() + '</select>' + FA_NOTE, '#10b981').then(function () {});
+    setTimeout(function () { $('#faReqPm').val($('#faPaidFrom').val()); }, 50);
+});
+$(document).on('click', '[data-req-no]', function () {
+    var id = $(this).data('req-no');
+    faDecide('/api/finance/balance-requests/' + id + '/reject', function () { return { reason: faWhy() }; }, faT('Decline'), FA_WHY, '#ef4444');
+});
 
 function loadUserBalances() {
     $.ajax({
@@ -1738,7 +1745,7 @@ function renderExpenseApprovals(expenses, status) {
         // Non-pending - show flat list
         expenses.forEach(function(e) {
             var statusClass = e.status === 'approved' ? 'success' : 'danger';
-            var statusIcon = e.status === 'approved' ? 'fa-check' : 'fa-times';
+            var statusIcon = e.status === 'approved' ? 'fq-check' : 'fa-times';
             var actionsHtml = e.status === 'approved' 
                 ? '<span class="text-success"><i class="fas fa-check-circle"></i> Approved</span>'
                 : '<span class="text-danger" title="' + (e.rejection_reason || '') + '"><i class="fas fa-times-circle"></i> Rejected</span>';
@@ -1915,6 +1922,7 @@ function loadExpenseTracking() {
                 // Update badge - count manager_approved
                 if (status === 'manager_approved') {
                     $('#badgeExpenseTracking').text(data.trackings.length);
+                    faCard(data.trackings.length, data.trackings.reduce(function (a, x) { return a + parseFloat(x.total_amount || 0); }, 0), 'cardEtN', 'cardEtT');
                 }
             }
         },
