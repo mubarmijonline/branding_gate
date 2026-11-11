@@ -109,6 +109,13 @@ class SupplierAssignmentApprovalTest(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.get_json())
         self.assertEqual((self._item()['supplier_id'], float(self._item()['supplier_cost'])), (self.supplier, 15000.0))
 
+    def test_the_items_list_says_where_the_request_stands(self):
+        self._ask(self.leader, actual=17000, note='Rush')
+        items = self._web(self.leader).get('/api/operations/approved-items').get_json()['items']
+        mine = [i for i in items if i['id'] == self.item_id][0]
+        self.assertEqual(mine['assignment_request']['status'], 'pending_head')
+        self.assertTrue(mine['assignment_request']['supplier'])
+
     def test_only_the_head_and_team_leaders_assign(self):
         if not self.member:
             self.skipTest('no operations member')
@@ -147,6 +154,10 @@ class SupplierAssignmentApprovalTest(unittest.TestCase):
         d = self._web(self.finance).get('/api/quick-approvals/supplier_assignment/%d?stage=finance' % assignment).get_json()
         self.assertTrue(d['quick'], d)
         self.assertEqual(len(d['attachments']), 1)
+        # Finance sees what becomes owed, never the agreed cost.
+        self.assertNotIn('Agreed cost', [f[0] for f in d['fields']])
+        listed = self._web(self.finance).get('/api/finance/supplier-assignments').get_json()['requests']
+        self.assertTrue(listed and all('item_cost' not in r for r in listed))
         self.assertTrue(d['approve_url'].endswith('/approve'))
         self.assertEqual(self._web(self.finance).post(d['reject_url'], json={'reason': ''}).status_code, 400)
         self.assertEqual(self._web(self.finance).post(d['reject_url'], json={'reason': 'Wrong supplier'}).status_code, 200)

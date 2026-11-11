@@ -724,8 +724,7 @@ function loadSupplierAssignments() {
                     (r.supplier_account ? ' <span class="sa-code">' + esc(r.supplier_account) + '</span>' : '') +
                     (r.previous_label ? ' <span class="sa-muted">' + T('instead of') + ' <span data-no-i18n>' + esc(r.previous_label) + '</span></span>' : '') + '</div></div>' +
                     (r.supplier_id ? '<div class="sa-cost"><span>' + T('Actual cost (becomes owed)') + '</span><b>' + formatCurrency(r.actual_cost) + '</b>' +
-                    '<small>' + T('Agreed') + ' ' + formatCurrency(r.item_cost) + (r.over_agreed ? ' · <b class="sa-over-t">+' + formatCurrency(r.actual_cost - r.item_cost) + '</b>' : '') +
-                    '</small>' + (r.head_by_name ? '<small><i class="fas fa-user-check"></i> ' + T('Cost approved by') + ' ' + esc(r.head_by_name) + '</small>' : '') +
+                    (r.head_by_name ? '<small><i class="fas fa-user-check"></i> ' + T('Cost approved by') + ' ' + esc(r.head_by_name) + '</small>' : '') +
                     '</div>' : '') + '</div>' +
                 '<div class="sa-meta">' +
                     '<span><i class="fas fa-user"></i> ' + esc(r.requested_by_name) + ' · ' + esc((r.requested_at || '').replace('T', ' ').slice(0, 16)) + '</span>' +

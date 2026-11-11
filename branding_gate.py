@@ -3109,9 +3109,10 @@ def _quick_details(cur, kind, record_id, stage):
                 ['Request', 'SR-%s %s' % (r['request_id'], r['request_title'] or '')],
                 ['Client', ' / '.join(x for x in (r['client_name'], r['company_name']) if x)],
                 ['Item', r['item_name']], ['Quantity', r['qty']],
-                ['Agreed cost', _egp(r['item_cost'])],
+                # The agreed cost is the head's concern; Finance sees only what becomes owed (Ahmed, 2026-11-11).
+                ['Agreed cost', head_stage and _egp(r['item_cost'])],
                 ['Actual cost (becomes owed)', r['actual_cost'] is not None and _egp(r['actual_cost'])],
-                ['Above agreed by', r['over_agreed'] and _egp(r['actual_cost'] - r['item_cost'])],
+                ['Above agreed by', head_stage and r['over_agreed'] and _egp(r['actual_cost'] - r['item_cost'])],
                 ['Cost approved by', r['head_by_name'] and '%s %s' % (r['head_by_name'], r['head_note'] or '')],
                 ['Supplier', r['supplier_label'] and '%s (%s)' % (r['supplier_label'], r['supplier_account'] or '')],
                 ['Instead of', r['previous_label']],
@@ -5746,6 +5747,18 @@ def get_approved_items():
         
         cur.execute(query, params)
         items = cur.fetchall()
+        # Each item's latest assignment request, so the list says where it stands
+        # (waiting for the head or Finance, or declined) before the item changes.
+        latest = {}
+        item_ids = [i['id'] for i in items]
+        if item_ids:
+            cur.execute("""SELECT a.item_id, a.status, a.decision_note, a.actual_cost, a.item_cost,
+                                  COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_label
+                           FROM supplier_assignment_request a LEFT JOIN supplier s ON s.id = a.supplier_id
+                           WHERE a.id IN (SELECT MAX(id) FROM supplier_assignment_request
+                                          WHERE item_id IN (%s) AND status <> 'cancelled' GROUP BY item_id)"""
+                        % ','.join(['%s'] * len(item_ids)), item_ids)
+            latest = {r['item_id']: r for r in cur.fetchall()}
         
         # Process items
         items_list = []
@@ -5802,6 +5815,11 @@ def get_approved_items():
                 'component_next_due': (item['component_next_due'].isoformat()
                                        if item['component_next_due'] else None),
             }
+            req = latest.get(item['id'])
+            if req and req['status'] in ('pending_head', 'pending', 'rejected'):
+                item_data['assignment_request'] = {
+                    'status': req['status'], 'supplier': req['supplier_label'], 'note': req['decision_note'],
+                    'actual_cost': float(req['actual_cost']) if req['actual_cost'] is not None else None}
             
             items_list.append(item_data)
             total_cost += item_data['total_cost']
@@ -6755,8 +6773,7 @@ def head_approve_supplier_cost(assignment_id):
         conn.close()
     head = session.get('name') or 'The Operations head'
     notify_supplier_assignment_to_finance(assignment_id, head, row['item_name'], row['request_id'], supplier_label(row),
-                                          row['actual_cost'], '%s approved the cost above the agreed %s.%s'
-                                          % (head, _egp(row['item_cost']), (' ' + note) if note else ''))
+                                          row['actual_cost'], '%s approved the cost.' % head)
     notify_user(row['requested_by'], 'Supplier cost approved by %s' % head,
                 'The cost of "%s" on SR-%s went to Finance.' % (row['item_name'], row['request_id']), link='/approved-items')
     return jsonify(success=True)
@@ -6868,6 +6885,10 @@ def finance_supplier_assignments():
     finally:
         cur.close()
         conn.close()
+    # Finance books the actual cost; the agreed cost would only mislead it.
+    for r in rows:
+        for k in ('item_cost', 'total_cost', 'cost_per_item', 'over_agreed', 'head_note'):
+            r.pop(k, None)
     return jsonify(success=True, requests=rows, counts=counts, can_decide=has(SUPPLIER_ASSIGNMENT_APPROVE))
 
 

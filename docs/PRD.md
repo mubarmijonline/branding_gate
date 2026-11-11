@@ -315,10 +315,14 @@ of its clients, and each client's balance equals their statement.
   under Approvals > Supplier Cost Approvals, then to Finance. The head's own
   request above agreed goes straight to Finance.
 - Finance approves under Finance Approvals > Supplier Assignments, seeing the
-  documents, agreed and actual cost, who approved a higher cost, and what the
-  request already owes that supplier. On approval the item is with the supplier
+  documents, the actual cost (what becomes owed), who approved the cost, and
+  what the request already owes that supplier. Finance never sees the agreed
+  cost: it would mislead it (only Operations and the head see it). On approval the item is with the supplier
   and the actual cost is owed to them (their account under 2101); the agreed
   cost stays on the item. Declining needs a reason; the requester is told.
+- Each item row on Approved Items shows its request under the supplier:
+  waiting for the Operations head or for Finance (with the supplier asked
+  for), or declined with the reason.
 - The assignment window shows the supplier now (with agreed and actual cost),
   a request waiting (with its files, withdrawable), the request form, the
   delivery dates, and every past request with its decision.

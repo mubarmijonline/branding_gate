@@ -1640,3 +1640,12 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - Test: `test_invoicing.py` (required, unique, journal, statement, print);
   existing post calls send one.
 
+### Follow-up: request state on item rows; agreed cost hidden from Finance (Ahmed, 2026-11-11)
+
+- `/api/operations/approved-items` adds `assignment_request` (latest non-cancelled
+  request when pending_head / pending / rejected); `aiRequestNote` shows it under
+  the supplier on cards and table rows.
+- Finance's list and quick window drop the agreed cost (`item_cost`,
+  `over_agreed`, head note); the head stage keeps it. The head's hand-off
+  notification no longer names the agreed figure.
+
