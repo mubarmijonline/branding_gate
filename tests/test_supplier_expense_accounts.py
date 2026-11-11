@@ -111,6 +111,19 @@ class SupplierExpenseAccountsTest(unittest.TestCase):
         self.assertEqual(listed[self.supplier]['label'], 'Vision Co T')
         self.assertTrue(all(s['label'] for s in listed.values()))
 
+    def test_only_the_requests_own_suppliers(self):
+        cur = self._cursor()
+        cur.execute("INSERT INTO supplier (supplier_name, status, added_by) VALUES ('Elsewhere T', 'Active', 't')")
+        elsewhere = cur.lastrowid
+        web = self._web(self.spender)
+        listed = [s['id'] for s in web.get('/api/finance/suppliers?sales_request_id=%d' % self.sr).get_json()['suppliers']]
+        self.assertIn(self.supplier, listed)
+        self.assertNotIn(elsewhere, listed)
+        r = web.post('/api/my-expenses', json={'amount': 50, 'description': 'd', 'expense_date': '2026-11-11',
+                                               'sales_request_id': self.sr, 'supplier_id': elsewhere})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('not assigned', r.get_json()['error'])
+
     def test_no_document_no_sending_and_no_approval(self):
         bare = self._line(status='draft', doc=False)
         r = self._web(self.spender).post('/api/my-expenses/submit')

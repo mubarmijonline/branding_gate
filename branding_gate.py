@@ -27808,8 +27808,12 @@ def get_finance_suppliers():
     
     try:
         conn, cur = connection()
+        # ?sales_request_id=: only the suppliers Operations assigned to that
+        # request's items (My Expenses, Ahmed 2026-11-11).
+        sr = request.args.get('sales_request_id', type=int)
         cur.execute("SELECT id, account_code, supplier_name, company_name, contact_person_name, primary_phone, status "
-                    "FROM supplier")
+                    "FROM supplier" + (" WHERE id IN (SELECT supplier_id FROM sales_request_items WHERE request_id = %s)"
+                                       if sr else ""), (sr,) if sr else ())
         suppliers = sorted(cur.fetchall(), key=lambda s: supplier_label(s).lower())
         cur.close()
         conn.close()
@@ -32284,12 +32288,13 @@ def get_my_expenses():
 EXPENSE_TRANSPORT = 'Transportation'
 
 
-def expense_supplier(cur, data):
+def expense_supplier(cur, data, sales_request_id=None):
     """
     (supplier_id, supplier_name, error) for a My Expenses line: a supplier from
     the list -- the ones Finance keeps an account for under 2101 -- or
     Transportation. A typed name is refused: it reached Finance as a supplier
-    nobody could find (Ahmed, 2026-11-11).
+    nobody could find (Ahmed, 2026-11-11). On a request, only a supplier
+    Operations assigned to one of its items.
     """
     supplier_id = data.get('supplier_id')
     if supplier_id in (None, ''):
@@ -32305,6 +32310,12 @@ def expense_supplier(cur, data):
     row = cur.fetchone()
     if not row:
         return None, None, 'Supplier not found'
+    if sales_request_id:
+        cur.execute("SELECT 1 FROM sales_request_items WHERE request_id = %s AND supplier_id = %s LIMIT 1",
+                    (sales_request_id, supplier_id))
+        if not cur.fetchone():
+            return None, None, ('%s is not assigned to any item on SR-%s. Choose one of the request\'s '
+                                'suppliers, or Transportation.' % (supplier_label(row), sales_request_id))
     return row['id'], supplier_label(row), None
 
 
@@ -32332,7 +32343,7 @@ def add_my_expense():
             return jsonify({'success': False, 'error': 'Date is required'}), 400
         
         conn, cur = connection()
-        supplier_id, supplier_name, supplier_error = expense_supplier(cur, data)
+        supplier_id, supplier_name, supplier_error = expense_supplier(cur, data, data.get('sales_request_id'))
         if supplier_error:
             cur.close()
             conn.close()
@@ -32413,7 +32424,8 @@ def update_my_expense(expense_id):
         # Update fields
         supplier_id, supplier_name = expense['supplier_id'], expense['supplier_name']
         if 'supplier_id' in data or 'supplier_name' in data:
-            supplier_id, supplier_name, supplier_error = expense_supplier(cur, data)
+            supplier_id, supplier_name, supplier_error = expense_supplier(
+                cur, data, data.get('sales_request_id', expense['sales_request_id']))
             if supplier_error:
                 return jsonify({'success': False, 'error': supplier_error}), 400
         amount = float(data.get('amount', expense['amount']))

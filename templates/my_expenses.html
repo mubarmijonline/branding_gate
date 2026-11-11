@@ -775,7 +775,7 @@ table.expense-table.xp-table { display: table; width: 100%; min-width: 900px; }
                         <select class="form-control select2" id="expenseSupplier" style="width: 100%;">
                             <option value="__transport" selected>Transportation</option>
                         </select>
-                        <small class="text-muted">Only suppliers registered with Finance. Not in the list? Ask for it to be added under Suppliers first.</small>
+                        <small class="text-muted" id="expenseSupplierHint">Choose the Sales Request first: its suppliers are listed here.</small>
                     </div>
                     
                     <div class="form-group-modern">
@@ -875,7 +875,9 @@ $(document).ready(function() {
                 $('#expenseCompanyId').val(sr.company_id || '');
                 $('#expenseCompanyName').val(sr.company_name || '');
             }
+            loadSuppliers(srId);
         } else {
+            loadSuppliers(null);
             $('#expenseClientId').val('');
             $('#expenseClientName').val('');
             $('#expenseCompanyId').val('');
@@ -884,7 +886,6 @@ $(document).ready(function() {
     });
     
     // Load data
-    loadSuppliers();
     loadSalesRequests();
     loadExpenses();
     loadBalanceHistory();
@@ -900,8 +901,12 @@ function formatCurrency(amount) {
 // way it is listed everywhere else (Royal Vision, not Mohamed Talha).
 var EXPENSE_TRANSPORT = '__transport';
 
+// The supplier to select once the request's list arrives (editing a draft).
+var wantSupplier = null;
+
 function renderSupplierOptions(list) {
-    var selected = $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
+    var selected = wantSupplier || $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
+    wantSupplier = null;
     var options = '<option value="' + EXPENSE_TRANSPORT + '">Transportation</option>';
     (list || []).forEach(function (s) {
         var label = s.label || s.company_name || s.supplier_name;
@@ -909,20 +914,34 @@ function renderSupplierOptions(list) {
         var person = s.company_name && s.supplier_name && s.supplier_name !== label ? ' (' + s.supplier_name + ')' : '';
         options += '<option value="' + s.id + '">' + $('<div>').text(label + person).html() + '</option>';
     });
-    $('#expenseSupplier').html(options).val(selected).trigger('change');
+    $('#expenseSupplier').html(options);
+    // A supplier no longer on this request is not kept: it has to be chosen again.
+    var has = $('#expenseSupplier option').filter(function () { return this.value === String(selected); }).length;
+    $('#expenseSupplier').val(has ? String(selected) : null).trigger('change');
 }
 
-function loadSuppliers() {
+// Only the suppliers Operations assigned to the chosen request's items
+// (Ahmed, 2026-11-11), plus Transportation.
+function loadSuppliers(srId) {
+    var T = window.bgT || String;
+    var keep = wantSupplier;
     renderSupplierOptions([]);
-    fetch('/api/finance/suppliers')
+    if (!srId) {
+        $('#expenseSupplierHint').text(T('Choose the Sales Request first: its suppliers are listed here.'));
+        return;
+    }
+    fetch('/api/finance/suppliers?sales_request_id=' + encodeURIComponent(srId))
         .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                suppliers = data.suppliers || [];
-                renderSupplierOptions(suppliers);
-            }
+            if (!data.success) return;
+            suppliers = data.suppliers || [];
+            wantSupplier = keep;
+            renderSupplierOptions(suppliers);
+            $('#expenseSupplierHint').text(suppliers.length
+                ? T('The suppliers assigned to this request\'s items.')
+                : T('No supplier is assigned to this request yet: only Transportation.'));
         })
-        .catch(function () { /* Transportation and Other still work */ });
+        .catch(function () { /* Transportation still works */ });
 }
 
 function loadSalesRequests() {
@@ -1276,14 +1295,13 @@ function editExpense(id) {
                 if (expense) {
                     $('#expenseId').val(expense.id);
                     $('#expenseModalTitle').text('Edit Expense');
+                    wantSupplier = expense.supplier_id ? String(expense.supplier_id)
+                        : (expense.supplier_name || '').trim().toLowerCase() === 'transportation' ? EXPENSE_TRANSPORT : '__none';
                     $('#expenseSalesRequest').val(expense.sales_request_id || '').trigger('change');
                     $('#expenseClientId').val(expense.client_id || '');
                     $('#expenseClientName').val(expense.client_name || '');
                     $('#expenseCompanyId').val(expense.company_id || '');
                     $('#expenseCompanyName').val(expense.company_name || '');
-                    // A typed name from before is not in the list: pick the supplier again.
-                    $('#expenseSupplier').val(expense.supplier_id ? String(expense.supplier_id)
-                        : (expense.supplier_name || '').trim().toLowerCase() === 'transportation' ? EXPENSE_TRANSPORT : null).trigger('change');
                     $('#expenseAmount').val(expense.amount);
                     $('#expenseDescription').val(expense.description);
                     $('#expenseDate').val(expense.expense_date);

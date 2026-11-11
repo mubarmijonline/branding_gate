@@ -4520,5 +4520,8 @@ window.BG_AR = {
   "Document added": "المستند اتضاف",
   "Each supplier gets its own account here when added": "كل مورد بياخد حساب خاص بيه هنا أول ما يتضاف",
   "Choose the supplier from the list. A supplier that is not there has to be added under Suppliers first.": "اختار المورد من القايمة. المورد اللي مش موجود لازم يتضاف من صفحة الموردين الأول.",
-  "A sent expense keeps at least one document. Add the right file first, then remove this one.": "المصروف المبعوت لازم يفضل عليه مستند واحد على الأقل. ارفع الملف الصح الأول وبعدين امسح ده."
+  "A sent expense keeps at least one document. Add the right file first, then remove this one.": "المصروف المبعوت لازم يفضل عليه مستند واحد على الأقل. ارفع الملف الصح الأول وبعدين امسح ده.",
+  "Choose the Sales Request first: its suppliers are listed here.": "اختار طلب البيع الأول: الموردين بتوعه هيظهروا هنا.",
+  "The suppliers assigned to this request's items.": "الموردين المتسندين لبنود الطلب ده.",
+  "No supplier is assigned to this request yet: only Transportation.": "لسه مفيش مورد متسند للطلب ده: انتقالات بس."
 };

@@ -8,6 +8,7 @@ account under 2101 (21011, 21012, ...) with a full report.
 **Acceptance check.**
 - A typed supplier is refused; the company is the name shown; the supplier
   list has no "Unknown".
+- On a request, only that request's suppliers are offered and accepted.
 - No document: not sent (`/api/my-expenses/submit`), not approved
   (`finance-approve-bulk`), last file of a sent expense not removable.
 - A supplier line is approved with no category and posts to 2101 with its

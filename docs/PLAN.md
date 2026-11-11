@@ -1557,3 +1557,12 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - ponytail: every supplier is listed under 2101 whether or not it moved; filter
   to moved ones if the list gets long.
 
+### Follow-up: suppliers per request (Ahmed, 2026-11-11)
+
+- `/api/finance/suppliers?sales_request_id=` lists only suppliers on that
+  request's items; `expense_supplier(cur, data, sales_request_id)` refuses any
+  other. My Expenses reloads the picker on SR change (`loadSuppliers(srId)`,
+  `wantSupplier` keeps a draft's choice while it loads).
+- Ahmed's two test expenses (EXP-64272, EXP-24557, manager_approved, no files,
+  no finance transactions) deleted on request; his 4,000 custody kept.
+
