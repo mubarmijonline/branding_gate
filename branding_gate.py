@@ -27771,6 +27771,84 @@ def finance_tree_ledger():
     return jsonify(success=True, code=code, title=title, rows=rows, **totals)
 
 
+def trial_balance(cur, start, end):
+    """
+    ميزان المراجعة (Ahmed, 2026-11-11): every row of the Finance Tree -- classes,
+    groups, accounts, payment methods, supplier accounts -- with its opening
+    balance on `start` (everything before it), the period's debits and credits,
+    and its closing balance on `end`. Balances are net and sit on the side they
+    fall. Rows come in tree order with their depth and parent.
+    """
+    opening = {}
+
+    def index(nodes):
+        for n in nodes:
+            opening[n['id']] = n
+            index(n['children'])
+    index(chart_tree(cur, None, start - timedelta(days=1)))
+    rows = []
+
+    def walk(nodes, depth):
+        for n in nodes:
+            o = opening.get(n['id'], {'debit': 0.0, 'credit': 0.0})
+            before = o['debit'] - o['credit']
+            after = before + n['debit'] - n['credit']
+            rows.append({'id': n['id'], 'code': n['code'], 'name': n['name'], 'depth': depth,
+                         'parent_id': n['parent_id'], 'has_children': bool(n['children']),
+                         'opening_debit': max(before, 0.0), 'opening_credit': max(-before, 0.0),
+                         'debit': n['debit'], 'credit': n['credit'],
+                         'closing_debit': max(after, 0.0), 'closing_credit': max(-after, 0.0)})
+            walk(n['children'], depth + 1)
+    walk(chart_tree(cur, start, end), 0)
+    columns = ('opening_debit', 'opening_credit', 'debit', 'credit', 'closing_debit', 'closing_credit')
+    totals = {k: round(sum(r[k] for r in rows if r['depth'] == 0), 2) for k in columns}
+    return rows, totals
+
+
+@app.route('/api/finance/trial-balance', methods=['GET'])
+@perm('finance_txn.view')
+def finance_trial_balance():
+    """The trial balance for a month, quarter, year or any dates. JSON, or Excel with format=xlsx."""
+    try:
+        start = datetime.strptime(request.args.get('start_date') or '', '%Y-%m-%d').date()
+        end = datetime.strptime(request.args.get('end_date') or '', '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, error='Choose the period'), 400
+    if end < start:
+        return jsonify(success=False, error='The end date is before the start date'), 400
+    conn, cur = connection()
+    try:
+        rows, totals = trial_balance(cur, start, end)
+    finally:
+        cur.close()
+        conn.close()
+    balanced = all(abs(totals[a] - totals[b]) < 0.005 for a, b in
+                   (('opening_debit', 'opening_credit'), ('debit', 'credit'), ('closing_debit', 'closing_credit')))
+    if request.args.get('format') == 'xlsx':
+        keep = [r for r in rows if request.args.get('zero') == '1' or any(
+            r[k] for k in ('opening_debit', 'opening_credit', 'debit', 'credit', 'closing_debit', 'closing_credit'))]
+        sheet = 'ميزان المراجعة'
+        frame = pd.DataFrame([[r['code'], '    ' * r['depth'] + r['name'], r['opening_debit'] or None,
+                               r['opening_credit'] or None, r['debit'] or None, r['credit'] or None,
+                               r['closing_debit'] or None, r['closing_credit'] or None] for r in keep],
+                             columns=['الكود', 'الحساب', 'رصيد أول المدة مدين', 'رصيد أول المدة دائن', 'حركة مدين',
+                                      'حركة دائن', 'رصيد آخر المدة مدين', 'رصيد آخر المدة دائن'])
+        frame.loc[len(frame)] = ['', 'الإجمالي', totals['opening_debit'], totals['opening_credit'], totals['debit'],
+                                 totals['credit'], totals['closing_debit'], totals['closing_credit']]
+        buffer = BytesIO()
+        with ExcelWriter(buffer, engine='openpyxl') as writer:
+            pd.DataFrame([['ميزان المراجعة', 'من %s إلى %s' % (start, end)]]).to_excel(
+                writer, sheet_name=sheet, index=False, header=False)
+            frame.to_excel(writer, sheet_name=sheet, index=False, startrow=2)
+            writer.sheets[sheet].sheet_view.rightToLeft = True
+            _autosize_worksheet(writer.sheets[sheet])
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name='trial_balance_%s_%s.xlsx' % (start, end),
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return jsonify(success=True, start=start.isoformat(), end=end.isoformat(), rows=rows, totals=totals,
+                   balanced=balanced)
+
+
 # ----------------------- HELPER: Get Clients and Suppliers for Dropdowns -----------------------
 
 @app.route('/api/finance/clients', methods=['GET'])

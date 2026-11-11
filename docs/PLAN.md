@@ -1568,3 +1568,16 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - Ahmed's two test expenses (EXP-64272, EXP-24557, manager_approved, no files,
   no finance transactions) deleted on request; his 4,000 custody kept.
 
+## Trial balance tab (Ahmed, 2026-11-11)
+
+- `trial_balance(cur, start, end)`: two `chart_tree` passes over the same
+  journal, one up to the day before `start` (opening) and one for the period;
+  rows in tree order with depth/parent, net balances split to debit/credit.
+  `/api/finance/trial-balance?start_date=&end_date=` (finance_txn.view), JSON
+  or Excel (`format=xlsx`, `zero=1` keeps zero rows).
+- Finance Management tab `trial-balance`: period picker (month / quarter /
+  year / custom) computed client side, level filter, fold by group, zero rows
+  toggle, Excel, print (prints only this tab).
+- Tests: `test_trial_balance.py` (opening + movement = closing, balanced,
+  October's closing = November's opening, full history = the tree).
+

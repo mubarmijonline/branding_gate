@@ -756,6 +756,32 @@ body.finance-surface {
 .chart-value.neg { color: var(--finance-expense); }
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
 .chart-row.chart-supplier .chart-name { color: #92400e; }
+.tb-toolbar .filters { flex-wrap: wrap; gap: 8px; align-items: center; }
+.tb-input { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: #fff; }
+.tb-dates label, .tb-check { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--muted); }
+.tb-title { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 6px 0 12px; }
+.tb-title h3 { margin: 0; font-size: 20px; font-weight: 800; }
+.tb-title span { color: var(--muted); }
+.tb-title b.ok { color: #059669; } .tb-title b.bad { color: #dc2626; }
+table.finance-table.tb-table { display: table; margin: 0; font-size: 13px; width: 100%; min-width: 980px; border: none; }
+.tb-table tfoot td { padding: 12px 16px; }
+.tb-table th.tb-grp { text-align: center; border-inline-start: 1px solid var(--border); }
+.tb-table th.num, .tb-table td.num { text-align: end; white-space: nowrap; }
+.tb-table td.num:nth-child(3), .tb-table td.num:nth-child(5), .tb-table td.num:nth-child(7),
+.tb-table thead tr:last-child th:nth-child(1), .tb-table thead tr:last-child th:nth-child(3), .tb-table thead tr:last-child th:nth-child(5) { border-inline-start: 1px solid var(--border); }
+.tb-table td.tb-code { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+.tb-table tr.tb-d0 td { background: #f1f5f9; font-weight: 800; }
+.tb-table tr.tb-d1 td { background: #f8fafc; font-weight: 700; }
+.tb-table tr[data-tb-parent] .tb-toggle, .tb-table .tb-toggle { cursor: pointer; color: var(--muted); display: inline-block; width: 16px; }
+.tb-table tr.tb-closed .tb-toggle i { transform: rotate(-90deg); }
+.tb-table tfoot td { font-weight: 800; background: #eef2ff; border-top: 2px solid #c7d2fe; }
+.tb-empty { text-align: center; padding: 30px !important; color: var(--muted); }
+@media print {
+  body * { visibility: hidden; }
+  #tab-trial-balance, #tab-trial-balance * { visibility: visible; }
+  #tab-trial-balance { position: absolute; inset: 0; }
+  #tab-trial-balance .finance-toolbar, #tab-trial-balance .chart-note { display: none; }
+}
 .sr-dialog { max-width: min(1280px, 96vw); }
 .sr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;
            padding: 20px 24px; background: linear-gradient(135deg, #fffbeb, #fef3c7); border-bottom: 1px solid #fde68a; }
@@ -1329,6 +1355,9 @@ body.finance-surface {
             <button class="finance-tab" data-tab="finance-tree">
                 <i class="fas fa-sitemap mr-2"></i> Finance Tree
             </button>
+            <button class="finance-tab" data-tab="trial-balance">
+                <i class="fas fa-balance-scale mr-2"></i> Trial Balance
+            </button>
             <button class="finance-tab" data-tab="client-payments">
                 <i class="fas fa-users mr-2"></i> Client Payments
             </button>
@@ -1569,7 +1598,54 @@ body.finance-surface {
             <div class="finance-card">
                 <div class="chart-head"><span>Code</span><span>Account</span><span class="chart-head-r">Debit</span><span class="chart-head-r">Credit</span><span class="chart-head-r">Balance</span></div>
                 <div id="chartTree" class="chart-tree"></div>
-                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Double entry from what Finance approved: each transaction debits and credits its payment method and its account; each posted invoice debits 1103 (total) and 2104 (1% withheld) and credits 4101 (before tax) and 2103 (VAT); a refund the reverse on 4102. Balance is on the account's normal side. Payment methods sit under 1101 (cash) and 1102 (bank).</div>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>Double entry from what Finance approved: each transaction debits and credits its payment method and its account; each posted invoice debits 1103 (total) and 2104 (1% withheld) and credits 4101 (before tax) and 2103 (VAT); a refund the reverse on 4102. Balance is on the account's normal side. Payment methods sit under 1101 (cash) and 1102 (bank). Each supplier has its own account under 2101: what Operations bought from them once the client approved it is owed (5101 debit, the supplier credit), payments to them are debits.</div>
+            </div>
+        </div>
+
+        <!-- Tab: Trial Balance (ميزان المراجعة) -->
+        <div class="tab-panel" id="tab-trial-balance">
+            <div class="finance-toolbar tb-toolbar">
+                <div class="filters">
+                    <select id="tbPeriod" class="tb-input">
+                        <option value="month">Monthly</option>
+                        <option value="quarter">Quarterly</option>
+                        <option value="year">Yearly</option>
+                        <option value="custom">Custom dates</option>
+                    </select>
+                    <input type="month" id="tbMonth" class="tb-input" data-tb="month">
+                    <select id="tbQuarter" class="tb-input" data-tb="quarter">
+                        <option value="1">Q1 (Jan - Mar)</option><option value="2">Q2 (Apr - Jun)</option>
+                        <option value="3">Q3 (Jul - Sep)</option><option value="4">Q4 (Oct - Dec)</option>
+                    </select>
+                    <input type="number" id="tbYear" class="tb-input" data-tb="quarter year" min="2000" max="2100" style="width: 96px;">
+                    <span data-tb="custom" class="tb-dates"><label>From <input type="date" id="tbFrom" class="tb-input"></label>
+                        <label>To <input type="date" id="tbTo" class="tb-input"></label></span>
+                    <select id="tbDepth" class="tb-input" title="Levels shown">
+                        <option value="0">Classes</option><option value="1">Groups</option>
+                        <option value="2">Accounts</option><option value="9" selected>All levels</option>
+                    </select>
+                    <label class="tb-check"><input type="checkbox" id="tbZero"> Show zero rows</label>
+                    <button class="btn-pill btn-pill-primary" onclick="loadTrialBalance()"><i class="fas fa-sync"></i> Show</button>
+                </div>
+                <div class="actions">
+                    <a class="btn-pill btn-pill-outline" id="tbExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+                    <button class="btn-pill btn-pill-outline" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+                </div>
+            </div>
+            <div class="tb-title"><h3>Trial Balance</h3><span id="tbRange"></span><b id="tbBalanced"></b></div>
+            <div class="finance-card" style="overflow-x: auto;">
+                <table class="finance-table tb-table">
+                    <thead>
+                        <tr><th rowspan="2">Code</th><th rowspan="2">Account</th>
+                            <th colspan="2" class="tb-grp">Opening balance</th><th colspan="2" class="tb-grp">Period movement</th>
+                            <th colspan="2" class="tb-grp">Closing balance</th></tr>
+                        <tr><th class="num">Debit</th><th class="num">Credit</th><th class="num">Debit</th><th class="num">Credit</th>
+                            <th class="num">Debit</th><th class="num">Credit</th></tr>
+                    </thead>
+                    <tbody id="tbBody"><tr><td colspan="8" class="tb-empty">Choose a period and press Show</td></tr></tbody>
+                    <tfoot id="tbFoot"></tfoot>
+                </table>
+                <div class="chart-note"><i class="fas fa-info-circle mr-1"></i>From the same entries as the Finance Tree. Opening is every entry before the first day of the period, closing is opening plus the period's movement. Each balance shows on the side it falls; groups add up the accounts under them.</div>
             </div>
         </div>
 
@@ -2807,6 +2883,8 @@ $(document).ready(function() {
             loadLoans();
         } else if (tab === 'finance-tree') {
             loadFinanceTree();
+        } else if (tab === 'trial-balance') {
+            loadTrialBalance();
         } else if (tab === 'pending-approvals') {
             loadPendingApprovals();
         } else if (tab === 'income-statement') {
@@ -5032,6 +5110,77 @@ function openClientDetail(clientId) {
             renderEntityTransactions(data.transactions, 'client');
         });
 }
+
+// Trial balance (ميزان المراجعة): a month, quarter, year or any dates.
+function tbRange() {
+    const kind = $('#tbPeriod').val(), pad = n => String(n).padStart(2, '0');
+    const last = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();   // m is 1-12
+    if (kind === 'month') {
+        const [y, m] = ($('#tbMonth').val() || '').split('-').map(Number);
+        return y ? [y + '-' + pad(m) + '-01', y + '-' + pad(m) + '-' + last(y, m)] : null;
+    }
+    const y = +$('#tbYear').val();
+    if (kind === 'quarter') {
+        const q = +$('#tbQuarter').val(), m1 = (q - 1) * 3 + 1;
+        return y ? [y + '-' + pad(m1) + '-01', y + '-' + pad(m1 + 2) + '-' + last(y, m1 + 2)] : null;
+    }
+    if (kind === 'year') return y ? [y + '-01-01', y + '-12-31'] : null;
+    return $('#tbFrom').val() && $('#tbTo').val() ? [$('#tbFrom').val(), $('#tbTo').val()] : null;
+}
+function tbShowInputs() {
+    const kind = $('#tbPeriod').val();
+    $('[data-tb]').each(function () { $(this).toggle(String($(this).data('tb')).split(' ').indexOf(kind) >= 0); });
+}
+$(function () {
+    const now = new Date();
+    $('#tbMonth').val(now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    $('#tbYear').val(now.getFullYear());
+    $('#tbQuarter').val(Math.floor(now.getMonth() / 3) + 1);
+    tbShowInputs();
+});
+$(document).on('change', '#tbPeriod', tbShowInputs);
+$(document).on('change', '#tbDepth, #tbZero', function () { if (window.tbData) renderTrialBalance(window.tbData); });
+
+function loadTrialBalance() {
+    const T = window.bgT || String, range = tbRange();
+    if (!range) { Swal.fire(T('Choose the period'), '', 'warning'); return; }
+    const q = 'start_date=' + range[0] + '&end_date=' + range[1];
+    $('#tbExcel').attr('href', '/api/finance/trial-balance?' + q + '&format=xlsx' + ($('#tbZero').is(':checked') ? '&zero=1' : ''));
+    $('#tbBody').html('<tr><td colspan="8" class="tb-empty">' + T('Loading...') + '</td></tr>');
+    $('#tbFoot').empty();
+    fetch('/api/finance/trial-balance?' + q).then(r => r.json()).then(function (d) {
+        if (!d.success) { $('#tbBody').html('<tr><td colspan="8" class="tb-empty">' + escHtml(d.error || '') + '</td></tr>'); return; }
+        window.tbData = d;
+        renderTrialBalance(d);
+    });
+}
+function renderTrialBalance(d) {
+    const T = window.bgT || String, depth = +$('#tbDepth').val(), zero = $('#tbZero').is(':checked');
+    const keys = ['opening_debit', 'opening_credit', 'debit', 'credit', 'closing_debit', 'closing_credit'];
+    const cell = v => '<td class="num">' + (Math.abs(v) >= 0.005 ? formatCurrency(v) : '-') + '</td>';
+    const moved = r => keys.some(k => Math.abs(r[k]) >= 0.005);
+    $('#tbRange').html(T('From') + ' <bdi>' + d.start + '</bdi> ' + T('To') + ' <bdi>' + d.end + '</bdi>');
+    $('#tbBalanced').attr('class', d.balanced ? 'ok' : 'bad').text(d.balanced ? T('Balanced: debit = credit') : T('Not balanced'));
+    const rows = d.rows.filter(r => r.depth <= depth && (zero || moved(r)));
+    $('#tbBody').html(rows.length ? rows.map(function (r) {
+        const toggle = r.has_children && r.depth < depth ? '<span class="tb-toggle"><i class="fas fa-chevron-down"></i></span>' : '<span class="tb-toggle"></span>';
+        return '<tr class="tb-d' + Math.min(r.depth, 2) + '" data-tb-id="' + r.id + '" data-tb-parent="' + (r.parent_id || '') + '">' +
+            '<td class="tb-code">' + escHtml(r.code) + '</td>' +
+            '<td style="padding-inline-start:' + (12 + r.depth * 20) + 'px">' + toggle + ' ' + escHtml(r.name) + '</td>' +
+            keys.map(k => cell(r[k])).join('') + '</tr>';
+    }).join('') : '<tr><td colspan="8" class="tb-empty">' + T('No entries in this period') + '</td></tr>');
+    $('#tbFoot').html('<tr><td></td><td>' + T('Total') + '</td>' + keys.map(k => cell(d.totals[k])).join('') + '</tr>');
+}
+// A group's chevron folds everything under it.
+$(document).on('click', '#tbBody .tb-toggle', function () {
+    const row = $(this).closest('tr'), closed = !row.hasClass('tb-closed');
+    row.toggleClass('tb-closed', closed);
+    const hide = id => $('#tbBody tr[data-tb-parent="' + id + '"]').each(function () {
+        $(this).toggle(!closed);
+        if (closed || !$(this).hasClass('tb-closed')) hide($(this).data('tb-id'));
+    });
+    hide(row.data('tb-id'));
+});
 
 // One supplier's account (21011, ...): owed per SR from the items Operations
 // assigned to them once the client approved, every payment, what is left.

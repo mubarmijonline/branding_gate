@@ -285,3 +285,18 @@ Vision in the tree shows the payment against what SR-502 owes.
   person's balance) for those whose requests go straight to Finance: the head
   and the admin. Each tile shows only to those allowed to use it. Others still
   find the same actions in the balance menu.
+
+## Trial balance
+
+- Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,
+  quarterly, yearly, or any two dates. For every account of the Finance Tree
+  (classes, groups, accounts, each payment method under 1101/1102, each
+  supplier under 2101): the opening balance on the first day, the period's
+  debits and credits, and the closing balance on the last day, each balance on
+  the side it falls. Groups add up the accounts under them; totals at the
+  foot, with a debit = credit check.
+- Rows can be shown to a level (classes, groups, accounts, all), folded by
+  group, zero rows hidden or shown; Excel (Arabic, right to left) and print.
+
+Done when: November's closing balances equal December's opening balances, and
+every column's debit total equals its credit total.
