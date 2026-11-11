@@ -269,6 +269,16 @@
 .ue-table .ue-amount::-webkit-outer-spin-button, .ue-table .ue-amount::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .ue-table .ue-amount { -moz-appearance: textfield; }
 .user-expense-category.ue-missing { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+.ue-sup { white-space: nowrap; }
+.ue-acc { font: 700 11px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 3px 6px; border-radius: 5px; }
+.ue-owed { margin-top: 6px; display: grid; grid-template-columns: repeat(3, auto); gap: 2px 12px; font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; }
+.ue-owed span { display: block; color: #64748b; font-weight: 600; } .ue-owed b { white-space: nowrap; }
+.ue-owed em { grid-column: 1 / -1; font-style: normal; color: #b45309; font-weight: 700; }
+.ue-owed.over { border-color: #fca5a5; background: #fef2f2; } .ue-owed.over em { color: #dc2626; }
+.ue-docs { display: flex; align-items: center; gap: 6px; }
+.ue-docs img, .ue-doc { width: 42px; height: 42px; border-radius: 8px; object-fit: cover; border: 1px solid #e2e8f0; display: inline-flex; align-items: center; justify-content: center; background: #f1f5f9; color: #dc2626; font-size: 20px; }
+.ue-nodoc { display: inline-block; white-space: nowrap; color: #b91c1c; background: #fee2e2; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.ue-locked { white-space: nowrap; font-weight: 700; color: #92400e; } .ue-locked small { display: block; font-weight: 500; color: #64748b; white-space: normal; }
 .balances-table {
     width: 100%;
     border-collapse: separate;
@@ -784,20 +794,47 @@ function renderUserExpensesForFinance(expenses) {
                     '<th>Date</th>' +
                     '<th>Supplier</th>' +
                     '<th>Description</th>' +
+                    '<th>Documents</th>' +
                     '<th style="width: 190px;">Amount</th>' +
                     '<th style="width: 230px;">Category <span class="text-danger">*</span></th>' +
                 '</tr></thead>' +
                 '<tbody>';
         
         group.expenses.forEach(function(e) {
-            html += '<tr data-user-expense-id="' + e.id + '" data-supplier="' + $('<div>').text(e.supplier_display || e.supplier_name || '').html() + '">' +
+            var T = window.bgT || String;
+            var esc = function (v) { return $('<div>').text(v == null ? '' : v).html(); };
+            var supplier = esc(e.supplier_display || e.supplier_name || '-');
+            if (e.supplier_id) {
+                supplier = '<div class="ue-sup"><b data-no-i18n>' + supplier + '</b>' +
+                    (e.supplier_account ? ' <span class="ue-acc">' + esc(e.supplier_account) + '</span>' : '') + '</div>';
+                var o = e.supplier_sr;
+                if (o) {
+                    var over = parseFloat(e.amount) > o.remaining + 0.004;
+                    supplier += '<div class="ue-owed' + (over ? ' over' : '') + '">' +
+                        '<div><span>' + T('Owed on this SR') + '</span><b>' + formatCurrency(o.purchased) + '</b></div>' +
+                        '<div><span>' + T('Paid') + '</span><b>' + formatCurrency(o.paid) + '</b></div>' +
+                        '<div><span>' + T('Remaining') + '</span><b>' + formatCurrency(o.remaining) + '</b></div>' +
+                        (o.purchased <= 0 ? '<em><i class="fas fa-exclamation-triangle"></i> ' + T('No approved items from this supplier on this SR') + '</em>'
+                            : over ? '<em><i class="fas fa-exclamation-triangle"></i> ' + T('This is more than what is left to pay') + '</em>' : '') +
+                        '</div>';
+                }
+            }
+            var docs = e.attachments && e.attachments.length
+                ? '<div class="ue-docs">' + e.attachments.slice(0, 3).map(function (a) {
+                      return a.is_image
+                          ? '<a href="' + a.url + '" target="_blank" rel="noopener" title="' + esc(a.name) + '"><img src="' + a.url + '" alt="" loading="lazy"></a>'
+                          : '<a href="' + a.url + '" target="_blank" rel="noopener" title="' + esc(a.name) + '" class="ue-doc"><i class="fas ' + (a.type === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></a>';
+                  }).join('') + ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) + '</div>'
+                : '<span class="ue-nodoc"><i class="fas fa-exclamation-circle"></i> ' + T('No document') + '</span>';
+            html += '<tr data-user-expense-id="' + e.id + '" data-has-doc="' + (e.attachments && e.attachments.length ? 1 : 0) + '" data-supplier-id="' + (e.supplier_id || '') + '" data-supplier="' + $('<div>').text(e.supplier_display || e.supplier_name || '').html() + '">' +
                 '<td><strong>' + e.tracking_code + '</strong></td>' +
                 '<td>' + (e.sales_request_id ? '<span class="badge badge-info">SR-' + e.sales_request_id + '</span>' : '-') + '</td>' +
                 '<td>' + (e.client_name || '-') + '</td>' +
                 '<td>' + (e.company_name || '-') + '</td>' +
                 '<td style="white-space:nowrap;">' + expenseDay(e.expense_date) + '</td>' +
-                '<td>' + (e.supplier_display || e.supplier_name || '-') + '</td>' +
-                '<td>' + (e.description || '-') + (e.attachments && e.attachments.length ? ' ' + bgExpenseFilesButton(e.attachments, e.tracking_code) : '') + '</td>' +
+                '<td>' + supplier + '</td>' +
+                '<td>' + (e.description || '-') + '</td>' +
+                '<td>' + docs + '</td>' +
                 '<td>' +
                     '<div class="input-group input-group-sm">' +
                         '<input type="number" class="form-control text-right font-weight-bold user-expense-amount-input ue-amount" ' +
@@ -808,10 +845,13 @@ function renderUserExpensesForFinance(expenses) {
                         '<div class="input-group-append"><span class="input-group-text">EGP</span></div>' +
                     '</div>' +
                 '</td>' +
-                '<td>' +
-                    '<select class="form-control form-control-sm user-expense-category" id="user_expense_category_' + e.id + '">' +
+                '<td>' + (e.supplier_id
+                    // Paid to a supplier: it settles what we owe them, on their own account under 2101.
+                    ? '<div class="ue-locked"><i class="fas fa-lock"></i> <bdi>2101 &rsaquo; ' + esc(e.supplier_account || '') + '</bdi>' +
+                      '<small>' + T('Supplier account, set by the system') + '</small></div>'
+                    : '<select class="form-control form-control-sm user-expense-category" id="user_expense_category_' + e.id + '">' +
                         categoryOptions +
-                    '</select>' +
+                    '</select>') +
                 '</td>' +
             '</tr>';
         });
@@ -819,11 +859,16 @@ function renderUserExpensesForFinance(expenses) {
         html += '</tbody></table></div></div>';
         container.append(html);
     });
-    // A line whose supplier is also a category ("Transportation") starts with it chosen.
+    // A line whose supplier is also a category starts with it chosen;
+    // Transportation with 6212 انتقالات.
     container.find('tr[data-user-expense-id]').each(function () {
         var sel = $(this).find('.user-expense-category');
         var supplier = String($(this).data('supplier') || '').trim().toLowerCase();
-        if (!supplier) return;
+        if (!supplier || !sel.length) return;
+        if (supplier === 'transportation') {
+            var transport = sel.find('option').filter(function () { return $(this).text().trim().indexOf('6212') === 0; }).first();
+            if (transport.length) { sel.val(transport.val()); return; }
+        }
         sel.find('option').each(function () {
             var label = $(this).text().replace('↳', '').split('|')[0].trim().toLowerCase();
             if (label && label === supplier) { sel.val($(this).val()); return false; }
@@ -894,6 +939,7 @@ function autoSaveUserExpenseAmount(expenseId) {
 function approveAllUserExpensesForFinance(userId, userName) {
     var expenses = [];
     var missing = [];
+    var noDoc = [];
     
     // Find the card for this specific user
     var userCard = $('.approval-item[data-user-id="' + userId + '"]');
@@ -902,6 +948,8 @@ function approveAllUserExpensesForFinance(userId, userName) {
         var row = $(this);
         var expId = row.data('user-expense-id');
         var amount = parseFloat($('#user_expense_amount_' + expId).val()) || 0;
+        if (!+row.data('has-doc')) { noDoc.push(row.find('td:first').text()); return; }
+        if (row.data('supplier-id')) { expenses.push({ id: expId, amount: amount }); return; }
         var catSelect = $('#user_expense_category_' + expId);
         var selectedOption = catSelect.find('option:selected');
         var selectedVal = catSelect.val();
@@ -924,6 +972,11 @@ function approveAllUserExpensesForFinance(userId, userName) {
         expenses.push(expenseData);
     });
     
+    if (noDoc.length) {
+        Swal.fire((window.bgT || String)('Document required'), (window.bgT || String)('No document is attached to:') + ' ' + noDoc.join(', ') + '. ' +
+                  (window.bgT || String)('Reject it, or ask for the receipt to be attached first.'), 'warning');
+        return;
+    }
     if (missing.length) {
         var first = userCard.find('.ue-missing').first();
         if (first.length) first[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -944,7 +997,7 @@ function approveAllUserExpensesForFinance(userId, userName) {
         title: 'Finance Approve All for ' + userName + '?',
         html: '<p>This will approve <strong>' + expenses.length + '</strong> expense(s)</p>' +
               '<p>Total: <strong>' + formatCurrency(totalAmount) + '</strong></p>' +
-              '<p class="text-info"><small><i class="fas fa-info-circle mr-1"></i>Each expense creates: Income (Internal Transfer) + Expense (selected category)</small></p>',
+              '<p class="text-info"><small><i class="fas fa-info-circle mr-1"></i>Each expense settles the custody (111002) against its account. Lines paid to a supplier go to that supplier\'s account under 2101.</small></p>',
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#10b981',

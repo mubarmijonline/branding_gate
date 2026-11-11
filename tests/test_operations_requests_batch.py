@@ -479,13 +479,13 @@ class PagesTest(unittest.TestCase):
         with open(os.path.join(ROOT, 'templates', name), encoding='utf-8') as handle:
             return handle.read()
 
-    def test_the_expense_supplier_defaults_to_transportation_and_other_is_typed(self):
+    def test_the_expense_supplier_defaults_to_transportation_and_cannot_be_typed(self):
         page = self._page('my_expenses.html')
         self.assertIn('<option value="__transport" selected>Transportation</option>', page)
         self.assertIn("supplierName = 'Transportation';", page)
-        # "Other" saves what was typed, and cannot be saved blank.
-        self.assertIn("supplierName = ($('#expenseSupplierName').val() || '').trim();", page)
-        self.assertIn('for "Other"', page)
+        # No typed names any more: they reached Finance as "Unknown" (Ahmed, 2026-11-11).
+        self.assertNotIn('__other', page)
+        self.assertNotIn('expenseSupplierName', page)
         self.assertNotIn('<option value="">Select Supplier</option>', page)
 
     def test_each_request_has_its_own_colour_in_both_views(self):

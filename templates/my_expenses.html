@@ -273,6 +273,7 @@ table.expense-table.xp-table { display: table; width: 100%; min-width: 900px; }
                display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
 .xp-icon-btn.edit { color: #4f46e5; } .xp-icon-btn.edit:hover { background: #eef2ff; border-color: #c7d2fe; }
 .xp-icon-btn.del { color: #dc2626; } .xp-icon-btn.del:hover { background: #fef2f2; border-color: #fecaca; }
+.xp-icon-btn.xp-need-doc { color: #fff; background: #dc2626; border-color: #dc2626; }
 .xp-table tfoot td { padding: 12px 16px; background: #f8fafc; font-size: 13px; font-weight: 700; color: var(--muted);
                      border-top: 1px solid var(--border); }
 .xp-loading { text-align: center; padding: 40px !important; color: var(--muted); }
@@ -773,14 +774,8 @@ table.expense-table.xp-table { display: table; width: 100%; min-width: 900px; }
                         <label>Supplier *</label>
                         <select class="form-control select2" id="expenseSupplier" style="width: 100%;">
                             <option value="__transport" selected>Transportation</option>
-                            <option value="__other">Other (type the name)</option>
                         </select>
-                    </div>
-                    {# Shown only for "Other": the name typed here is what is saved,
-                       never the word "Other". #}
-                    <div class="form-group-modern" id="expenseSupplierNameGroup" style="display: none;">
-                        <label>Supplier name *</label>
-                        <input type="text" class="form-control" id="expenseSupplierName" placeholder="Type the supplier's name">
+                        <small class="text-muted">Only suppliers registered with Finance. Not in the list? Ask for it to be added under Suppliers first.</small>
                     </div>
                     
                     <div class="form-group-modern">
@@ -799,7 +794,7 @@ table.expense-table.xp-table { display: table; width: 100%; min-width: 900px; }
                     </div>
 
                     <div class="form-group-modern">
-                        <label>Receipts / Documents <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                        <label>Receipts / Documents * <span class="text-muted" style="font-weight:400;">(at least one)</span></label>
                         <div id="expenseExistingFiles" class="bg-xf-grid" style="margin-bottom:10px;"></div>
                         <label for="expenseFiles" class="exp-drop">
                             <i class="fas fa-paperclip"></i>
@@ -899,21 +894,21 @@ function formatCurrency(amount) {
     return 'EGP ' + parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Transportation is the default, the real suppliers follow, and "Other" lets
-// the name be typed. The list used to come only from /api/finance/suppliers,
-// which answered 403 to anyone outside Finance -- so for Operations the
-// dropdown was empty with no word as to why.
+// Transportation, then the suppliers Finance keeps an account for (2101...).
+// A typed name is no longer offered: it reached Finance as a supplier nobody
+// could find. Each one shows as the company with the person after it, the
+// way it is listed everywhere else (Royal Vision, not Mohamed Talha).
 var EXPENSE_TRANSPORT = '__transport';
-var EXPENSE_OTHER = '__other';
 
 function renderSupplierOptions(list) {
     var selected = $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
     var options = '<option value="' + EXPENSE_TRANSPORT + '">Transportation</option>';
     (list || []).forEach(function (s) {
-        options += '<option value="' + s.id + '">' +
-                   $('<div>').text(s.company_name || s.supplier_name || 'Unknown').html() + '</option>';
+        var label = s.label || s.company_name || s.supplier_name;
+        if (!label) return;
+        var person = s.company_name && s.supplier_name && s.supplier_name !== label ? ' (' + s.supplier_name + ')' : '';
+        options += '<option value="' + s.id + '">' + $('<div>').text(label + person).html() + '</option>';
     });
-    options += '<option value="' + EXPENSE_OTHER + '">Other (type the name)</option>';
     $('#expenseSupplier').html(options).val(selected).trigger('change');
 }
 
@@ -929,13 +924,6 @@ function loadSuppliers() {
         })
         .catch(function () { /* Transportation and Other still work */ });
 }
-
-// "Other" opens the name box; anything else closes it.
-$(document).on('change', '#expenseSupplier', function () {
-    var other = $(this).val() === EXPENSE_OTHER;
-    $('#expenseSupplierNameGroup').toggle(other);
-    if (!other) $('#expenseSupplierName').val('');
-});
 
 function loadSalesRequests() {
     fetch('/api/sales-requests-lookup')
@@ -1159,6 +1147,10 @@ function renderExpenses(expenses) {
                         exp.status === 'manager_approved' ? 'fa-coins' :
                         exp.status === 'approved' ? 'fa-check' : 'fa-times';
         var actions = '<span class="text-muted">-</span>';
+        if (exp.status === 'submitted' || exp.status === 'manager_approved') {
+            actions = '<div class="xp-actions"><button class="xp-icon-btn edit' + (exp.attachments && exp.attachments.length ? '' : ' xp-need-doc') +
+                '" onclick="attachLater(' + exp.id + ')" title="Add document"><i class="fas fa-paperclip"></i></button></div>';
+        }
         if (exp.status === 'draft') {
             actions = '<div class="xp-actions">' +
                 '<button class="xp-icon-btn edit" onclick="editExpense(' + exp.id + ')" title="Edit"><i class="fas fa-pen"></i></button>' +
@@ -1241,13 +1233,28 @@ function uploadExpenseFiles(expenseId) {
         .catch(function () { return { success: false, error: 'Upload failed' }; });
 }
 
+// A sent expense still takes files until Finance decides; one without a
+// document cannot be approved.
+function attachLater(id) {
+    var input = $('<input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">');
+    input.on('change', function () {
+        pendingFiles = Array.prototype.slice.call(this.files || []);
+        if (!pendingFiles.length) return;
+        uploadExpenseFiles(id).then(function (up) {
+            pendingFiles = [];
+            if (up.success) { Swal.fire('Done', 'Document added', 'success'); loadExpenses(); }
+            else Swal.fire('Error', up.error || 'Upload failed', 'error');
+        });
+    });
+    input.trigger('click');
+}
+
 function openAddExpenseModal() {
     $('#expenseId').val('');
     $('#expenseModalTitle').text('Add Expense');
     $('#expenseForm')[0].reset();
     $('#expenseDate').val(new Date().toISOString().split('T')[0]);
     $('#expenseSupplier').val(EXPENSE_TRANSPORT).trigger('change');
-    $('#expenseSupplierName').val('');
     $('#expenseSalesRequest').val('').trigger('change');
     $('#expenseClientId').val('');
     $('#expenseClientName').val('');
@@ -1274,14 +1281,9 @@ function editExpense(id) {
                     $('#expenseClientName').val(expense.client_name || '');
                     $('#expenseCompanyId').val(expense.company_id || '');
                     $('#expenseCompanyName').val(expense.company_name || '');
-                    if (expense.supplier_id) {
-                        $('#expenseSupplier').val(String(expense.supplier_id)).trigger('change');
-                    } else if ((expense.supplier_name || '').trim().toLowerCase() === 'transportation') {
-                        $('#expenseSupplier').val(EXPENSE_TRANSPORT).trigger('change');
-                    } else if (expense.supplier_name) {
-                        $('#expenseSupplier').val(EXPENSE_OTHER).trigger('change');
-                        $('#expenseSupplierName').val(expense.supplier_name);
-                    }
+                    // A typed name from before is not in the list: pick the supplier again.
+                    $('#expenseSupplier').val(expense.supplier_id ? String(expense.supplier_id)
+                        : (expense.supplier_name || '').trim().toLowerCase() === 'transportation' ? EXPENSE_TRANSPORT : null).trigger('change');
                     $('#expenseAmount').val(expense.amount);
                     $('#expenseDescription').val(expense.description);
                     $('#expenseDate').val(expense.expense_date);
@@ -1323,18 +1325,12 @@ function updateBalancePreview() {
 
 function saveExpense() {
     var id = $('#expenseId').val();
-    var supplierChoice = $('#expenseSupplier').val() || EXPENSE_TRANSPORT;
+    var supplierChoice = $('#expenseSupplier').val();
     var supplierId = '';
     var supplierName = '';
     if (supplierChoice === EXPENSE_TRANSPORT) {
         supplierName = 'Transportation';
-    } else if (supplierChoice === EXPENSE_OTHER) {
-        supplierName = ($('#expenseSupplierName').val() || '').trim();
-        if (!supplierName) {
-            Swal.fire('Error', 'Type the supplier\'s name for "Other"', 'error');
-            return;
-        }
-    } else {
+    } else if (supplierChoice) {
         supplierId = supplierChoice;
     }
     var amount = bgPlainNumber($('#expenseAmount').val());
@@ -1361,7 +1357,11 @@ function saveExpense() {
         return;
     }
     if (!supplierId && !supplierName) {
-        Swal.fire('Error', 'Please select a supplier or enter a supplier name', 'error');
+        Swal.fire('Error', 'Choose the supplier from the list', 'error');
+        return;
+    }
+    if (!pendingFiles.length && !$('#expenseExistingFiles .bg-xf-tile').length) {
+        Swal.fire('Document required', 'Attach the receipt or a document for this expense', 'warning');
         return;
     }
     

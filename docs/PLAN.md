@@ -1523,3 +1523,37 @@ under the next month's name (Oct's 495,390 read as Nov). Headings and figures
 now share the end edge, each month column is ruled off, and month names follow
 the page language. Also: `test_pricing_alert` counted every costed unpriced
 item; it now uses the endpoint's rule (sent to Pricing, not already decided).
+
+## Supplier accounts under 2101; expenses need a supplier and a document (Ahmed, 2026-11-11)
+
+Ahmed sent two custody expenses: one to Royal Vision showed as "Mohamed
+Talha" (the list showed the company, the line the person), one had no
+receipt, and the picker showed "Unknown" for suppliers without a company.
+
+- `supplier.account_code` (`supplier_account_migration.sql`): 2101 + serial
+  by id, backfilled; `assign_supplier_accounts(cur)` numbers new ones (supplier
+  add, party request approval, and lazily on the tree). `supplier_label()` is
+  the company, else the person, used by every expense query and
+  `/api/finance/suppliers` (now returns `label`, `account_code`).
+- `expense_supplier()`: supplier_id from the table or "Transportation"; typed
+  names refused on add/update. My Expenses drops "Other".
+- Documents: `expenses_without_documents()` checked on submit and at Finance
+  (`expense_posting_account()`), last file of a sent expense kept; My Expenses
+  requires a file in the form and offers "Add document" on sent lines.
+- Finance approval: supplier lines skip the category, post to 2101 with
+  supplier and SR (single approve now records the SR too); the list carries
+  `supplier_sr` (owed/paid/remaining via `supplier_purchases_by_request`) for
+  Finance only; Documents column with thumbnails or "No document".
+- Journal: `chart_journal` lines carry `supplier`; supplier ledger purchases
+  (client-approved items with a supplier) book Dr 5101 / Cr 2101, openings
+  against 3103; items with no supplier are skipped. `chart_tree` puts 2101
+  lines with a known supplier on that supplier's row (`sup-<id>`); the side
+  "entities" list under 2101 is gone.
+- Finance Tree: supplier rows open `openSupplierDetail` (rewritten): XL modal
+  from the statement and purchases-by-request endpoints.
+- Tests: `test_supplier_expense_accounts.py`; fixtures in
+  `test_expense_finance_approval.py` carry a document; the My Expenses page
+  test now asserts no typed supplier.
+- ponytail: every supplier is listed under 2101 whether or not it moved; filter
+  to moved ones if the list gets long.
+

@@ -244,6 +244,36 @@ they are created. The numbers do not skip.
 Done when: George pays part of an SR's purchase from a bank and the rest from
 cash; the request's remaining drops to zero, the bank's and the cash box's
 ledgers show the payments, and paying more is refused.
+## Staff expenses paid to suppliers, and supplier accounts under 2101
+
+- An expense on My Expenses names who was paid: Transportation, or a supplier
+  from the list Finance keeps. A name cannot be typed; a supplier not in the
+  list is added under Suppliers first. A supplier is shown everywhere by its
+  company (Royal Vision), with the person after it.
+- Every expense carries at least one receipt or document. Without one it
+  cannot be saved from the form, sent for approval, or approved by Finance.
+  Until Finance decides, the owner can add a document to an expense already
+  sent (paperclip on the line), and cannot remove the last one.
+- On Finance's approval list each line shows its documents (thumbnails, open
+  in a click, or a red "No document"), and for a line paid to a supplier what
+  that request owes the supplier (client-approved item costs), what was paid,
+  what remains, with a warning when the line is more than what remains or the
+  supplier has no approved items on that request.
+- A line paid to a supplier needs no category: it goes to 2101 on that
+  supplier's own account. Every supplier has one, numbered as they are added:
+  21011, 21012, ... A code once given never changes.
+- In the Finance Tree, 2101 lists every supplier account; 2101 is their sum.
+  An account is owed the cost of the items Operations assigned to that
+  supplier once the client approved them, and paid by every payment to them
+  (Finance's own and staff expenses). Opening a supplier shows a large report:
+  total owed, paid and the number of payments, remaining; the same by
+  request with the items; every payment; the full statement; Excel.
+
+Done when: Ahmed's expense to Royal Vision on SR-502 cannot be sent without a
+receipt; Finance sees the receipt and SR-502's owed/paid/remaining for Royal
+Vision on the line, approves it without choosing a category, and 21011 Royal
+Vision in the tree shows the payment against what SR-502 owes.
+
 - Whoever asks for money (Expense Tracking) does not choose where it comes
   from. Finance chooses the payment method when approving, and cannot approve
   without one.

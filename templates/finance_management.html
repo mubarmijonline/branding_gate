@@ -755,6 +755,33 @@ body.finance-surface {
 .chart-row .tree-actions { width: 110px; flex: none; justify-content: flex-end; }
 .chart-value.neg { color: var(--finance-expense); }
 .chart-method-icon { color: var(--muted); margin-inline-end: 6px; font-size: 12px; }
+.chart-row.chart-supplier .chart-name { color: #92400e; }
+.sr-dialog { max-width: min(1280px, 96vw); }
+.sr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+           padding: 20px 24px; background: linear-gradient(135deg, #fffbeb, #fef3c7); border-bottom: 1px solid #fde68a; }
+.sr-code { display: inline-block; font: 700 12px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 5px 9px; border-radius: 6px; }
+.sr-name { margin: 8px 0 4px; font-weight: 800; color: #1e293b; }
+.sr-contact { font-size: 13px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+.sr-head-actions { display: flex; gap: 8px; align-items: center; }
+.sr-head-actions .close { margin-inline-start: 8px; font-size: 28px; }
+.sr-body { padding: 20px 24px; background: #f8fafc; }
+.sr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.sr-kpi { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.sr-kpi span { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+.sr-kpi b { display: block; font-size: 22px; font-weight: 800; margin-top: 4px; color: #1e293b; }
+.sr-kpi small { color: var(--muted); }
+.sr-kpi.owe b { color: #b45309; } .sr-kpi.paid b { color: #059669; } .sr-kpi.left b { color: #dc2626; } .sr-kpi.left.clear b { color: #059669; }
+.sr-section { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.sr-section h6 { font-weight: 800; margin: 0 0 6px; color: #1e293b; } .sr-section h6 i { color: #d97706; margin-inline-end: 6px; }
+.sr-note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.sr-scroll { overflow-x: auto; max-height: 46vh; }
+.sr-table { margin: 0; } .sr-table th.num, .sr-table td.num { text-align: end; white-space: nowrap; }
+.sr-items { margin: 0; padding: 0; list-style: none; font-size: 12px; color: #475569; }
+.sr-items li { display: flex; justify-content: space-between; gap: 12px; } .sr-items li b { font-weight: 600; white-space: nowrap; }
+.sr-bar { height: 5px; background: #fee2e2; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.sr-bar i { display: block; height: 100%; background: #10b981; }
+.sr-empty { text-align: center; padding: 22px; color: var(--muted); }
+.sr-tot td { font-weight: 800; background: #f8fafc; }
 .chart-balance { font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 7px; border-radius: 6px; margin-inline-start: 6px; }
 .type-badge.transfer { background: #eef2ff; color: #4f46e5; }
 .chart-bal { color: #0f172a; }
@@ -2344,6 +2371,51 @@ body.finance-surface {
             <div class="modal-footer">
                 <a class="btn-pill btn-pill-outline" id="ledgerExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
                 <button type="button" class="btn-pill btn-pill-outline" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- One supplier's account under 2101: what each SR owes them, what was paid, what is left -->
+<div class="modal fade" id="supplierReportModal" tabindex="-1">
+    <div class="modal-dialog modal-xl sr-dialog">
+        <div class="modal-content">
+            <div class="sr-head">
+                <div>
+                    <div class="sr-code" id="srCode"></div>
+                    <h4 class="sr-name" id="srName">Supplier</h4>
+                    <div class="sr-contact" id="srContact"></div>
+                </div>
+                <div class="sr-head-actions">
+                    <a class="btn-pill btn-pill-outline" id="srExcel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+                    <a class="btn-pill btn-pill-outline" id="srAccount" href="#" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> Account page</a>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body sr-body">
+                <div class="sr-kpis" id="srKpis"></div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-clipboard-list"></i> By request</h6>
+                    <div class="sr-note">Owed is the cost of the items Operations assigned to this supplier, once the client approved them.</div>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>SR</th><th>Client</th><th>Items</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Remaining</th></tr></thead>
+                        <tbody id="srRequests"></tbody>
+                    </table></div>
+                </div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-money-check-alt"></i> Payments</h6>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>Date</th><th>Reference</th><th>SR</th><th>Paid by</th><th class="num">Amount</th></tr></thead>
+                        <tbody id="srPayments"></tbody>
+                    </table></div>
+                </div>
+                <div class="sr-section">
+                    <h6><i class="fas fa-book"></i> Statement</h6>
+                    <div class="sr-scroll"><table class="finance-table sr-table">
+                        <thead><tr><th>Date</th><th>Entry</th><th>SR</th><th class="num">Paid (debit)</th><th class="num">Owed (credit)</th><th class="num">Balance</th></tr></thead>
+                        <tbody id="srStatement"></tbody>
+                    </table></div>
+                </div>
             </div>
         </div>
     </div>
@@ -4551,7 +4623,11 @@ var CHART_CLASS_COLORS = { '1': '#2563eb', '2': '#dc2626', '3': '#7c3aed', '4': 
 // Add under / edit / delete on a chart row. Classes and the accounts the
 // system books into keep their name and code but still take accounts under them.
 function treeActions(node, depth) {
-    if (!CAN_EDIT_CATEGORIES || node.method) return '<span class="tree-actions"></span>';
+    if (!CAN_EDIT_CATEGORIES || node.method || node.supplier) return '<span class="tree-actions"></span>';
+    if (node.suppliers_total) {
+        // Suppliers number themselves under 2101 as they are added.
+        return '<span class="tree-actions"><span class="tree-sys" title="Each supplier gets its own account here when added">SYSTEM</span></span>';
+    }
     if (node.methods_total) {
         // Cash and bank hold the payment methods: + adds one of that kind.
         const kind = node.code === '1102' ? 'bank' : 'cash';
@@ -4577,11 +4653,11 @@ function chartRows(nodes, depth, withAmounts, cls) {
         const cell = v => `<span class="chart-value">${v ? formatCurrency(v) : '-'}</span>`;
         const value = withAmounts ? cell(n.debit) + cell(n.credit) +
             `<span class="chart-value chart-bal${n.value < 0 ? ' neg' : ''}">${n.debit || n.credit ? formatCurrency(n.value) : '-'}</span>` : '';
-        let html = `<div class="chart-row depth-${Math.min(depth, 3)}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
+        let html = `<div class="chart-row depth-${Math.min(depth, 3)}${n.supplier ? ' chart-supplier' : ''}" data-chart-id="${n.id}" data-search="${escHtml((n.code + ' ' + n.name).toLowerCase())}"
                          style="--cls:${CHART_CLASS_COLORS[c] || '#64748b'}; padding-inline-start:${12 + depth * 22}px">
             <span class="chart-toggle${n.children.length ? ' closed' : ''}">${n.children.length ? '<i class="fas fa-chevron-down"></i>' : ''}</span>
             <span class="chart-code">${escHtml(n.code)}</span>
-            <span class="chart-name">${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}</span>
+            <span class="chart-name">${n.supplier ? '<i class="fas fa-truck chart-method-icon"></i>' : ''}${n.method ? '<i class="fas ' + (c === '1' && n.code.startsWith('1102') ? 'fa-university' : 'fa-cash-register') + ' chart-method-icon"></i>' : ''}${escHtml(n.name)}${n.method && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}${n.method ? ' <span class="chart-balance" title="Current balance">' + formatCurrency(n.balance) + '</span>' : ''}${n.method && !n.is_active ? ' <span class="tree-sys">INACTIVE</span>' : ''}${n.supplier && n.description ? ' <span class="chart-meta">' + escHtml(n.description) + '</span>' : ''}</span>
             ${meta}${value}${treeActions(n, depth)}
         </div>`;
         (withAmounts ? (n.entities || []) : []).forEach(function(ent) {
@@ -4644,7 +4720,8 @@ $(document).on('click', '.chart-toggle', function(e) {
 // A row of the tree opens its ledger: every entry behind the number.
 $(document).on('click', '#chartTree .chart-row:not(.chart-entity)', function(e) {
     if ($(e.target).closest('.tree-actions, .chart-toggle').length) return;
-    openLedger(treeCats[$(this).attr('data-chart-id')]);
+    const node = treeCats[$(this).attr('data-chart-id')];
+    if (node && node.supplier) openSupplierDetail(node.supplier); else openLedger(node);
 });
 function openLedger(node) {
     if (!node) return;
@@ -4664,7 +4741,8 @@ function openLedger(node) {
         $('#ledgerBody').html(d.rows.length ? d.rows.map(function(r) {
             const ref = r.source === 'invoice'
                 ? '<a href="#" data-invoice-id="' + r.source_id + '">' + escHtml(r.ref) + '</a>'
-                : '<a href="#" onclick="viewTransaction(' + r.source_id + '); return false;">' + escHtml(r.ref) + '</a>';
+                : r.source === 'txn' ? '<a href="#" onclick="viewTransaction(' + r.source_id + '); return false;">' + escHtml(r.ref) + '</a>'
+                : escHtml(r.ref);   // a supplier purchase or balance brought forward
             return '<tr><td>' + escHtml(r.day || '') + '</td><td>' + ref + '</td><td><bdi>' + escHtml(r.account + ' ' + r.account_name) +
                 '</bdi></td><td>' + escHtml(r.description || '') + '</td><td style="text-align:end">' + (r.debit ? formatCurrency(r.debit) : '') +
                 '</td><td style="text-align:end">' + (r.credit ? formatCurrency(r.credit) : '') + '</td><td style="text-align:end"><b>' +
@@ -4955,51 +5033,63 @@ function openClientDetail(clientId) {
         });
 }
 
+// One supplier's account (21011, ...): owed per SR from the items Operations
+// assigned to them once the client approved, every payment, what is left.
 function openSupplierDetail(supplierId) {
-    $('#entityDetailHeader').css('background', 'linear-gradient(135deg, #f59e0b, #d97706)');
-    $('#entityDetailTitle').html('<i class="fas fa-truck mr-2"></i>Loading...');
-    $('#entitySummaryCards').empty();
-    $('#entityContactInfo').empty();
-    $('#entityTransactionsBody').empty();
-    $('#entityDetailModal').modal('show');
-    
-    fetch(`/api/finance/suppliers/${supplierId}/transactions`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                Swal.fire('Error', data.error, 'error');
-                return;
-            }
-            
-            const s = data.supplier;
-            $('#entityDetailTitle').html(`<i class="fas fa-truck mr-2"></i>${s.company_name}`);
-            
-            // Summary cards
-            const balanceColor = data.balance >= 0 ? '#10b981' : '#ef4444';
-            $('#entitySummaryCards').html(`
-                <div class="col-md-4" style="padding: 20px 24px; border-right: 1px solid var(--border); background: rgba(16,185,129,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Total Income</div>
-                    <div style="font-size: 24px; font-weight: 800; color: var(--finance-income);">${formatCurrency(data.total_income)}</div>
-                </div>
-                <div class="col-md-4" style="padding: 20px 24px; border-right: 1px solid var(--border); background: rgba(239,68,68,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Total Expense</div>
-                    <div style="font-size: 24px; font-weight: 800; color: var(--finance-expense);">${formatCurrency(data.total_expense)}</div>
-                </div>
-                <div class="col-md-4" style="padding: 20px 24px; background: rgba(245,158,11,0.05);">
-                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Balance</div>
-                    <div style="font-size: 24px; font-weight: 800; color: ${balanceColor};">${formatCurrency(data.balance)}</div>
-                </div>
-            `);
-            
-            // Contact info
-            $('#entityContactInfo').html(`
-                <span style="margin-right: 20px;"><i class="fas fa-user-tie mr-1" style="color: var(--muted);"></i>${s.contact_person || '-'}</span>
-                <span><i class="fas fa-phone mr-1" style="color: var(--muted);"></i>${s.phone || '-'}</span>
-            `);
-            
-            // Transactions
-            renderEntityTransactions(data.transactions, 'supplier');
-        });
+    const T = window.bgT || String;
+    const money = v => formatCurrency(v || 0);
+    const srLink = id => id ? '<a href="/sales_request?request=' + id + '" target="_blank" rel="noopener"><span class="badge badge-info">SR-' + id + '</span></a>' : '-';
+    $('#srCode, #srName, #srContact, #srKpis').empty();
+    $('#srName').text(T('Loading...'));
+    $('#srRequests, #srPayments, #srStatement').html('<tr><td colspan="6" class="sr-empty">' + T('Loading...') + '</td></tr>');
+    $('#srExcel').attr('href', '/api/finance/supplier-accounts/' + supplierId + '/statement?format=xlsx');
+    $('#srAccount').attr('href', '/finance/suppliers/' + supplierId);
+    $('#supplierReportModal').modal('show');
+    Promise.all([
+        fetch('/api/finance/supplier-accounts/' + supplierId + '/statement').then(r => r.json()),
+        fetch('/api/finance/supplier-purchases?supplier_id=' + supplierId).then(r => r.json())
+    ]).then(function (res) {
+        const st = res[0], by = res[1];
+        if (!st.success) { $('#srName').text(st.error || T('Could not load')); return; }
+        const s = st.supplier;
+        $('#srCode').text(s.account_code || '');
+        $('#srName').text(s.company_name || s.supplier_name);
+        $('#srContact').html(
+            (s.company_name ? '<span><i class="fas fa-user-tie"></i> ' + escHtml(s.supplier_name) + '</span>' : '') +
+            (s.primary_phone ? '<span><i class="fas fa-phone"></i> <bdi>' + escHtml(s.primary_phone) + '</bdi></span>' : '') +
+            (s.supplier_type ? '<span><i class="fas fa-tag"></i> ' + escHtml(s.supplier_type) + '</span>' : ''));
+        const payments = st.entries.filter(e => e.kind === 'payment');
+        const owed = st.opening + st.entries.filter(e => e.kind !== 'payment').reduce((a, e) => a + e.credit - e.debit, 0);
+        const paid = payments.reduce((a, e) => a + e.debit, 0);
+        const rows = (by.success && by.rows) || [];
+        $('#srKpis').html(
+            '<div class="sr-kpi owe"><span>' + T('Total owed') + '</span><b>' + money(owed) + '</b><small>' + rows.length + ' ' + T('request(s)') + '</small></div>' +
+            '<div class="sr-kpi paid"><span>' + T('Paid') + '</span><b>' + money(paid) + '</b><small>' + payments.length + ' ' + T('payment(s)') + '</small></div>' +
+            '<div class="sr-kpi left' + (st.closing <= 0.005 ? ' clear' : '') + '"><span>' + T('Remaining') + '</span><b>' + money(st.closing) + '</b><small>' +
+                (st.closing < -0.005 ? T('Paid ahead of what is owed') : st.closing <= 0.005 ? T('Settled') : T('Still to pay')) + '</small></div>');
+        $('#srRequests').html(rows.length ? rows.map(function (r) {
+            const pct = r.purchased > 0 ? Math.min(100, Math.round(r.paid / r.purchased * 100)) : (r.paid > 0 ? 100 : 0);
+            return '<tr><td>' + srLink(r.sales_request_id) + '</td><td data-no-i18n>' + escHtml(r.client_name || '-') +
+                (r.title ? '<div class="sr-note" style="margin:0">' + escHtml(r.title) + '</div>' : '') + '</td>' +
+                '<td><ul class="sr-items" data-no-i18n>' + (r.items.length ? r.items.map(i => '<li><span>' + escHtml(i.name) + '</span><b>' + money(i.cost) + '</b></li>').join('')
+                    : '<li><span>' + T('No approved items from this supplier') + '</span></li>') + '</ul></td>' +
+                '<td class="num">' + money(r.purchased) + '</td><td class="num">' + money(r.paid) + '<div class="sr-bar"><i style="width:' + pct + '%"></i></div></td>' +
+                '<td class="num"><b style="color:' + (r.remaining > 0.005 ? '#dc2626' : '#059669') + '">' + money(r.remaining) + '</b></td></tr>';
+        }).join('') + '<tr class="sr-tot"><td colspan="3">' + T('Total') + '</td><td class="num">' + money(rows.reduce((a, r) => a + r.purchased, 0)) +
+            '</td><td class="num">' + money(rows.reduce((a, r) => a + r.paid, 0)) + '</td><td class="num">' + money(rows.reduce((a, r) => a + r.remaining, 0)) + '</td></tr>'
+            : '<tr><td colspan="6" class="sr-empty">' + T('Nothing assigned to this supplier on a request yet') + '</td></tr>');
+        $('#srPayments').html(payments.length ? payments.slice().reverse().map(e =>
+            '<tr><td>' + escHtml(e.day || '') + '</td><td data-no-i18n>' + escHtml(e.description || '') + '</td><td>' + srLink(e.sales_request_id) +
+            '</td><td>' + T(e.label) + '</td><td class="num"><b>' + money(e.debit) + '</b></td></tr>').join('') +
+            '<tr class="sr-tot"><td colspan="4">' + T('Total') + '</td><td class="num">' + money(paid) + '</td></tr>'
+            : '<tr><td colspan="5" class="sr-empty">' + T('No payments yet') + '</td></tr>');
+        $('#srStatement').html((st.opening ? '<tr><td></td><td>' + T('Balance brought forward') + '</td><td></td><td></td><td></td><td class="num"><b>' + money(st.opening) + '</b></td></tr>' : '') +
+            (st.entries.length ? st.entries.map(e =>
+                '<tr><td>' + escHtml(e.day || '') + '</td><td>' + T(e.label) + (e.description ? ' <span class="sr-note" data-no-i18n>' + escHtml(e.description) + '</span>' : '') +
+                '</td><td>' + srLink(e.sales_request_id) + '</td><td class="num">' + (e.debit ? money(e.debit) : '') + '</td><td class="num">' + (e.credit ? money(e.credit) : '') +
+                '</td><td class="num"><b>' + money(e.balance) + '</b></td></tr>').join('')
+            : '<tr><td colspan="6" class="sr-empty">' + T('No entries yet') + '</td></tr>'));
+    }).catch(function () { $('#srName').text(T('Could not load')); });
 }
 
 function renderEntityTransactions(transactions, entityType) {

@@ -7041,7 +7041,10 @@ def _create_party_record(cur, req, payload):
         values.append(req['requested_by'])
     cur.execute("INSERT INTO `%s` (%s) VALUES (%s)"
                 % (kind, ', '.join(columns), ', '.join(['%s'] * len(columns))), values)
-    return cur.lastrowid
+    new_id = cur.lastrowid
+    if kind == 'supplier':
+        assign_supplier_accounts(cur)
+    return new_id
 
 
 @app.route('/api/party-requests/<int:request_id>/head-approve', methods=['POST'])
@@ -8935,10 +8938,10 @@ def add_supplier():
             session['username']
         ))
         
-        conn.commit()
-        
         # Get the newly inserted supplier ID
         supplier_id = cur.lastrowid
+        assign_supplier_accounts(cur)
+        conn.commit()
         
         cur.close()
         conn.close()
@@ -27488,9 +27491,14 @@ def chart_journal(cur, start=None, end=None):
     - a posted invoice: 1103 debit the total and the withholding account the
       1%; 4101 credit the subtotal, 2103 the VAT. A posted refund: the reverse
       on 4102.
+    - what we came to owe a supplier, as on their statement: an SR item they
+      supplied, once the client approved it, debits 5101 and credits the
+      supplier's own account under 2101; a balance brought forward credits it
+      against 3103. So 2101 is what we owe, not only what we paid.
 
     Lines: {account (code), debit, credit, method (payment method id or None),
-    day, ref, description, source ('txn' / 'invoice', id)}.
+    day, ref, description, source ('txn' / 'invoice', id), supplier (id or None;
+    on 2101 it is that supplier's own account)}.
     """
     cur.execute("SELECT id, account_code, category_code FROM finance_categories")
     cats = {r['id']: r for r in cur.fetchall()}
@@ -27503,7 +27511,7 @@ def chart_journal(cur, start=None, end=None):
 
     q = """SELECT ft.id, ft.transaction_code, ft.transaction_date, ft.description, ft.reference_number,
                   ft.transaction_type, ft.amount, COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id) AS account_id,
-                  ft.payment_method_id, pm.method_type, pm.method_name
+                  ft.payment_method_id, pm.method_type, pm.method_name, ft.supplier_id
            FROM finance_transactions ft LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
            WHERE ft.status = 'approved'"""
     params = []
@@ -27516,6 +27524,7 @@ def chart_journal(cur, start=None, end=None):
     cur.execute(q, params)
     for t in cur.fetchall():
         src = {'day': t['transaction_date'], 'ref': t['transaction_code'], 'source': ('txn', t['id']),
+               'supplier': t['supplier_id'],
                'description': ' - '.join(x for x in (t['reference_number'], t['description'], t['method_name']) if x)}
         amount = float(t['amount'] or 0)
         cash = '1102' if t['method_type'] == 'bank' else '1101'
@@ -27557,6 +27566,19 @@ def chart_journal(cur, start=None, end=None):
             line(WITHHOLDING_TAX_ACCOUNT, debit=tax)
             line('4101', credit=sub)
             line('2103', credit=vat)
+
+    for e in supplier_ledger_entries(cur):
+        day = e['day'].isoformat() if e['day'] else ''
+        # An item Operations never gave a supplier is owed to no one yet.
+        if e['kind'] == 'payment' or not e['supplier_id'] or (start and day < str(start)) or (end and day > str(end)):
+            continue
+        src = {'day': e['day'], 'source': (e['kind'], e['ref_id']), 'supplier': e['supplier_id'],
+               'ref': 'SR-%s' % e['sales_request_id'] if e['sales_request_id'] else e['label'],
+               'description': e['description'] or e['label']}
+        owed = e['credit'] - e['debit']
+        other = '5101' if e['kind'] == 'purchase' else '3103'
+        line(other, debit=max(owed, 0), credit=max(-owed, 0))
+        line(SUPPLIER_ACCOUNT, credit=max(owed, 0), debit=max(-owed, 0))
     return lines
 
 
@@ -27570,9 +27592,15 @@ def chart_tree(cur, start=None, end=None):
     rows = chart_accounts(cur)
     by_code = {r['account_code']: rid for rid, r in rows.items() if r['account_code']}
     journal = chart_journal(cur, start, end)
-    sums, by_method = {}, {}
+    cur.execute("SELECT id, account_code, supplier_name, company_name, status FROM supplier WHERE account_code IS NOT NULL")
+    suppliers = sorted(cur.fetchall(), key=lambda s: int(s['account_code']))
+    known = {s['id'] for s in suppliers}
+    sums, by_method, by_supplier = {}, {}, {}
     for l in journal:
-        acc = sums.setdefault(l['account'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+        # A 2101 line with its supplier sits on that supplier's own account.
+        on_supplier = l['account'] == SUPPLIER_ACCOUNT and l.get('supplier') in known
+        acc = (by_supplier.setdefault(l['supplier'], {'debit': 0.0, 'credit': 0.0, 'count': 0}) if on_supplier
+               else sums.setdefault(l['account'], {'debit': 0.0, 'credit': 0.0, 'count': 0}))
         acc['debit'] += l['debit']
         acc['credit'] += l['credit']
         acc['count'] += 1
@@ -27603,6 +27631,20 @@ def chart_tree(cur, start=None, end=None):
                         'value': s_['debit'] - s_['credit'], 'children': []})
         return out
 
+    def supplier_rows(parent_id):
+        # ponytail: every supplier is listed, moved or not; filter to those with
+        # movement if the list grows past what Finance wants to scroll.
+        out = []
+        for s in suppliers:
+            s_ = by_supplier.get(s['id'], {'debit': 0.0, 'credit': 0.0, 'count': 0})
+            out.append({'id': 'sup-%d' % s['id'], 'code': s['account_code'], 'name': supplier_label(s),
+                        'type': 'liability', 'parent_id': parent_id, 'is_system': True, 'supplier': s['id'],
+                        'is_active': (s['status'] or 'Active') == 'Active',
+                        'description': s['supplier_name'] if s['company_name'] else '',
+                        'debit': s_['debit'], 'credit': s_['credit'], 'count': s_['count'],
+                        'value': s_['credit'] - s_['debit'], 'children': []})
+        return out
+
     def build(rid):
         r = rows[rid]
         code = r['account_code'] or ''
@@ -27611,6 +27653,8 @@ def chart_tree(cur, start=None, end=None):
             own = {'debit': 0.0, 'credit': 0.0, 'count': 0}
         else:
             kids = [build(c) for c in r['children']]
+            if code == SUPPLIER_ACCOUNT:
+                kids += supplier_rows(rid)
             own = sums.get(code, {'debit': 0.0, 'credit': 0.0, 'count': 0})
         debit = own['debit'] + sum(k['debit'] for k in kids)
         credit = own['credit'] + sum(k['credit'] for k in kids)
@@ -27620,7 +27664,7 @@ def chart_tree(cur, start=None, end=None):
                 'description': r['description'] or '', 'debit': debit, 'credit': credit,
                 'count': own['count'] + sum(k['count'] for k in kids),
                 'value': (debit - credit) if normal_debit else (credit - debit), 'children': kids,
-                'methods_total': code in ('1101', '1102')}
+                'methods_total': code in ('1101', '1102'), 'suppliers_total': code == SUPPLIER_ACCOUNT}
 
     classes = [build(rid) for rid, r in rows.items() if r['parent_id'] not in rows]
     return classes
@@ -27644,8 +27688,10 @@ def get_finance_tree():
     end = request.args.get('end_date') or None
     conn, cur = connection()
     try:
+        assign_supplier_accounts(cur)
+        conn.commit()
         classes = chart_tree(cur, start, end)
-        # Who the client collections and supplier payments were with.
+        # Who the client collections were with (suppliers are accounts of their own under 2101).
         dates, params = '', []
         if start:
             dates += " AND ft.transaction_date >= %s"
@@ -27660,19 +27706,12 @@ def get_finance_tree():
                     " GROUP BY c.id, c.client_name ORDER BY total DESC", params)
         clients = [{'id': r['id'], 'name': r['name'], 'total': float(r['total']), 'count': r['n'], 'entity_type': 'client'}
                    for r in cur.fetchall()]
-        cur.execute("""SELECT s.id, COALESCE(s.company_name, s.supplier_name) AS name, SUM(ft.amount) AS total, COUNT(*) AS n
-                       FROM finance_transactions ft JOIN supplier s ON s.id = ft.supplier_id
-                       WHERE ft.status = 'approved' AND ft.category_id = 10""" + dates +
-                    " GROUP BY s.id, name ORDER BY total DESC", params)
-        suppliers = [{'id': r['id'], 'name': r['name'], 'total': float(r['total']), 'count': r['n'], 'entity_type': 'supplier'}
-                     for r in cur.fetchall()]
     finally:
         cur.close()
         conn.close()
-    for code, entities in (('1103', clients), ('2101', suppliers)):
-        node = chart_find(classes, code)
-        if node and entities:
-            node['entities'] = entities
+    node = chart_find(classes, '1103')
+    if node and clients:
+        node['entities'] = clients
     debit = sum(c['debit'] for c in classes)
     credit = sum(c['credit'] for c in classes)
     return jsonify(success=True, classes=classes, debit=debit, credit=credit,
@@ -27769,15 +27808,19 @@ def get_finance_suppliers():
     
     try:
         conn, cur = connection()
-        cur.execute("SELECT id, company_name, contact_person_name, primary_phone FROM supplier ORDER BY company_name")
-        suppliers = cur.fetchall()
+        cur.execute("SELECT id, account_code, supplier_name, company_name, contact_person_name, primary_phone, status "
+                    "FROM supplier")
+        suppliers = sorted(cur.fetchall(), key=lambda s: supplier_label(s).lower())
         cur.close()
         conn.close()
         
+        # `label` is the name everywhere (the company, else the person); a
+        # supplier without a company used to come out as "Unknown".
         return jsonify({
             'success': True,
-            'suppliers': [{'id': s['id'], 'company_name': s['company_name'], 
-                           'contact_person': s['contact_person_name'], 
+            'suppliers': [{'id': s['id'], 'label': supplier_label(s), 'company_name': s['company_name'],
+                           'supplier_name': s['supplier_name'], 'account_code': s['account_code'],
+                           'contact_person': s['contact_person_name'], 'status': s['status'],
                            'phone': s['primary_phone']} for s in suppliers]
         })
     except Exception as e:
@@ -29980,6 +30023,29 @@ def finance_account_opening():
 # ============================================================================
 
 SUPPLIER_PAYMENT_CATEGORY_CODE = 'SUPPLIER_PAYMENT'
+SUPPLIER_ACCOUNT = '2101'
+
+
+def assign_supplier_accounts(cur):
+    """
+    Every supplier its own account under 2101: 21011, 21012, ... in the order
+    they were added (Ahmed, 2026-11-11). A code once given is kept, so a new
+    supplier only ever takes the next number. The caller commits.
+    """
+    cur.execute("SELECT id FROM supplier WHERE account_code IS NULL ORDER BY id")
+    new = [r['id'] for r in cur.fetchall()]
+    if not new:
+        return
+    cur.execute("SELECT account_code FROM supplier WHERE account_code LIKE %s", (SUPPLIER_ACCOUNT + '%',))
+    last = max([int(r['account_code'][len(SUPPLIER_ACCOUNT):] or 0) for r in cur.fetchall()] or [0])
+    for n, supplier_id in enumerate(new, start=last + 1):
+        cur.execute("UPDATE supplier SET account_code = %s WHERE id = %s AND account_code IS NULL",
+                    (SUPPLIER_ACCOUNT + str(n), supplier_id))
+
+
+def supplier_label(row):
+    """What a supplier is called everywhere: the company, else the person (Royal Vision, not Mohamed Talha)."""
+    return (row.get('company_name') or '').strip() or (row.get('supplier_name') or '').strip()
 
 
 def supplier_ledger_entries(cur, supplier_id=None):
@@ -32172,7 +32238,8 @@ def get_my_expenses():
         query = """
             SELECT 
                 uet.*,
-                s.supplier_name as supplier_display,
+                COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_display,
+                s.account_code AS supplier_account,
                 u.name as approved_by_name,
                 c.client_name as client_name,
                 comp.company_name as company_name
@@ -32214,6 +32281,33 @@ def get_my_expenses():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+EXPENSE_TRANSPORT = 'Transportation'
+
+
+def expense_supplier(cur, data):
+    """
+    (supplier_id, supplier_name, error) for a My Expenses line: a supplier from
+    the list -- the ones Finance keeps an account for under 2101 -- or
+    Transportation. A typed name is refused: it reached Finance as a supplier
+    nobody could find (Ahmed, 2026-11-11).
+    """
+    supplier_id = data.get('supplier_id')
+    if supplier_id in (None, ''):
+        if (data.get('supplier_name') or '').strip().lower() == EXPENSE_TRANSPORT.lower():
+            return None, EXPENSE_TRANSPORT, None
+        return None, None, ('Choose the supplier from the list. A supplier that is not there '
+                            'has to be added under Suppliers first.')
+    try:
+        supplier_id = int(supplier_id)
+    except (TypeError, ValueError):
+        return None, None, 'Supplier not found'
+    cur.execute("SELECT id, supplier_name, company_name FROM supplier WHERE id = %s", (supplier_id,))
+    row = cur.fetchone()
+    if not row:
+        return None, None, 'Supplier not found'
+    return row['id'], supplier_label(row), None
+
+
 @app.route('/api/my-expenses', methods=['POST'])
 @perm('expense.create')
 def add_my_expense():
@@ -32224,8 +32318,6 @@ def add_my_expense():
             return jsonify({'success': False, 'error': 'Not logged in'}), 401
         
         data = request.get_json()
-        supplier_id = data.get('supplier_id')
-        supplier_name = data.get('supplier_name', '')
         amount = float(data.get('amount', 0))
         description = data.get('description', '')
         expense_date = data.get('expense_date')
@@ -32240,6 +32332,11 @@ def add_my_expense():
             return jsonify({'success': False, 'error': 'Date is required'}), 400
         
         conn, cur = connection()
+        supplier_id, supplier_name, supplier_error = expense_supplier(cur, data)
+        if supplier_error:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': supplier_error}), 400
         
         # Generate tracking code
         import random
@@ -32314,8 +32411,11 @@ def update_my_expense(expense_id):
             return jsonify({'success': False, 'error': 'Expense not found or cannot be edited'}), 404
         
         # Update fields
-        supplier_id = data.get('supplier_id', expense['supplier_id'])
-        supplier_name = data.get('supplier_name', expense['supplier_name'])
+        supplier_id, supplier_name = expense['supplier_id'], expense['supplier_name']
+        if 'supplier_id' in data or 'supplier_name' in data:
+            supplier_id, supplier_name, supplier_error = expense_supplier(cur, data)
+            if supplier_error:
+                return jsonify({'success': False, 'error': supplier_error}), 400
         amount = float(data.get('amount', expense['amount']))
         description = data.get('description', expense['description'])
         expense_date = data.get('expense_date', expense['expense_date'])
@@ -32412,6 +32512,11 @@ def submit_my_expenses():
         
         if not drafts:
             return jsonify({'success': False, 'error': 'No draft expenses to submit'}), 400
+        bare = expenses_without_documents(cur, [d['id'] for d in drafts])
+        if bare:
+            return jsonify({'success': False, 'missing_documents': bare,
+                            'error': 'Attach the receipt or document to every expense before sending it: %s'
+                                     % ', '.join(bare)}), 400
         
         # Get current balance
         cur.execute("""
@@ -32498,6 +32603,18 @@ def expense_attachments_for(cur, expense_ids):
             'uploaded_at': row['uploaded_at'].isoformat() if row['uploaded_at'] else None,
         })
     return out
+
+
+def expenses_without_documents(cur, expense_ids):
+    """Tracking codes of the given expenses that have no file attached. A document is required (Ahmed, 2026-11-11)."""
+    ids = [int(i) for i in expense_ids if i]
+    if not ids:
+        return []
+    cur.execute("""SELECT uet.tracking_code FROM user_expense_tracking uet
+                   WHERE uet.id IN (%s)
+                     AND NOT EXISTS (SELECT 1 FROM expense_attachments ea WHERE ea.expense_id = uet.id)
+                   ORDER BY uet.id""" % ','.join(['%s'] * len(ids)), ids)
+    return [r['tracking_code'] for r in cur.fetchall()]
 
 
 def with_expense_attachments(cur, expenses):
@@ -32600,6 +32717,12 @@ def delete_expense_attachment(attachment_id):
             return jsonify(success=False, error='File not found'), 404
         if row['status'] not in EXPENSE_FILES_EDITABLE:
             return jsonify(success=False, error='This expense is %s; its files are kept' % row['status']), 400
+        if row['status'] != 'draft':
+            cur.execute("SELECT COUNT(*) AS n FROM expense_attachments ea JOIN expense_attachments me "
+                        "ON me.expense_id = ea.expense_id WHERE me.id = %s", (attachment_id,))
+            if cur.fetchone()['n'] <= 1:
+                return jsonify(success=False, error='A sent expense keeps at least one document. '
+                                                    'Add the right file first, then remove this one.'), 400
         cur.execute("DELETE FROM expense_attachments WHERE id = %s", (attachment_id,))
         conn.commit()
     finally:
@@ -32703,7 +32826,8 @@ def get_expense_approvals():
                     uet.*,
                     u.name as user_name,
                     u.email as user_email,
-                    s.supplier_name as supplier_display,
+                    COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_display,
+                    s.account_code AS supplier_account,
                     ufb.balance as user_current_balance,
                     approver.name as approved_by_name,
                     c.client_name as client_name,
@@ -32724,7 +32848,8 @@ def get_expense_approvals():
                     uet.*,
                     u.name as user_name,
                     u.email as user_email,
-                    s.supplier_name as supplier_display,
+                    COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_display,
+                    s.account_code AS supplier_account,
                     ufb.balance as user_current_balance,
                     approver.name as approved_by_name,
                     c.client_name as client_name,
@@ -32745,6 +32870,18 @@ def get_expense_approvals():
         if ids is not None:
             expenses = [e for e in expenses if e['user_id'] in ids]
         expenses = with_expense_attachments(cur, expenses)
+        # A line paid to a supplier: what this SR owes that supplier (client-approved
+        # item costs), already paid and remaining, so Finance approves it against
+        # that. Costs, so Finance only.
+        if has('finance_report.view'):
+            owed = {}
+            for e in expenses:
+                if e['supplier_id'] and e['sales_request_id']:
+                    key = (e['supplier_id'], e['sales_request_id'])
+                    if key not in owed:
+                        rows = supplier_purchases_by_request(cur, *key)
+                        owed[key] = rows[0] if rows else {'purchased': 0.0, 'paid': 0.0, 'remaining': 0.0, 'items': []}
+                    e['supplier_sr'] = {k: owed[key][k] for k in ('purchased', 'paid', 'remaining', 'items')}
         
         # Get count by status
         cur.execute("""
@@ -32914,6 +33051,22 @@ def expense_payment_method(cur, requested_id=None):
     return (row['id'], None) if row else (None, 'Add a payment method first (Finance Management > Payment Methods)')
 
 
+def expense_posting_account(cur, expense, category_id, subcategory_id=None):
+    """
+    (account id, error) a My Expenses line posts to when Finance approves it.
+    No document, no approval. A line paid to a supplier goes to 2101 الموردين,
+    on that supplier's own account (21011, ...): it pays off what we owe them
+    (Ahmed, 2026-11-11). Anything else goes to the account Finance chose.
+    """
+    if expenses_without_documents(cur, [expense['id']]):
+        return None, '%s has no document attached' % expense['tracking_code']
+    if expense['supplier_id']:
+        cur.execute("SELECT id FROM finance_categories WHERE account_code = %s", (SUPPLIER_ACCOUNT,))
+        row = cur.fetchone()
+        return (row['id'], None) if row else (None, 'Account %s is missing from the chart' % SUPPLIER_ACCOUNT)
+    return posting_account(cur, category_id, subcategory_id)
+
+
 @app.route('/api/finance/expense-approvals/<int:expense_id>/finance-approve', methods=['POST'])
 @perm('expense_tracking.approve_finance')
 def finance_approve_user_expense(expense_id):
@@ -32964,7 +33117,8 @@ def finance_approve_user_expense(expense_id):
         payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
         if pm_error:
             return jsonify({'success': False, 'error': pm_error}), 400
-        category_id, account_error = posting_account(cur, data.get('category_id'), data.get('subcategory_id'))
+        category_id, account_error = expense_posting_account(cur, expense, data.get('category_id'),
+                                                             data.get('subcategory_id'))
         if account_error:
             return jsonify({'success': False, 'error': account_error}), 400
         
@@ -32978,12 +33132,12 @@ def finance_approve_user_expense(expense_id):
         cur.execute("""
             INSERT INTO finance_transactions
             (transaction_code, transaction_type, amount, payment_method_id, category_id,
-             supplier_id, description, transaction_date, notes, status, serial_number,
+             supplier_id, client_id, sales_request_id, description, transaction_date, notes, status, serial_number,
              added_by, added_by_user_id, approved_by, approved_by_user_id, approved_at,
              balance_before, balance_after)
-            VALUES (%s, 'expense', %s, %s, %s, %s, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
+            VALUES (%s, 'expense', %s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved', %s, %s, %s, %s, %s, NOW(), %s, %s)
         """, (transaction_code, final_amount, payment_method_id, category_id,
-              expense['supplier_id'],
+              expense['supplier_id'], expense.get('client_id'), expense.get('sales_request_id'),
               f"User Expense: {expense['description']} (from {expense['tracking_code']})",
               expense['expense_date'],
               f"User expense by {expense['user_name']}",
@@ -33059,8 +33213,22 @@ def finance_approve_expenses_bulk():
         payment_method_id, pm_error = expense_payment_method(cur, data.get('payment_method_id'))
         if pm_error:
             return jsonify({'success': False, 'error': pm_error}), 400
-        # Every line needs its category: refuse the batch rather than approve part of it.
-        missing = [str(e.get('id')) for e in expenses if not e.get('category_id')]
+        # Every line needs its document, and its category unless it is paid to
+        # a supplier (that one goes to 2101): refuse the batch rather than
+        # approve part of it.
+        ids = [int(e.get('id')) for e in expenses if str(e.get('id') or '').isdigit()]
+        bare = expenses_without_documents(cur, ids)
+        if bare:
+            return jsonify({'success': False, 'missing_documents': bare,
+                            'error': 'No document attached to %s. Ask for the receipt before approving.'
+                                     % ', '.join(bare)}), 400
+        to_supplier = set()
+        if ids:
+            cur.execute("SELECT id FROM user_expense_tracking WHERE supplier_id IS NOT NULL AND id IN (%s)"
+                        % ','.join(['%s'] * len(ids)), ids)
+            to_supplier = {r['id'] for r in cur.fetchall()}
+        missing = [str(e.get('id')) for e in expenses
+                   if not e.get('category_id') and int(e.get('id') or 0) not in to_supplier]
         if missing:
             return jsonify({'success': False, 'missing_category': missing,
                             'error': 'Select a category for every expense before approving '
@@ -33074,15 +33242,6 @@ def finance_approve_expenses_bulk():
             category_id = exp.get('category_id')  # Main expense category
             subcategory_id = exp.get('subcategory_id')  # Subcategory (if selected)
             
-            if not category_id:
-                continue  # Skip if no category selected
-            
-            category_id, account_error = posting_account(cur, category_id, subcategory_id)
-            if account_error:
-                conn.rollback()
-                return jsonify({'success': False, 'error': account_error}), 400
-            subcategory_id = None
-            
             # Get expense details
             cur.execute("""
                 SELECT uet.*, u.name as user_name
@@ -33094,6 +33253,12 @@ def finance_approve_expenses_bulk():
             
             if not expense:
                 continue
+            
+            category_id, account_error = expense_posting_account(cur, expense, category_id, subcategory_id)
+            if account_error:
+                conn.rollback()
+                return jsonify({'success': False, 'error': account_error}), 400
+            subcategory_id = None
             
             # ============================================
             # 1. Create INCOME transaction (Internal Transfer)

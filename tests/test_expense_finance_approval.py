@@ -48,6 +48,8 @@ class ExpenseFinanceApprovalTest(unittest.TestCase):
                            description, expense_date, status) VALUES (%s, %s, 'Transportation', 100, 'Taxi',
                            '2026-10-18', 'manager_approved')""", (self.spender, 'EXP-T4-%d' % n))
             self.lines.append(cur.lastrowid)
+            cur.execute("INSERT INTO expense_attachments (expense_id, stored_path, original_name, file_type) "
+                        "VALUES (%s, '/nowhere/r.pdf', 'r.pdf', 'application/pdf')", (cur.lastrowid,))
         cur.close()
 
     def _undo(self):
