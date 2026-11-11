@@ -364,6 +364,19 @@ of its clients, and each client's balance equals their statement.
   they hold now, who approved it before, the account and payment method;
   Pay out / Approve and Decline in place.
 
+## Client answer for the whole request
+
+- On Client Approval, each request whose items still wait on the client shows
+  Approve all (N) and Reject all (N), N being the priced items not yet decided
+  or in negotiation. The confirmation lists those items and their total;
+  rejecting needs the client's reason.
+- Every one of those items is decided at once, and Operations (the people who
+  costed the request and the Operations Managers, plus the whole team on an
+  approval) get one notification naming the request and its title, with the
+  items and the reason.
+- Items the client answered differently are still decided one by one, each
+  with its own notification. A reason typed on a single-item rejection is kept.
+
 ## Trial balance
 
 - Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,

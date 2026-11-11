@@ -4648,5 +4648,16 @@ window.BG_AR = {
   "Holds now": "معاه دلوقتي",
   "Pay out": "صرف",
   "Reason (required)": "السبب (مطلوب)",
-  "This SR no longer exists": "الطلب ده مبقاش موجود"
+  "This SR no longer exists": "الطلب ده مبقاش موجود",
+  "Approve the whole request": "موافقة على الطلب كله",
+  "Reject the whole request": "رفض الطلب كله",
+  "The client approved all of these:": "العميل وافق على كل دول:",
+  "The client rejected all of these:": "العميل رفض كل دول:",
+  "item(s)": "بند",
+  "Operations gets one notification for the request. Items the client answered differently: decide them one by one instead.": "العمليات هيوصلها إشعار واحد للطلب. لو العميل رد على بنود بشكل مختلف، قررها بند بند.",
+  "Client feedback (optional)": "رأي العميل (اختياري)",
+  "Why did the client reject it? (required)": "العميل رفض ليه؟ (مطلوب)",
+  "Approve all": "موافقة على الكل",
+  "The client approved the whole request": "العميل وافق على الطلب كله",
+  "The client rejected the whole request": "العميل رفض الطلب كله"
 };

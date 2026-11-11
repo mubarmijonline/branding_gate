@@ -20570,8 +20570,10 @@ def approve_item(item_id):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        data = request.get_json()
-        feedback = data.get('feedback', '')
+        data = request.get_json() or {}
+        # The page sends a rejection's reason as `reason`; it used to be read
+        # only from `feedback`, so every reason typed was lost.
+        feedback = data.get('feedback') or data.get('reason') or ''
         user_id = session.get('user_id')
         user_name = session.get('name', 'Unknown')
         
@@ -20680,8 +20682,10 @@ def reject_item(item_id):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        data = request.get_json()
-        feedback = data.get('feedback', '')
+        data = request.get_json() or {}
+        # The page sends a rejection's reason as `reason`; it used to be read
+        # only from `feedback`, so every reason typed was lost.
+        feedback = data.get('feedback') or data.get('reason') or ''
         user_id = session.get('user_id')
         user_name = session.get('name', 'Unknown')
         
@@ -20764,6 +20768,104 @@ def reject_item(item_id):
             'success': False,
             'error': str(e)
         }), 500
+
+CLIENT_REQUEST_NOTICES = {
+    'approved': ('Client approved the whole request #{0}',
+                 'Request #{1}: the client approved all {2} item(s): {3}.'),
+    'rejected': ('Client rejected the whole request #{0}',
+                 'Request #{1}: the client rejected all {2} item(s): {3}.{4}'),
+}
+
+
+def decidable_items(cur, request_id):
+    """The items of a request still waiting on the client: priced and not yet
+    decided or in negotiation -- the ones the page offers Approve / Reject on."""
+    cur.execute("""
+        SELECT i.*, sr.client_id FROM sales_request_items i JOIN sales_request sr ON sr.id = i.request_id
+        WHERE i.request_id = %s
+          AND COALESCE(i.approval_status, 'pending') NOT IN ('approved', 'rejected', 'pending_negotiation')
+          AND COALESCE(i.negotiation_status, '') <> 'pending_negotiation'
+          AND i.cost_per_item IS NOT NULL AND i.sell_per_item IS NOT NULL
+        ORDER BY i.id FOR UPDATE""", (request_id,))
+    return cur.fetchall()
+
+
+@app.route('/api/client-approval/requests/<int:request_id>/decide', methods=['POST'])
+@perm('client_approval.decide')
+def decide_whole_request(request_id):
+    """
+    The client approved (or rejected) the whole request (David Osama,
+    2026-11-11): every item still waiting is decided in one go, and Operations
+    gets one notification naming the request, not one per item. Items the client
+    decided differently are still decided one by one.
+    """
+    data = request.get_json(silent=True) or {}
+    decision = data.get('decision')
+    if decision not in ('approved', 'rejected'):
+        return jsonify(success=False, error='Approve or reject'), 400
+    feedback = (data.get('feedback') or data.get('reason') or '').strip()
+    if decision == 'rejected' and not feedback:
+        return jsonify(success=False, error='A reason is required to reject the whole request'), 400
+    user_id, user_name = session.get('user_id'), session.get('name', 'Unknown')
+    conn, cur = connection()
+    try:
+        items = decidable_items(cur, request_id)
+        if not items:
+            return jsonify(success=False, error='Nothing on this request is waiting for the client'), 400
+        if item_outside_decide_scope(cur, items[0]['id']):
+            return jsonify(success=False, error=DECIDE_OUTSIDE_SCOPE), 403
+        action = 'CLIENT_APPROVED' if decision == 'approved' else 'CLIENT_REJECTED'
+        for item in items:
+            cur.execute("""UPDATE sales_request_items SET approval_status = %s, client_approval_date = NOW(),
+                               client_feedback = %s WHERE id = %s""", (decision, feedback, item['id']))
+            cur.execute("""INSERT INTO item_client_approval_log
+                           (item_id, request_id, action_type, action_by, previous_status, new_status, notes)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                        (item['id'], request_id, decision, user_id, item['approval_status'] or 'submitted', decision,
+                         feedback))
+            log_item_change(
+                request_id=request_id, item_id=item['id'], item_name=item['name'],
+                request_type=item.get('request_type', 'General'), action_type=action, action_by=user_name,
+                change_description="[Client Approval] Item '%s' %s by client with the whole request%s"
+                                   % (item['name'], decision, ('. ' + ('Reason: ' if decision == 'rejected' else 'Feedback: ')
+                                                              + feedback) if feedback else ''),
+                conn=conn, cur=cur)
+        update_request_approval_stage(request_id, conn, cur)
+        conn.commit()
+        notify_ops_of_request_decision(cur, request_id, decision, [i['name'] for i in items], feedback)
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, decided=len(items),
+                   message='%d item(s) %s' % (len(items), 'approved' if decision == 'approved' else 'rejected'))
+
+
+def notify_ops_of_request_decision(cur, request_id, decision, names, feedback=''):
+    """One notice for a whole-request decision, to the same people a per-item one reaches
+    (and, on approval, the rest of Operations, as an approved item does)."""
+    try:
+        cur.execute("""SELECT DISTINCT assignee_id, assigned_by FROM costing_assignment
+                       WHERE request_id = %s AND status <> 'withdrawn'""", (request_id,))
+        people = {uid for row in cur.fetchall() for uid in (row['assignee_id'], row['assigned_by'])}
+        cur.execute("""SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id
+                       WHERE r.code = 'operations_manager' AND u.is_active = 1""")
+        people |= {row['id'] for row in cur.fetchall()}
+        if decision == 'approved':
+            people |= set(operations_team_ids(cur))
+        people.discard(None)
+        people.discard(session.get('user_id'))
+        cur.execute("SELECT title FROM sales_request WHERE id = %s", (request_id,))
+        row = cur.fetchone()
+        where = '%s (%s)' % (request_id, row['title']) if row and row.get('title') else str(request_id)
+        shown = ', '.join(names[:8]) + (' and %d more' % (len(names) - 8) if len(names) > 8 else '')
+        title, body = CLIENT_REQUEST_NOTICES[decision]
+        notify_users(sorted(people), title.format(where), body.format(where, where, len(names), shown,
+                                                                       (' Reason: ' + feedback) if feedback else ''),
+                     link=('/approved-items?request=%s' if decision == 'approved' else '/operation_request?request=%s')
+                          % request_id, category='announcement')
+    except Exception as notify_error:
+        print(f"Whole-request decision notification failed: {notify_error}")
+
 
 @app.route('/api/client-approval/items/<int:item_id>/negotiate', methods=['POST'])
 @perm('client_approval.decide')

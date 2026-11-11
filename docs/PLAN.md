@@ -1664,3 +1664,17 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
   `existing_request_id()` books them without the link; the list flags them
   (`request_missing`). Test in `test_supplier_expense_accounts.py`.
 
+## Approve all / Reject all for a request (David, 2026-11-11)
+
+- POST `/api/client-approval/requests/<id>/decide` {decision, feedback}
+  (client_approval.decide, the per-item scope rule): `decidable_items` (priced,
+  not approved/rejected/in negotiation) locked and decided in one transaction,
+  logged per item, stage updated once, `notify_ops_of_request_decision` sends
+  one notice (CLIENT_REQUEST_NOTICES).
+- client_approval.html: buttons on the request header (`caIsOpen`, CA_GROUPS),
+  confirmation with the items and total.
+- Fix: the per-item reject read `feedback` but the page sends `reason`; both
+  are read now.
+- Not done: a batch of mixed per-item decisions still notifies per item.
+- Test: `test_client_whole_request.py`.
+

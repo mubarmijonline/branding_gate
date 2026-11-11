@@ -284,6 +284,14 @@
     /* =====================================================
        REQUEST GROUP CARDS - Clean Table Design
        ===================================================== */
+    .ca-bulk { display: inline-flex; gap: 6px; margin-inline-end: 6px; }
+    .ca-bulk-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.8rem; font-weight: 700; color: #fff; cursor: pointer; }
+    .ca-bulk-btn.ok { background: #22c55e; } .ca-bulk-btn.ok:hover { background: #16a34a; }
+    .ca-bulk-btn.no { background: #ef4444; } .ca-bulk-btn.no:hover { background: #dc2626; }
+    .ca-bulk-list { list-style: none; padding: 0; margin: 0 0 8px; max-height: 220px; overflow: auto; text-align: start; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .ca-bulk-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; border-top: 1px solid #f1f5f9; font-size: 0.9rem; }
+    .ca-bulk-list li:first-child { border-top: none; }
+    .ca-bulk-total { font-weight: 800; font-size: 1.05rem; margin: 6px 0; }
     .request-group-card {
         background: white;
         border-radius: 16px;
@@ -1419,6 +1427,10 @@ $(document).ready(function() {
             // requests; one request on screen opens by itself.
             const open = sortedGroups.length === 1 || OPEN_GROUPS.has(group.request_id);
             const counts = { pending: 0, approved: 0, rejected: 0, negotiation: 0 };
+            // Waiting on the client and priced: what Approve all / Reject all decide (David, 2026-11-11).
+            const open_ = group.items.filter(caIsOpen);
+            const openSell = open_.reduce((a, i) => a + (parseFloat(i.total_sell) || 0), 0);
+            CA_GROUPS[group.request_id] = { items: open_, sell: openSell, client: group.client_name };
             group.items.forEach(item => {
                 if (item.approval_status === 'approved') counts.approved++;
                 else if (item.approval_status === 'rejected') counts.rejected++;
@@ -1462,6 +1474,10 @@ $(document).ready(function() {
                             <span style="color: #6b7280; font-size: 0.9rem;"><i class="fas fa-cubes" style="margin-right: 6px;"></i>${totalItems} Item${totalItems > 1 ? 's' : ''}</span>
                         </div>
                         <div class="d-flex align-items-center flex-wrap" style="gap: 6px;">
+                            ${CAN_DECIDE && open_.length ? `<span class="ca-bulk">
+                                <button type="button" class="ca-bulk-btn ok" data-bulk="approved" data-request-id="${group.request_id}" title="The client approved the whole request"><i class="fas fa-check-double"></i> Approve all (${open_.length})</button>
+                                <button type="button" class="ca-bulk-btn no" data-bulk="rejected" data-request-id="${group.request_id}" title="The client rejected the whole request"><i class="fas fa-times"></i> Reject all (${open_.length})</button>
+                            </span>` : ''}
                             ${counts.pending ? `<span class="badge badge-light" title="Waiting for the client">${counts.pending} pending</span>` : ''}
                             ${counts.approved ? `<span class="badge badge-success">${counts.approved} approved</span>` : ''}
                             ${counts.negotiation ? `<span class="badge badge-warning">${counts.negotiation} negotiating</span>` : ''}
@@ -1585,6 +1601,48 @@ $(document).ready(function() {
         $body.stop(true, true).slideToggle(160, function () {
             const t = $body.find('table.dataTable');
             if (opening && t.length) t.DataTable().columns.adjust();
+        });
+    });
+
+    // An item the client still has to answer: priced, not decided, not in negotiation.
+    const CA_GROUPS = {};
+    function caIsOpen(item) {
+        const hasCost = CAN_SEE_COST ? (item.cost_per_item !== null && item.cost_per_item !== undefined && item.cost_per_item !== '') : !!item.has_cost;
+        const hasSelling = item.sell_per_item !== null && item.sell_per_item !== undefined && item.sell_per_item !== '';
+        return hasCost && hasSelling && !['approved', 'rejected', 'pending_negotiation'].includes(item.approval_status)
+            && item.negotiation_status !== 'pending_negotiation';
+    }
+
+    // The whole request at once: one confirmation, one call, one notice to Operations.
+    $(document).on('click', '.ca-bulk-btn', function (e) {
+        e.stopPropagation();
+        const T = window.bgT || String;
+        const requestId = Number($(this).data('request-id')), decision = $(this).data('bulk');
+        const g = CA_GROUPS[requestId];
+        if (!g || !g.items.length) return;
+        const approve = decision === 'approved';
+        const list = '<ul class="ca-bulk-list">' + g.items.map(i => '<li><span data-no-i18n>' + esc(i.item_name || i.name) + '</span><b>EGP ' +
+            bgNumber(parseFloat(i.total_sell) || 0, 2) + '</b></li>').join('') + '</ul>';
+        Swal.fire({
+            title: (approve ? T('Approve the whole request') : T('Reject the whole request')) + ' #' + requestId + '?',
+            html: '<p class="mb-2">' + (approve ? T('The client approved all of these:') : T('The client rejected all of these:')) + '</p>' + list +
+                  '<p class="ca-bulk-total">' + g.items.length + ' ' + T('item(s)') + ' · EGP ' + bgNumber(g.sell, 2) + '</p>' +
+                  '<p class="small text-muted mb-0">' + T('Operations gets one notification for the request. Items the client answered differently: decide them one by one instead.') + '</p>',
+            input: 'textarea',
+            inputPlaceholder: approve ? T('Client feedback (optional)') : T('Why did the client reject it? (required)'),
+            inputValidator: v => approve || (v && v.trim()) ? undefined : T('A reason is required'),
+            showCancelButton: true, width: 620,
+            confirmButtonText: approve ? T('Approve all') : T('Reject all'),
+            confirmButtonColor: approve ? '#22c55e' : '#ef4444',
+            showLoaderOnConfirm: true,
+            preConfirm: v => $.ajax({ url: '/api/client-approval/requests/' + requestId + '/decide', method: 'POST',
+                                      contentType: 'application/json', data: JSON.stringify({ decision: decision, feedback: (v || '').trim() }) })
+                .catch(xhr => Swal.showValidationMessage(decideError(xhr, 'Failed'))),
+            allowOutsideClick: () => !Swal.isLoading()
+        }).then(r => {
+            if (!r.isConfirmed || !r.value) return;
+            Swal.fire({ icon: approve ? 'success' : 'info', title: r.value.message, timer: 2000, showConfirmButton: false });
+            loadItems();
         });
     });
 
