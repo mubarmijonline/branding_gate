@@ -1678,3 +1678,16 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 - Not done: a batch of mixed per-item decisions still notifies per item.
 - Test: `test_client_whole_request.py`.
 
+
+## Image attachments open in a viewer (Ahmed, 2026-11-11)
+- `static/js/bg-file-preview.js`, loaded by main.html after bg-expense-files.js:
+  one capture-phase click handler for any `a[target=_blank]` that shows an
+  image (an `<img>` inside or an image file name), so every page and the
+  receipts pop-up get it without per-page changes. Gallery = image links in
+  the same file list (`.bg-xf-grid`, `.sa-files`, `.sc-files`, `.qa-files`,
+  `.dr-files`, `[data-preview-group]`) else the link's parent. Esc closes the
+  viewer only (captured before SweetAlert). `data-no-preview` opts a link out;
+  `window.bgPreviewImage(url, name)` opens one from code.
+- PDFs keep the new tab: some file routes serve them as attachments.
+- Checked in the browser on the test DB (supplier assignment card, receipts
+  pop-up); no unit test, the change is front-end only.

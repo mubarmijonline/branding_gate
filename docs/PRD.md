@@ -364,6 +364,18 @@ of its clients, and each client's balance equals their statement.
   they hold now, who approved it before, the account and payment method;
   Pay out / Approve and Decline in place.
 
+## Viewing attached images
+
+- Clicking an attached image anywhere in the system (receipts, supplier
+  assignment documents, quotations, request files, the files in a
+  notification) opens it over the page instead of in a new tab. The viewer
+  shows the file name, steps through the other images of the same request
+  (arrows on screen or the keyboard; mirrored in Arabic), zooms on a click,
+  and has "open in a new tab" and "download". Esc or a click outside closes
+  it and leaves the page, and any open list of files, as it was.
+- PDFs and other files still open in a new tab. Ctrl/Cmd-click still opens a
+  new tab for anyone who wants one.
+
 ## Client answer for the whole request
 
 - On Client Approval, each request whose items still wait on the client shows
