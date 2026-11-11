@@ -4523,5 +4523,10 @@ window.BG_AR = {
   "A sent expense keeps at least one document. Add the right file first, then remove this one.": "المصروف المبعوت لازم يفضل عليه مستند واحد على الأقل. ارفع الملف الصح الأول وبعدين امسح ده.",
   "Choose the Sales Request first: its suppliers are listed here.": "اختار طلب البيع الأول: الموردين بتوعه هيظهروا هنا.",
   "The suppliers assigned to this request's items.": "الموردين المتسندين لبنود الطلب ده.",
-  "No supplier is assigned to this request yet: only Transportation.": "لسه مفيش مورد متسند للطلب ده: انتقالات بس."
+  "No supplier is assigned to this request yet: only Transportation.": "لسه مفيش مورد متسند للطلب ده: انتقالات بس.",
+  "On this SR": "على الطلب ده",
+  "Other suppliers": "موردين تانيين",
+  "Choose the Sales Request: its suppliers come first.": "اختار طلب البيع: الموردين بتوعه هيظهروا الأول.",
+  "The suppliers on this SR are listed first.": "موردين الطلب ده ظاهرين الأول.",
+  "No supplier is assigned to this SR yet; all suppliers are listed.": "لسه مفيش مورد متسند للطلب ده، فكل الموردين ظاهرين."
 };

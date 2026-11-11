@@ -1559,10 +1559,12 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
 
 ### Follow-up: suppliers per request (Ahmed, 2026-11-11)
 
-- `/api/finance/suppliers?sales_request_id=` lists only suppliers on that
-  request's items; `expense_supplier(cur, data, sales_request_id)` refuses any
-  other. My Expenses reloads the picker on SR change (`loadSuppliers(srId)`,
-  `wantSupplier` keeps a draft's choice while it loads).
+- `/api/finance/suppliers?sales_request_id=` lists every supplier, the ones on
+  that request's items first and flagged `on_request`; My Expenses shows them
+  as "On this SR" / "Other suppliers" and reloads on SR change
+  (`loadSuppliers(srId)`, `wantSupplier` keeps a draft's choice while it
+  loads). Ahmed first had it SR-only, then chose "all, the SR's first": any
+  registered supplier is accepted.
 - Ahmed's two test expenses (EXP-64272, EXP-24557, manager_approved, no files,
   no finance transactions) deleted on request; his 4,000 custody kept.
 

@@ -111,18 +111,19 @@ class SupplierExpenseAccountsTest(unittest.TestCase):
         self.assertEqual(listed[self.supplier]['label'], 'Vision Co T')
         self.assertTrue(all(s['label'] for s in listed.values()))
 
-    def test_only_the_requests_own_suppliers(self):
+    def test_the_requests_suppliers_come_first(self):
         cur = self._cursor()
-        cur.execute("INSERT INTO supplier (supplier_name, status, added_by) VALUES ('Elsewhere T', 'Active', 't')")
+        cur.execute("INSERT INTO supplier (supplier_name, status, added_by) VALUES ('AAA Elsewhere T', 'Active', 't')")
         elsewhere = cur.lastrowid
         web = self._web(self.spender)
-        listed = [s['id'] for s in web.get('/api/finance/suppliers?sales_request_id=%d' % self.sr).get_json()['suppliers']]
-        self.assertIn(self.supplier, listed)
-        self.assertNotIn(elsewhere, listed)
+        listed = web.get('/api/finance/suppliers?sales_request_id=%d' % self.sr).get_json()['suppliers']
+        flags = {s['id']: s['on_request'] for s in listed}
+        self.assertEqual((flags[self.supplier], flags[elsewhere]), (True, False))
+        self.assertEqual([s['on_request'] for s in listed], sorted((s['on_request'] for s in listed), reverse=True))
+        # Any registered supplier is still accepted (Ahmed chose "all, the SR's first").
         r = web.post('/api/my-expenses', json={'amount': 50, 'description': 'd', 'expense_date': '2026-11-11',
                                                'sales_request_id': self.sr, 'supplier_id': elsewhere})
-        self.assertEqual(r.status_code, 400)
-        self.assertIn('not assigned', r.get_json()['error'])
+        self.assertEqual(r.status_code, 200, r.get_json())
 
     def test_no_document_no_sending_and_no_approval(self):
         bare = self._line(status='draft', doc=False)

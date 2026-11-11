@@ -250,10 +250,9 @@ ledgers show the payments, and paying more is refused.
   from the list Finance keeps. A name cannot be typed; a supplier not in the
   list is added under Suppliers first. A supplier is shown everywhere by its
   company (Royal Vision), with the person after it.
-- The supplier list follows the chosen sales request: only the suppliers
-  Operations assigned to that request's items, plus Transportation. Before a
-  request is chosen only Transportation is offered; a supplier not on the
-  request is refused.
+- The supplier list follows the chosen sales request: Transportation, then
+  "On this SR" (the suppliers Operations assigned to that request's items),
+  then every other registered supplier. Any registered supplier can be chosen.
 - Every expense carries at least one receipt or document. Without one it
   cannot be saved from the form, sent for approval, or approved by Finance.
   Until Finance decides, the owner can add a document to an expense already
