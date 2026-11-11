@@ -83,9 +83,22 @@ class AssignmentLockTest(unittest.TestCase):
         return client
 
     def _assign(self, actor, supplier_id):
-        return self._client_for(actor).put(
-            '/api/approved-items/%d/supplier' % self.item_id,
-            json={'supplier_id': supplier_id, 'due_date': '2026-09-01'})
+        # An assignment is asked of Finance with a document, and lands when Finance approves.
+        import io, tempfile
+        branding_gate.SUPPLIER_ASSIGNMENT_FILES_DIR = tempfile.mkdtemp()
+        r = self._client_for(actor).post(
+            '/api/approved-items/%d/supplier-request' % self.item_id,
+            data={'supplier_id': str(supplier_id), 'due_date': '2026-09-01',
+                  'files': (io.BytesIO(b'%PDF-1.4'), 'quote.pdf')}, content_type='multipart/form-data')
+        if r.status_code != 200:
+            return r
+        cur = self._cursor()
+        cur.execute("SELECT u.id FROM user u JOIN rbac_role r ON r.id = u.rbac_role_id "
+                    "WHERE r.code = 'finance_manager' AND u.is_active = 1 LIMIT 1")
+        finance = cur.fetchone()['id']
+        cur.close()
+        return self._client_for(finance).post(
+            '/api/finance/supplier-assignments/%d/approve' % r.get_json()['assignment_id'], json={})
 
     def test_a_leader_may_make_the_first_assignment(self):
         if not self.suppliers:

@@ -1598,3 +1598,35 @@ receipt, and the picker showed "Unknown" for suppliers without a company.
   pending income still counts unless it is a 1110 custody leg.
 - Tests: `test_client_tree_accounts.py`.
 
+## Supplier assignment through Finance, agreed vs actual cost, quick Finance approvals (Ahmed, 2026-11-11)
+
+- `supplier_assignment_migration.sql`: `supplier_assignment_request` (status
+  pending_head / pending / approved / rejected / cancelled; item_cost = agreed,
+  actual_cost; head_by/at/note), `supplier_assignment_file`;
+  `sales_request_items.supplier_cost` (actual, what is owed). The supplier
+  ledger owes COALESCE(supplier_cost, total_cost).
+- Routes: POST `/api/approved-items/<id>/supplier-request` (approved_item.edit:
+  head, team leaders, admin; multipart, documents required with a supplier,
+  reason required above agreed), GET `.../supplier-requests`, POST
+  `/api/supplier-assignments/<id>/cancel`, head-approve / head-reject
+  (approved_item.reassign), `/approvals/supplier-costs` page and
+  `/api/supplier-assignments/over-agreed`, Finance list / approve / reject
+  under `/api/finance/supplier-assignments` (finance_txn.approve), files at
+  `/api/supplier-assignments/files/<id>` (private_uploads/supplier_assignments).
+  The direct PUT now only changes dates; a supplier change answers 400
+  needs_finance.
+- Quick approvals: kinds supplier_assignment (stages head / finance),
+  my_expense, finance_txn; custody and expense-tracking Finance stages now
+  quick too. Details carry `attachments`, `inputs` (payment method, expense
+  account per line) and `approve_body` ("$name" placeholders); main.html fills
+  and posts it. Notifications added: My Expenses line reaching Finance (manager
+  approve, single and bulk), a transaction waiting for approval, assignment and
+  cost requests and their decisions.
+- UI: approved_items.html assignment window rebuilt; finance_approvals.html
+  Supplier Assignments tab (`?tab=` opens it); supplier_cost_approvals.html;
+  Approvals menu entry with its waiting count.
+- Tests: `test_supplier_assignment_approval.py`; `test_approved_items.py`
+  assigns through request + Finance approval.
+- Not covered: sub-item (component) suppliers still save directly; they do not
+  reach the books.
+

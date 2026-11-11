@@ -303,6 +303,36 @@ Vision in the tree shows the payment against what SR-502 owes.
 Done when: every client row under 1103 carries its code, 1103 equals the sum
 of its clients, and each client's balance equals their statement.
 
+## Supplier assignment approved by Finance; agreed and actual cost
+
+- Only the Operations head and team leaders assign a supplier to an approved
+  item. Assigning (or changing, or removing) is a request: the supplier, the
+  actual cost, the due date, a note, and at least one document (quotation,
+  invoice, agreement). Nothing changes on the item until it is approved.
+- The item's costing is the agreed cost. The actual cost starts at the agreed
+  cost and can be changed. At or below agreed the request goes to Finance.
+  Above agreed it needs a reason and goes first to the Operations head (David)
+  under Approvals > Supplier Cost Approvals, then to Finance. The head's own
+  request above agreed goes straight to Finance.
+- Finance approves under Finance Approvals > Supplier Assignments, seeing the
+  documents, agreed and actual cost, who approved a higher cost, and what the
+  request already owes that supplier. On approval the item is with the supplier
+  and the actual cost is owed to them (their account under 2101); the agreed
+  cost stays on the item. Declining needs a reason; the requester is told.
+- The assignment window shows the supplier now (with agreed and actual cost),
+  a request waiting (with its files, withdrawable), the request form, the
+  delivery dates, and every past request with its decision.
+
+## Deciding Finance approvals from the notification
+
+- Every Finance approval sends a notification that opens the full record:
+  supplier assignments, supplier costs above agreed (to the head), custody
+  requests, expense reimbursements, each My Expenses line sent to Finance, and
+  transactions waiting for approval. The window shows all the data, the
+  receipts and documents, and what Finance must choose (payment method, the
+  account per line); Approve and Decline work there, with the same rules as the
+  approval pages.
+
 ## Trial balance
 
 - Finance Management has a Trial Balance tab (ميزان المراجعة): monthly,

@@ -2797,8 +2797,10 @@ def mark_notifications_read():
 # where each record stands, and the details modal decides through the very
 # endpoints the approval pages use, so the rules (who may sign, scopes, what a
 # decline needs, who is told next) are the same whichever way it is done.
-# Finance's stages need a payment method or expense categories, so for those
-# the modal shows the record and opens the page.
+# Finance's stages need a payment method or an account: the details carry
+# `inputs` (selects the modal shows) and `approve_body`, the JSON the page
+# would send with "$name" where an input's value goes. `attachments` are the
+# receipts and documents, shown in the modal (Ahmed, 2026-11-11).
 
 QUICK_ACTION_PERMS = {
     'sales_request_approval': ('sales_request.approve',),
@@ -2806,11 +2808,16 @@ QUICK_ACTION_PERMS = {
     'custody': ('user_balance.approve_manager', 'user_balance.approve'),
     'expense': ('expense_tracking.approve_manager', 'expense_tracking.approve_finance'),
     'negotiation': ('negotiation.decide_sales_head', 'negotiation.decide_account_head'),
+    'supplier_assignment': ('finance_txn.approve', 'approved_item.reassign'),
+    'my_expense': ('expense_tracking.approve_finance',),
+    'finance_txn': ('finance_txn.approve',),
 }
 _QUICK_TABLE = {
     'sales_request_approval': 'sales_request_approvals', 'party_request': 'party_request',
     'custody': 'user_balance_transfers', 'expense': 'expense_tracking',
     'negotiation': 'negotiation_requests',
+    'supplier_assignment': 'supplier_assignment_request', 'my_expense': 'user_expense_tracking',
+    'finance_txn': 'finance_transactions',
 }
 # Record statuses that mean "still waiting at this stage".
 _QUICK_WAITING = {
@@ -2821,6 +2828,11 @@ _QUICK_WAITING = {
     ('expense', 'manager'): ('pending',),
     ('expense', 'finance'): ('manager_approved', 'finance_pending'),
     ('negotiation', None): ('pending_sales_head',),
+    ('supplier_assignment', 'head'): ('pending_head',),
+    ('supplier_assignment', 'finance'): ('pending',),
+    ('supplier_assignment', None): ('pending_head', 'pending'),
+    ('my_expense', 'finance'): ('submitted', 'manager_approved'),
+    ('finance_txn', None): ('pending',),
 }
 
 
@@ -2879,6 +2891,30 @@ def _when(value):
 
 def _egp(value):
     return 'EGP {:,.2f}'.format(float(value or 0))
+
+
+def _quick_payment_input(cur):
+    cur.execute("SELECT id, method_name, method_type FROM payment_methods WHERE is_active = 1 "
+                "ORDER BY method_type = 'cash' DESC, id")
+    return {'name': 'payment_method_id', 'label': 'Paid from', 'options': [
+        {'value': r['id'], 'label': ('Bank: ' if r['method_type'] == 'bank' else 'Cash: ') + r['method_name']}
+        for r in cur.fetchall()]}
+
+
+def _quick_account_input(cur, name, label='Account', preselect=None):
+    """A select of the expense accounts a line can post to (leaves of 5 and 6)."""
+    cur.execute("""SELECT f.id, f.account_code, f.category_name FROM finance_categories f
+                   WHERE f.is_active = 1 AND f.category_type = 'expense' AND f.account_code IS NOT NULL
+                     AND NOT EXISTS (SELECT 1 FROM finance_categories k WHERE k.parent_id = f.id AND k.is_active = 1)
+                   ORDER BY f.account_code""")
+    rows = cur.fetchall()
+    value = next((r['id'] for r in rows if preselect and r['account_code'] == preselect), None)
+    return {'name': name, 'label': label, 'value': value,
+            'options': [{'value': r['id'], 'label': '%s %s' % (r['account_code'], r['category_name'])} for r in rows]}
+
+
+def _quick_files(files):
+    return [{'name': f['name'], 'url': f['url'], 'is_image': f['is_image'], 'type': f['type']} for f in files]
 
 
 def _quick_details(cur, kind, record_id, stage):
@@ -2978,8 +3014,11 @@ def _quick_details(cur, kind, record_id, stage):
             'lines': [],
             # The manager may lower or raise the amount as they pass it on.
             'amount': float(row['amount'] or 0) if manager_stage else None,
-            'approve_url': ('/api/finance/balance-requests/%d/manager-approve' % record_id) if manager_stage else None,
-            'reject_url': ('/api/finance/balance-requests/%d/manager-reject' % record_id) if manager_stage else None,
+            # Finance pays it out of a payment method, chosen here.
+            'inputs': [] if manager_stage else [_quick_payment_input(cur)],
+            'approve_body': None if manager_stage else {'payment_method_id': '$payment_method_id', 'notes': '$notes'},
+            'approve_url': '/api/finance/balance-requests/%d/%s' % (record_id, 'manager-approve' if manager_stage else 'approve'),
+            'reject_url': '/api/finance/balance-requests/%d/%s' % (record_id, 'manager-reject' if manager_stage else 'reject'),
             'page': '/expense-tracking-approval' if manager_stage else '/finance/approvals',
         }
 
@@ -2988,13 +3027,22 @@ def _quick_details(cur, kind, record_id, stage):
         row = cur.fetchone()
         if not row:
             return None
-        cur.execute("""SELECT i.item_description, i.amount, i.notes, sr.title
+        cur.execute("""SELECT i.id, i.item_description, i.amount, i.notes, sr.title
                        FROM expense_tracking_items i LEFT JOIN sales_request sr ON sr.id = i.sales_request_id
                        WHERE i.tracking_id = %s ORDER BY i.id""", (record_id,))
+        items = cur.fetchall()
         lines = [{'label': i['item_description'] or 'Expense',
                   'detail': ' · '.join(x for x in (i['title'] and 'For: ' + i['title'], i['notes']) if x),
-                  'amount': _egp(i['amount'])} for i in cur.fetchall()]
+                  'amount': _egp(i['amount'])} for i in items]
         manager_stage = stage == 'manager'
+        finance_inputs, finance_body = [], None
+        if not manager_stage:
+            # Finance picks where it is paid from and each line's account.
+            finance_inputs = [_quick_payment_input(cur)] + [
+                _quick_account_input(cur, 'cat_%d' % i['id'], 'Account: %s' % (i['item_description'] or 'line'))
+                for i in items]
+            finance_body = {'payment_method_id': '$payment_method_id', 'notes': '$notes',
+                            'items': [{'item_id': i['id'], 'category_id': '$cat_%d' % i['id']} for i in items]}
         return {
             'title': 'Expenses %s' % row['tracking_code'],
             'status': row['status'],
@@ -3006,8 +3054,9 @@ def _quick_details(cur, kind, record_id, stage):
                 ['Reason given', row['rejection_reason']],
             ],
             'lines': lines,
-            'approve_url': ('/api/expense-tracking/%d/manager-approve' % record_id) if manager_stage else None,
-            'reject_url': ('/api/expense-tracking/%d/reject' % record_id) if manager_stage else None,
+            'inputs': finance_inputs, 'approve_body': finance_body,
+            'approve_url': '/api/expense-tracking/%d/%s' % (record_id, 'manager-approve' if manager_stage else 'finance-approve'),
+            'reject_url': '/api/expense-tracking/%d/reject' % record_id,
             'page': '/expense-tracking-approval' if manager_stage else '/finance-expense-approval',
         }
     if kind == 'negotiation':
@@ -3044,6 +3093,112 @@ def _quick_details(cur, kind, record_id, stage):
             'reject_url': '/api/sales-head/negotiations/%d/decline' % record_id,
             'page': page,
         }
+
+    if kind == 'supplier_assignment':
+        rows = supplier_assignment_rows(cur, 'a.id = %s', (record_id,), with_owed=True)
+        if not rows:
+            return None
+        r = rows[0]
+        owed = r.get('supplier_sr')
+        head_stage = stage == 'head'
+        return {
+            'title': ('Supplier cost above agreed: %s' if head_stage else 'Supplier assignment: %s')
+                     % (r['supplier_label'] or 'remove the supplier'),
+            'status': r['status'],
+            'fields': [
+                ['Request', 'SR-%s %s' % (r['request_id'], r['request_title'] or '')],
+                ['Client', ' / '.join(x for x in (r['client_name'], r['company_name']) if x)],
+                ['Item', r['item_name']], ['Quantity', r['qty']],
+                ['Agreed cost', _egp(r['item_cost'])],
+                ['Actual cost (becomes owed)', r['actual_cost'] is not None and _egp(r['actual_cost'])],
+                ['Above agreed by', r['over_agreed'] and _egp(r['actual_cost'] - r['item_cost'])],
+                ['Cost approved by', r['head_by_name'] and '%s %s' % (r['head_by_name'], r['head_note'] or '')],
+                ['Supplier', r['supplier_label'] and '%s (%s)' % (r['supplier_label'], r['supplier_account'] or '')],
+                ['Instead of', r['previous_label']],
+                ['Due date', r['due_date']],
+                ['Already owed to them on this SR', owed and _egp(owed['purchased'])],
+                ['Already paid to them on this SR', owed and _egp(owed['paid'])],
+                ['Note', r['note']],
+                ['Requested by', r['requested_by_name']], ['Requested at', _when(r['requested_at'])],
+                ['Reason given', r['status'] == 'rejected' and r['decision_note']],
+            ],
+            'lines': [], 'attachments': _quick_files(r['files']),
+            'approve_url': ('/api/supplier-assignments/%d/head-approve' if head_stage
+                            else '/api/finance/supplier-assignments/%d/approve') % record_id,
+            'reject_url': ('/api/supplier-assignments/%d/head-reject' if head_stage
+                           else '/api/finance/supplier-assignments/%d/reject') % record_id,
+            'page': '/approvals/supplier-costs' if head_stage else '/finance/approvals?tab=supplier-assignments',
+        }
+
+    if kind == 'my_expense':
+        cur.execute("""SELECT uet.*, u.name AS user_name, c.client_name,
+                              COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_label, s.account_code
+                       FROM user_expense_tracking uet JOIN user u ON u.id = uet.user_id
+                       LEFT JOIN client c ON c.id = uet.client_id LEFT JOIN supplier s ON s.id = uet.supplier_id
+                       WHERE uet.id = %s""", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        files = expense_attachments_for(cur, [record_id]).get(record_id, [])
+        line = {'id': record_id, 'amount': float(row['amount'] or 0)}
+        inputs = [_quick_payment_input(cur)]
+        if not row['supplier_id']:   # a supplier line goes to 2101 on its own
+            inputs.append(_quick_account_input(cur, 'category_id', preselect='6212' if
+                                               (row['supplier_name'] or '').lower() == 'transportation' else None))
+            line['category_id'] = '$category_id'
+        fields = [
+            ['By', row['user_name']], ['Code', row['tracking_code']], ['Amount', _egp(row['amount'])],
+            ['Request', row['sales_request_id'] and 'SR-%s' % row['sales_request_id']], ['Client', row['client_name']],
+            ['Paid to', row['supplier_label'] or row['supplier_name']],
+            ['Posts to', row['supplier_id'] and '2101 > %s' % (row['account_code'] or '')],
+            ['Date', _when(row['expense_date'])], ['Description', row['description']],
+            ['Documents', None if files else 'None attached: it cannot be approved'],
+            ['Reason given', row.get('rejection_reason')],
+        ]
+        if row['supplier_id'] and row['sales_request_id']:
+            owed = supplier_purchases_by_request(cur, row['supplier_id'], row['sales_request_id'])
+            if owed:
+                fields.insert(6, ['Owed / paid / remaining on this SR', '%s / %s / %s' % (
+                    _egp(owed[0]['purchased']), _egp(owed[0]['paid']), _egp(owed[0]['remaining']))])
+        return {
+            'title': 'Expense %s: %s' % (row['tracking_code'], row['user_name']),
+            'status': row['status'], 'fields': fields, 'lines': [], 'attachments': _quick_files(files),
+            'inputs': inputs,
+            'approve_body': {'payment_method_id': '$payment_method_id', 'expenses': [line]},
+            'approve_url': '/api/finance/expense-approvals/finance-approve-bulk',
+            'reject_url': '/api/finance/expense-approvals/%d/reject' % record_id,
+            'page': '/finance/approvals',
+        }
+
+    if kind == 'finance_txn':
+        cur.execute("""SELECT ft.*, pm.method_name, CONCAT_WS(' ', fc.account_code, fc.category_name) AS account,
+                              COALESCE(c.client_name, src.client_name) AS client_name,
+                              COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_label
+                       FROM finance_transactions ft
+                       LEFT JOIN payment_methods pm ON pm.id = ft.payment_method_id
+                       LEFT JOIN finance_categories fc ON fc.id = COALESCE(NULLIF(ft.subcategory_id, 0), ft.category_id)
+                       LEFT JOIN sales_request sr ON sr.id = ft.sales_request_id
+                       LEFT JOIN client c ON c.id = ft.client_id LEFT JOIN client src ON src.id = sr.client_id
+                       LEFT JOIN supplier s ON s.id = ft.supplier_id
+                       WHERE ft.id = %s""", (record_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            'title': '%s %s' % ('Money in' if row['transaction_type'] == 'income' else 'Money out', row['transaction_code']),
+            'status': row['status'],
+            'fields': [
+                ['Amount', _egp(row['amount'])], ['Account', row['account']], ['Payment method', row['method_name']],
+                ['Client', row['client_name']], ['Request', row['sales_request_id'] and 'SR-%s' % row['sales_request_id']],
+                ['Supplier', row['supplier_label']], ['Date', _when(row['transaction_date'])],
+                ['Reference', row['reference_number']], ['Description', row['description']], ['Notes', row['notes']],
+                ['Added by', row['added_by']], ['Reason given', row.get('rejection_reason')],
+            ],
+            'lines': [],
+            'approve_url': '/api/finance/transactions/%d/approve' % record_id,
+            'reject_url': '/api/finance/transactions/%d/reject' % record_id,
+            'page': '/finance/approvals',
+        }
     return None
 
 
@@ -3065,7 +3220,7 @@ def quick_approval_details(kind, record_id):
     if not details:
         return jsonify(success=False, error='This request no longer exists'), 404
     details['state'] = quick_state({'kind': kind, 'stage': stage}, details['status'])
-    details['fields'] = [f for f in details['fields'] if f[1] not in (None, '')]
+    details['fields'] = [f for f in details['fields'] if f[1] is not False and f[1] not in (None, '')]
     # Decidable here only while it waits at this stage and needs nothing but a yes or no.
     details['quick'] = details['state'] == 'pending' and bool(details.get('approve_url'))
     return jsonify(success=True, **details)
@@ -3120,6 +3275,10 @@ def approvals_waiting_counts():
                         "AND request_id IN (SELECT sr.id FROM sales_request sr WHERE 1=1" + scope_sql
                         + negotiation_line_clause(line) + ")", scope_params)
             counts[line + '_head'] = cur.fetchone()['n']
+
+        if has(SUPPLIER_COST_APPROVE):
+            cur.execute("SELECT COUNT(*) AS n FROM supplier_assignment_request WHERE status = 'pending_head'")
+            counts['supplier_cost'] = cur.fetchone()['n']
 
         if has('sales_request.approve'):
             cur.execute("SELECT COUNT(*) AS n FROM sales_request_approvals WHERE status = 'pending'")
@@ -6081,8 +6240,9 @@ def get_item_components(item_id):
                 i.supplier_due_date,
                 i.supplier_received_date,
                 i.supplier_received_by,
-                i.has_components,
-                s.supplier_name,
+                i.has_components, i.total_cost, i.supplier_cost,
+                COALESCE(NULLIF(s.company_name, ''), s.supplier_name) AS supplier_name,
+                s.supplier_name AS supplier_person, s.account_code AS supplier_account,
                 s.primary_phone as supplier_phone,
                 u.name as received_by_name
             FROM sales_request_items i
@@ -6123,6 +6283,11 @@ def get_item_components(item_id):
             item_info = {
                 'supplier_id': item_supplier['supplier_id'],
                 'supplier_name': item_supplier['supplier_name'],
+                'supplier_person': item_supplier['supplier_person'],
+                'supplier_account': item_supplier['supplier_account'],
+                # Agreed: the item's costing. Actual: what Finance booked as owed to the supplier.
+                'agreed_cost': float(item_supplier['total_cost']) if item_supplier['total_cost'] is not None else None,
+                'supplier_cost': float(item_supplier['supplier_cost']) if item_supplier['supplier_cost'] is not None else None,
                 'supplier_phone': item_supplier['supplier_phone'],
                 'supplier_due_date': item_supplier['supplier_due_date'].isoformat() if item_supplier['supplier_due_date'] else None,
                 'supplier_received_date': item_supplier['supplier_received_date'].isoformat() if item_supplier['supplier_received_date'] else None,
@@ -6325,16 +6490,23 @@ def update_item_supplier(item_id):
 
         cur.execute("SELECT supplier_id FROM sales_request_items WHERE id = %s", (item_id,))
         current = cur.fetchone()
-        if current and not _may_change_assignment(current['supplier_id']):
+        if not current:
             cur.close()
             conn.close()
-            return jsonify({'success': False,
-                            'error': 'This item is already assigned. Only the Operations '
-                                     'Manager can change an assignment.'}), 403
+            return jsonify({'success': False, 'error': 'Item not found'}), 404
+        # Who the item is with is Finance's to approve (it becomes owed to the
+        # supplier): that goes through /supplier-request with its documents.
+        # Here only the dates of the approved assignment change.
+        if (int(supplier_id) if supplier_id else None) != current['supplier_id']:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'needs_finance': True,
+                            'error': 'Choosing or changing the supplier goes to Finance for approval, '
+                                     'with its documents.'}), 400
 
         # Build update query
-        update_fields = ['supplier_id = %s', 'supplier_due_date = %s']
-        update_values = [supplier_id if supplier_id else None, due_date if due_date else None]
+        update_fields = ['supplier_due_date = %s']
+        update_values = [due_date if due_date else None]
         
         if received_date:
             update_fields.append('supplier_received_date = %s')
@@ -6363,6 +6535,426 @@ def update_item_supplier(item_id):
         print(f"Error updating item supplier: {str(e)}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ----------------------- SUPPLIER ASSIGNMENT: FINANCE APPROVES -----------------------
+# Putting an item with a supplier makes its cost owed to them (5101 / their
+# account under 2101), so Finance approves it first (Ahmed, 2026-11-11).
+# Operations asks with the supplier, the due date, a note and at least one
+# document; the item changes only when Finance approves.
+
+SUPPLIER_ASSIGNMENT_FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                             'private_uploads', 'supplier_assignments')
+SUPPLIER_ASSIGNMENT_APPROVE = 'finance_txn.approve'
+# Above the agreed cost the Operations head (David) approves before Finance.
+SUPPLIER_COST_APPROVE = 'approved_item.reassign'
+
+
+def supplier_assignment_files(cur, ids):
+    """{assignment_id: [file, ...]} with the URL each one is read from."""
+    ids = [int(i) for i in ids if i]
+    if not ids:
+        return {}
+    cur.execute("""SELECT id, assignment_id, original_name, file_type, file_size FROM supplier_assignment_file
+                   WHERE assignment_id IN (%s) ORDER BY id""" % ','.join(['%s'] * len(ids)), ids)
+    out = {}
+    for r in cur.fetchall():
+        out.setdefault(r['assignment_id'], []).append({
+            'id': r['id'], 'name': r['original_name'], 'type': r['file_type'], 'size': r['file_size'],
+            'is_image': (r['file_type'] or '').startswith('image/'),
+            'url': '/api/supplier-assignments/files/%d' % r['id']})
+    return out
+
+
+def supplier_assignment_rows(cur, where='1 = 1', params=(), with_owed=False):
+    """Assignment requests with their item, request, client, suppliers, people and files."""
+    cur.execute("""
+        SELECT a.*, i.name AS item_name, i.qty, i.unit, i.total_cost, i.cost_per_item, i.supplier_id AS current_supplier_id,
+               sr.title AS request_title, c.client_name, co.company_name,
+               s.supplier_name, s.company_name AS supplier_company, s.account_code AS supplier_account,
+               ps.supplier_name AS previous_name, ps.company_name AS previous_company,
+               ru.name AS requested_by_name, du.name AS decided_by_name, hu.name AS head_by_name
+        FROM supplier_assignment_request a
+        JOIN sales_request_items i ON i.id = a.item_id
+        JOIN sales_request sr ON sr.id = a.request_id
+        LEFT JOIN client c ON c.id = sr.client_id
+        LEFT JOIN company co ON co.id = sr.company_id
+        LEFT JOIN supplier s ON s.id = a.supplier_id
+        LEFT JOIN supplier ps ON ps.id = a.previous_supplier_id
+        LEFT JOIN user ru ON ru.id = a.requested_by
+        LEFT JOIN user du ON du.id = a.decided_by
+        LEFT JOIN user hu ON hu.id = a.head_by
+        WHERE """ + where + " ORDER BY a.id DESC", params)
+    rows = [dict(r) for r in cur.fetchall()]
+    files = supplier_assignment_files(cur, [r['id'] for r in rows])
+    for r in rows:
+        r['files'] = files.get(r['id'], [])
+        r['supplier_label'] = supplier_label({'company_name': r['supplier_company'], 'supplier_name': r['supplier_name']}) \
+            if r['supplier_id'] else None
+        r['previous_label'] = supplier_label({'company_name': r['previous_company'], 'supplier_name': r['previous_name']}) \
+            if r['previous_supplier_id'] else None
+        for k in ('item_cost', 'actual_cost', 'total_cost', 'cost_per_item', 'qty'):
+            r[k] = float(r[k]) if r[k] is not None else None
+        r['over_agreed'] = (r['actual_cost'] is not None and r['item_cost'] is not None
+                            and r['actual_cost'] > r['item_cost'] + 0.004)
+        for k in ('requested_at', 'decided_at', 'due_date', 'head_at'):
+            r[k] = r[k].isoformat() if hasattr(r[k], 'isoformat') else r[k]
+        if with_owed and r['supplier_id']:
+            owed = supplier_purchases_by_request(cur, r['supplier_id'], r['request_id'])
+            r['supplier_sr'] = {k: owed[0][k] for k in ('purchased', 'paid', 'remaining')} if owed else \
+                {'purchased': 0.0, 'paid': 0.0, 'remaining': 0.0}
+    return rows
+
+
+@app.route('/api/approved-items/<int:item_id>/supplier-request', methods=['POST'])
+@perm('approved_item.edit')
+def request_supplier_assignment(item_id):
+    """Operations asks Finance to put an item with a supplier (or take it off one)."""
+    me = session.get('user_id')
+    supplier_id = request.form.get('supplier_id', type=int)
+    due_date = request.form.get('due_date') or None
+    note = (request.form.get('note') or '').strip()[:1000]
+    actual = request.form.get('actual_cost')
+    try:
+        actual = invoicing.money(actual) if actual not in (None, '') else None
+    except (ValueError, ArithmeticError):
+        return jsonify(success=False, error='Enter the actual cost as a number'), 400
+    if actual is not None and actual < 0:
+        return jsonify(success=False, error='The actual cost cannot be negative'), 400
+    files = [f for f in request.files.getlist('files') if f and f.filename]
+    if supplier_id and not files:
+        return jsonify(success=False, error="Attach the supplier's quotation, invoice or another document"), 400
+    if not supplier_id and not note:
+        return jsonify(success=False, error='Say why the supplier is taken off this item'), 400
+    if len(files) > EXPENSE_FILES_PER_EXPENSE:
+        return jsonify(success=False, error='At most %d files' % EXPENSE_FILES_PER_EXPENSE), 400
+    checked = []
+    for handle in files:
+        ext = handle.filename.rsplit('.', 1)[-1].lower() if '.' in handle.filename else ''
+        if ext not in EXPENSE_FILE_TYPES:
+            return jsonify(success=False, error='"%s": only photos, PDF, Word or Excel files' % handle.filename), 400
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(0)
+        if size > EXPENSE_FILE_MAX_BYTES:
+            return jsonify(success=False, error='"%s" is over 10MB' % handle.filename), 400
+        checked.append((handle, ext, size))
+
+    conn, cur = connection()
+    saved = []
+    try:
+        cur.execute("""SELECT i.id, i.request_id, i.name, i.supplier_id, i.total_cost, sr.title
+                       FROM sales_request_items i JOIN sales_request sr ON sr.id = i.request_id
+                       WHERE i.id = %s FOR UPDATE""", (item_id,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify(success=False, error='Item not found'), 404
+        if supplier_id == item['supplier_id']:
+            return jsonify(success=False, error='The item is already with this supplier'), 400
+        if not _may_change_assignment(item['supplier_id']):
+            return jsonify(success=False, error='This item is already assigned. Only the Operations '
+                                                'Manager can change an assignment.'), 403
+        supplier = None
+        if supplier_id:
+            cur.execute("SELECT id, supplier_name, company_name FROM supplier WHERE id = %s", (supplier_id,))
+            supplier = cur.fetchone()
+            if not supplier:
+                return jsonify(success=False, error='Supplier not found'), 404
+        cur.execute("SELECT id FROM supplier_assignment_request WHERE item_id = %s "
+                    "AND status IN ('pending_head', 'pending')", (item_id,))
+        if cur.fetchone():
+            return jsonify(success=False, error='A request for this item is already waiting for approval. '
+                                                'Withdraw it first to send a new one.'), 400
+        # The item's costing is the agreed number; the actual cost starts there
+        # and may change. Above it the Operations head approves first, unless
+        # the head is the one asking.
+        agreed = float(item['total_cost'] or 0)
+        if supplier_id and actual is None:
+            actual = agreed
+        over = supplier_id and float(actual) > agreed + 0.004
+        if over and not note:
+            return jsonify(success=False, error='Say why the actual cost is above the agreed %s' % _egp(agreed)), 400
+        status = 'pending_head' if over and not has(SUPPLIER_COST_APPROVE) else 'pending'
+        cur.execute("""INSERT INTO supplier_assignment_request
+                       (item_id, request_id, supplier_id, previous_supplier_id, due_date, item_cost, actual_cost, note,
+                        status, requested_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (item_id, item['request_id'], supplier_id, item['supplier_id'], due_date,
+                     item['total_cost'], actual if supplier_id else None, note or None, status, me))
+        assignment_id = cur.lastrowid
+        folder = os.path.join(SUPPLIER_ASSIGNMENT_FILES_DIR, str(assignment_id))
+        os.makedirs(folder, exist_ok=True)
+        for handle, ext, size in checked:
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            path = os.path.join(folder, '%s_%s' % (stamp, secure_filename(handle.filename) or ('file.' + ext)))
+            handle.save(path)
+            saved.append(path)
+            cur.execute("""INSERT INTO supplier_assignment_file (assignment_id, stored_path, original_name, file_type,
+                           file_size, uploaded_by) VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (assignment_id, path, handle.filename[:255], EXPENSE_FILE_TYPES[ext], size, me))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        for path in saved:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+    who = session.get('name') or 'Operations'
+    what = supplier_label(supplier) if supplier else 'no supplier'
+    if status == 'pending_head':
+        notify_users(users_holding(SUPPLIER_COST_APPROVE),
+                     'Supplier cost above agreed: %s' % what,
+                     '%s asks to put "%s" on SR-%s with %s at %s, above the agreed %s. Note: %s'
+                     % (who, item['name'], item['request_id'], what, _egp(actual), _egp(item['total_cost']), note),
+                     link='/approvals/supplier-costs',
+                     action=approval_action('supplier_assignment', assignment_id, 'head'))
+        return jsonify(success=True, assignment_id=assignment_id, status=status,
+                       message='Above the agreed cost: sent to the Operations head, then Finance.')
+    notify_supplier_assignment_to_finance(assignment_id, who, item['name'], item['request_id'], what,
+                                          actual if supplier_id else item['total_cost'], note)
+    return jsonify(success=True, assignment_id=assignment_id, status=status,
+                   message='Sent to Finance. The item is assigned once Finance approves.')
+
+
+def notify_supplier_assignment_to_finance(assignment_id, who, item_name, request_id, what, cost, note):
+    notify_users(users_holding(SUPPLIER_ASSIGNMENT_APPROVE),
+                 'Supplier assignment to approve: %s' % what,
+                 '%s asks to put "%s" on SR-%s with %s (cost %s).%s'
+                 % (who, item_name, request_id, what, _egp(cost), (' Note: ' + note) if note else ''),
+                 link='/finance/approvals?tab=supplier-assignments',
+                 action=approval_action('supplier_assignment', assignment_id, 'finance'))
+
+
+@app.route('/api/supplier-assignments/<int:assignment_id>/head-approve', methods=['POST'])
+@perm(SUPPLIER_COST_APPROVE)
+def head_approve_supplier_cost(assignment_id):
+    """The Operations head accepts an actual cost above the agreed one; Finance decides next."""
+    data = request.get_json(silent=True) or {}
+    note = (data.get('notes') or '').strip()[:1000] or None
+    conn, cur = connection()
+    try:
+        cur.execute("""SELECT a.*, i.name AS item_name, s.supplier_name, s.company_name
+                       FROM supplier_assignment_request a JOIN sales_request_items i ON i.id = a.item_id
+                       LEFT JOIN supplier s ON s.id = a.supplier_id WHERE a.id = %s FOR UPDATE""", (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Request not found'), 404
+        if row['status'] != 'pending_head':
+            return jsonify(success=False, error='This request is not waiting for the Operations head'), 400
+        cur.execute("""UPDATE supplier_assignment_request SET status = 'pending', head_by = %s, head_at = NOW(),
+                           head_note = %s WHERE id = %s""", (session.get('user_id'), note, assignment_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    head = session.get('name') or 'The Operations head'
+    notify_supplier_assignment_to_finance(assignment_id, head, row['item_name'], row['request_id'], supplier_label(row),
+                                          row['actual_cost'], '%s approved the cost above the agreed %s.%s'
+                                          % (head, _egp(row['item_cost']), (' ' + note) if note else ''))
+    notify_user(row['requested_by'], 'Supplier cost approved by %s' % head,
+                'The cost of "%s" on SR-%s went to Finance.' % (row['item_name'], row['request_id']), link='/approved-items')
+    return jsonify(success=True)
+
+
+@app.route('/api/supplier-assignments/<int:assignment_id>/head-reject', methods=['POST'])
+@perm(SUPPLIER_COST_APPROVE)
+def head_reject_supplier_cost(assignment_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()[:1000]
+    if not reason:
+        return jsonify(success=False, error='A reason is required'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("""SELECT a.requested_by, a.status, a.request_id, i.name AS item_name
+                       FROM supplier_assignment_request a JOIN sales_request_items i ON i.id = a.item_id
+                       WHERE a.id = %s FOR UPDATE""", (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Request not found'), 404
+        if row['status'] != 'pending_head':
+            return jsonify(success=False, error='This request is not waiting for the Operations head'), 400
+        cur.execute("""UPDATE supplier_assignment_request SET status = 'rejected', head_by = %s, head_at = NOW(),
+                           head_note = %s, decided_by = %s, decided_at = NOW(), decision_note = %s WHERE id = %s""",
+                    (session.get('user_id'), reason, session.get('user_id'), reason, assignment_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    notify_user(row['requested_by'], 'Supplier cost declined',
+                'The cost above agreed for "%s" on SR-%s was declined. Reason: %s'
+                % (row['item_name'], row['request_id'], reason), link='/approved-items')
+    return jsonify(success=True)
+
+
+@app.route('/approvals/supplier-costs', methods=['GET'])
+@perm(SUPPLIER_COST_APPROVE)
+def supplier_cost_approvals_page():
+    """The Operations head's list of supplier costs above the agreed number."""
+    return render_template('supplier_cost_approvals.html')
+
+
+@app.route('/api/supplier-assignments/over-agreed', methods=['GET'])
+@perm(SUPPLIER_COST_APPROVE)
+def supplier_costs_over_agreed():
+    status = request.args.get('status') or 'pending_head'
+    conn, cur = connection()
+    try:
+        if status == 'pending_head':
+            rows = supplier_assignment_rows(cur, "a.status = 'pending_head'")
+        else:   # what the head decided
+            rows = supplier_assignment_rows(cur, 'a.head_by IS NOT NULL')
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, requests=rows)
+
+
+@app.route('/api/approved-items/<int:item_id>/supplier-requests', methods=['GET'])
+@perm('approved_item.view')
+def item_supplier_requests(item_id):
+    """Every assignment request on one item, newest first."""
+    conn, cur = connection()
+    try:
+        rows = supplier_assignment_rows(cur, 'a.item_id = %s', (item_id,))
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, requests=rows)
+
+
+@app.route('/api/supplier-assignments/<int:assignment_id>/cancel', methods=['POST'])
+@perm('approved_item.edit')
+def cancel_supplier_assignment(assignment_id):
+    """The one who asked (or the Operations Manager) withdraws a request Finance has not decided."""
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT requested_by, status FROM supplier_assignment_request WHERE id = %s FOR UPDATE",
+                    (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Request not found'), 404
+        if row['requested_by'] != session.get('user_id') and not has('approved_item.reassign'):
+            return jsonify(success=False, error='Only the one who asked can withdraw it'), 403
+        if row['status'] not in ('pending_head', 'pending'):
+            return jsonify(success=False, error='It has already been decided'), 400
+        cur.execute("UPDATE supplier_assignment_request SET status = 'cancelled', decided_at = NOW() WHERE id = %s",
+                    (assignment_id,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True)
+
+
+@app.route('/api/finance/supplier-assignments', methods=['GET'])
+@perm(SUPPLIER_ASSIGNMENT_APPROVE, 'finance_report.view')
+def finance_supplier_assignments():
+    """Assignment requests for Finance: pending by default, with what the SR already owes the supplier."""
+    status = request.args.get('status') or 'pending'
+    if status not in ('pending_head', 'pending', 'approved', 'rejected', 'cancelled', 'all'):
+        status = 'pending'
+    conn, cur = connection()
+    try:
+        rows = supplier_assignment_rows(cur, '1 = 1' if status == 'all' else 'a.status = %s',
+                                        () if status == 'all' else (status,), with_owed=True)
+        cur.execute("SELECT status, COUNT(*) AS n FROM supplier_assignment_request GROUP BY status")
+        counts = {r['status']: r['n'] for r in cur.fetchall()}
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(success=True, requests=rows, counts=counts, can_decide=has(SUPPLIER_ASSIGNMENT_APPROVE))
+
+
+@app.route('/api/finance/supplier-assignments/<int:assignment_id>/approve', methods=['POST'])
+@perm(SUPPLIER_ASSIGNMENT_APPROVE)
+def approve_supplier_assignment(assignment_id):
+    """Finance approves: the item goes to the supplier and its cost becomes owed to them."""
+    data = request.get_json(silent=True) or {}
+    note = (data.get('notes') or '').strip()[:1000] or None
+    conn, cur = connection()
+    try:
+        cur.execute("""SELECT a.*, i.supplier_id AS current_supplier_id, i.name AS item_name
+                       FROM supplier_assignment_request a JOIN sales_request_items i ON i.id = a.item_id
+                       WHERE a.id = %s FOR UPDATE""", (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Request not found'), 404
+        if row['status'] != 'pending':
+            return jsonify(success=False, error='This request is already %s' % row['status']), 400
+        if row['current_supplier_id'] != row['previous_supplier_id']:
+            return jsonify(success=False, error='The item changed supplier since this was asked. '
+                                                'Decline it and ask Operations to send it again.'), 409
+        # The actual cost is what is owed to the supplier; the item's costing
+        # stays as the agreed number.
+        cur.execute("""UPDATE sales_request_items SET supplier_id = %s, supplier_cost = %s,
+                           supplier_due_date = COALESCE(%s, supplier_due_date) WHERE id = %s""",
+                    (row['supplier_id'], row['actual_cost'] if row['supplier_id'] else None, row['due_date'], row['item_id']))
+        cur.execute("""UPDATE supplier_assignment_request SET status = 'approved', decided_by = %s, decided_at = NOW(),
+                           decision_note = %s WHERE id = %s""", (session.get('user_id'), note, assignment_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    notify_user(row['requested_by'], 'Supplier assignment approved',
+                'Finance approved the supplier for "%s" on SR-%s.%s'
+                % (row['item_name'], row['request_id'], (' Note: ' + note) if note else ''),
+                link='/approved-items')
+    return jsonify(success=True)
+
+
+@app.route('/api/finance/supplier-assignments/<int:assignment_id>/reject', methods=['POST'])
+@perm(SUPPLIER_ASSIGNMENT_APPROVE)
+def reject_supplier_assignment(assignment_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()[:1000]
+    if not reason:
+        return jsonify(success=False, error='A reason is required'), 400
+    conn, cur = connection()
+    try:
+        cur.execute("""SELECT a.requested_by, a.status, a.request_id, i.name AS item_name
+                       FROM supplier_assignment_request a JOIN sales_request_items i ON i.id = a.item_id
+                       WHERE a.id = %s FOR UPDATE""", (assignment_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, error='Request not found'), 404
+        if row['status'] != 'pending':
+            return jsonify(success=False, error='This request is already %s' % row['status']), 400
+        cur.execute("""UPDATE supplier_assignment_request SET status = 'rejected', decided_by = %s, decided_at = NOW(),
+                           decision_note = %s WHERE id = %s""", (session.get('user_id'), reason, assignment_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    notify_user(row['requested_by'], 'Supplier assignment declined',
+                'Finance declined the supplier for "%s" on SR-%s. Reason: %s'
+                % (row['item_name'], row['request_id'], reason), link='/approved-items')
+    return jsonify(success=True)
+
+
+@app.route('/api/supplier-assignments/files/<int:file_id>', methods=['GET'])
+@perm('approved_item.view', SUPPLIER_ASSIGNMENT_APPROVE, 'finance_report.view')
+def supplier_assignment_file(file_id):
+    conn, cur = connection()
+    try:
+        cur.execute("SELECT stored_path, original_name, file_type FROM supplier_assignment_file WHERE id = %s", (file_id,))
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not row:
+        abort(404)
+    path = os.path.realpath(row['stored_path'])
+    if not path.startswith(os.path.realpath(SUPPLIER_ASSIGNMENT_FILES_DIR) + os.sep) or not os.path.exists(path):
+        abort(404)
+    inline = (row['file_type'] or '').startswith('image/') or row['file_type'] == 'application/pdf'
+    return send_file(path, mimetype=row['file_type'] or 'application/octet-stream',
+                     as_attachment=not inline, download_name=row['original_name'])
 
 
 @app.route('/api/approved-items/pipeline', methods=['GET'])
@@ -7232,7 +7824,7 @@ def get_suppliers_list():
         conn, cur = connection()
         
         cur.execute("""
-            SELECT id, supplier_name, company_name, primary_phone, email_address
+            SELECT id, account_code, supplier_name, company_name, primary_phone, email_address
             FROM supplier
             WHERE status = 'Active'
             ORDER BY supplier_name
@@ -27039,6 +27631,14 @@ def add_finance_transaction():
         conn.commit()
         cur.close()
         conn.close()
+        if not is_admin_or_finance:
+            notify_users(users_holding('finance_txn.approve'),
+                         'Transaction to approve: %s' % transaction_code,
+                         '%s recorded %s %s (%s). It waits for Finance.'
+                         % (user_name, 'money in' if transaction_type == 'income' else 'money out',
+                            _egp(amount), description or transaction_code),
+                         link='/finance/approvals',
+                         action=approval_action('finance_txn', trans_id))
         
         message = 'Transaction approved and recorded' if is_admin_or_finance else 'Transaction created and pending approval'
         return jsonify({
@@ -30198,7 +30798,7 @@ def supplier_ledger_entries(cur, supplier_id=None):
         SELECT DATE(COALESCE(i.supplier_received_date, i.client_approval_date, sr.created_at)) AS day,
                'purchase' AS kind, i.id AS ref_id, i.supplier_id, i.request_id AS sales_request_id,
                CONCAT_WS(' - ', i.name, NULLIF(sr.title, '')) AS description, NULL AS method_type,
-               0 AS debit, COALESCE(i.total_cost, i.qty * i.cost_per_item, 0) AS credit
+               0 AS debit, COALESCE(i.supplier_cost, i.total_cost, i.qty * i.cost_per_item, 0) AS credit
         FROM sales_request_items i JOIN sales_request sr ON sr.id = i.request_id
         WHERE i.approval_status = 'approved'""" + where.format('i'), params)
     entries += [dict(r) for r in cur.fetchall()]
@@ -33068,6 +33668,7 @@ def approve_user_expense(expense_id):
         """, (session.get('user_id'), expense_id))
         
         conn.commit()
+        notify_finance_of_expenses(cur, [expense_id], session.get('name') or 'The manager')
         cur.close()
         conn.close()
         
@@ -33124,6 +33725,7 @@ def approve_expenses_bulk():
             return jsonify({'success': False, 'error': 'No expenses provided'}), 400
         
         approved_count = 0
+        sent = []
         approver_id = session.get('user_id')
         
         for exp in expenses:
@@ -33147,8 +33749,10 @@ def approve_expenses_bulk():
             
             if cur.rowcount > 0:
                 approved_count += 1
+                sent.append(exp_id)
         
         conn.commit()
+        notify_finance_of_expenses(cur, sent, session.get('name') or 'The manager')
         cur.close()
         conn.close()
         
@@ -33175,6 +33779,27 @@ def expense_payment_method(cur, requested_id=None):
                    ORDER BY method_type = 'cash' DESC, id LIMIT 1""")
     row = cur.fetchone()
     return (row['id'], None) if row else (None, 'Add a payment method first (Finance Management > Payment Methods)')
+
+
+def notify_finance_of_expenses(cur, expense_ids, by_name):
+    """Each My Expenses line that reached Finance, as a notification Finance can decide from."""
+    ids = [int(i) for i in expense_ids if i]
+    if not ids:
+        return
+    cur.execute("""SELECT uet.id, uet.tracking_code, uet.amount, uet.description, uet.sales_request_id, u.name,
+                          COALESCE(NULLIF(s.company_name, ''), s.supplier_name, uet.supplier_name) AS paid_to
+                   FROM user_expense_tracking uet JOIN user u ON u.id = uet.user_id
+                   LEFT JOIN supplier s ON s.id = uet.supplier_id WHERE uet.id IN (%s)"""
+                % ','.join(['%s'] * len(ids)), ids)
+    finance = users_holding('expense_tracking.approve_finance')
+    for r in cur.fetchall():
+        notify_users(finance, 'Expense to approve: %s' % r['name'],
+                     '%s spent %s on %s%s: %s (%s). %s sent it to Finance.'
+                     % (r['name'], _egp(r['amount']), r['paid_to'] or '-',
+                        ' for SR-%s' % r['sales_request_id'] if r['sales_request_id'] else '',
+                        r['description'] or '', r['tracking_code'], by_name),
+                     link='/finance/approvals',
+                     action=approval_action('my_expense', r['id'], 'finance'))
 
 
 def expense_posting_account(cur, expense, category_id, subcategory_id=None):

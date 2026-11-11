@@ -1,0 +1,111 @@
+{% extends "main.html" %}
+
+{% block head %}
+<style>
+:root { --sc-text: #0f172a; --sc-muted: #64748b; --sc-border: #e2e8f0; }
+.sc-shell { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+.sc-head h1 { font-size: 24px; font-weight: 800; color: var(--sc-text); margin: 0 0 4px; }
+.sc-head p { color: var(--sc-muted); margin: 0 0 16px; font-size: 14px; max-width: 760px; }
+.sc-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+.sc-tab { border: 1px solid var(--sc-border); background: #fff; border-radius: 999px; padding: 7px 16px; font-weight: 700; color: #475569; cursor: pointer; }
+.sc-tab.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.sc-card { background: #fff; border: 1px solid var(--sc-border); border-inline-start: 4px solid #f97316; border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
+.sc-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sc-sup { margin-top: 8px; font-size: 15px; } .sc-sup i { color: #d97706; }
+.sc-code { font: 700 11px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 3px 6px; border-radius: 5px; }
+.sc-costs { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 18px; text-align: end; }
+.sc-costs span { font-size: 11px; font-weight: 700; color: var(--sc-muted); text-transform: uppercase; }
+.sc-costs b { font-size: 18px; color: var(--sc-text); } .sc-costs b.up { color: #c2410c; }
+.sc-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: #475569; }
+.sc-note { margin-top: 8px; font-size: 13px; background: #f8fafc; border-radius: 8px; padding: 6px 10px; }
+.sc-muted { color: var(--sc-muted); font-size: 12.5px; }
+.sc-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sc-files a { width: 96px; text-align: center; color: inherit; text-decoration: none; }
+.sc-files img, .sc-files .sc-doc { width: 96px; height: 74px; object-fit: cover; border-radius: 8px; border: 1px solid var(--sc-border); display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #dc2626; font-size: 26px; }
+.sc-files small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+.sc-state { font-weight: 700; } .sc-state.ok { color: #059669; } .sc-state.bad { color: #dc2626; }
+.sc-empty { text-align: center; padding: 50px 20px; color: var(--sc-muted); background: #fff; border: 1px dashed var(--sc-border); border-radius: 14px; }
+@media (max-width: 640px) { .sc-costs { grid-template-columns: 1fr 1fr; text-align: start; } }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="sc-shell">
+    <div class="sc-head">
+        <h1><i class="fas fa-truck-loading mr-2"></i>Supplier Cost Approvals</h1>
+        <p>A team leader's supplier cost above the item's agreed cost comes here first. Approving sends it to Finance, which approves the assignment and books the actual cost as owed to the supplier.</p>
+    </div>
+    <div class="sc-bar">
+        <button type="button" class="sc-tab active" data-status="pending_head">Waiting for you</button>
+        <button type="button" class="sc-tab" data-status="decided">Decided</button>
+    </div>
+    <div id="scList"><div class="sc-empty"><i class="fas fa-spinner fa-spin"></i></div></div>
+</div>
+
+<script>
+(function () {
+    var T = window.bgT || String, status = 'pending_head';
+    function esc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+    function money(v) { return v == null ? '-' : 'EGP ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    function load() {
+        $.getJSON('/api/supplier-assignments/over-agreed', { status: status }).done(function (d) {
+            if (!d.requests.length) {
+                $('#scList').html('<div class="sc-empty"><i class="fas fa-check-circle fa-2x mb-2 d-block"></i>' + T('Nothing here') + '</div>');
+                return;
+            }
+            $('#scList').html(d.requests.map(function (r) {
+                var files = r.files.map(function (f) {
+                    return '<a href="' + f.url + '" target="_blank" rel="noopener" title="' + esc(f.name) + '">' +
+                        (f.is_image ? '<img src="' + f.url + '" alt="" loading="lazy">' : '<span class="sc-doc"><i class="fas ' + (/pdf/.test(f.type || '') ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></span>') +
+                        '<small>' + esc(f.name) + '</small></a>';
+                }).join('');
+                var decided = r.status !== 'pending_head';
+                return '<div class="sc-card">' +
+                    '<div class="sc-top"><div><span class="badge badge-info">SR-' + r.request_id + '</span> <b data-no-i18n>' + esc(r.item_name) + '</b>' +
+                        ' <span class="sc-muted" data-no-i18n>' + esc([r.client_name, r.company_name].filter(Boolean).join(' / ')) + '</span>' +
+                        '<div class="sc-sup"><i class="fas fa-truck"></i> <b data-no-i18n>' + esc(r.supplier_label) + '</b>' +
+                        (r.supplier_account ? ' <span class="sc-code">' + esc(r.supplier_account) + '</span>' : '') + '</div></div>' +
+                    '<div class="sc-costs"><span>' + T('Agreed') + '</span><span>' + T('Actual') + '</span><span>' + T('Above by') + '</span>' +
+                        '<b>' + money(r.item_cost) + '</b><b class="up">' + money(r.actual_cost) + '</b><b class="up">' + money(r.actual_cost - r.item_cost) + '</b></div></div>' +
+                    '<div class="sc-meta"><span><i class="fas fa-user"></i> ' + esc(r.requested_by_name) + ' · ' + esc((r.requested_at || '').replace('T', ' ').slice(0, 16)) + '</span>' +
+                        (r.due_date ? '<span><i class="fas fa-calendar"></i> ' + T('Due') + ' ' + esc(r.due_date) + '</span>' : '') +
+                        (decided ? '<span class="sc-state ' + (r.status === 'rejected' ? 'bad' : 'ok') + '">' +
+                            (r.status === 'rejected' ? T('Declined') : T('Approved')) + ' · ' + esc(r.head_by_name || '') + '</span>' : '') + '</div>' +
+                    (r.note ? '<div class="sc-note"><i class="fas fa-comment-dots"></i> <span data-no-i18n>' + esc(r.note) + '</span></div>' : '') +
+                    (r.head_note ? '<div class="sc-note"><i class="fas fa-reply"></i> <span data-no-i18n>' + esc(r.head_note) + '</span></div>' : '') +
+                    (files ? '<div class="sc-files">' + files + '</div>' : '') +
+                    (decided ? '' : '<div class="sc-actions">' +
+                        '<button class="btn btn-outline-danger" onclick="scDecide(' + r.id + ', false)"><i class="fas fa-times mr-1"></i>' + T('Decline') + '</button>' +
+                        '<button class="btn btn-success" onclick="scDecide(' + r.id + ', true)"><i class="fas fa-check mr-1"></i>' + T('Approve, send to Finance') + '</button></div>') +
+                    '</div>';
+            }).join(''));
+        }).fail(function () { $('#scList').html('<div class="sc-empty">' + T('Could not load') + '</div>'); });
+    }
+
+    window.scDecide = function (id, approve) {
+        Swal.fire({
+            title: approve ? T('Approve this cost?') : T('Decline this cost?'),
+            input: 'textarea', inputLabel: approve ? T('Note (optional)') : T('Reason (the team leader reads this)'),
+            inputValidator: function (v) { return approve || (v && v.trim()) ? undefined : T('A reason is required'); },
+            showCancelButton: true, confirmButtonText: approve ? T('Approve') : T('Decline'),
+            confirmButtonColor: approve ? '#10b981' : '#ef4444', showLoaderOnConfirm: true,
+            preConfirm: function (v) {
+                return $.ajax({ url: '/api/supplier-assignments/' + id + '/' + (approve ? 'head-approve' : 'head-reject'), method: 'POST',
+                                contentType: 'application/json', data: JSON.stringify(approve ? { notes: v || '' } : { reason: (v || '').trim() }) })
+                    .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Failed'); });
+            }
+        }).then(function (r) { if (r.isConfirmed) load(); });
+    };
+
+    $(document).on('click', '.sc-tab', function () {
+        $('.sc-tab').removeClass('active');
+        $(this).addClass('active');
+        status = $(this).data('status');
+        load();
+    });
+    $(load);
+})();
+</script>
+{% endblock %}

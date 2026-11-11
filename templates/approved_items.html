@@ -8,6 +8,52 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <style>
+/* Supplier assignment (asked of Finance) */
+#componentsModal .modal-dialog { max-width: min(1180px, 96vw) !important; width: auto !important; }
+#componentsModal .modal-header { background: linear-gradient(135deg, #0ea5e9, #6366f1) !important; }
+.sa-wrap { margin-top: 4px; }
+.sa-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 16px; }
+@media (max-width: 860px) { .sa-grid { grid-template-columns: 1fr; } }
+.sa-col { display: flex; flex-direction: column; gap: 14px; }
+.sa-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 18px; background: #fff; }
+.sa-card h6 { font-weight: 800; color: #1e293b; margin: 0 0 10px; } .sa-card h6 i { color: #6366f1; margin-inline-end: 6px; }
+.sa-muted { color: #64748b; font-size: 12.5px; }
+.sa-label { display: block; font-weight: 700; font-size: 12.5px; color: #334155; margin: 12px 0 6px; }
+.sa-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.sa-row2 label { font-weight: 700; font-size: 12.5px; color: #334155; margin: 0; }
+.sa-row2 input { margin-top: 6px; }
+.sa-now { display: flex; gap: 14px; align-items: center; }
+.sa-now .sa-ico { width: 48px; height: 48px; border-radius: 12px; background: #eef2ff; color: #4f46e5; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+.sa-now b { font-size: 17px; color: #1e293b; } .sa-code { font: 700 11px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 3px 6px; border-radius: 5px; margin-inline-start: 6px; }
+.sa-empty .sa-ico { background: #f1f5f9; color: #94a3b8; }
+.sa-pending { border-color: #fcd34d; background: #fffbeb; }
+.sa-pending h6 i { color: #d97706; }
+.sa-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+.sa-chip.pending { background: #fef3c7; color: #92400e; } .sa-chip.approved { background: #dcfce7; color: #166534; }
+.sa-chip.rejected { background: #fee2e2; color: #991b1b; } .sa-chip.cancelled { background: #f1f5f9; color: #475569; }
+.sa-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 2px dashed #c7d2fe; border-radius: 12px; padding: 18px; cursor: pointer; color: #4f46e5; background: #f8faff; text-align: center; margin: 0; }
+.sa-drop i { font-size: 26px; } .sa-drop span { font-weight: 700; } .sa-drop small { color: #64748b; }
+.sa-drop.need { border-color: #f87171; background: #fef2f2; }
+.sa-agreed { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; }
+.sa-agreed span { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+.sa-agreed b { font-size: 17px; color: #1e293b; } .sa-agreed small { display: block; color: #94a3b8; font-size: 11px; }
+.sa-over { margin-top: 10px; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; }
+.sa-costs { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; } .sa-costs b { color: #1e293b; }
+.sa-chosen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sa-chosen span { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
+.sa-chosen button { border: none; background: none; color: #ef4444; padding: 0; cursor: pointer; }
+.sa-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sa-files a { width: 84px; text-align: center; color: inherit; text-decoration: none; }
+.sa-files img, .sa-files .sa-doc { width: 84px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #dc2626; font-size: 24px; }
+.sa-files small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sa-hist { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid #f1f5f9; }
+.sa-hist:first-child { border-top: none; }
+.sa-hist .sa-who { flex: 1; font-size: 13px; } .sa-hist .sa-who b { color: #1e293b; }
+#componentsModal .select2-container { width: 100% !important; }
+#componentsModal .select2-selection--single { height: 40px; border-radius: 8px; border-color: #d1d5db; }
+#componentsModal .select2-selection__rendered { line-height: 38px !important; }
+#componentsModal .select2-selection__arrow { height: 38px !important; }
+
     .page-header {
         background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
         color: white;
@@ -1264,44 +1310,65 @@
                     </div>
                 </div>
                 
-                <!-- Direct Supplier Assignment Section (for items without components) -->
-                <div id="directAssignmentSection" class="supplier-assignment-section">
-                    <h6 class="mb-3"><i class="fas fa-truck mr-2"></i>Supplier Assignment</h6>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Supplier</label>
-                                <select class="form-control" id="directSupplier">
-                                    <option value="">Select Supplier...</option>
-                                </select>
+                <!-- Direct supplier assignment: asked of Finance, with documents -->
+                <div id="directAssignmentSection" class="sa-wrap">
+                    <div class="sa-grid">
+                        <div class="sa-col">
+                            <div class="sa-card" id="saCurrent"></div>
+                            <div class="sa-card sa-pending" id="saPending" style="display:none;"></div>
+                            <div class="sa-card sa-dates" id="saDates" style="display:none;">
+                                <h6><i class="fas fa-calendar-alt"></i> Delivery dates</h6>
+                                <div class="sa-row2">
+                                    <label>Due date<input type="date" class="form-control" id="directDueDate"></label>
+                                    <label>Received on<input type="date" class="form-control" id="directReceivedDate"></label>
+                                </div>
+                                <div class="sa-muted" id="directAssignmentInfo" style="display:none;">
+                                    <i class="fas fa-user-check"></i> Received by <span id="directReceivedByName">-</span>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="saveDirectAssignmentBtn">
+                                    <i class="fas fa-save mr-1"></i>Save dates
+                                </button>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="form-group">
-                                <label>Due Date</label>
-                                <input type="date" class="form-control" id="directDueDate">
+                        <div class="sa-col">
+                            <div class="sa-card sa-form" id="saForm">
+                                <h6><i class="fas fa-paper-plane"></i> <span id="saFormTitle">Assign a supplier</span></h6>
+                                <p class="sa-muted">Finance approves the supplier before it is assigned: from then the item's cost is owed to them.</p>
+                                <label class="sa-label">Supplier *</label>
+                                <select class="form-control" id="directSupplier" style="width:100%;"></select>
+                                <div class="sa-row2">
+                                    <div class="sa-agreed"><span>Agreed cost</span><b id="saAgreed">-</b><small>From the item's costing</small></div>
+                                    <label>Actual cost *<input type="text" inputmode="decimal" class="form-control" id="saActual"></label>
+                                </div>
+                                <div class="sa-over" id="saOver" style="display:none;">
+                                    <i class="fas fa-exclamation-triangle"></i> Above the agreed cost: it goes to the Operations head first, then Finance. Say why in the note.
+                                </div>
+                                <div class="sa-row2">
+                                    <label>Due date<input type="date" class="form-control" id="saDueDate"></label>
+                                </div>
+                                <label class="sa-label">Note for Finance</label>
+                                <textarea class="form-control" id="saNote" rows="2" placeholder="Agreed price, payment terms, anything Finance should know"></textarea>
+                                <label class="sa-label">Documents * <span class="sa-muted">(quotation, invoice, agreement)</span></label>
+                                <label for="saFiles" class="sa-drop" id="saDrop">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <span>Add photos or documents</span>
+                                    <small>Photos, PDF, Word or Excel &middot; up to 10MB each</small>
+                                </label>
+                                <input type="file" id="saFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;">
+                                <div id="saChosen" class="sa-chosen"></div>
+                                <button type="button" class="btn btn-success btn-block mt-2" id="saSend">
+                                    <i class="fas fa-paper-plane mr-1"></i>Send to Finance for approval
+                                </button>
                             </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="form-group">
-                                <label>Received Date</label>
-                                <input type="date" class="form-control" id="directReceivedDate">
-                            </div>
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="button" class="btn btn-success btn-block" id="saveDirectAssignmentBtn">
-                                <i class="fas fa-save mr-1"></i>Save
-                            </button>
+                            <div class="sa-card" id="saLocked" style="display:none;"></div>
                         </div>
                     </div>
-                    <div id="directAssignmentInfo" class="mt-2" style="display: none;">
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Received by: <span id="directReceivedByName">-</span>
-                        </small>
+                    <div class="sa-card sa-history" id="saHistoryWrap" style="display:none;">
+                        <h6><i class="fas fa-history"></i> Requests</h6>
+                        <div id="saHistory"></div>
                     </div>
                 </div>
-                
+
                 <!-- Components List Section -->
                 <div id="componentsSection" style="display: none;">
                     <h6 class="mb-3"><i class="fas fa-list mr-2"></i>Sub-Items List</h6>
@@ -2275,9 +2342,15 @@ $(document).ready(function() {
         loadSuppliers().then(function(suppliers) {
             var options = '<option value="">Select Supplier...</option>';
             suppliers.forEach(function(s) {
-                options += `<option value="${s.id}">${s.supplier_name}${s.company_name ? ' - ' + s.company_name : ''}</option>`;
+                // The company is the name everywhere, the person after it, the account code last.
+                var label = (s.company_name || s.supplier_name) + (s.company_name && s.supplier_name ? ' (' + s.supplier_name + ')' : '') +
+                            (s.account_code ? '  ·  ' + s.account_code : '');
+                options += '<option value="' + s.id + '">' + $('<div>').text(label).html() + '</option>';
             });
             $('#directSupplier, #componentSupplier').html(options);
+            if ($.fn.select2) {
+                $('#directSupplier').select2({ dropdownParent: $('#componentsModal'), width: '100%', placeholder: 'Search a supplier' });
+            }
         });
     }
     
@@ -2394,23 +2467,11 @@ $(document).ready(function() {
                     $('#addComponentBtn').hide();
                 }
                 
-                // Populate direct assignment fields
+                // The supplier the item is with, what waits on Finance, the dates.
                 if (response.item_supplier_info) {
-                    var info = response.item_supplier_info;
-                    $('#directSupplier').val(info.supplier_id || '');
-                    $('#directDueDate').val(info.supplier_due_date || '');
-                    $('#directReceivedDate').val(info.supplier_received_date || '');
-                    if (typeof applyAssignmentLock === 'function') {
-                        applyAssignmentLock(!!info.supplier_id);
-                    }
-                    
-                    if (info.received_by_name) {
-                        $('#directReceivedByName').text(info.received_by_name);
-                        $('#directAssignmentInfo').show();
-                    } else {
-                        $('#directAssignmentInfo').hide();
-                    }
+                    renderAssignment(response.item_supplier_info);
                 }
+                loadAssignmentRequests(itemId);
                 
                 // Render components list
                 renderComponentsList(response.components);
@@ -2621,58 +2682,153 @@ $(document).ready(function() {
         });
     };
     
-    // Lock the direct-assignment form once the item is placed, for anybody who
-    // may not rewrite an assignment.
-    window.applyAssignmentLock = function (alreadyAssigned) {
-        var locked = alreadyAssigned && !window.CAN_REASSIGN;
-        $('#directSupplier, #directDueDate, #directReceivedDate').prop('disabled', locked);
-        $('#saveDirectAssignmentBtn').prop('disabled', locked);
-        $('#assignmentLockNote').remove();
-        if (locked) {
-            $('#saveDirectAssignmentBtn').before(
-                '<div id="assignmentLockNote" class="alert alert-warning py-2 px-3 mb-2 small">' +
-                '<i class="fas fa-lock mr-1"></i>This item is already with a supplier. ' +
-                'Ask the Operations Manager to change it.</div>');
+    // ---- Supplier assignment: asked of Finance with documents (Ahmed, 2026-11-11) ----
+    var saInfo = null, saFiles = [];
+    function saEsc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+    function saFileTiles(files) {
+        return '<div class="sa-files">' + (files || []).map(function (f) {
+            return '<a href="' + f.url + '" target="_blank" rel="noopener" title="' + saEsc(f.name) + '">' +
+                (f.is_image ? '<img src="' + f.url + '" alt="" loading="lazy">'
+                            : '<span class="sa-doc"><i class="fas ' + (/pdf/.test(f.type || '') ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></span>') +
+                '<small>' + saEsc(f.name) + '</small></a>';
+        }).join('') + '</div>';
+    }
+    var SA_STATE = { pending_head: 'Waiting for the Operations head', pending: 'Waiting for Finance', approved: 'Approved',
+                     rejected: 'Declined', cancelled: 'Withdrawn' };
+    function saMoney(v) { return v == null ? '-' : 'EGP ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function saPlain(v) { return parseFloat(String(v || '').replace(/,/g, '')); }
+    function saCheckOver() {
+        var actual = saPlain($('#saActual').val()), agreed = saInfo && saInfo.agreed_cost;
+        $('#saOver').toggle(agreed != null && !isNaN(actual) && actual > agreed + 0.004);
+    }
+    $(document).on('input', '#saActual', saCheckOver);
+
+    window.renderAssignment = function (info) {
+        saInfo = info;
+        $('#saCurrent').html(info.supplier_id
+            ? '<div class="sa-now"><span class="sa-ico"><i class="fas fa-truck"></i></span><div><div class="sa-muted">With supplier</div>' +
+              '<b>' + saEsc(info.supplier_name) + '</b>' + (info.supplier_account ? '<span class="sa-code">' + saEsc(info.supplier_account) + '</span>' : '') +
+              '<div class="sa-muted">' + saEsc([info.supplier_person !== info.supplier_name ? info.supplier_person : '', info.supplier_phone].filter(Boolean).join(' · ')) + '</div></div></div>'
+            : '<div class="sa-now sa-empty"><span class="sa-ico"><i class="fas fa-truck"></i></span><div><div class="sa-muted">With supplier</div><b>Not assigned yet</b></div></div>');
+        if (info.supplier_id && info.supplier_cost != null) {
+            $('#saCurrent').append('<div class="sa-costs"><span>Agreed <b>' + saMoney(info.agreed_cost) + '</b></span>' +
+                '<span>Actual (owed) <b>' + saMoney(info.supplier_cost) + '</b></span></div>');
         }
+        $('#saAgreed').text(saMoney(info.agreed_cost));
+        $('#saActual').val(info.agreed_cost != null ? info.agreed_cost : '');
+        $('#saOver').hide();
+        $('#saDates').toggle(!!info.supplier_id);
+        $('#directDueDate').val(info.supplier_due_date || '');
+        $('#directReceivedDate').val(info.supplier_received_date || '');
+        $('#directReceivedByName').text(info.received_by_name || '-');
+        $('#directAssignmentInfo').toggle(!!info.received_by_name);
+        $('#saFormTitle').text(info.supplier_id ? 'Change the supplier' : 'Assign a supplier');
+        var locked = info.supplier_id && !window.CAN_REASSIGN;
+        $('#saForm').toggle(!locked);
+        $('#saLocked').toggle(!!locked).html('<div class="sa-muted"><i class="fas fa-lock mr-1"></i>This item is already with a supplier. ' +
+            'Ask the Operations Manager to change it.</div>');
+        $('#directSupplier').val('').trigger('change');
+        $('#saNote, #saDueDate').val('');
+        saFiles = [];
+        saRenderChosen();
     };
 
-    // Save direct supplier assignment
+    function loadAssignmentRequests(itemId) {
+        $.get('/api/approved-items/' + itemId + '/supplier-requests', function (r) {
+            var list = (r && r.requests) || [], pending = list.filter(function (x) { return x.status === 'pending' || x.status === 'pending_head'; })[0];
+            if (pending) {
+                $('#saPending').show().html('<h6><i class="fas fa-hourglass-half"></i> ' + SA_STATE[pending.status] + '</h6>' +
+                    '<div class="sa-now"><div><b>' + saEsc(pending.supplier_label || 'Remove the supplier') + '</b>' +
+                    (pending.supplier_account ? '<span class="sa-code">' + saEsc(pending.supplier_account) + '</span>' : '') +
+                    '<div class="sa-muted">Asked by ' + saEsc(pending.requested_by_name) + ' · ' + saEsc((pending.requested_at || '').replace('T', ' ').slice(0, 16)) +
+                    (pending.due_date ? ' · due ' + saEsc(pending.due_date) : '') + '</div>' +
+                    (pending.note ? '<div class="sa-muted">' + saEsc(pending.note) + '</div>' : '') +
+                    (pending.supplier_id ? '<div class="sa-costs"><span>Agreed <b>' + saMoney(pending.item_cost) + '</b></span><span>Actual <b' +
+                        (pending.over_agreed ? ' style="color:#c2410c"' : '') + '>' + saMoney(pending.actual_cost) + '</b></span></div>' : '') +
+                    '</div></div>' +
+                    saFileTiles(pending.files) +
+                    '<button type="button" class="btn btn-outline-danger btn-sm mt-2" onclick="saWithdraw(' + pending.id + ')"><i class="fas fa-undo mr-1"></i>Withdraw</button>');
+                $('#saForm').hide();
+            } else {
+                $('#saPending').hide();
+            }
+            $('#saHistoryWrap').toggle(list.length > 0);
+            $('#saHistory').html(list.map(function (x) {
+                return '<div class="sa-hist"><span class="sa-chip ' + x.status + '">' + SA_STATE[x.status] + '</span><div class="sa-who">' +
+                    '<b>' + saEsc(x.supplier_label || 'Remove the supplier') + '</b>' + (x.previous_label ? ' <span class="sa-muted">instead of ' + saEsc(x.previous_label) + '</span>' : '') +
+                    '<div class="sa-muted">' + saEsc(x.requested_by_name) + ' · ' + saEsc((x.requested_at || '').replace('T', ' ').slice(0, 16)) +
+                    (x.decided_by_name ? ' · ' + SA_STATE[x.status] + ' by ' + saEsc(x.decided_by_name) : '') + '</div>' +
+                    (x.decision_note ? '<div class="sa-muted"><i class="fas fa-comment-dots"></i> ' + saEsc(x.decision_note) + '</div>' : '') +
+                    '</div>' + (x.files.length ? '<span class="sa-muted"><i class="fas fa-paperclip"></i> ' + x.files.length + '</span>' : '') + '</div>';
+            }).join(''));
+        });
+    }
+
+    function saRenderChosen() {
+        $('#saChosen').html(saFiles.map(function (f, i) {
+            return '<span><i class="fas fa-paperclip"></i>' + saEsc(f.name) + '<button type="button" data-i="' + i + '"><i class="fas fa-times"></i></button></span>';
+        }).join(''));
+        $('#saDrop').toggleClass('need', false);
+    }
+    $(document).on('change', '#saFiles', function () {
+        Array.prototype.forEach.call(this.files || [], function (f) {
+            if (f.size > 10 * 1024 * 1024) { Swal.fire('Too big', '"' + f.name + '" is over 10MB', 'warning'); return; }
+            saFiles.push(f);
+        });
+        this.value = '';
+        saRenderChosen();
+    });
+    $(document).on('click', '#saChosen button', function () { saFiles.splice(+$(this).data('i'), 1); saRenderChosen(); });
+
+    $(document).on('click', '#saSend', function () {
+        var itemId = $('#componentsItemId').val(), supplier = $('#directSupplier').val();
+        if (!supplier) { Swal.fire('Choose the supplier', '', 'warning'); return; }
+        if (!saFiles.length) { $('#saDrop').addClass('need'); Swal.fire('Documents required', 'Attach the quotation, invoice or another document for Finance.', 'warning'); return; }
+        var actual = saPlain($('#saActual').val());
+        if (isNaN(actual) || actual < 0) { Swal.fire('Actual cost', 'Enter the actual cost', 'warning'); return; }
+        if ($('#saOver').is(':visible') && !($('#saNote').val() || '').trim()) {
+            Swal.fire('Note required', 'Say why the actual cost is above the agreed cost.', 'warning'); return;
+        }
+        var form = new FormData();
+        form.append('supplier_id', supplier);
+        form.append('due_date', $('#saDueDate').val() || '');
+        form.append('note', $('#saNote').val() || '');
+        form.append('actual_cost', actual);
+        saFiles.forEach(function (f) { form.append('files', f, f.name); });
+        var btn = $(this).prop('disabled', true);
+        $.ajax({ url: '/api/approved-items/' + itemId + '/supplier-request', type: 'POST', data: form, processData: false, contentType: false })
+            .done(function (r) {
+                Swal.fire({ icon: 'success', title: 'Sent to Finance', text: r.message, timer: 2200, showConfirmButton: false });
+                loadComponentsData(itemId);
+            })
+            .fail(function (xhr) { Swal.fire('Not sent', (xhr.responseJSON || {}).error || 'Failed to send', 'error'); })
+            .always(function () { btn.prop('disabled', false); });
+    });
+
+    window.saWithdraw = function (id) {
+        Swal.fire({ title: 'Withdraw this request?', icon: 'question', showCancelButton: true, confirmButtonText: 'Withdraw' }).then(function (r) {
+            if (!r.isConfirmed) return;
+            $.post('/api/supplier-assignments/' + id + '/cancel').done(function () { loadComponentsData($('#componentsItemId').val()); })
+                .fail(function (xhr) { Swal.fire('Error', (xhr.responseJSON || {}).error || 'Failed', 'error'); });
+        });
+    };
+
+    // The dates of the approved assignment change here; the supplier only through Finance.
     $('#saveDirectAssignmentBtn').click(function() {
         var itemId = $('#componentsItemId').val();
-        var data = {
-            supplier_id: $('#directSupplier').val() || null,
-            due_date: $('#directDueDate').val() || null,
-            received_date: $('#directReceivedDate').val() || null
-        };
-        
         $.ajax({
-            url: '/api/approved-items/' + itemId + '/supplier',
-            type: 'PUT',
-            contentType: 'application/json',
-            data: JSON.stringify(data),
+            url: '/api/approved-items/' + itemId + '/supplier', type: 'PUT', contentType: 'application/json',
+            data: JSON.stringify({ supplier_id: (saInfo && saInfo.supplier_id) || null,
+                                   due_date: $('#directDueDate').val() || null, received_date: $('#directReceivedDate').val() || null }),
             success: function(response) {
                 if (response.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Saved!',
-                        text: 'Supplier assignment updated',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
+                    Swal.fire({ icon: 'success', title: 'Saved!', timer: 1500, showConfirmButton: false });
                     loadComponentsData(itemId);
                 } else {
                     Swal.fire('Error', response.error || 'Failed to save', 'error');
                 }
             },
-            error: function(xhr) {
-                // 403 here is the assignment lock, not a broken save: an item
-                // already placed with a supplier is a commitment, and only the
-                // Operations Manager rewrites one.
-                var said = (xhr.responseJSON || {}).error;
-                Swal.fire(xhr.status === 403 ? 'Already assigned' : 'Error',
-                          said || 'Failed to save supplier assignment',
-                          xhr.status === 403 ? 'warning' : 'error');
-            }
+            error: function(xhr) { Swal.fire('Error', (xhr.responseJSON || {}).error || 'Failed to save', 'error'); }
         });
     });
 

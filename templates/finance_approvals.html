@@ -268,6 +268,24 @@
 .ue-table .ue-amount { min-width: 110px; }
 .ue-table .ue-amount::-webkit-outer-spin-button, .ue-table .ue-amount::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .ue-table .ue-amount { -moz-appearance: textfield; }
+.sa-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.sa-hint { color: #64748b; font-size: 13px; }
+.sa-item { border-inline-start: 4px solid #6366f1 !important; }
+.sa-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sa-sup { margin-top: 8px; font-size: 15px; } .sa-sup i { color: #d97706; }
+.sa-code { font: 700 11px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 3px 6px; border-radius: 5px; }
+.sa-cost { text-align: end; } .sa-cost span { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+.sa-cost b { font-size: 20px; color: #b45309; } .sa-cost small { display: block; color: #64748b; }
+.sa-cost small b.sa-over-t { font-size: 12px; color: #c2410c; }
+.sa-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: #475569; }
+.sa-state { font-weight: 700; } .sa-state.pending { color: #b45309; } .sa-state.approved { color: #059669; } .sa-state.rejected { color: #dc2626; }
+.sa-note { margin-top: 8px; font-size: 13px; background: #f8fafc; border-radius: 8px; padding: 6px 10px; }
+.sa-muted { color: #64748b; font-size: 12.5px; }
+.sa-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sa-files a { width: 96px; text-align: center; color: inherit; text-decoration: none; }
+.sa-files img, .sa-files .sa-doc { width: 96px; height: 74px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #dc2626; font-size: 26px; }
+.sa-files small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sa-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 .user-expense-category.ue-missing { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
 .ue-sup { white-space: nowrap; }
 .ue-acc { font: 700 11px/1 ui-monospace, monospace; background: #92400e; color: #fff; padding: 3px 6px; border-radius: 5px; }
@@ -410,6 +428,9 @@
             <button class="approval-tab active" data-tab="pending-transactions" type="button">
                 <i class="fas fa-exchange-alt"></i> Transactions <span class="badge" id="badgeTrans">0</span>
             </button>
+            <button class="approval-tab" data-tab="supplier-assignments" type="button">
+                <i class="fas fa-truck-loading"></i> Supplier Assignments <span class="badge" id="badgeAssign">0</span>
+            </button>
             <button class="approval-tab" data-tab="balance-requests" type="button">
                 <i class="fas fa-hand-holding-usd"></i> Balance Requests <span class="badge" id="badgeReq">0</span>
             </button>
@@ -447,6 +468,20 @@
             </div>
         </div>
         
+        <!-- Tab: Supplier Assignments (Operations asks, Finance approves) -->
+        <div class="tab-panel" id="tab-supplier-assignments">
+            <div class="sa-bar">
+                <select class="form-control" id="saStatus" style="max-width: 220px;">
+                    <option value="pending">Waiting for approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Declined</option>
+                    <option value="all">All</option>
+                </select>
+                <span class="sa-hint"><i class="fas fa-info-circle"></i> Approving puts the item with the supplier: its cost becomes owed to them under 2101.</span>
+            </div>
+            <div class="approval-list" id="supplierAssignmentsList"></div>
+        </div>
+
         <!-- Tab: Balance Requests -->
         <div class="tab-panel" id="tab-balance-requests">
             <div class="approval-list" id="balanceRequestsList">
@@ -643,6 +678,7 @@ $(document).ready(function() {
         $('.tab-panel').removeClass('active');
         $('#tab-' + tab).addClass('active');
         
+        if (tab === 'supplier-assignments') loadSupplierAssignments();
         // Load data when switching to transfer tab
         if (tab === 'transfer') {
             loadPaymentMethodsForTransfer();
@@ -655,7 +691,73 @@ $(document).ready(function() {
     
     // Confirm approval
     $('#btnConfirmApproval').on('click', confirmApproval);
+
+    loadSupplierAssignments();
+    // ?tab=supplier-assignments (from a notification) opens that tab.
+    var wanted = new URLSearchParams(location.search).get('tab');
+    if (wanted) $('.approval-tab[data-tab="' + wanted + '"]').trigger('click');
 });
+
+// ---- Supplier assignments: Operations asks with documents, Finance approves ----
+$(document).on('change', '#saStatus', loadSupplierAssignments);
+function loadSupplierAssignments() {
+    var T = window.bgT || String, esc = function (v) { return $('<div>').text(v == null ? '' : v).html(); };
+    $.getJSON('/api/finance/supplier-assignments', { status: $('#saStatus').val() || 'pending' }).done(function (d) {
+        $('#badgeAssign').text((d.counts || {}).pending || 0);
+        var box = $('#supplierAssignmentsList');
+        if (!d.requests.length) {
+            box.html('<div class="empty-state"><i class="fas fa-check-circle"></i><h3>' + T('Nothing here') + '</h3></div>');
+            return;
+        }
+        box.html(d.requests.map(function (r) {
+            var owed = r.supplier_sr || {};
+            var files = r.files.map(function (f) {
+                return '<a href="' + f.url + '" target="_blank" rel="noopener" title="' + esc(f.name) + '">' +
+                    (f.is_image ? '<img src="' + f.url + '" alt="" loading="lazy">' : '<span class="sa-doc"><i class="fas ' + (/pdf/.test(f.type || '') ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></span>') +
+                    '<small>' + esc(f.name) + '</small></a>';
+            }).join('');
+            var state = { pending_head: T('Waiting for the Operations head'), pending: T('Waiting for approval'), approved: T('Approved'), rejected: T('Declined'), cancelled: T('Withdrawn') }[r.status];
+            return '<div class="approval-item sa-item" style="display:block;">' +
+                '<div class="sa-top"><div><span class="badge badge-info">SR-' + r.request_id + '</span> <b data-no-i18n>' + esc(r.item_name) + '</b>' +
+                    ' <span class="sa-muted" data-no-i18n>' + esc([r.client_name, r.company_name].filter(Boolean).join(' / ')) + '</span>' +
+                    '<div class="sa-sup"><i class="fas fa-truck"></i> <b data-no-i18n>' + esc(r.supplier_label || T('Remove the supplier')) + '</b>' +
+                    (r.supplier_account ? ' <span class="sa-code">' + esc(r.supplier_account) + '</span>' : '') +
+                    (r.previous_label ? ' <span class="sa-muted">' + T('instead of') + ' <span data-no-i18n>' + esc(r.previous_label) + '</span></span>' : '') + '</div></div>' +
+                    (r.supplier_id ? '<div class="sa-cost"><span>' + T('Actual cost (becomes owed)') + '</span><b>' + formatCurrency(r.actual_cost) + '</b>' +
+                    '<small>' + T('Agreed') + ' ' + formatCurrency(r.item_cost) + (r.over_agreed ? ' · <b class="sa-over-t">+' + formatCurrency(r.actual_cost - r.item_cost) + '</b>' : '') +
+                    '</small>' + (r.head_by_name ? '<small><i class="fas fa-user-check"></i> ' + T('Cost approved by') + ' ' + esc(r.head_by_name) + '</small>' : '') +
+                    '</div>' : '') + '</div>' +
+                '<div class="sa-meta">' +
+                    '<span><i class="fas fa-user"></i> ' + esc(r.requested_by_name) + ' · ' + esc((r.requested_at || '').replace('T', ' ').slice(0, 16)) + '</span>' +
+                    (r.due_date ? '<span><i class="fas fa-calendar"></i> ' + T('Due') + ' ' + esc(r.due_date) + '</span>' : '') +
+                    (r.supplier_id ? '<span><i class="fas fa-balance-scale"></i> ' + T('Already owed on this SR') + ' ' + formatCurrency(owed.purchased) +
+                        ' · ' + T('paid') + ' ' + formatCurrency(owed.paid) + '</span>' : '') +
+                    '<span class="sa-state ' + r.status + '">' + state + (r.decided_by_name ? ' · ' + esc(r.decided_by_name) : '') + '</span></div>' +
+                (r.note ? '<div class="sa-note"><i class="fas fa-comment-dots"></i> <span data-no-i18n>' + esc(r.note) + '</span></div>' : '') +
+                (r.decision_note ? '<div class="sa-note"><i class="fas fa-reply"></i> <span data-no-i18n>' + esc(r.decision_note) + '</span></div>' : '') +
+                (files ? '<div class="sa-files">' + files + '</div>' : '<div class="ue-nodoc mt-2"><i class="fas fa-exclamation-circle"></i> ' + T('No document') + '</div>') +
+                (r.status === 'pending' && d.can_decide ? '<div class="sa-actions">' +
+                    '<button class="btn-pill btn-pill-danger" onclick="decideAssignment(' + r.id + ', false)"><i class="fas fa-times"></i> ' + T('Decline') + '</button>' +
+                    '<button class="btn-pill btn-pill-success" onclick="decideAssignment(' + r.id + ', true)"><i class="fas fa-check"></i> ' + T('Approve') + '</button></div>' : '') +
+                '</div>';
+        }).join(''));
+    });
+}
+function decideAssignment(id, approve) {
+    var T = window.bgT || String;
+    Swal.fire({
+        title: approve ? T('Approve this supplier?') : T('Decline this request?'),
+        input: 'textarea', inputLabel: approve ? T('Note (optional)') : T('Reason (Operations reads this)'),
+        inputValidator: function (v) { return approve || (v && v.trim()) ? undefined : T('A reason is required'); },
+        showCancelButton: true, confirmButtonText: approve ? T('Approve') : T('Decline'),
+        confirmButtonColor: approve ? '#10b981' : '#ef4444', showLoaderOnConfirm: true,
+        preConfirm: function (v) {
+            return $.ajax({ url: '/api/finance/supplier-assignments/' + id + '/' + (approve ? 'approve' : 'reject'), method: 'POST',
+                            contentType: 'application/json', data: JSON.stringify(approve ? { notes: v || '' } : { reason: (v || '').trim() }) })
+                .catch(function (xhr) { Swal.showValidationMessage((xhr.responseJSON || {}).error || 'Failed'); });
+        }
+    }).then(function (r) { if (r.isConfirmed) loadSupplierAssignments(); });
+}
 
 function loadPendingApprovals() {
     $.ajax({

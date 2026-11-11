@@ -359,6 +359,11 @@
     .qa-lines { margin: .6rem 0 0; padding: 0; list-style: none; text-align: start; font-size: .83rem; }
     .qa-lines li { border: 1px solid #eceef3; border-radius: 6px; padding: .4rem .6rem; margin-bottom: .35rem; }
     .qa-lines .qa-amt { float: inline-end; font-weight: 700; }
+    .qa-files { display: flex; flex-wrap: wrap; gap: 8px; margin: .6rem 0 .2rem; }
+    .qa-files a { width: 92px; text-decoration: none; color: inherit; text-align: center; }
+    .qa-files img, .qa-files .qa-doc { width: 92px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #e3e6f0;
+      display: flex; align-items: center; justify-content: center; background: #f8f9fc; font-size: 28px; color: #e74a3b; }
+    .qa-files small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qa-lines small { display: block; color: #6c757d; }
     .qa-form { text-align: start; margin-top: .6rem; }
     .qa-form label { font-size: .8rem; font-weight: 600; margin-bottom: .2rem; }
@@ -803,9 +808,10 @@
              came to do. #}
           {% set can_approve_expenses = can_approve_expense_mgr or 'user_balance.approve_manager' in _p %}
           {% set can_approve_urgent = 'sales_request.approve' in _p %}
+          {% set can_approve_supplier_cost = 'approved_item.reassign' in _p %}
           {% if can_approve_expenses or can_open_clients or can_open_companies
                 or can_open_suppliers or can_decide_negotiation or can_decide_account_negotiation
-                or can_approve_urgent %}
+                or can_approve_urgent or can_approve_supplier_cost %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="approvalsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fas fa-clipboard-check mr-1"></i> Approvals
@@ -821,6 +827,11 @@
               {% if can_approve_expenses %}
               <a class="dropdown-item" href="{{ url_for('expense_tracking_approval_page') }}">
                 <i class="fas fa-receipt"></i> Expense Approvals<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="expenses"></span>
+              </a>
+              {% endif %}
+              {% if can_approve_supplier_cost %}
+              <a class="dropdown-item" href="{{ url_for('supplier_cost_approvals_page') }}">
+                <i class="fas fa-truck-loading"></i> Supplier Cost Approvals<span class="badge badge-danger ml-2 nav-wait d-none" data-wait="supplier_cost"></span>
               </a>
               {% endif %}
               {% if can_open_clients or can_open_companies or can_open_suppliers %}
@@ -2244,7 +2255,24 @@ window.bgQuickApproval = function (o) {
           '<strong>' + esc(l.label) + '</strong>' + (l.detail ? '<small>' + esc(l.detail) + '</small>' : '') + '</li>';
       }).join('') + '</ul>';
     }
+    // Receipts and documents, opened in a new tab; photos shown small.
+    if (d.attachments && d.attachments.length) {
+      html += '<div class="qa-files">' + d.attachments.map(function (a) {
+        return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' +
+          (a.is_image ? '<img src="' + esc(a.url) + '" alt="" loading="lazy">'
+                      : '<span class="qa-doc"><i class="fas ' + (/pdf/.test(a.type || '') ? 'fa-file-pdf' : 'fa-file-alt') + '"></i></span>') +
+          '<small>' + esc(a.name) + '</small></a>';
+      }).join('') + '</div>';
+    }
     if (d.quick) {
+      // What Finance has to choose (payment method, account), as on its page.
+      (d.inputs || []).forEach(function (inp) {
+        html += '<div class="qa-form"><label for="qaIn_' + esc(inp.name) + '">' + esc(inp.label) + '</label>' +
+          '<select class="form-control form-control-sm mb-2 qa-input" id="qaIn_' + esc(inp.name) + '" data-name="' + esc(inp.name) + '">' +
+          '<option value="">--</option>' + inp.options.map(function (o) {
+            return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(inp.value) ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+          }).join('') + '</select></div>';
+      });
       html += '<div class="qa-form">' +
         (d.amount !== null && d.amount !== undefined
           ? '<label for="qaAmount">Amount to approve (EGP)</label>' +
@@ -2265,9 +2293,29 @@ window.bgQuickApproval = function (o) {
       footer: d.page ? '<a href="' + d.page + '">Open the approval page</a>' : '',
       showLoaderOnConfirm: true,
       preConfirm: function () {
-        var body = { notes: $('#qaNotes').val() || '' };
+        var values = { notes: $('#qaNotes').val() || '' }, missing = [];
+        $('.qa-input').each(function () {
+          values[$(this).data('name')] = $(this).val();
+          if (!$(this).val()) { missing.push($('label[for="' + this.id + '"]').text()); }
+        });
+        if (missing.length) { Swal.showValidationMessage('Choose: ' + missing.join(', ')); return false; }
+        // "$name" in the page's own request body takes the chosen value.
+        function fill(v) {
+          if (typeof v === 'string' && v.charAt(0) === '$') {
+            var got = values[v.slice(1)];
+            return /^\d+$/.test(got || '') ? Number(got) : got;
+          }
+          if (Array.isArray(v)) { return v.map(fill); }
+          if (v && typeof v === 'object') { var o = {}; Object.keys(v).forEach(function (k) { o[k] = fill(v[k]); }); return o; }
+          return v;
+        }
+        var body = d.approve_body ? fill(d.approve_body) : { notes: values.notes };
         if ($('#qaAmount').length) { body.amount = $('#qaAmount').val(); }
-        return post(d.approve_url, body).catch(function (xhr) { Swal.showValidationMessage(failText(xhr)); });
+        return post(d.approve_url, body).then(function (r) {
+          // A batch endpoint answers 200 with nothing approved when the line moved on.
+          if (r && r.approved_count === 0) { return $.Deferred().reject({ responseJSON: { error: 'Nothing was approved: it was decided already' } }); }
+          return r;
+        }).catch(function (xhr) { Swal.showValidationMessage(failText(xhr)); });
       },
       allowOutsideClick: function () { return !Swal.isLoading(); }
     }).then(function (result) {
